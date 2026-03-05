@@ -60,8 +60,8 @@ libp2p = { version = "0.54", features = [
     "serde",
 ] }
 
-# Storage
-rocksdb = "0.22"
+# Storage (redb: pure Rust, no native deps; rocksdb to be added later with LLVM)
+redb = "2"
 
 # AI inference
 tract-onnx = "0.21"

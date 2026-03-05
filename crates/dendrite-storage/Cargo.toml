@@ -1,13 +1,13 @@
 [package]
 name = "dendrite-storage"
-description = "Storage layer (RocksDB, Verkle trees, state management) for Dendrite Network"
+description = "Storage layer (redb, Verkle trees, state management) for Dendrite Network"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 
 [dependencies]
 dendrite-core = { workspace = true }
-rocksdb = { workspace = true }
+redb = { workspace = true }
 serde = { workspace = true }
 bincode = { workspace = true }
 blake3 = { workspace = true }
