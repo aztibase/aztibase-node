@@ -18,7 +18,7 @@ This is the Dendrite Network blockchain project. A Layer-1 AI-native, server-ind
 - Always ensure you are on the `dev` branch before making changes.
 
 ## Skill Fleet
-This project uses a fleet of 12 specialist skills located in `.claude/skills/`.
+This project uses a fleet of 13 specialist skills located in `.claude/skills/`.
 Each skill represents a team member with a specific role, authority, and output responsibilities.
 
 ### How to invoke skills
@@ -29,17 +29,17 @@ Use `/blockchain-architect`, `/consensus-engineer`, etc. to invoke a specific en
 ```
                  /project-lead
                       |
-         +------------+------------+
-         |            |            |
-  /blockchain-   /research-   /legal-ip-
-    architect      analyst      counsel
+         +------------+------+------------+
+         |            |      |            |
+  /blockchain-   /research-  /docs-   /legal-ip-
+    architect      analyst   engineer    counsel
          |
     +----+----+----+----+----+----+
     |    |    |    |    |    |    |
   cons  node  p2p  sec  ai  smart token
 ```
 
-### Full Roster (12 skills)
+### Full Roster (13 skills)
 | Skill | Role | Authority |
 |-------|------|-----------|
 | `/project-lead` | Orchestrator, strategic decisions, sprint planning | COMMANDS ALL |
@@ -51,6 +51,7 @@ Use `/blockchain-architect`, `/consensus-engineer`, etc. to invoke a specific en
 | `/ai-integration-engineer` | 3-layer AI, compute market | AI domain |
 | `/smart-contract-engineer` | Dual VM, contracts, gas model | Execution domain |
 | `/tokenomics-engineer` | DNDR economics | Economics domain |
+| `/documentation-engineer` | Dev docs, API refs, guides, docs site | Documentation |
 | `/research-analyst` | Web research, competitive intel | Research |
 | `/legal-ip-counsel` | IP, trademarks, regulatory | VETO on naming/IP |
 | `/naming-council` | Branding, naming | Naming (legal-gated) |
@@ -71,6 +72,7 @@ Use `/blockchain-architect`, `/consensus-engineer`, etc. to invoke a specific en
 7. legal-ip-counsel (gates naming)
 8. naming-council (blocked by legal)
 9. research-analyst (runs first in new research sprints)
+10. documentation-engineer (continuous — documents each phase as it completes)
 
 ## Tech Stack
 - Language: Rust
