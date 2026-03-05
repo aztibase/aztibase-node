@@ -1,0 +1,17 @@
+[package]
+name = "dendrite-consensus"
+description = "Consensus layer (DAG-BFT, PoUW) for Dendrite Network"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+dendrite-core = { workspace = true }
+dendrite-network = { workspace = true }
+dendrite-storage = { workspace = true }
+tokio = { workspace = true }
+serde = { workspace = true }
+tracing = { workspace = true }
+thiserror = { workspace = true }
+rand = { workspace = true }
+anyhow = { workspace = true }

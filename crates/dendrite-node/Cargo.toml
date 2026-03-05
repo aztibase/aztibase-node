@@ -1,0 +1,24 @@
+[package]
+name = "dendrite-node"
+description = "Main node binary for Dendrite Network"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "dendrite"
+path = "src/main.rs"
+
+[dependencies]
+dendrite-core = { workspace = true }
+dendrite-network = { workspace = true }
+dendrite-storage = { workspace = true }
+dendrite-consensus = { workspace = true }
+dendrite-execution = { workspace = true }
+dendrite-runtime = { workspace = true }
+dendrite-rpc = { workspace = true }
+tokio = { workspace = true }
+clap = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+anyhow = { workspace = true }

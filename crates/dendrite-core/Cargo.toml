@@ -1,0 +1,18 @@
+[package]
+name = "dendrite-core"
+description = "Core types, cryptographic primitives, and shared utilities for Dendrite Network"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+serde = { workspace = true }
+blake3 = { workspace = true }
+ed25519-dalek = { workspace = true }
+rand = { workspace = true }
+thiserror = { workspace = true }
+bytes = { workspace = true }
+hex = { workspace = true }
+chrono = { workspace = true }
+prost = { workspace = true }
+bincode = { workspace = true }
