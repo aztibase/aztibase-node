@@ -73,8 +73,63 @@ Use `/blockchain-architect`, `/consensus-engineer`, etc. to invoke a specific en
 - P2P: rust-libp2p (QUIC + WebRTC)
 - Consensus: Synaptic Consensus (SynBFT + PoUW)
 - VM: wasmtime (WASM) + revm (EVM)
-- Storage: RocksDB (full nodes), redb (light/mobile)
+- Storage: redb (all node types -- ADR-001, pure Rust, no native deps)
 - State: Verkle trees
 - Crypto: BLAKE3, Ed25519, BLS12-381
 - AI Runtime: tract (primary), candle (secondary)
 - License: Dual MIT / Apache-2.0
+
+## Reference Repos (in /references/)
+Study these BEFORE writing implementation code for the corresponding domain:
+- `references/mysticeti/` — DAG-BFT consensus (MystiCeti by MystenLabs). Key: `mysticeti-core/src/core.rs`, `types.rs`, `consensus/`
+- `references/sui/` — Object model, parallel execution, DAG consensus. Key: `consensus/core/src/`, `crates/sui-core/src/`
+- `references/lighthouse/` — Production Rust node architecture (Ethereum). Key: `consensus/src/`, `beacon_node/`
+- `references/rust-libp2p/` — P2P networking patterns. Key: `examples/`, `protocols/gossipsub/src/`
+- `references/redb/` — Storage engine internals. Key: `src/db.rs`, `src/transactions.rs`
+
+## Critical Design Constraints (from MASTER_DESIGN.md)
+These are non-negotiable. Violating any of these is a bug:
+1. **Server-independence**: Every design must work if all centralized servers go offline
+2. **DAG consensus**: Blocks have multiple parents (Vec<BlockHash>), NOT linear chain
+3. **400ms target block time**, <1s finality, 10k+ TPS at launch
+4. **Verkle trees** for state (NOT Merkle Patricia Tries) — but design binary Merkle + SNARK escape hatch
+5. **Hybrid account + object model** (not pure account like Ethereum, not pure object like Sui)
+6. **AI inference is OFF-CHAIN** with ON-CHAIN verification only
+7. **Privacy is protocol-level** with selective disclosure (not full anonymity)
+8. **nChain patent risk**: FTO analysis required before finalizing consensus design (1,308 patents)
+
+## Cross-Skill Review Protocol
+After completing any major component, run a security review:
+1. Write code in the domain skill (e.g., `/consensus-engineer`)
+2. Review it as `/security-engineer` — check for threat vectors, crypto misuse, DoS surfaces
+3. If security flags are raised, they MUST be addressed before merging
+4. For consensus/crypto code: also review as `/blockchain-architect` for architectural alignment
+
+## Web Research Capability
+The `/research-analyst` skill has access to `WebSearch` and `WebFetch` tools.
+Use these to get current data before major design decisions. Example triggers:
+- "Research latest DAG consensus developments" → WebSearch + summarize
+- "Check rust-libp2p release status" → WebFetch the GitHub releases page
+- "Compare our approach to [competitor]" → WebSearch for recent benchmarks
+
+## Build-Phase Rules (MANDATORY -- enforced on every change)
+These are hard requirements. Violating any of these blocks shipping.
+
+1. **Traceability**: Every code change must have a BUILD_LOG entry with git ref, files changed, and review notes
+2. **ADRs**: Non-obvious technical choices require an Architecture Decision Record in `blockchain-project/DECISIONS.md`
+3. **BUILD_LOG**: Entry in `blockchain-project/BUILD_LOG.md` mandatory for every commit
+4. **CHANGELOG**: Entry in `CHANGELOG.md` for architecture-level or user-facing changes
+5. **STATUS.md**: Updated at every sprint boundary in `blockchain-project/STATUS.md`
+6. **Sprint plans**: Written in `blockchain-project/sprints/SPRINT-XXX.md` BEFORE work begins
+7. **Security flags**: Propagate immediately. Security-engineer flags are ELEVATED priority and BLOCK shipping until resolved
+
+### Development Workflow
+- Run `cargo check` after every code change (fast compilation check)
+- Run `cargo test` after every change
+- Run `cargo clippy` before committing (zero warnings policy)
+- Run `cargo fmt --check` before committing (consistent formatting)
+- Reference repos are for reading only -- never modify them
+- All new code needs tests (minimum: happy path + one failure case)
+- No `unsafe` blocks without security-engineer review and justification comment
+- All dependencies must be pure Rust (no C/C++ build deps -- ADR-001)
+- Security-engineer review mandatory before merging any code

@@ -18,3 +18,6 @@ Thumbs.db
 
 # Logs
 *.log
+
+# Reference repos (not part of our codebase)
+/references/
