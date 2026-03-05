@@ -33,7 +33,7 @@
 - Build-phase tracking infrastructure (5 documents)
 - Implementation depth audit (Sprint 001, Task 7)
 - Reference repos cloned (MystiCeti, Sui, Lighthouse, rust-libp2p, redb)
-- cargo build + cargo test pass (60 tests, 0 failures)
+- cargo build + cargo test pass (66 tests, 0 failures)
 - Sprint 001 closed with retrospective
 
 ### Crate Status
@@ -50,12 +50,13 @@
 | dendrite-node | PARTIAL | node-engineer | NO |
 
 ### In Progress
-- Sprint 002: M1 Core Primitives Build-Out (16/24 tasks done, Phases 1-3 complete)
+- Sprint 002: M1 Core Primitives Build-Out (20/24 tasks done, Phases 1-4 complete)
 
 ### Blocked
 - Nothing currently blocked
 
 ### Recently Completed
+- Phase 4: Node wiring (storage init, network swarm, TOML config, graceful shutdown, 6 tests)
 - Phase 3a: Network transport (libp2p 0.54, QUIC + TCP/Noise, Gossipsub, Kademlia, mDNS)
 - Phase 3b: Execution engine (wasmtime 28, deterministic config, fuel metering, 3 host functions)
 - Phase 2: Consensus persistence (DagStore, CommitRule)
@@ -63,8 +64,7 @@
 - Phase 1b: Consensus data types (DagBlock, ValidatorSet)
 
 ### Next Up
-1. Execute Sprint 002 Phase 4: Node Wiring (Tasks 17-20)
-2. Execute Sprint 002 Phase 5: Cross-Cutting (Tasks 21-24)
+1. Execute Sprint 002 Phase 5: Cross-Cutting (Tasks 21-24)
 
 ---
 

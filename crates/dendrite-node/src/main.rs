@@ -1,48 +1,227 @@
+mod config;
+
+use std::path::PathBuf;
+use std::sync::Arc;
+
+use anyhow::{Context, Result};
 use clap::Parser;
+use tokio::sync::Notify;
 use tracing_subscriber::EnvFilter;
+
+use config::NodeConfig;
+use dendrite_network::{Libp2pTransport, NetworkEvent, TransportConfig};
+use dendrite_storage::StateStore;
 
 #[derive(Parser, Debug)]
 #[command(name = "dendrite", about = "Dendrite Network Node")]
 struct Cli {
-    /// Path to the data directory
-    #[arg(long, default_value = "./data")]
-    data_dir: String,
+    /// Path to TOML configuration file
+    #[arg(long, short)]
+    config: Option<PathBuf>,
 
-    /// Listen address for P2P
-    #[arg(long, default_value = "/ip4/0.0.0.0/tcp/30333")]
-    listen_addr: String,
+    /// Override data directory
+    #[arg(long)]
+    data_dir: Option<PathBuf>,
 
-    /// RPC listen address
-    #[arg(long, default_value = "127.0.0.1:9944")]
-    rpc_addr: String,
+    /// Override P2P listen address (may be repeated)
+    #[arg(long)]
+    listen: Vec<String>,
+
+    /// Override RPC listen address
+    #[arg(long)]
+    rpc_addr: Option<String>,
+
+    /// Override log level (trace, debug, info, warn, error)
+    #[arg(long)]
+    log_level: Option<String>,
+}
+
+impl Cli {
+    fn apply_overrides(&self, mut cfg: NodeConfig) -> NodeConfig {
+        if let Some(ref dir) = self.data_dir {
+            cfg.data_dir = dir.clone();
+        }
+        if !self.listen.is_empty() {
+            cfg.network.listen_addresses = self.listen.clone();
+        }
+        if let Some(ref addr) = self.rpc_addr {
+            cfg.rpc.listen_addr = addr.clone();
+        }
+        if let Some(ref level) = self.log_level {
+            cfg.log.level = level.clone();
+        }
+        cfg
+    }
 }
 
 #[tokio::main]
-async fn main() -> anyhow::Result<()> {
-    tracing_subscriber::fmt()
-        .with_env_filter(EnvFilter::from_default_env().add_directive("dendrite=info".parse()?))
-        .init();
-
+async fn main() -> Result<()> {
     let cli = Cli::parse();
 
+    let config = NodeConfig::load_or_default(cli.config.as_deref())?;
+    let config = cli.apply_overrides(config);
+
+    init_logging(&config.log.level)?;
+
     tracing::info!("Starting Dendrite node");
-    tracing::info!("  Data dir: {}", cli.data_dir);
-    tracing::info!("  P2P listen: {}", cli.listen_addr);
-    tracing::info!("  RPC listen: {}", cli.rpc_addr);
+    tracing::info!(data_dir = %config.data_dir.display());
 
-    // TODO: Initialize subsystems:
-    // 1. Storage (dendrite-storage)
-    // 2. Network (dendrite-network)
-    // 3. Consensus (dendrite-consensus)
-    // 4. Execution (dendrite-execution)
-    // 5. Runtime (dendrite-runtime)
-    // 6. RPC server (dendrite-rpc)
+    // Storage
+    std::fs::create_dir_all(&config.data_dir)
+        .with_context(|| format!("Failed to create data dir: {}", config.data_dir.display()))?;
+    let storage_path = config.storage_path();
+    let storage_path_str = storage_path.to_str().context("Invalid storage path")?;
+    let store = StateStore::open(storage_path_str).context("Failed to open storage")?;
+    let _store = Arc::new(store);
+    tracing::info!(path = %storage_path.display(), "Storage initialized");
 
-    tracing::info!("Dendrite node initialized (skeleton)");
+    // Network
+    let transport_config = TransportConfig {
+        idle_timeout_secs: config.network.idle_timeout_secs,
+    };
+    let mut transport =
+        Libp2pTransport::new(transport_config).context("Failed to create network transport")?;
+    tracing::info!(peer_id = %transport.local_peer_id(), "Network identity");
 
-    // Keep running until Ctrl+C
-    tokio::signal::ctrl_c().await?;
-    tracing::info!("Shutting down...");
+    for addr_str in &config.network.listen_addresses {
+        let addr: dendrite_network::Multiaddr = addr_str
+            .parse()
+            .with_context(|| format!("Invalid listen address: {addr_str}"))?;
+        transport
+            .listen_on(addr)
+            .with_context(|| format!("Failed to listen on {addr_str}"))?;
+    }
 
+    for boot_str in &config.network.boot_nodes {
+        let addr: dendrite_network::Multiaddr = boot_str
+            .parse()
+            .with_context(|| format!("Invalid boot node address: {boot_str}"))?;
+        if let Err(e) = transport.dial(addr) {
+            tracing::warn!(addr = %boot_str, error = %e, "Failed to dial boot node");
+        }
+    }
+
+    tracing::info!("Node started — press Ctrl+C to shut down");
+
+    let shutdown = Arc::new(Notify::new());
+    let shutdown_signal = shutdown.clone();
+
+    tokio::spawn(async move {
+        let _ = tokio::signal::ctrl_c().await;
+        tracing::info!("Shutdown signal received");
+        shutdown_signal.notify_waiters();
+    });
+
+    // Main event loop
+    loop {
+        tokio::select! {
+            event = transport.next_event() => {
+                match event {
+                    NetworkEvent::Listening(addr) => {
+                        tracing::info!(addr = %addr, "Listening");
+                    }
+                    NetworkEvent::PeerConnected(peer) => {
+                        tracing::info!(peer = %peer, "Peer connected");
+                    }
+                    NetworkEvent::PeerDisconnected(peer) => {
+                        tracing::debug!(peer = %peer, "Peer disconnected");
+                    }
+                    NetworkEvent::Message { source, topic, data } => {
+                        tracing::debug!(
+                            source = %source,
+                            topic = %topic,
+                            bytes = data.len(),
+                            "Received message"
+                        );
+                    }
+                }
+            }
+            _ = shutdown.notified() => {
+                break;
+            }
+        }
+    }
+
+    tracing::info!("Dendrite node shut down");
     Ok(())
+}
+
+fn init_logging(level: &str) -> Result<()> {
+    let directive = format!("dendrite={level}");
+    let filter = EnvFilter::from_default_env()
+        .add_directive(directive.parse().context("Invalid log level")?);
+    tracing_subscriber::fmt().with_env_filter(filter).init();
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn default_config_is_valid() {
+        let config = NodeConfig::default();
+        assert!(!config.network.listen_addresses.is_empty());
+        assert!(config.rpc.enabled);
+        assert_eq!(config.log.level, "info");
+    }
+
+    #[test]
+    fn cli_overrides_data_dir() {
+        let cli = Cli {
+            config: None,
+            data_dir: Some(PathBuf::from("/tmp/test")),
+            listen: vec![],
+            rpc_addr: None,
+            log_level: None,
+        };
+        let config = cli.apply_overrides(NodeConfig::default());
+        assert_eq!(config.data_dir, PathBuf::from("/tmp/test"));
+    }
+
+    #[test]
+    fn cli_overrides_listen_addresses() {
+        let cli = Cli {
+            config: None,
+            data_dir: None,
+            listen: vec!["/ip4/127.0.0.1/tcp/9999".into()],
+            rpc_addr: None,
+            log_level: None,
+        };
+        let config = cli.apply_overrides(NodeConfig::default());
+        assert_eq!(config.network.listen_addresses.len(), 1);
+        assert_eq!(
+            config.network.listen_addresses[0],
+            "/ip4/127.0.0.1/tcp/9999"
+        );
+    }
+
+    #[test]
+    fn config_roundtrip_toml() {
+        let config = NodeConfig::default();
+        let toml_str = toml::to_string_pretty(&config).unwrap();
+        let parsed: NodeConfig = toml::from_str(&toml_str).unwrap();
+        assert_eq!(parsed.rpc.listen_addr, config.rpc.listen_addr);
+        assert_eq!(
+            parsed.network.idle_timeout_secs,
+            config.network.idle_timeout_secs
+        );
+    }
+
+    #[test]
+    fn storage_path_is_under_data_dir() {
+        let mut config = NodeConfig::default();
+        config.data_dir = PathBuf::from("/var/dendrite");
+        assert_eq!(config.storage_path(), PathBuf::from("/var/dendrite/db"));
+    }
+
+    #[tokio::test]
+    async fn node_opens_storage() {
+        let dir = std::env::temp_dir().join(format!("dendrite_node_test_{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let db_path = dir.join("db");
+        let store = StateStore::open(db_path.to_str().unwrap());
+        assert!(store.is_ok());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 }

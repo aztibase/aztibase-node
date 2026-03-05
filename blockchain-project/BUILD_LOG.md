@@ -21,6 +21,21 @@ Entries are prepended (newest first).
 
 ## Entries
 
+### 2026-03-05 -- node-engineer -- dendrite-node
+**Task:** Phase 4 complete: Node wiring (storage, network, config, shutdown)
+**Sprint:** Sprint 002, Phase 4 (Tasks 17-20)
+**Git Ref:** pending
+**Files Changed:**
+- Cargo.toml (added toml, directories workspace deps)
+- crates/dendrite-node/Cargo.toml (added serde, toml, directories deps)
+- crates/dendrite-node/src/config.rs (NodeConfig: TOML loading, CLI overrides, defaults, storage path)
+- crates/dendrite-node/src/main.rs (full node startup: storage init, network swarm, event loop, graceful shutdown)
+- crates/dendrite-network/src/lib.rs (re-exported Multiaddr)
+**Review Notes:** Node opens redb storage on startup, creates libp2p swarm with TCP+QUIC, listens on configured addresses, dials boot nodes, runs event loop processing gossip/mDNS/connection events. Graceful shutdown via Ctrl+C with tokio::signal + Notify. Config supports TOML file loading with CLI overrides (--data-dir, --listen, --rpc-addr, --log-level). 6 new tests (config defaults, CLI overrides, TOML roundtrip, storage path, storage open). 66 tests total, zero clippy warnings, fmt clean.
+**Security Flags:** None
+
+---
+
 ### 2026-03-05 -- smart-contract-engineer -- dendrite-execution
 **Task:** Phase 3b complete: WASM execution engine with wasmtime
 **Sprint:** Sprint 002, Phase 3b (Tasks 14-16)

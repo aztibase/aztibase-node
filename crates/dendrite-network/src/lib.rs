@@ -3,6 +3,7 @@ pub mod discovery;
 pub mod gossip;
 pub mod transport;
 
+pub use libp2p::Multiaddr;
 pub use transport::{Libp2pTransport, NetworkEvent, TransportConfig};
 
 #[cfg(test)]

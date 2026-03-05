@@ -8,6 +8,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 ## [M1] -- Core Primitives (In Progress)
 
 ### Added
+- Node startup wiring: storage, network, TOML config, graceful shutdown (2026-03-05)
 - Build-phase tracking infrastructure: STATUS.md, DECISIONS.md, CHANGELOG.md, BUILD_LOG.md (2026-03-05)
 
 ### Changed

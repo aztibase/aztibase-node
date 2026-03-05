@@ -90,10 +90,10 @@ This sprint follows the build dependency order with parallelism where possible. 
 
 | # | Task | Assigned To | Depends On | Status | Acceptance Criteria |
 |---|------|-------------|------------|--------|---------------------|
-| 17 | Wire storage subsystem into node startup | node-engineer | Phase 1a | PENDING | Node opens redb on startup |
-| 18 | Wire network subsystem into node startup | node-engineer | Phase 3a | PENDING | Node starts libp2p swarm |
-| 19 | Add node configuration (TOML config file + CLI overrides) | node-engineer | -- | PENDING | Config struct, file loading, clap integration |
-| 20 | Implement graceful shutdown (signal handling, cleanup) | node-engineer | Tasks 17-18 | PENDING | SIGTERM/Ctrl-C cleanup + test |
+| 17 | Wire storage subsystem into node startup | node-engineer | Phase 1a | DONE | Node opens redb on startup |
+| 18 | Wire network subsystem into node startup | node-engineer | Phase 3a | DONE | Node starts libp2p swarm |
+| 19 | Add node configuration (TOML config file + CLI overrides) | node-engineer | -- | DONE | Config struct, file loading, clap integration |
+| 20 | Implement graceful shutdown (signal handling, cleanup) | node-engineer | Tasks 17-18 | DONE | SIGTERM/Ctrl-C cleanup + test |
 
 **Exit criteria:** `cargo test -p dendrite-node` passes. `cargo run -p dendrite-node` starts, opens storage, starts networking, shuts down cleanly.
 
