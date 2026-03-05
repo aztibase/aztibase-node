@@ -22,6 +22,20 @@ Entries are prepended (newest first).
 ## Entries
 
 ### 2026-03-05 -- consensus-engineer -- dendrite-consensus
+**Task:** Phase 2 complete: DagStore + CommitRule implementations
+**Sprint:** Sprint 002, Phase 2 (Tasks 7-8)
+**Git Ref:** pending
+**Files Changed:**
+- crates/dendrite-consensus/src/dag_store.rs (DagStore: insert, get, parent/child lookup, ancestor check, causal ordering, persistence via redb)
+- crates/dendrite-consensus/src/commit.rs (CommitRule: direct commit via supermajority voting, indirect commit via anchor, wave-based leader election)
+- crates/dendrite-consensus/src/lib.rs (exports, 10 new tests -- 7 DagStore + 3 CommitRule)
+- crates/dendrite-consensus/Cargo.toml (added bincode dependency)
+**Review Notes:** DagStore: in-memory index + redb persistence, parent validation on insert, BFS ancestor traversal with round-based pruning, deterministic topological sort for causal ordering, rebuild_index from disk on startup. CommitRule: MystiCeti-inspired wave structure (configurable wave_length), direct commit checks >2/3 voting stake, indirect commit via causal ancestry from anchor block. 26 consensus tests total (16 existing + 10 new). Zero clippy warnings, fmt clean.
+**Security Flags:** None
+
+---
+
+### 2026-03-05 -- consensus-engineer -- dendrite-consensus
 **Task:** Phase 1b complete: DagBlock + ValidatorSet implementations
 **Sprint:** Sprint 002, Phase 1b (Tasks 5-6)
 **Git Ref:** pending

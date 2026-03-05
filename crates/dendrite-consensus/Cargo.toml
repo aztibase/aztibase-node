@@ -11,6 +11,7 @@ dendrite-network = { workspace = true }
 dendrite-storage = { workspace = true }
 tokio = { workspace = true }
 serde = { workspace = true }
+bincode = { workspace = true }
 tracing = { workspace = true }
 thiserror = { workspace = true }
 rand = { workspace = true }

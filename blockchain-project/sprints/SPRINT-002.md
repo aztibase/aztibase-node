@@ -53,8 +53,8 @@ This sprint follows the build dependency order with parallelism where possible. 
 
 | # | Task | Assigned To | Depends On | Status | Acceptance Criteria |
 |---|------|-------------|------------|--------|---------------------|
-| 7 | Implement `DagStore` (block insertion, parent lookup, causal ordering) | consensus-engineer | Phase 1a + 1b | PENDING | DAG walk, ancestor queries + 4 tests |
-| 8 | Implement basic commit rule (direct/indirect commit) | consensus-engineer | Task 7 | PENDING | MystiCeti-style commit logic + 3 tests |
+| 7 | Implement `DagStore` (block insertion, parent lookup, causal ordering) | consensus-engineer | Phase 1a + 1b | DONE | DAG walk, ancestor queries + 7 tests |
+| 8 | Implement basic commit rule (direct/indirect commit) | consensus-engineer | Task 7 | DONE | MystiCeti-style commit logic + 3 tests |
 
 **Exit criteria:** `cargo test -p dendrite-consensus` passes with 10+ total tests. DAG blocks can be created, stored, and ordered.
 

@@ -600,6 +600,7 @@ name = "dendrite-consensus"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "bincode",
  "dendrite-core",
  "dendrite-network",
  "dendrite-storage",

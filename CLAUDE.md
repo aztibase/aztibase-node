@@ -74,6 +74,18 @@ Use `/blockchain-architect`, `/consensus-engineer`, etc. to invoke a specific en
 9. research-analyst (runs first in new research sprints)
 10. documentation-engineer (continuous — documents each phase as it completes)
 
+## Clean Code Rules (MANDATORY -- zero tolerance)
+
+These rules are non-negotiable. Every line of code must look like it was written by a skilled human developer.
+
+1. **No AI fingerprints**: Zero comments like "// AI-generated", "// Claude", "// TODO: Claude", "// Helper function for...", or any phrasing that reveals AI assistance. No boilerplate explanations disguised as comments. Comments exist ONLY to explain non-obvious *why*, never obvious *what*.
+2. **No over-commenting**: Do not add comments to self-explanatory code. `let total = a + b; // add a and b` is a violation. If the code reads clearly, it needs no comment.
+3. **No placeholder or filler code**: Every function does real work. No `todo!()` in shipped code unless explicitly marked as a future-phase stub in the sprint plan.
+4. **Type errors are tracked**: When a type error occurs during development, Claude MUST log it in memory and never repeat the same mistake. Type errors are bugs in understanding -- fix the understanding, not just the code.
+5. **Clippy + fmt are law**: `cargo clippy` zero warnings, `cargo fmt --check` clean. No exceptions. Run both before declaring any task done.
+6. **Idiomatic Rust**: Use standard patterns (Result/Option, iterators, trait impls). No Java-style getters/setters, no unnecessary clones, no `.unwrap()` in library code.
+7. **Dead code is deleted code**: No commented-out code blocks, no unused imports, no dead functions. If it's not used, it doesn't exist.
+
 ## Tech Stack
 - Language: Rust
 - Async: tokio

@@ -1,8 +1,12 @@
+pub mod commit;
 pub mod dag;
+pub mod dag_store;
 pub mod pouw;
 pub mod validator;
 
+pub use commit::{CommitConfig, CommitRule, LeaderStatus};
 pub use dag::{DagBlock, DagError};
+pub use dag_store::{DagStore, DagStoreError, DagStoreResult};
 pub use validator::{ValidatorInfo, ValidatorSet};
 
 #[cfg(test)]
@@ -188,5 +192,276 @@ mod tests {
     fn test_leader_empty_set() {
         let vs = ValidatorSet::new();
         assert_eq!(vs.leader_for_round(0), None);
+    }
+
+    // ── Task 7: DagStore tests ──────────────────────────────────────
+
+    use dendrite_storage::StateStore;
+    use std::sync::atomic::{AtomicU32, Ordering};
+
+    static TEST_COUNTER: AtomicU32 = AtomicU32::new(0);
+
+    fn test_db_path() -> std::path::PathBuf {
+        let id = TEST_COUNTER.fetch_add(1, Ordering::SeqCst);
+        let pid = std::process::id();
+        std::env::temp_dir().join(format!("dendrite_consensus_test_{}_{}", pid, id))
+    }
+
+    fn cleanup(path: &std::path::Path) {
+        let _ = std::fs::remove_file(path);
+        let lock = path.with_extension("lock");
+        let _ = std::fs::remove_file(lock);
+    }
+
+    fn make_dag_store() -> (DagStore, std::path::PathBuf) {
+        let path = test_db_path();
+        let store = StateStore::open(path.to_str().unwrap()).unwrap();
+        let dag = DagStore::new(store).unwrap();
+        (dag, path)
+    }
+
+    #[test]
+    fn test_dag_store_insert_genesis() {
+        let (mut dag, path) = make_dag_store();
+        let genesis = DagBlock::genesis([1u8; 32], 1000);
+        let gh = genesis.hash;
+        dag.insert(genesis).unwrap();
+
+        assert!(dag.contains(&gh));
+        assert_eq!(dag.len(), 1);
+        assert_eq!(dag.round_of(&gh).unwrap(), 0);
+        assert_eq!(dag.blocks_at_round(0).len(), 1);
+
+        let retrieved = dag.get(&gh).unwrap();
+        assert_eq!(retrieved.hash, gh);
+        assert!(retrieved.is_genesis());
+
+        cleanup(&path);
+    }
+
+    #[test]
+    fn test_dag_store_insert_with_parents() {
+        let (mut dag, path) = make_dag_store();
+        let g1 = DagBlock::genesis([1u8; 32], 1000);
+        let g2 = DagBlock::genesis([2u8; 32], 1000);
+        let g1h = g1.hash;
+        let g2h = g2.hash;
+        dag.insert(g1).unwrap();
+        dag.insert(g2).unwrap();
+
+        let child = DagBlock::new(1, [1u8; 32], vec![g1h, g2h], vec![], 2000).unwrap();
+        let ch = child.hash;
+        dag.insert(child).unwrap();
+
+        assert_eq!(dag.len(), 3);
+        assert_eq!(dag.parents(&ch).unwrap(), &[g1h, g2h]);
+        assert!(dag.children(&g1h).unwrap().contains(&ch));
+        assert!(dag.children(&g2h).unwrap().contains(&ch));
+
+        cleanup(&path);
+    }
+
+    #[test]
+    fn test_dag_store_rejects_missing_parent() {
+        let (mut dag, path) = make_dag_store();
+        let fake_parent = hash(b"nonexistent");
+        let block = DagBlock::new(1, [1u8; 32], vec![fake_parent], vec![], 2000).unwrap();
+        let result = dag.insert(block);
+
+        assert!(result.is_err());
+        assert!(matches!(
+            result.unwrap_err(),
+            DagStoreError::MissingParent { .. }
+        ));
+
+        cleanup(&path);
+    }
+
+    #[test]
+    fn test_dag_store_rejects_duplicate() {
+        let (mut dag, path) = make_dag_store();
+        let genesis = DagBlock::genesis([1u8; 32], 1000);
+        let g = genesis.clone();
+        dag.insert(genesis).unwrap();
+        let result = dag.insert(g);
+
+        assert!(result.is_err());
+        assert!(matches!(
+            result.unwrap_err(),
+            DagStoreError::DuplicateBlock(_)
+        ));
+
+        cleanup(&path);
+    }
+
+    #[test]
+    fn test_dag_store_ancestor_check() {
+        let (mut dag, path) = make_dag_store();
+
+        let g = DagBlock::genesis([1u8; 32], 1000);
+        let gh = g.hash;
+        dag.insert(g).unwrap();
+
+        let b1 = DagBlock::new(1, [2u8; 32], vec![gh], vec![], 2000).unwrap();
+        let b1h = b1.hash;
+        dag.insert(b1).unwrap();
+
+        let b2 = DagBlock::new(2, [3u8; 32], vec![b1h], vec![], 3000).unwrap();
+        let b2h = b2.hash;
+        dag.insert(b2).unwrap();
+
+        assert!(dag.is_ancestor(&gh, &b2h));
+        assert!(dag.is_ancestor(&b1h, &b2h));
+        assert!(dag.is_ancestor(&b2h, &b2h));
+        assert!(!dag.is_ancestor(&b2h, &gh));
+
+        cleanup(&path);
+    }
+
+    #[test]
+    fn test_dag_store_causal_order() {
+        let (mut dag, path) = make_dag_store();
+
+        let g1 = DagBlock::genesis([1u8; 32], 1000);
+        let g2 = DagBlock::genesis([2u8; 32], 1000);
+        let g1h = g1.hash;
+        let g2h = g2.hash;
+        dag.insert(g1).unwrap();
+        dag.insert(g2).unwrap();
+
+        let b1 = DagBlock::new(1, [1u8; 32], vec![g1h, g2h], vec![], 2000).unwrap();
+        let b1h = b1.hash;
+        dag.insert(b1).unwrap();
+
+        let order = dag.causal_order(&[b1h]).unwrap();
+        assert_eq!(order.len(), 3);
+        // Genesis blocks must come before the child.
+        let b1_pos = order.iter().position(|h| *h == b1h).unwrap();
+        let g1_pos = order.iter().position(|h| *h == g1h).unwrap();
+        let g2_pos = order.iter().position(|h| *h == g2h).unwrap();
+        assert!(g1_pos < b1_pos);
+        assert!(g2_pos < b1_pos);
+
+        cleanup(&path);
+    }
+
+    #[test]
+    fn test_dag_store_highest_round() {
+        let (mut dag, path) = make_dag_store();
+        assert_eq!(dag.highest_round(), None);
+
+        let g = DagBlock::genesis([1u8; 32], 1000);
+        let gh = g.hash;
+        dag.insert(g).unwrap();
+        assert_eq!(dag.highest_round(), Some(0));
+
+        let b = DagBlock::new(1, [2u8; 32], vec![gh], vec![], 2000).unwrap();
+        dag.insert(b).unwrap();
+        assert_eq!(dag.highest_round(), Some(1));
+
+        cleanup(&path);
+    }
+
+    // ── Task 8: CommitRule tests ────────────────────────────────────
+
+    fn build_3validator_set() -> (ValidatorSet, [u8; 32], [u8; 32], [u8; 32]) {
+        let mut vs = ValidatorSet::new();
+        let v1 = [1u8; 32];
+        let v2 = [2u8; 32];
+        let v3 = [3u8; 32];
+        vs.add(v1, 100);
+        vs.add(v2, 100);
+        vs.add(v3, 100);
+        (vs, v1, v2, v3)
+    }
+
+    #[test]
+    fn test_direct_commit_with_supermajority() {
+        let (mut dag, path) = make_dag_store();
+        let (vs, v1, v2, v3) = build_3validator_set();
+        let config = CommitConfig { wave_length: 2 };
+
+        // Wave 0: leader round = 0, voting round = 1.
+        // Elect leader for round 0 -- use whoever the ValidatorSet picks.
+        let leader = vs.leader_for_round(0).unwrap();
+        let leader_block = DagBlock::genesis(leader, 1000);
+        let lh = leader_block.hash;
+        dag.insert(leader_block).unwrap();
+
+        // All other validators also produce genesis blocks.
+        let others: Vec<[u8; 32]> = [v1, v2, v3].into_iter().filter(|v| *v != leader).collect();
+        for v in &others {
+            dag.insert(DagBlock::genesis(*v, 1000)).unwrap();
+        }
+
+        // Voting round (round 1): all 3 validators reference the leader block.
+        let voting_blocks: Vec<DagBlock> = [v1, v2, v3]
+            .iter()
+            .map(|v| DagBlock::new(1, *v, vec![lh], vec![], 2000).unwrap())
+            .collect();
+        for vb in voting_blocks {
+            dag.insert(vb).unwrap();
+        }
+
+        let rule = CommitRule::new(&dag, &vs, config);
+        let status = rule.try_direct_commit(0);
+        assert_eq!(status, LeaderStatus::Commit(lh));
+
+        cleanup(&path);
+    }
+
+    #[test]
+    fn test_direct_skip_no_leader_block() {
+        let (dag, path) = make_dag_store();
+        let (vs, _, _, _) = build_3validator_set();
+        let config = CommitConfig { wave_length: 2 };
+
+        // No blocks at all -- leader block missing.
+        let rule = CommitRule::new(&dag, &vs, config);
+        let status = rule.try_direct_commit(0);
+        assert!(matches!(status, LeaderStatus::Skip(0)));
+
+        cleanup(&path);
+    }
+
+    #[test]
+    fn test_indirect_commit_via_anchor() {
+        let (mut dag, path) = make_dag_store();
+        let (vs, v1, v2, v3) = build_3validator_set();
+        let config = CommitConfig { wave_length: 2 };
+
+        // Wave 0: leader at round 0.
+        let leader_w0 = vs.leader_for_round(0).unwrap();
+        let lb0 = DagBlock::genesis(leader_w0, 1000);
+        let lh0 = lb0.hash;
+        dag.insert(lb0).unwrap();
+
+        let others: Vec<[u8; 32]> = [v1, v2, v3]
+            .into_iter()
+            .filter(|v| *v != leader_w0)
+            .collect();
+        for v in &others {
+            dag.insert(DagBlock::genesis(*v, 1000)).unwrap();
+        }
+
+        // Round 1: only 1 validator votes for wave-0 leader (not enough for direct).
+        let vb1 = DagBlock::new(1, v1, vec![lh0], vec![], 2000).unwrap();
+        let vb1h = vb1.hash;
+        dag.insert(vb1).unwrap();
+
+        // Wave 1: leader at round 2.
+        let leader_w1 = vs.leader_for_round(2).unwrap();
+        let lb1 = DagBlock::new(2, leader_w1, vec![vb1h], vec![], 3000).unwrap();
+        let lh1 = lb1.hash;
+        dag.insert(lb1).unwrap();
+
+        // The wave-0 leader is in the causal history of wave-1 leader.
+        assert!(dag.is_ancestor(&lh0, &lh1));
+
+        let rule = CommitRule::new(&dag, &vs, config);
+        let status = rule.try_indirect_commit(0, &lh1);
+        assert_eq!(status, LeaderStatus::Commit(lh0));
+
+        cleanup(&path);
     }
 }
