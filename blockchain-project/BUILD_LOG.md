@@ -21,6 +21,26 @@ Entries are prepended (newest first).
 
 ## Entries
 
+### 2026-03-05 -- security-engineer + ai-integration-engineer -- cross-cutting
+**Task:** Phase 5 complete: Security review, AIRuntime, CryptoProvider, cargo-audit
+**Sprint:** Sprint 002, Phase 5 (Tasks 21-24)
+**Git Ref:** pending
+**Files Changed:**
+- crates/dendrite-core/src/crypto.rs (CryptoProvider trait + DefaultCryptoProvider impl)
+- crates/dendrite-core/src/lib.rs (3 new tests for CryptoProvider)
+- crates/dendrite-runtime/src/ai_oracle.rs (AIRuntime trait, InferenceRequest/Result, PassthroughRuntime)
+- crates/dendrite-runtime/src/lib.rs (exports, 3 new tests for AIRuntime)
+- crates/dendrite-execution/src/vm.rs (bounds-checked memory access in host functions)
+**Review Notes:**
+- Security review: 13-item checklist passed. Found and fixed WASM host function bounds checking (vm.rs). No ELEVATED flags remaining.
+- AIRuntime trait with Passthrough/LocalInference/NetworkInference modes. PassthroughRuntime returns empty results, enabling nodes to run without AI hardware.
+- CryptoProvider trait abstracts BLAKE3+Ed25519 behind swappable interface for future PQC migration.
+- cargo-audit: 5 advisories found, all in transitive deps (wasmtime WASI, ring AES, libp2p lru). None affect our code paths (no WASI, no AES, threads disabled). Documented as acceptable for M1.
+- 72 tests total, zero clippy warnings, fmt clean.
+**Security Flags:** WASM bounds checking fixed (was missing negative ptr/overflow validation). No remaining ELEVATED flags.
+
+---
+
 ### 2026-03-05 -- node-engineer -- dendrite-node
 **Task:** Phase 4 complete: Node wiring (storage, network, config, shutdown)
 **Sprint:** Sprint 002, Phase 4 (Tasks 17-20)

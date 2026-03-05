@@ -56,6 +56,44 @@ impl PublicKey {
     }
 }
 
+/// Abstraction over cryptographic operations.
+///
+/// Allows swapping the underlying algorithms (e.g., Ed25519 → Dilithium for PQC)
+/// without changing consumer code. All consensus, networking, and storage code
+/// should use this trait rather than calling hash/sign/verify directly.
+pub trait CryptoProvider: Send + Sync {
+    fn hash(&self, data: &[u8]) -> Hash;
+    fn generate_keypair(&self) -> Keypair;
+    fn sign(&self, keypair: &Keypair, message: &[u8]) -> Vec<u8>;
+    fn verify(&self, public_key: &PublicKey, message: &[u8], signature: &[u8]) -> bool;
+    fn algorithm_name(&self) -> &'static str;
+}
+
+/// Default provider using BLAKE3 + Ed25519.
+pub struct DefaultCryptoProvider;
+
+impl CryptoProvider for DefaultCryptoProvider {
+    fn hash(&self, data: &[u8]) -> Hash {
+        hash(data)
+    }
+
+    fn generate_keypair(&self) -> Keypair {
+        Keypair::generate()
+    }
+
+    fn sign(&self, keypair: &Keypair, message: &[u8]) -> Vec<u8> {
+        keypair.sign(message)
+    }
+
+    fn verify(&self, public_key: &PublicKey, message: &[u8], signature: &[u8]) -> bool {
+        public_key.verify(message, signature)
+    }
+
+    fn algorithm_name(&self) -> &'static str {
+        "Ed25519+BLAKE3"
+    }
+}
+
 mod pub_key_serde {
     use super::*;
     use serde::{self, Deserializer, Serializer};

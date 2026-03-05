@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, bail};
 
 pub struct EngineConfig {
     pub fuel_limit: u64,
@@ -107,6 +107,20 @@ impl ExecutionEngine {
         })
     }
 
+    fn read_guest_memory(data: &[u8], ptr: i32, len: i32) -> anyhow::Result<Vec<u8>> {
+        if ptr < 0 || len < 0 {
+            bail!("negative pointer or length");
+        }
+        let start = ptr as usize;
+        let end = start
+            .checked_add(len as usize)
+            .ok_or_else(|| anyhow::anyhow!("pointer arithmetic overflow"))?;
+        if end > data.len() {
+            bail!("out-of-bounds memory access: {end} > {}", data.len());
+        }
+        Ok(data[start..end].to_vec())
+    }
+
     fn register_host_functions(linker: &mut wasmtime::Linker<HostState>) -> Result<()> {
         linker
             .func_wrap(
@@ -124,8 +138,8 @@ impl ExecutionEngine {
                         .ok_or_else(|| anyhow::anyhow!("missing memory export"))?;
 
                     let data = memory.data(&caller);
-                    let key = data[key_ptr as usize..(key_ptr + key_len) as usize].to_vec();
-                    let val = data[val_ptr as usize..(val_ptr + val_len) as usize].to_vec();
+                    let key = Self::read_guest_memory(data, key_ptr, key_len)?;
+                    let val = Self::read_guest_memory(data, val_ptr, val_len)?;
 
                     caller.data_mut().storage.insert(key, val);
                     Ok(())
@@ -149,11 +163,19 @@ impl ExecutionEngine {
                         .ok_or_else(|| anyhow::anyhow!("missing memory export"))?;
 
                     let data = memory.data(&caller);
-                    let key = data[key_ptr as usize..(key_ptr + key_len) as usize].to_vec();
+                    let key = Self::read_guest_memory(data, key_ptr, key_len)?;
 
                     match caller.data().storage.get(&key) {
                         Some(val) => {
+                            if out_ptr < 0 || out_cap < 0 {
+                                bail!("negative output pointer or capacity");
+                            }
                             let write_len = val.len().min(out_cap as usize);
+                            let out_start = out_ptr as usize;
+                            let out_end = out_start
+                                .checked_add(write_len)
+                                .ok_or_else(|| anyhow::anyhow!("output pointer overflow"))?;
+
                             let val_copy = val[..write_len].to_vec();
 
                             let memory = caller
@@ -161,9 +183,11 @@ impl ExecutionEngine {
                                 .and_then(|e| e.into_memory())
                                 .ok_or_else(|| anyhow::anyhow!("missing memory export"))?;
 
-                            memory.data_mut(&mut caller)
-                                [out_ptr as usize..out_ptr as usize + write_len]
-                                .copy_from_slice(&val_copy);
+                            let mem_data = memory.data_mut(&mut caller);
+                            if out_end > mem_data.len() {
+                                bail!("out-of-bounds write: {out_end} > {}", mem_data.len());
+                            }
+                            mem_data[out_start..out_end].copy_from_slice(&val_copy);
 
                             Ok(write_len as i32)
                         }
@@ -189,8 +213,8 @@ impl ExecutionEngine {
                         .ok_or_else(|| anyhow::anyhow!("missing memory export"))?;
 
                     let mem = memory.data(&caller);
-                    let topic = mem[topic_ptr as usize..(topic_ptr + topic_len) as usize].to_vec();
-                    let data = mem[data_ptr as usize..(data_ptr + data_len) as usize].to_vec();
+                    let topic = Self::read_guest_memory(mem, topic_ptr, topic_len)?;
+                    let data = Self::read_guest_memory(mem, data_ptr, data_len)?;
 
                     caller.data_mut().events.push(ContractEvent { topic, data });
                     Ok(())

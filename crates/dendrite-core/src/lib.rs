@@ -49,6 +49,30 @@ mod tests {
     }
 
     #[test]
+    fn test_crypto_provider_hash() {
+        let provider = DefaultCryptoProvider;
+        let h1 = provider.hash(b"test");
+        let h2 = hash(b"test");
+        assert_eq!(h1, h2);
+    }
+
+    #[test]
+    fn test_crypto_provider_sign_verify() {
+        let provider = DefaultCryptoProvider;
+        let kp = provider.generate_keypair();
+        let msg = b"provider test";
+        let sig = provider.sign(&kp, msg);
+        assert!(provider.verify(&kp.public_key(), msg, &sig));
+        assert!(!provider.verify(&kp.public_key(), b"wrong", &sig));
+    }
+
+    #[test]
+    fn test_crypto_provider_name() {
+        let provider = DefaultCryptoProvider;
+        assert_eq!(provider.algorithm_name(), "Ed25519+BLAKE3");
+    }
+
+    #[test]
     fn test_block_header_serialization() {
         let header = BlockHeader {
             version: 1,

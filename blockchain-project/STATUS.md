@@ -3,7 +3,7 @@
 **Last Updated:** 2026-03-05
 **Updated By:** project-lead
 **Current Phase:** M1 -- Core Primitives
-**Current Sprint:** Sprint 002 -- M1 Core Primitives Build-Out
+**Current Sprint:** Sprint 002 -- COMPLETE
 
 ---
 
@@ -12,7 +12,7 @@
 | Milestone | Description | Status | Date Started | Date Completed |
 |-----------|-------------|--------|--------------|----------------|
 | M0 | Design complete (all MASTER_DESIGN sections) | DONE | 2026-03-05 | 2026-03-05 |
-| M1 | Core primitives (data types, crypto, basic structs) | IN PROGRESS | 2026-03-05 | -- |
+| M1 | Core primitives (data types, crypto, basic structs) | DONE | 2026-03-05 | 2026-03-05 |
 | M2 | P2P networking + basic consensus | NOT STARTED | -- | -- |
 | M3 | Execution layer (WASM VM, state management) | NOT STARTED | -- | -- |
 | M4 | Integration testing + basic AI + testnet | NOT STARTED | -- | -- |
@@ -33,8 +33,9 @@
 - Build-phase tracking infrastructure (5 documents)
 - Implementation depth audit (Sprint 001, Task 7)
 - Reference repos cloned (MystiCeti, Sui, Lighthouse, rust-libp2p, redb)
-- cargo build + cargo test pass (66 tests, 0 failures)
+- cargo build + cargo test pass (72 tests, 0 failures)
 - Sprint 001 closed with retrospective
+- Sprint 002 closed: 24/24 tasks, 5 phases complete
 
 ### Crate Status
 
@@ -45,26 +46,26 @@
 | dendrite-storage | PARTIAL | node-engineer | YES |
 | dendrite-network | PARTIAL | p2p-network-engineer | YES |
 | dendrite-execution | PARTIAL | smart-contract-engineer | YES |
-| dendrite-runtime | STUB | ai-integration-engineer | NO |
+| dendrite-runtime | PARTIAL | ai-integration-engineer | YES |
 | dendrite-rpc | STUB | node-engineer | NO |
-| dendrite-node | PARTIAL | node-engineer | NO |
+| dendrite-node | PARTIAL | node-engineer | YES |
 
 ### In Progress
-- Sprint 002: M1 Core Primitives Build-Out (20/24 tasks done, Phases 1-4 complete)
+- Nothing (Sprint 002 complete, Sprint 003 not yet planned)
 
 ### Blocked
 - Nothing currently blocked
 
 ### Recently Completed
-- Phase 4: Node wiring (storage init, network swarm, TOML config, graceful shutdown, 6 tests)
-- Phase 3a: Network transport (libp2p 0.54, QUIC + TCP/Noise, Gossipsub, Kademlia, mDNS)
-- Phase 3b: Execution engine (wasmtime 28, deterministic config, fuel metering, 3 host functions)
-- Phase 2: Consensus persistence (DagStore, CommitRule)
-- Phase 1a: Storage foundation (redb, StateStore, 6 tables)
-- Phase 1b: Consensus data types (DagBlock, ValidatorSet)
+- Sprint 002 Phase 5: Security review (13-item checklist), AIRuntime trait, CryptoProvider trait, cargo-audit
+- Sprint 002 Phase 4: Node wiring (storage init, network swarm, TOML config, graceful shutdown)
+- Sprint 002 Phase 3: Network transport (libp2p) + Execution engine (wasmtime)
+- Sprint 002 Phase 2: Consensus persistence (DagStore, CommitRule)
+- Sprint 002 Phase 1: Storage foundation + Consensus data types
 
 ### Next Up
-1. Execute Sprint 002 Phase 5: Cross-Cutting (Tasks 21-24)
+1. Plan Sprint 003 (M2: P2P networking + basic consensus)
+2. Draft `blockchain-project/sprints/SPRINT-003.md`
 
 ---
 
@@ -74,8 +75,9 @@
 |------|----------|-------|--------|
 | Dendrite Systems coexistence agreement not initiated | MEDIUM | legal-ip-counsel | OPEN |
 | Domain acquisition pending | MEDIUM | legal-ip-counsel | OPEN |
-| No CI/CD pipeline | LOW | node-engineer | RESOLVED (GitHub Actions CI) |
 | nChain patent FTO analysis not started | HIGH | legal-ip-counsel | OPEN |
+| wasmtime trap handling on Windows | LOW | smart-contract-engineer | KNOWN |
+| Transitive dep advisories (ring, wasmtime WASI, lru) | LOW | security-engineer | DOCUMENTED |
 
 ---
 
