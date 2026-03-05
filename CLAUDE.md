@@ -12,6 +12,11 @@ This is the Dendrite Network blockchain project. A Layer-1 AI-native, server-ind
 - Orchestration: `blockchain-project/ORCHESTRATION.md`
 - Visual Explainer: `blockchain-project/dendrite-visual-explainer.html`
 
+## Branch Strategy
+- **main**: Protected. Only receives merges from `dev` via PR. Never commit directly to main.
+- **dev**: Active development branch. All work happens here. Push to `dev`, PR to `main`.
+- Always ensure you are on the `dev` branch before making changes.
+
 ## Skill Fleet
 This project uses a fleet of 12 specialist skills located in `.claude/skills/`.
 Each skill represents a team member with a specific role, authority, and output responsibilities.
