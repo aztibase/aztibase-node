@@ -1,5 +1,5 @@
-use serde::{Deserialize, Serialize};
 use crate::crypto::Hash;
+use serde::{Deserialize, Serialize};
 
 /// Unique identifier for a validator.
 pub type ValidatorId = [u8; 32];
