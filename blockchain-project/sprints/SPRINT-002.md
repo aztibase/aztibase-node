@@ -3,7 +3,7 @@
 **Sprint Goal:** Bring all 8 crates from STUB/SKELETON to at minimum PARTIAL depth. Complete M1 milestone (core primitives, storage, basic consensus structures, network transport).
 **Start Date:** 2026-03-05
 **End Date:** TBD
-**Status:** PLANNED
+**Status:** IN PROGRESS
 **Led By:** project-lead
 
 ---
@@ -31,10 +31,10 @@ This sprint follows the build dependency order with parallelism where possible. 
 
 | # | Task | Assigned To | Depends On | Status | Acceptance Criteria |
 |---|------|-------------|------------|--------|---------------------|
-| 1 | Implement `StateStore` trait (get, put, delete, batch, iterate) | node-engineer | -- | PENDING | Trait + redb backend + 5 tests |
-| 2 | Create named table abstraction (blocks, state, tx, receipts, validators, verkle) | node-engineer | Task 1 | PENDING | 6 tables defined, open/close works |
-| 3 | Implement batch write operations | node-engineer | Task 2 | PENDING | Atomic multi-table writes + test |
-| 4 | Add iterator support for range queries | node-engineer | Task 2 | PENDING | Forward/reverse iteration + test |
+| 1 | Implement `StateStore` trait (get, put, delete, batch, iterate) | node-engineer | -- | DONE | Trait + redb backend + 7 tests |
+| 2 | Create named table abstraction (blocks, state, tx, receipts, validators, verkle) | node-engineer | Task 1 | DONE | 6 tables defined + 2 tests |
+| 3 | Implement batch write operations | node-engineer | Task 2 | DONE | Atomic single + multi-table writes + 2 tests |
+| 4 | Add iterator support for range queries | node-engineer | Task 2 | DONE | Forward/reverse iteration + 4 tests |
 
 **Exit criteria:** `cargo test -p dendrite-storage` passes with 10+ tests. StateStore fully functional.
 

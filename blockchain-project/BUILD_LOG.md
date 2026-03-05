@@ -21,6 +21,18 @@ Entries are prepended (newest first).
 
 ## Entries
 
+### 2026-03-05 -- node-engineer -- dendrite-storage
+**Task:** Phase 1a complete: StateStore trait, 6 named tables, batch writes, range iteration
+**Sprint:** Sprint 002, Phase 1a (Tasks 1-4)
+**Git Ref:** pending
+**Files Changed:**
+- crates/dendrite-storage/src/store.rs (complete rewrite — StateStore with redb backend)
+- crates/dendrite-storage/src/lib.rs (exports, 15 tests)
+**Review Notes:** Full CRUD (get/put/delete/contains), batch_put (single table), batch_put_multi (cross-table atomic), iter/range/range_reverse. All 6 tables (blocks, state, tx, receipts, validators, verkle) initialized on open. StorageError with boxed TransactionError to satisfy clippy. Zero clippy warnings, fmt clean. 15 tests passing (exit criteria was 10+).
+**Security Flags:** None
+
+---
+
 ### 2026-03-05 -- project-lead -- Project Infrastructure
 **Task:** Established build-phase documentation trail
 **Sprint:** Pre-Sprint
