@@ -140,3 +140,73 @@ These are hard requirements. Violating any of these blocks shipping.
 - No `unsafe` blocks without security-engineer review and justification comment
 - All dependencies must be pure Rust (no C/C++ build deps -- ADR-001)
 - Security-engineer review mandatory before merging any code
+
+## Session Handoff Protocol (MANDATORY -- enforced on EVERY new conversation)
+
+This is a solo-developer project. Context WILL be lost between conversations.
+This protocol ensures zero drift between sessions.
+
+### When the user starts a new conversation (says "lead", "continue", "status", or similar):
+
+Claude MUST do the following BEFORE any other work:
+
+1. **Read these files silently** (do NOT dump their contents to the user):
+   - `blockchain-project/STATUS.md`
+   - `blockchain-project/BUILD_LOG.md` (last 5 entries)
+   - Current sprint plan in `blockchain-project/sprints/`
+   - `blockchain-project/DECISIONS.md` (last 3 ADRs)
+   - `CHANGELOG.md` (last section)
+
+2. **Run these checks silently**:
+   - `git branch` (confirm on `dev`)
+   - `git status` (check for uncommitted work)
+   - `git log --oneline -3` (last 3 commits)
+   - `cargo check --workspace` (does it compile?)
+
+3. **Respond with a SHORT sync report** (max 15 lines):
+   ```
+   SYNC REPORT -- Dendrite Network
+   Branch: dev (clean / dirty)
+   Last commit: <hash> <message>
+   Sprint: <number> -- <name>
+   Phase: <current phase> | Task: <current/next task>
+   Tests: <pass count> | Warnings: <count>
+   Blockers: <none or list>
+   Next action: <what to do next>
+   ```
+
+4. **Wait for the user's go-ahead** before doing any work.
+
+### Why this exists:
+- Single developer = no one else to catch drift
+- Long conversations lose context = errors compound
+- This 30-second check prevents hours of rework
+
+## Doc Sync Rules (MANDATORY -- enforced on every task completion)
+
+Documentation is NOT optional. It is part of the Definition of Done for EVERY task.
+
+### After completing ANY task:
+1. **BUILD_LOG.md**: Add entry with git ref, files changed, what was done
+2. **Sprint plan**: Update task status from PENDING to DONE
+3. **STATUS.md**: Update if a phase boundary was crossed
+4. **CHANGELOG.md**: Add entry if the change is architecture-level or user-facing
+5. **DECISIONS.md**: Add ADR if a non-obvious technical choice was made
+6. **Code docs**: If a new public trait/type/function was added, ensure it has rustdoc comments
+
+### After completing ANY phase:
+1. All of the above, PLUS:
+2. **STATUS.md**: Full update (crate depth table, completed list, next up)
+3. **Sprint plan**: Mark phase exit criteria as met
+4. **CHANGELOG.md**: Phase completion entry
+
+### After completing ANY sprint:
+1. All of the above, PLUS:
+2. **Sprint retrospective**: Written in the sprint plan file
+3. **STATUS.md**: Full refresh with metrics
+4. **Next sprint plan**: Drafted in `blockchain-project/sprints/SPRINT-XXX.md`
+
+### Enforcement:
+- Claude MUST NOT say "task complete" until ALL doc updates are done
+- If Claude forgets, the user should say "docs?" and Claude must immediately do the updates
+- No commit is valid without its BUILD_LOG entry
