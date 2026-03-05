@@ -119,3 +119,58 @@ Each skill appends to MASTER_DESIGN.md with a signed section:
 | Phase 5b | 10 raw names submitted | Step 5a completion |
 | Phase 5c | LEGAL_CLEARANCE_REPORT.md complete with GREEN names | Step 5b completion |
 | Phase 6 | NAMING_REPORT.md complete | Phase 5 completion |
+
+---
+
+## Build-Phase Tracking Protocol
+
+The design phase (Phases 3-6) is complete. The following protocol governs all build activity from M1 onward.
+
+### Tracking Documents
+
+| Document | Location | Purpose | Updated By |
+|----------|----------|---------|------------|
+| STATUS.md | blockchain-project/STATUS.md | Living project status, milestones, risks | project-lead |
+| DECISIONS.md | blockchain-project/DECISIONS.md | Architecture Decision Records (ADRs) | Any engineer (reviewed by blockchain-architect) |
+| CHANGELOG.md | CHANGELOG.md | Per-milestone change log | Engineer who made the change |
+| BUILD_LOG.md | blockchain-project/BUILD_LOG.md | Running build diary (who, what, when) | Engineer who did the work |
+| Sprint plans | blockchain-project/sprints/SPRINT-NNN.md | Per-sprint task breakdown | project-lead |
+
+### Build-Phase Rules
+
+1. **Every code change must be traceable.** The chain is: Design (MASTER_DESIGN.md) -> Decision (DECISIONS.md) -> Sprint (sprints/) -> Code (git commit) -> Log (BUILD_LOG.md) -> Status (STATUS.md).
+
+2. **ADRs are mandatory** for any non-obvious technical choice. "Non-obvious" means: a reasonable engineer could have chosen differently. If in doubt, write the ADR.
+
+3. **BUILD_LOG entries are mandatory** for every meaningful code session. A "meaningful session" is any work that results in a git commit. Format is defined in BUILD_LOG.md.
+
+4. **CHANGELOG entries are mandatory** for every user-facing or architecture-affecting change. Internal refactors that don't change behavior can skip the changelog.
+
+5. **STATUS.md is updated** at sprint boundaries and whenever a milestone status changes. project-lead owns this document.
+
+6. **Sprint plans are written before work begins.** No engineer starts M1+ build work without an active sprint plan assigning their tasks.
+
+7. **Security flags propagate immediately.** If security-engineer raises a flag during build, it is logged in BUILD_LOG.md with `Security Flags:` and added to STATUS.md open risks. The flag blocks the affected code from shipping until resolved.
+
+8. **Code ownership follows crate boundaries.** Each crate has a primary owner (see STATUS.md crate table). Cross-crate changes require review from both owners.
+
+### Engineer Build Responsibilities
+
+When an engineer completes a task, they must:
+1. Commit the code with a clear commit message
+2. Add a BUILD_LOG.md entry (prepended, newest first)
+3. Update CHANGELOG.md if the change is user/architecture-facing
+4. Write an ADR in DECISIONS.md if a non-obvious decision was made
+5. Update their task status in the active sprint plan
+6. Flag any security concerns with `Security Flags:` in their build log entry
+
+### Sprint Lifecycle
+
+```
+1. project-lead creates sprints/SPRINT-NNN.md
+2. Tasks assigned to engineers
+3. Engineers work tasks, updating BUILD_LOG as they go
+4. project-lead updates STATUS.md at sprint boundary
+5. Sprint retrospective fills the retro section
+6. Next sprint plan created
+```
