@@ -42,8 +42,8 @@ This sprint follows the build dependency order with parallelism where possible. 
 
 | # | Task | Assigned To | Depends On | Status | Acceptance Criteria |
 |---|------|-------------|------------|--------|---------------------|
-| 5 | Implement `DagBlock` with parent validation | consensus-engineer | -- | PENDING | DAG block with multi-parent support, round monotonicity check, 3 tests |
-| 6 | Implement `ValidatorSet` (add, remove, lookup, stake-weighted selection) | consensus-engineer | -- | PENDING | Validator management with stake tracking + 3 tests |
+| 5 | Implement `DagBlock` with parent validation | consensus-engineer | -- | DONE | DAG block with multi-parent, genesis, round check, hash + 8 tests |
+| 6 | Implement `ValidatorSet` (add, remove, lookup, stake-weighted selection) | consensus-engineer | -- | DONE | Add/remove/get, supermajority, leader selection + 8 tests |
 
 **Exit criteria:** `cargo test -p dendrite-consensus` passes Tasks 5-6 tests. Pure data structures, no storage dependency.
 

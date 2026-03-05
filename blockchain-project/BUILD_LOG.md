@@ -21,6 +21,19 @@ Entries are prepended (newest first).
 
 ## Entries
 
+### 2026-03-05 -- consensus-engineer -- dendrite-consensus
+**Task:** Phase 1b complete: DagBlock + ValidatorSet implementations
+**Sprint:** Sprint 002, Phase 1b (Tasks 5-6)
+**Git Ref:** pending
+**Files Changed:**
+- crates/dendrite-consensus/src/dag.rs (DagBlock with hash, genesis, parent validation)
+- crates/dendrite-consensus/src/validator.rs (ValidatorSet with stake, supermajority, leader selection)
+- crates/dendrite-consensus/src/lib.rs (exports, 16 tests)
+**Review Notes:** DagBlock: deterministic hash (BLAKE3 of round+author+parents+payload+timestamp), genesis block factory, parent round monotonicity validation. ValidatorSet: add/remove/get/contains, total_stake tracking, BFT supermajority check (>2/3), deterministic stake-weighted leader selection. 16 tests passing. Zero clippy warnings.
+**Security Flags:** None
+
+---
+
 ### 2026-03-05 -- node-engineer -- dendrite-storage
 **Task:** Phase 1a complete: StateStore trait, 6 named tables, batch writes, range iteration
 **Sprint:** Sprint 002, Phase 1a (Tasks 1-4)
