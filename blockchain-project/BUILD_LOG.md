@@ -21,6 +21,35 @@ Entries are prepended (newest first).
 
 ## Entries
 
+### 2026-03-05 -- smart-contract-engineer -- dendrite-execution
+**Task:** Phase 3b complete: WASM execution engine with wasmtime
+**Sprint:** Sprint 002, Phase 3b (Tasks 14-16)
+**Git Ref:** pending
+**Files Changed:**
+- crates/dendrite-execution/Cargo.toml (added wasmtime dependency)
+- crates/dendrite-execution/src/vm.rs (ExecutionEngine: deterministic config, fuel metering, host functions, execution pipeline)
+- crates/dendrite-execution/src/lib.rs (exports, 5 tests)
+**Review Notes:** wasmtime 28 with deterministic config: SIMD disabled, relaxed SIMD disabled, threads disabled, fuel metering enabled. Three host functions: storage_set, storage_get, emit_event — all with WASM linear memory access. Execution pipeline: compile module → create store with fuel → link host functions → instantiate → call → collect results. Fuel exhaustion trap aborts on Windows (known wasmtime limitation) — tested via fuel consumption tracking instead. 5 tests passing.
+**Security Flags:** wasmtime trap handling on Windows causes process abort instead of unwinding — epoch_interruption disabled for now. To be revisited when adding time-based execution limits.
+
+---
+
+### 2026-03-05 -- p2p-network-engineer -- dendrite-network
+**Task:** Phase 3a complete: libp2p transport with Gossipsub, Kademlia, mDNS
+**Sprint:** Sprint 002, Phase 3a (Tasks 9-13)
+**Git Ref:** pending
+**Files Changed:**
+- crates/dendrite-network/Cargo.toml (added futures dependency)
+- crates/dendrite-network/src/behaviour.rs (DendriteBehaviour: combined NetworkBehaviour with gossipsub + kademlia + mDNS)
+- crates/dendrite-network/src/gossip.rs (6 Dendrite topics, gossipsub config with strict validation, content-based dedup)
+- crates/dendrite-network/src/discovery.rs (Kademlia DHT with /dendrite/kad/1.0.0 protocol, replication factor 20, disjoint query paths; mDNS for local discovery)
+- crates/dendrite-network/src/transport.rs (Libp2pTransport: SwarmBuilder with TCP/Noise + QUIC, topic subscription, event handling loop with mDNS auto-peering)
+- crates/dendrite-network/src/lib.rs (exports, 8 tests)
+**Review Notes:** libp2p 0.54 with SwarmBuilder API. Transport creates swarm with TCP/Noise/Yamux + QUIC, subscribes to all 6 topics on construction. Event loop handles gossipsub messages, mDNS discovery/expiry (auto-adds to gossipsub + kademlia), connection lifecycle. Kademlia in Server mode with 60s query timeout. 8 tests: config creation, topic validation, swarm creation, peer ID, topic subscription count, TCP listening.
+**Security Flags:** None
+
+---
+
 ### 2026-03-05 -- consensus-engineer -- dendrite-consensus
 **Task:** Phase 2 complete: DagStore + CommitRule implementations
 **Sprint:** Sprint 002, Phase 2 (Tasks 7-8)

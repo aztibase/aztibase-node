@@ -33,39 +33,38 @@
 - Build-phase tracking infrastructure (5 documents)
 - Implementation depth audit (Sprint 001, Task 7)
 - Reference repos cloned (MystiCeti, Sui, Lighthouse, rust-libp2p, redb)
-- cargo build + cargo test pass (9 tests, 0 failures)
+- cargo build + cargo test pass (60 tests, 0 failures)
 - Sprint 001 closed with retrospective
 
-### Crate Status (Post-Audit)
+### Crate Status
 
 | Crate | Depth | Owner | M1-Ready |
 |-------|-------|-------|----------|
 | dendrite-core | COMPLETE | blockchain-architect | YES |
-| dendrite-consensus | STUB | consensus-engineer | NO |
-| dendrite-storage | SKELETON | node-engineer | NO |
-| dendrite-network | SKELETON | p2p-network-engineer | NO |
-| dendrite-execution | STUB | smart-contract-engineer | NO |
+| dendrite-consensus | PARTIAL | consensus-engineer | YES |
+| dendrite-storage | PARTIAL | node-engineer | YES |
+| dendrite-network | PARTIAL | p2p-network-engineer | YES |
+| dendrite-execution | PARTIAL | smart-contract-engineer | YES |
 | dendrite-runtime | STUB | ai-integration-engineer | NO |
 | dendrite-rpc | STUB | node-engineer | NO |
 | dendrite-node | PARTIAL | node-engineer | NO |
 
 ### In Progress
-- Sprint 002: M1 Core Primitives Build-Out (24 tasks, 6 phases)
+- Sprint 002: M1 Core Primitives Build-Out (16/24 tasks done, Phases 1-3 complete)
 
 ### Blocked
 - Nothing currently blocked
 
-### Recently Completed (Pre-Sprint 002)
-- Skill fleet upgrade: All 9 engineering skills upgraded with deep domain knowledge
-- CI pipeline: GitHub Actions (check, test, clippy, fmt, audit) at `.github/workflows/ci.yml`
-- CLAUDE.md: 7 build-phase rules codified as hard requirements
-- Sprint 002 plan: 24 tasks across 6 phases, written and ready
+### Recently Completed
+- Phase 3a: Network transport (libp2p 0.54, QUIC + TCP/Noise, Gossipsub, Kademlia, mDNS)
+- Phase 3b: Execution engine (wasmtime 28, deterministic config, fuel metering, 3 host functions)
+- Phase 2: Consensus persistence (DagStore, CommitRule)
+- Phase 1a: Storage foundation (redb, StateStore, 6 tables)
+- Phase 1b: Consensus data types (DagBlock, ValidatorSet)
 
 ### Next Up
-1. Execute Sprint 002 Phase 1: Storage Foundation (Tasks 1-4)
-2. Execute Sprint 002 Phase 2: Consensus Structures (Tasks 5-8)
-3. Execute Sprint 002 Phase 3: Network Transport (Tasks 9-13)
-4. Execute Sprint 002 Phases 4-6: Execution, Node Wiring, Cross-Cutting
+1. Execute Sprint 002 Phase 4: Node Wiring (Tasks 17-20)
+2. Execute Sprint 002 Phase 5: Cross-Cutting (Tasks 21-24)
 
 ---
 

@@ -74,6 +74,12 @@ tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
 thiserror = "2"
 anyhow = "1"
 
+# WASM execution
+wasmtime = "28"
+
+# Async utilities
+futures = "0.3"
+
 # Misc
 bytes = "1"
 hex = "0.4"

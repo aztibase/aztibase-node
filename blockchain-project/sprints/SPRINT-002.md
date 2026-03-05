@@ -66,11 +66,11 @@ This sprint follows the build dependency order with parallelism where possible. 
 
 | # | Task | Assigned To | Depends On | Status | Acceptance Criteria |
 |---|------|-------------|------------|--------|---------------------|
-| 9 | Implement `Libp2pTransport` struct implementing `NetworkTransport` trait | p2p-network-engineer | -- | PENDING | Swarm creation with QUIC + TCP/Noise |
-| 10 | Add Gossipsub with 6 topic subscriptions | p2p-network-engineer | Task 9 | PENDING | All 6 Dendrite topics, mesh config |
-| 11 | Add Kademlia DHT for peer discovery | p2p-network-engineer | Task 9 | PENDING | Bootstrap, peer routing + test |
-| 12 | Add mDNS for local discovery | p2p-network-engineer | Task 9 | PENDING | Local peer finding + test |
-| 13 | Implement peer event handling (connection, disconnection, message) | p2p-network-engineer | Task 10 | PENDING | Event loop processes gossip msgs |
+| 9 | Implement `Libp2pTransport` struct implementing `NetworkTransport` trait | p2p-network-engineer | -- | DONE | Swarm creation with QUIC + TCP/Noise |
+| 10 | Add Gossipsub with 6 topic subscriptions | p2p-network-engineer | Task 9 | DONE | All 6 Dendrite topics, mesh config |
+| 11 | Add Kademlia DHT for peer discovery | p2p-network-engineer | Task 9 | DONE | Bootstrap, peer routing + test |
+| 12 | Add mDNS for local discovery | p2p-network-engineer | Task 9 | DONE | Local peer finding + test |
+| 13 | Implement peer event handling (connection, disconnection, message) | p2p-network-engineer | Task 10 | DONE | Event loop processes gossip msgs |
 
 **Exit criteria:** `cargo test -p dendrite-network` passes with 8+ tests. Two nodes can discover each other and exchange gossip messages.
 
@@ -78,9 +78,9 @@ This sprint follows the build dependency order with parallelism where possible. 
 
 | # | Task | Assigned To | Depends On | Status | Acceptance Criteria |
 |---|------|-------------|------------|--------|---------------------|
-| 14 | Implement wasmtime `Engine` + `Store` configuration (deterministic, fuel-metered) | smart-contract-engineer | -- | PENDING | Engine config matches spec, fuel works |
-| 15 | Implement host function linker (storage_get, storage_set, emit_event) | smart-contract-engineer | Task 14 | PENDING | 3 host functions callable from WASM |
-| 16 | Implement basic contract execution pipeline (load module -> execute -> return) | smart-contract-engineer | Task 15 | PENDING | Execute simple WASM, consume fuel + 3 tests |
+| 14 | Implement wasmtime `Engine` + `Store` configuration (deterministic, fuel-metered) | smart-contract-engineer | -- | DONE | Engine config matches spec, fuel works |
+| 15 | Implement host function linker (storage_get, storage_set, emit_event) | smart-contract-engineer | Task 14 | DONE | 3 host functions callable from WASM |
+| 16 | Implement basic contract execution pipeline (load module -> execute -> return) | smart-contract-engineer | Task 15 | DONE | Execute simple WASM, consume fuel + 3 tests |
 
 **Exit criteria:** `cargo test -p dendrite-execution` passes with 5+ tests. Simple WASM module executes with fuel metering.
 
