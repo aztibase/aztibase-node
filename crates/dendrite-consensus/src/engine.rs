@@ -380,10 +380,19 @@ impl ConsensusEngine {
                     self.state.last_committed_wave = Some(wave);
                     self.state.prune_before(wave * wave_len);
                     self.vrf_seed = dendrite_core::hash(&hash);
-                    if let Ok(batch) =
-                        crate::ordering::extract_committed_batch(&self.dag, hash, &already)
-                    {
-                        let _ = self.outbox.try_send(ConsensusOutput::BatchCommitted(batch));
+                    match crate::ordering::extract_committed_batch(&self.dag, hash, &already) {
+                        Ok(batch) => {
+                            if let Err(e) =
+                                self.outbox.try_send(ConsensusOutput::BatchCommitted(batch))
+                            {
+                                tracing::error!(
+                                    "Failed to send committed batch to execution: {e} — batch may be lost"
+                                );
+                            }
+                        }
+                        Err(e) => {
+                            tracing::warn!("Failed to extract committed batch: {e}");
+                        }
                     }
                 }
                 LeaderStatus::Skip(r) => {

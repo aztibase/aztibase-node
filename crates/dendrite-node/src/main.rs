@@ -224,7 +224,12 @@ async fn main() -> Result<()> {
                             txs = batch.transactions.len(),
                             "Batch committed — forwarding to execution"
                         );
-                        let _ = pipeline_tx.send(batch).await;
+                        if pipeline_tx.send(batch).await.is_err() {
+                            tracing::error!(
+                                "Execution pipeline channel closed — halting node"
+                            );
+                            break;
+                        }
                     }
                     None => {
                         tracing::info!("Consensus output channel closed");
