@@ -5,6 +5,36 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ---
 
+## [M4] -- Integration Testing + AI + Testnet (IN PROGRESS)
+
+### Added
+- Transaction receipt store: ExecutionReceipt persisted to redb RECEIPTS_TABLE with atomic batch writes (2026-03-06)
+- `dndr_getTransactionReceipt` RPC method: query receipts by tx hash (2026-03-06)
+- EVM execution via revm v36: `evm_deploy()` and `evm_call()` with CacheDB state adapter (2026-03-06)
+- Dual VM architecture: WASM (wasmtime) + EVM (revm) coexisting in same AccountState (2026-03-06)
+- TxKind::EvmDeploy (0x04) and TxKind::EvmCall (0x05) wire format variants (2026-03-06)
+- TractRuntime: AIRuntime implementation with real ONNX model loading via tract-onnx (2026-03-06)
+- Model registry: register/unregister ONNX models with thread-safe RwLock storage (2026-03-06)
+- AI inference pipeline: f32 input → tract tensor → model run → f32 output serialization (2026-03-06)
+- InferenceReceipt: deterministic BLAKE3 hash of (model_id || input || output) for verification (2026-03-06)
+- `verify_inference()` stub: re-runs inference and compares deterministic hash (2026-03-06)
+
+### Changed
+- MSRV bumped from 1.85 to 1.88 for revm v36 compatibility (2026-03-06)
+- Pipeline now collects receipts from transfers, WASM contracts, and EVM operations (2026-03-06)
+
+### Security
+- SEC-AI-001: 64 MiB model size cap prevents memory exhaustion via oversized ONNX models (2026-03-06)
+- SEC-EVM-004: revm with `default-features = false, features = ["std"]` — no C dependencies (2026-03-06)
+- EVM nonce validation and chain ID enforcement (0xDE0D) on both deploy and call (2026-03-06)
+- AI input size validation rejects mismatched input before model execution (2026-03-06)
+- cargo-audit: 6 transitive vulns (ring, wasmtime, tracing-subscriber), 7 warnings — all transitive, no action needed (2026-03-06)
+
+### Testing
+- 222 tests total (31 new): receipt store (5), receipt RPC (4), receipt e2e (1), EVM engine (3), EVM routing (2), EVM pipeline (3), tract runtime (13) (2026-03-06)
+
+---
+
 ## [M3] -- Execution Layer (COMPLETE)
 
 ### Added

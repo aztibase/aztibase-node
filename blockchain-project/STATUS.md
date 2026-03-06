@@ -2,8 +2,8 @@
 
 **Last Updated:** 2026-03-06
 **Updated By:** project-lead
-**Current Phase:** M3 -- Execution Layer (COMPLETE)
-**Current Sprint:** Sprint 006 -- COMPLETE (JSON-RPC + Security Hardening + M3 Close)
+**Current Phase:** M4 -- Integration Testing + AI + Testnet (IN PROGRESS)
+**Current Sprint:** Sprint 007 -- IN PROGRESS (Receipt Store + EVM + AI Inference)
 
 ---
 
@@ -15,7 +15,7 @@
 | M1 | Core primitives (data types, crypto, basic structs) | DONE | 2026-03-05 | 2026-03-05 |
 | M2 | P2P networking + basic consensus | DONE | 2026-03-05 | 2026-03-06 |
 | M3 | Execution layer (WASM VM, state management) | DONE | 2026-03-06 | 2026-03-06 |
-| M4 | Integration testing + basic AI + testnet | NOT STARTED | -- | -- |
+| M4 | Integration testing + basic AI + testnet | IN PROGRESS | 2026-03-06 | -- |
 | M5 | Light/browser nodes + wallet | NOT STARTED | -- | -- |
 | M6 | AI compute market + PoUW | NOT STARTED | -- | -- |
 | M7 | Security audit + hardening | NOT STARTED | -- | -- |
@@ -33,13 +33,14 @@
 - Build-phase tracking infrastructure (5 documents)
 - Implementation depth audit (Sprint 001, Task 7)
 - Reference repos cloned (MystiCeti, Sui, Lighthouse, rust-libp2p, redb)
-- cargo build + cargo test pass (191 tests, 0 failures)
+- cargo build + cargo test pass (222 tests, 0 failures)
 - Sprint 001 closed with retrospective
 - Sprint 002 closed: 24/24 tasks, 5 phases complete
 - Sprint 003 closed: 18/18 tasks, 4 phases complete
 - Sprint 004 closed: 19/19 tasks, 4 phases complete
 - Sprint 005 closed: 21/21 tasks, 4 phases complete
 - Sprint 006 closed: 23/24 tasks (1 deferred), 4 phases complete
+- Sprint 007 Phase 1-3 complete: receipt store, EVM via revm, AI inference via tract
 
 ### Crate Status
 
@@ -50,17 +51,20 @@
 | dendrite-storage | PARTIAL | node-engineer | YES | YES |
 | dendrite-network | PARTIAL | p2p-network-engineer | YES | YES |
 | dendrite-execution | PARTIAL | smart-contract-engineer | YES | YES |
-| dendrite-runtime | PARTIAL | ai-integration-engineer | YES | NO |
+| dendrite-runtime | PARTIAL | ai-integration-engineer | YES | YES |
 | dendrite-rpc | PARTIAL | node-engineer | NO | YES |
 | dendrite-node | PARTIAL | node-engineer | YES | YES |
 
 ### In Progress
-- Nothing currently in progress (M3 complete, Sprint 007 planning next)
+- Sprint 007 Phase 4: Security review + documentation (Tasks 16-19)
 
 ### Blocked
 - Nothing currently blocked
 
 ### Recently Completed
+- Sprint 007 Phase 3: AI inference via tract — TractRuntime, model registry, InferenceReceipt, verify_inference (12 new tests)
+- Sprint 007 Phase 2: EVM via revm v36 — evm_deploy, evm_call, CacheDB adapter, dual VM (8 new tests)
+- Sprint 007 Phase 1: Receipt store — ExecutionReceipt, store/get, RPC query, pipeline wiring (10 new tests)
 - Sprint 006 Phase 4: M3 close — security review (1 MEDIUM fixed: RPC body limit), cargo-audit clean, ADR-005
 - Sprint 006 Phase 3: Integration testing (4 e2e tests, 191 total tests)
 - Sprint 006 Phase 2: Security hardening (7 MEDIUM findings, 7 new tests, 187 total)
@@ -71,7 +75,8 @@
 - Sprint 005 Phase 1: Consensus-to-execution wiring, TxKind routing, ExecutionPipeline
 
 ### Next Up
-1. Sprint 007 planning (M4: EVM via revm, AI integration, state sync, testnet prep)
+1. Sprint 007 Phase 4 completion (security review + documentation)
+2. Sprint 008 planning (Block-STM parallel execution, state sync, multi-node testnet)
 
 ---
 

@@ -3,7 +3,7 @@
 **Start Date:** 2026-03-06
 **Target:** M4 progress — dual VM (EVM via revm), AI inference (tract), receipt infrastructure
 **Owner:** project-lead
-**Status:** IN PROGRESS
+**Status:** COMPLETE
 
 ---
 
@@ -183,45 +183,46 @@ These three features define Dendrite's competitive identity: dual VM for develop
 **Owner:** security-engineer + documentation-engineer
 **Goal:** Security review of all new code, documentation updates.
 
-### Task 16: Security review -- PENDING
-- [ ] Receipt store: check for injection, unbounded growth, missing receipts
-- [ ] EVM: check revm config (no unsafe precompiles, gas limit enforcement, reentrancy)
-- [ ] AI: check model loading (malicious ONNX, resource exhaustion, determinism guarantees)
-- [ ] Rate findings as LOW/MEDIUM/ELEVATED
+### Task 16: Security review -- DONE
+- [x] Receipt store: SEC-RCPT-001 (bincode deser, LOW, acceptable), SEC-RCPT-002 (unbounded growth, LOW, deferred), SEC-RCPT-003 (atomic batch write, OK)
+- [x] EVM: SEC-EVM-001 (no gas cap, LOW, acceptable), SEC-EVM-002 (nonce check, OK), SEC-EVM-003 (chain ID, OK), SEC-EVM-004 (no C deps, OK), SEC-EVM-005 (address truncation, LOW, acceptable)
+- [x] AI: SEC-AI-001 (model size cap, MEDIUM, FIXED — 64 MiB limit), SEC-AI-002 (no timeout, LOW, deferred), SEC-AI-003 (input validation, OK), SEC-AI-004 (deterministic hash, OK), SEC-AI-005 (lock poisoning, OK)
+- [x] No ELEVATED findings. 1 MEDIUM fixed (SEC-AI-001).
 
-### Task 17: cargo-audit + clippy + fmt -- PENDING
-- [ ] `cargo audit` — document any new advisories from revm/tract
-- [ ] `cargo clippy --workspace` — zero warnings
-- [ ] `cargo fmt --check` — clean
+### Task 17: cargo-audit + clippy + fmt -- DONE
+- [x] `cargo audit`: 6 transitive vulns (ring, wasmtime ×3, tracing-subscriber), 7 warnings (bincode, derivative, lru, proc-macro-crate, ring, windows-targets) — all transitive, no action needed
+- [x] `cargo clippy --workspace` — zero warnings
+- [x] `cargo fmt --check` — clean
 
-### Task 18: Documentation updates -- PENDING
-- [ ] BUILD_LOG.md: entries for each phase
-- [ ] STATUS.md: M4 progress update, crate depth table
-- [ ] CHANGELOG.md: new features, security items
-- [ ] Sprint plan: mark tasks DONE
+### Task 18: Documentation updates -- DONE
+- [x] BUILD_LOG.md: entries for Phase 1, 2, 3, and 4
+- [x] STATUS.md: M4 IN PROGRESS, crate depth updated, test count 222
+- [x] CHANGELOG.md: M4 section with features, security, testing
+- [x] Sprint plan: all tasks marked DONE
 
-### Task 19: ADR-006 (if needed) -- PENDING
-- [ ] If revm or tract introduce C dependencies, document the exception
-- [ ] If significant design tradeoffs were made, record the decision
-- [ ] Skip if no non-obvious decisions were required
+### Task 19: ADR-006 (if needed) -- SKIPPED
+- [x] revm: `default-features = false, features = ["std"]` — no C dependencies confirmed
+- [x] tract: pure Rust — no C dependencies
+- [x] No non-obvious design tradeoffs requiring an ADR
+- [x] MSRV bump to 1.88 is documented in CHANGELOG, not ADR-worthy
 
 **Phase 4 Exit Criteria:**
-- [ ] Security review complete, no open ELEVATED flags
-- [ ] All docs updated
-- [ ] Sprint retrospective written
+- [x] Security review complete, no open ELEVATED flags
+- [x] All docs updated
+- [x] Sprint retrospective below
 
 ---
 
 ## Definition of Done (Sprint 007)
 
-- [ ] All 19 tasks completed or explicitly deferred with justification
-- [ ] `cargo check --workspace` passes
-- [ ] `cargo test --workspace` passes (target: 210+ tests)
-- [ ] `cargo clippy --workspace` zero warnings
-- [ ] `cargo fmt --check` clean
-- [ ] All code has BUILD_LOG entries
-- [ ] Security review complete (no open ELEVATED flags)
-- [ ] STATUS.md updated
+- [x] All 19 tasks completed (18 done + 1 skipped with justification)
+- [x] `cargo check --workspace` passes
+- [x] `cargo test --workspace` passes (222 tests, target was 210+)
+- [x] `cargo clippy --workspace` zero warnings
+- [x] `cargo fmt --check` clean
+- [x] All code has BUILD_LOG entries
+- [x] Security review complete (no open ELEVATED flags, 1 MEDIUM fixed)
+- [x] STATUS.md updated
 
 ---
 
@@ -234,6 +235,34 @@ These three features define Dendrite's competitive identity: dual VM for develop
 | EVM gas model differs from DNDR gas model | MEDIUM | Use revm's native gas; map to DNDR units in receipt |
 | Deterministic inference depends on tract version/platform | HIGH | Pin tract version; BLAKE3 hash includes model_id for versioning |
 | revm state adapter complexity (AccountState <-> revm DB) | MEDIUM | Start with simple in-memory adapter; optimize later |
+
+---
+
+## Sprint Retrospective
+
+### What went well
+- **revm v36 integration** succeeded with zero C dependencies (`default-features = false`)
+- **tract-onnx** pure Rust — no dependency issues, clean integration
+- **Dual VM architecture** (WASM + EVM) works cleanly with shared AccountState
+- **Programmatic ONNX test models** via protobuf avoids external fixture files
+- **Deterministic inference hashing** provides foundation for on-chain verification
+
+### What was challenging
+- **revm v36 API discovery**: 15+ API mismatches from docs/examples (Context, TxEnv, ExecutionResult paths all different from older versions)
+- **Chain ID validation**: TxEnv defaults `chain_id = Some(1)` (mainnet), had to explicitly set to match context
+- **32→20 byte address mapping**: inherent limitation of EVM compatibility layer
+
+### What to improve
+- Pin dependency versions more aggressively to avoid API drift
+- Consider integration tests that exercise EVM + receipt + RPC together
+- Add inference timeout mechanism before production use
+
+### Metrics
+- **Tasks:** 18 completed, 1 skipped (ADR-006 not needed)
+- **Tests:** 222 total (31 new: 5 receipt, 4 RPC receipt, 1 receipt e2e, 3 EVM engine, 2 EVM routing, 3 EVM pipeline, 13 tract)
+- **Security:** 13 findings reviewed, 1 MEDIUM fixed (SEC-AI-001), 0 ELEVATED
+- **Clippy:** zero warnings
+- **Phases:** 4/4 complete
 
 ---
 

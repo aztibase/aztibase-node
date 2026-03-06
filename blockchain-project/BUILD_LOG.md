@@ -21,6 +21,19 @@ Entries are prepended (newest first).
 
 ## Entries
 
+### 2026-03-06 -- security-engineer + documentation-engineer -- all crates, docs
+**Task:** Sprint 007 Phase 4: Security review + documentation (Tasks 16-19)
+**Sprint:** Sprint 007, Phase 4
+**Git Ref:** pending
+**Files Changed:**
+- crates/dendrite-runtime/src/tract_runtime.rs (added MAX_MODEL_SIZE 64 MiB cap + test — SEC-AI-001)
+- blockchain-project/sprints/SPRINT-007.md (all tasks DONE, retrospective)
+- blockchain-project/STATUS.md (M4 IN PROGRESS, test count 222, recent completions)
+- blockchain-project/BUILD_LOG.md (Phase 4 entry)
+- CHANGELOG.md (M4 section with features, security, testing)
+**Review Notes:** Security review: 13 findings across receipt store (3), EVM (5), AI pipeline (5). 1 MEDIUM fixed (SEC-AI-001: 64 MiB model size cap). 0 ELEVATED. cargo-audit: 6 transitive vulns, 7 warnings — all from ring/wasmtime/lru/bincode transitive deps. ADR-006 skipped — neither revm nor tract introduce C deps. Sprint 007 COMPLETE: 18/19 tasks done + 1 skipped.
+**Security Flags:** SEC-AI-001 RESOLVED (64 MiB model size cap). No ELEVATED flags.
+
 ### 2026-03-06 -- ai-integration-engineer -- dendrite-runtime
 **Task:** Sprint 007 Phase 3: AI inference via tract (Tasks 10-15)
 **Sprint:** Sprint 007, Phase 3

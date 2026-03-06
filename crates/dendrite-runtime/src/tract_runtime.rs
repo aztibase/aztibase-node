@@ -9,6 +9,8 @@ use crate::ai_oracle::{AIRuntime, AIRuntimeMode, InferenceRequest, InferenceResu
 
 type RunModel = RunnableModel<TypedFact, Box<dyn TypedOp>, Graph<TypedFact, Box<dyn TypedOp>>>;
 
+const MAX_MODEL_SIZE: usize = 64 * 1024 * 1024; // 64 MiB
+
 struct RegisteredModel {
     plan: RunModel,
     input_shape: Vec<usize>,
@@ -35,6 +37,13 @@ impl TractRuntime {
 
     /// Register an ONNX model from raw bytes.
     pub fn register_model(&self, model_id: &str, onnx_bytes: &[u8]) -> Result<()> {
+        if onnx_bytes.len() > MAX_MODEL_SIZE {
+            bail!(
+                "model too large: {} bytes (max {})",
+                onnx_bytes.len(),
+                MAX_MODEL_SIZE
+            );
+        }
         let mut cursor = Cursor::new(onnx_bytes);
         let model = tract_onnx::onnx()
             .model_for_read(&mut cursor)?
@@ -489,5 +498,13 @@ mod tests {
         assert_eq!(parse_f32_output(&r_b.output), vec![11.0, 21.0, 31.0]);
         // Different model_id means different deterministic hash
         assert_ne!(r_a.deterministic_hash, r_b.deterministic_hash);
+    }
+
+    #[test]
+    fn register_oversized_model_rejected() {
+        let rt = TractRuntime::new();
+        let huge = vec![0u8; MAX_MODEL_SIZE + 1];
+        let err = rt.register_model("huge", &huge).unwrap_err();
+        assert!(err.to_string().contains("model too large"));
     }
 }
