@@ -40,7 +40,7 @@ impl DagBlock {
             return Err(DagError::NoParents);
         }
 
-        let hash = Self::compute_hash(round, &author, &parents, &payload, timestamp);
+        let hash = Self::hash_fields(round, &author, &parents, &payload, timestamp);
 
         Ok(Self {
             hash,
@@ -56,7 +56,7 @@ impl DagBlock {
     pub fn genesis(author: ValidatorId, timestamp: u64) -> Self {
         let parents = Vec::new();
         let payload = Vec::new();
-        let hash = Self::compute_hash(0, &author, &parents, &payload, timestamp);
+        let hash = Self::hash_fields(0, &author, &parents, &payload, timestamp);
         Self {
             hash,
             round: 0,
@@ -85,12 +85,23 @@ impl DagBlock {
         Ok(())
     }
 
+    /// Recompute the hash from this block's fields for verification.
+    pub fn compute_hash(&self) -> Hash {
+        Self::hash_fields(
+            self.round,
+            &self.author,
+            &self.parents,
+            &self.payload,
+            self.timestamp,
+        )
+    }
+
     /// Check if this block is a genesis block.
     pub fn is_genesis(&self) -> bool {
         self.round == 0 && self.parents.is_empty()
     }
 
-    fn compute_hash(
+    fn hash_fields(
         round: u64,
         author: &ValidatorId,
         parents: &[BlockHash],

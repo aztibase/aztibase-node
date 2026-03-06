@@ -21,6 +21,49 @@ Entries are prepended (newest first).
 
 ## Entries
 
+### 2026-03-06 -- consensus-engineer + p2p-network-engineer -- consensus/network/node
+**Task:** Sprint 003 Phase 2: Vertex Reception & DAG Growth (Tasks 7-11)
+**Sprint:** Sprint 003, Phase 2
+**Git Ref:** pending
+**Files Changed:**
+- crates/dendrite-consensus/src/dag.rs (added compute_hash() public method, renamed private hash fn)
+- crates/dendrite-consensus/src/engine.rs (hash verification, round bounds check, quorum-aware parent warning)
+- crates/dendrite-consensus/src/validator.rs (added quorum_count() method)
+- crates/dendrite-consensus/src/lib.rs (2 new tests: quorum_count, block_hash_verification)
+- crates/dendrite-network/src/lib.rs (exported TOPIC_CONSENSUS, TOPIC_TRANSACTIONS constants)
+- crates/dendrite-node/src/main.rs (topic-based message routing: consensus vs transactions)
+**Review Notes:**
+- Node filters gossip messages by topic: consensus vertices to engine, transactions to mempool
+- Received vertices validated: deserialization, author check, hash integrity, round bounds (max +10 ahead)
+- Broadcast uses TOPIC_CONSENSUS constant instead of hardcoded string
+- Parent selection warns when fewer than quorum (2f+1) parents available after round 3
+- 5 new tests (41 consensus total, 87 workspace total)
+- cargo clippy zero warnings, cargo fmt clean
+**Security Flags:** None
+
+---
+
+### 2026-03-05 -- consensus-engineer + node-engineer -- consensus/node
+**Task:** Sprint 003 Phase 1: Consensus Round Engine (Tasks 1-6)
+**Sprint:** Sprint 003, Phase 1
+**Git Ref:** pending
+**Files Changed:**
+- crates/dendrite-consensus/src/engine.rs (NEW: ConsensusConfig, RoundState, ConsensusEngine, ConsensusInput/Output)
+- crates/dendrite-consensus/src/lib.rs (added engine module + exports)
+- crates/dendrite-node/src/main.rs (wired ConsensusEngine into node event loop)
+**Review Notes:**
+- ConsensusEngine runs async round loop at 400ms intervals via tokio::time::interval
+- Vertex proposal, reception, validation, and commit evaluation all functional
+- Channel-based architecture (mpsc) cleanly separates consensus from network
+- Node spawns engine as tokio task, routes gossip messages to inbox, broadcasts outbox vertices
+- Replaced hex dependency with inline short_hex() helper to avoid unnecessary dep
+- Added Default impl for RoundState per clippy suggestion
+- 10 new engine tests (36 consensus total, 82 workspace total)
+- cargo clippy zero warnings, cargo fmt clean
+**Security Flags:** None
+
+---
+
 ### 2026-03-05 -- security-engineer + ai-integration-engineer -- cross-cutting
 **Task:** Phase 5 complete: Security review, AIRuntime, CryptoProvider, cargo-audit
 **Sprint:** Sprint 002, Phase 5 (Tasks 21-24)

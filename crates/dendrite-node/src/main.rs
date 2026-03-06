@@ -9,7 +9,12 @@ use tokio::sync::Notify;
 use tracing_subscriber::EnvFilter;
 
 use config::NodeConfig;
-use dendrite_network::{Libp2pTransport, NetworkEvent, TransportConfig};
+use dendrite_consensus::{
+    ConsensusConfig, ConsensusEngine, ConsensusInput, ConsensusOutput, DagStore, ValidatorSet,
+};
+use dendrite_network::{
+    Libp2pTransport, NetworkEvent, TOPIC_CONSENSUS, TOPIC_TRANSACTIONS, TransportConfig,
+};
 use dendrite_storage::StateStore;
 
 #[derive(Parser, Debug)]
@@ -72,8 +77,27 @@ async fn main() -> Result<()> {
     let storage_path = config.storage_path();
     let storage_path_str = storage_path.to_str().context("Invalid storage path")?;
     let store = StateStore::open(storage_path_str).context("Failed to open storage")?;
-    let _store = Arc::new(store);
     tracing::info!(path = %storage_path.display(), "Storage initialized");
+
+    // Consensus
+    let dag = DagStore::new(store).context("Failed to initialize DAG store")?;
+    let identity = [1u8; 32]; // Placeholder until keypair management is added
+    let mut validators = ValidatorSet::new();
+    validators.add(identity, 100);
+
+    let consensus_config = ConsensusConfig::default();
+    let (consensus_tx, consensus_rx) = tokio::sync::mpsc::channel::<ConsensusInput>(256);
+    let (output_tx, mut output_rx) = tokio::sync::mpsc::channel::<ConsensusOutput>(256);
+
+    let mut engine = ConsensusEngine::new(
+        consensus_config,
+        identity,
+        dag,
+        validators,
+        consensus_rx,
+        output_tx,
+    );
+    tracing::info!("Consensus engine initialized");
 
     // Network
     let transport_config = TransportConfig {
@@ -112,6 +136,13 @@ async fn main() -> Result<()> {
         shutdown_signal.notify_waiters();
     });
 
+    // Spawn consensus engine
+    let consensus_handle = tokio::spawn(async move {
+        if let Err(e) = engine.run().await {
+            tracing::error!(error = %e, "Consensus engine failed");
+        }
+    });
+
     // Main event loop
     loop {
         tokio::select! {
@@ -133,6 +164,33 @@ async fn main() -> Result<()> {
                             bytes = data.len(),
                             "Received message"
                         );
+                        let msg = if topic == TOPIC_CONSENSUS {
+                            ConsensusInput::ReceivedVertex(data)
+                        } else if topic == TOPIC_TRANSACTIONS {
+                            ConsensusInput::Transaction(data)
+                        } else {
+                            continue;
+                        };
+                        let _ = consensus_tx.send(msg).await;
+                    }
+                }
+            }
+            output = output_rx.recv() => {
+                match output {
+                    Some(ConsensusOutput::BroadcastVertex(data)) => {
+                        if let Err(e) = transport.publish(TOPIC_CONSENSUS, data) {
+                            tracing::debug!(error = %e, "Failed to publish vertex");
+                        }
+                    }
+                    Some(ConsensusOutput::BlockCommitted(hash)) => {
+                        tracing::info!(
+                            hash = %format!("{:02x}{:02x}{:02x}{:02x}", hash[0], hash[1], hash[2], hash[3]),
+                            "Block committed"
+                        );
+                    }
+                    None => {
+                        tracing::info!("Consensus output channel closed");
+                        break;
                     }
                 }
             }
@@ -141,6 +199,9 @@ async fn main() -> Result<()> {
             }
         }
     }
+
+    drop(consensus_tx);
+    let _ = consensus_handle.await;
 
     tracing::info!("Dendrite node shut down");
     Ok(())

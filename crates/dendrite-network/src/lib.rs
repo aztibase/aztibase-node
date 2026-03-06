@@ -3,6 +3,7 @@ pub mod discovery;
 pub mod gossip;
 pub mod transport;
 
+pub use gossip::{TOPIC_CONSENSUS, TOPIC_TRANSACTIONS};
 pub use libp2p::Multiaddr;
 pub use transport::{Libp2pTransport, NetworkEvent, TransportConfig};
 

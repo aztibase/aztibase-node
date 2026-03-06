@@ -117,6 +117,17 @@ impl ValidatorSet {
         Some(sorted[0].0)
     }
 
+    /// Minimum number of validators needed for a quorum (2f+1).
+    /// With n validators and f = (n-1)/3 faulty, quorum = n - f.
+    pub fn quorum_count(&self) -> usize {
+        let n = self.validators.len();
+        if n == 0 {
+            return 0;
+        }
+        let f = (n - 1) / 3;
+        n - f
+    }
+
     /// Iterate over all validators as (id, stake) pairs.
     pub fn iter(&self) -> impl Iterator<Item = (&ValidatorId, &u64)> {
         self.validators.iter()

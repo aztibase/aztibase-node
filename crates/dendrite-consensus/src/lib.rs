@@ -1,12 +1,14 @@
 pub mod commit;
 pub mod dag;
 pub mod dag_store;
+pub mod engine;
 pub mod pouw;
 pub mod validator;
 
 pub use commit::{CommitConfig, CommitRule, LeaderStatus};
 pub use dag::{DagBlock, DagError};
 pub use dag_store::{DagStore, DagStoreError, DagStoreResult};
+pub use engine::{ConsensusConfig, ConsensusEngine, ConsensusInput, ConsensusOutput, RoundState};
 pub use validator::{ValidatorInfo, ValidatorSet};
 
 #[cfg(test)]
@@ -192,6 +194,30 @@ mod tests {
     fn test_leader_empty_set() {
         let vs = ValidatorSet::new();
         assert_eq!(vs.leader_for_round(0), None);
+    }
+
+    #[test]
+    fn test_quorum_count() {
+        let mut vs = ValidatorSet::new();
+        assert_eq!(vs.quorum_count(), 0);
+
+        vs.add([1u8; 32], 100);
+        assert_eq!(vs.quorum_count(), 1); // n=1, f=0, quorum=1
+
+        vs.add([2u8; 32], 100);
+        assert_eq!(vs.quorum_count(), 2); // n=2, f=0, quorum=2
+
+        vs.add([3u8; 32], 100);
+        assert_eq!(vs.quorum_count(), 3); // n=3, f=0, quorum=3
+
+        vs.add([4u8; 32], 100);
+        assert_eq!(vs.quorum_count(), 3); // n=4, f=1, quorum=3
+    }
+
+    #[test]
+    fn test_block_hash_verification() {
+        let block = DagBlock::genesis([1u8; 32], 1000);
+        assert_eq!(block.compute_hash(), block.hash);
     }
 
     // ── Task 7: DagStore tests ──────────────────────────────────────
