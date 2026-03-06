@@ -1,9 +1,9 @@
 # PROJECT STATUS: Dendrite Network
 
-**Last Updated:** 2026-03-05
+**Last Updated:** 2026-03-06
 **Updated By:** project-lead
 **Current Phase:** M2 -- P2P Networking + Basic Consensus
-**Current Sprint:** Sprint 003 -- IN PROGRESS (Phases 1-2 complete)
+**Current Sprint:** Sprint 003 -- COMPLETE
 
 ---
 
@@ -33,9 +33,10 @@
 - Build-phase tracking infrastructure (5 documents)
 - Implementation depth audit (Sprint 001, Task 7)
 - Reference repos cloned (MystiCeti, Sui, Lighthouse, rust-libp2p, redb)
-- cargo build + cargo test pass (87 tests, 0 failures)
+- cargo build + cargo test pass (93 tests, 0 failures)
 - Sprint 001 closed with retrospective
 - Sprint 002 closed: 24/24 tasks, 5 phases complete
+- Sprint 003 closed: 18/18 tasks, 4 phases complete
 
 ### Crate Status
 
@@ -51,12 +52,14 @@
 | dendrite-node | PARTIAL | node-engineer | YES |
 
 ### In Progress
-- Sprint 003 Phase 3: Commit Rule Integration + Mempool (Tasks 12-16)
+- Nothing currently in progress
 
 ### Blocked
 - Nothing currently blocked
 
 ### Recently Completed
+- Sprint 003 Phase 4: Security review + cargo-audit (12-item checklist, no ELEVATED flags)
+- Sprint 003 Phase 3: Commit Rule Integration + Mempool (Mempool struct, gossip tx routing, vertex payload)
 - Sprint 003 Phase 2: Vertex Reception & DAG Growth (topic routing, hash/round validation, quorum parents)
 - Sprint 003 Phase 1: Consensus Round Engine (ConsensusConfig, RoundState, ConsensusEngine, node wiring)
 - Sprint 002 Phase 5: Security review (13-item checklist), AIRuntime trait, CryptoProvider trait, cargo-audit
@@ -66,8 +69,10 @@
 - Sprint 002 Phase 1: Storage foundation + Consensus data types
 
 ### Next Up
-1. Sprint 003 Phase 3: Commit rule integration + Mempool (Tasks 12-16)
-2. Sprint 003 Phase 4: Security review + cargo-audit (Tasks 17-18)
+1. Plan Sprint 004 (M2 continued or M3 start)
+2. VRF leader election (deferred from Sprint 003)
+3. Round pruning for unbounded vertices_by_round HashMap
+4. Explicit pending_txs cap in ConsensusEngine
 
 ---
 

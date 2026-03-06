@@ -21,6 +21,45 @@ Entries are prepended (newest first).
 
 ## Entries
 
+### 2026-03-06 -- security-engineer -- cross-cutting
+**Task:** Sprint 003 Phase 4: Security Review + cargo-audit (Tasks 17-18)
+**Sprint:** Sprint 003, Phase 4
+**Git Ref:** pending
+**Files Changed:**
+- (Review only — no code changes required)
+**Review Notes:**
+- Security review: 12-item checklist passed across consensus engine, vertex validation, mempool, gossip routing
+- Equivocation detection: engine rejects duplicate vertices per (author, round) pair
+- Hash integrity: received vertices verified via compute_hash() before insertion
+- Round bounds: vertices >10 rounds ahead rejected (DoS mitigation)
+- Parent validation: quorum (2f+1) parents required after round 3
+- Mempool bounded (10k default), dedup via seen-set prevents flooding
+- Channel backpressure: mpsc(256) limits consensus inbox depth
+- No unsafe blocks in any Sprint 003 code
+- cargo-audit: same 5 transitive advisories as Sprint 002 (wasmtime WASI, ring, lru) + bincode unmaintained warning
+- All advisories documented, none affect our code paths
+- No ELEVATED flags
+**Security Flags:** None
+
+---
+
+### 2026-03-06 -- node-engineer + consensus-engineer -- node/consensus
+**Task:** Sprint 003 Phase 3: Commit Rule Integration + Mempool (Tasks 12-16)
+**Sprint:** Sprint 003, Phase 3
+**Git Ref:** pending
+**Files Changed:**
+- crates/dendrite-node/src/mempool.rs (NEW: Mempool with insert, remove, peek/drain_batch, dedup, bounded)
+- crates/dendrite-node/src/main.rs (added mempool module, integrated with gossip tx routing)
+**Review Notes:**
+- Tasks 12-13 already implemented in engine.rs (evaluate_commits, RoundState tracks committed blocks)
+- Mempool: BTreeMap + HashSet seen-filter for dedup, configurable max_size (10k default)
+- Node routes TOPIC_TRANSACTIONS through mempool.insert() for dedup before forwarding to consensus
+- 6 new mempool tests (93 workspace total)
+- cargo clippy zero warnings, cargo fmt clean
+**Security Flags:** None
+
+---
+
 ### 2026-03-06 -- consensus-engineer + p2p-network-engineer -- consensus/network/node
 **Task:** Sprint 003 Phase 2: Vertex Reception & DAG Growth (Tasks 7-11)
 **Sprint:** Sprint 003, Phase 2

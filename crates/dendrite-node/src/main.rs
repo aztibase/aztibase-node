@@ -1,4 +1,5 @@
 mod config;
+mod mempool;
 
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -39,6 +40,14 @@ struct Cli {
     /// Override log level (trace, debug, info, warn, error)
     #[arg(long)]
     log_level: Option<String>,
+
+    /// Validator index for testing (1-255). Each node needs a unique index.
+    #[arg(long, default_value = "1")]
+    validator_index: u8,
+
+    /// Total number of validators in the test network
+    #[arg(long, default_value = "1")]
+    validator_count: u8,
 }
 
 impl Cli {
@@ -68,7 +77,7 @@ async fn main() -> Result<()> {
 
     init_logging(&config.log.level)?;
 
-    tracing::info!("Starting Dendrite node");
+    tracing::info!(validator = cli.validator_index, "Starting Dendrite node");
     tracing::info!(data_dir = %config.data_dir.display());
 
     // Storage
@@ -81,9 +90,11 @@ async fn main() -> Result<()> {
 
     // Consensus
     let dag = DagStore::new(store).context("Failed to initialize DAG store")?;
-    let identity = [1u8; 32]; // Placeholder until keypair management is added
+    let identity = [cli.validator_index; 32];
     let mut validators = ValidatorSet::new();
-    validators.add(identity, 100);
+    for i in 1..=cli.validator_count {
+        validators.add([i; 32], 100);
+    }
 
     let consensus_config = ConsensusConfig::default();
     let (consensus_tx, consensus_rx) = tokio::sync::mpsc::channel::<ConsensusInput>(256);
@@ -98,6 +109,10 @@ async fn main() -> Result<()> {
         output_tx,
     );
     tracing::info!("Consensus engine initialized");
+
+    // Mempool
+    let mut mempool = mempool::Mempool::new(10_000);
+    tracing::info!("Mempool initialized (capacity: 10000)");
 
     // Network
     let transport_config = TransportConfig {
@@ -164,14 +179,13 @@ async fn main() -> Result<()> {
                             bytes = data.len(),
                             "Received message"
                         );
-                        let msg = if topic == TOPIC_CONSENSUS {
-                            ConsensusInput::ReceivedVertex(data)
-                        } else if topic == TOPIC_TRANSACTIONS {
-                            ConsensusInput::Transaction(data)
-                        } else {
-                            continue;
-                        };
-                        let _ = consensus_tx.send(msg).await;
+                        if topic == TOPIC_CONSENSUS {
+                            let _ = consensus_tx.send(ConsensusInput::ReceivedVertex(data)).await;
+                        } else if topic == TOPIC_TRANSACTIONS
+                            && mempool.insert(data.clone())
+                        {
+                            let _ = consensus_tx.send(ConsensusInput::Transaction(data)).await;
+                        }
                     }
                 }
             }
@@ -235,6 +249,8 @@ mod tests {
             listen: vec![],
             rpc_addr: None,
             log_level: None,
+            validator_index: 1,
+            validator_count: 1,
         };
         let config = cli.apply_overrides(NodeConfig::default());
         assert_eq!(config.data_dir, PathBuf::from("/tmp/test"));
@@ -248,6 +264,8 @@ mod tests {
             listen: vec!["/ip4/127.0.0.1/tcp/9999".into()],
             rpc_addr: None,
             log_level: None,
+            validator_index: 1,
+            validator_count: 1,
         };
         let config = cli.apply_overrides(NodeConfig::default());
         assert_eq!(config.network.listen_addresses.len(), 1);
