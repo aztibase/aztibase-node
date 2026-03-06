@@ -25,6 +25,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 ### Security
 - ADR-004: blst C dependency justified exception for BLS12-381 (2026-03-06)
 - Security review: consensus-execution wiring, state persistence, BLS certificates, tx routing (2026-03-06)
+- BLS Proof-of-Possession: prevents rogue-key attacks on aggregate signatures (2026-03-06)
+- BLS DST switched from NUL to POP ciphersuite for safe aggregation (2026-03-06)
+- Finality message domain separator (DENDRITE_FINALITY_V1) prevents cross-protocol replay (2026-03-06)
+- Atomic state flush: single batch_put_multi() transaction for crash safety (2026-03-06)
+- Safe deserialization: all unwrap() in persistence replaced with graceful error handling (2026-03-06)
+- Duplicate signer deduplication in build_certificate (2026-03-06)
 - cargo-audit: transitive advisories (ring, wasmtime WASI, lru, bincode) — no new critical issues (2026-03-06)
 
 ---

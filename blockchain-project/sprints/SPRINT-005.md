@@ -131,30 +131,47 @@ This sprint makes the execution pipeline real: consensus commits flow through th
 ### Task 16: Consensus-to-Execution Wiring
 | ID | Severity | Finding | Status |
 |----|----------|---------|--------|
-| SEC-WIRE-001 | LOW | Unbounded mpsc channel — no backpressure if execution lags consensus | KNOWN — bounded channel + backpressure deferred to hardening sprint |
-| SEC-WIRE-002 | INFO | No double-execution protection (same batch hash sent twice) | ACCEPTABLE — consensus engine tracks committed set, duplicates not emitted |
-| SEC-WIRE-003 | INFO | Channel drop on shutdown loses in-flight batches | ACCEPTABLE — node shutdown is graceful; uncommitted state lost is by design |
+| SEC-WIRE-001 | ELEVATED→FIXED | try_send silently drops committed batches | FIXED (27ab11b) — error logged on send failure |
+| SEC-WIRE-002 | ELEVATED→FIXED | let _ = discards pipeline send failure (dead execution undetected) | FIXED (27ab11b) — node halts on dead pipeline |
+| SEC-WIRE-003 | MEDIUM | No double-execution guard on committed batches | KNOWN — dedup via anchor_hash tracking (Sprint 006) |
+| SEC-WIRE-004 | MEDIUM | Persistence failure does not halt execution pipeline | KNOWN — fatal flush handling (Sprint 006) |
+| SEC-WIRE-005 | MEDIUM | Unbounded committed vector with O(n) linear scan | KNOWN — HashSet replacement (Sprint 006) |
+| SEC-WIRE-006 | LOW | Causal order determinism (confirmed sound) | ACCEPTABLE |
+| SEC-WIRE-007 | LOW | .unwrap() on payload slice conversion (currently safe) | ACCEPTABLE — bounds check precedes |
+| SEC-WIRE-008 | LOW | No batch sequence numbering for gap detection | KNOWN — add batch_index (Sprint 006) |
+| SEC-WIRE-009 | INFO | Channel sizing bounded but generous (256) | ACCEPTABLE |
 
 ### Task 17: State Persistence
 | ID | Severity | Finding | Status |
 |----|----------|---------|--------|
-| SEC-PERSIST-001 | INFO | flush_state is not atomic across all 3 tables | ACCEPTABLE — redb individual put() calls are each ACID; partial flush leaves state consistent per-account |
-| SEC-PERSIST-002 | LOW | deserialize_account_record panics on data < 16 bytes | MITIGATED — load_state skips records with len < 16 (line 58-60) |
+| SEC-PERSIST-001 | ELEVATED→FIXED | flush_state was not atomic across tables | FIXED (24e4262) — rewritten to use single batch_put_multi() transaction |
+| SEC-PERSIST-002 | ELEVATED→FIXED | deserialize_account_record could panic on malformed data | FIXED (24e4262) — returns Option, all unwrap() replaced with match/continue |
 | SEC-PERSIST-003 | INFO | No state snapshot / rollback mechanism | KNOWN — deferred to M4 state sync sprint |
 
 ### Task 18: BLS Finality Certificates
 | ID | Severity | Finding | Status |
 |----|----------|---------|--------|
-| SEC-BLS-001 | MEDIUM | Rogue-key attack possible without proof-of-possession | DOCUMENTED — PoP required at validator registration; noted in ADR-004 consequences |
-| SEC-BLS-002 | INFO | DST tag uses NUL_ augmentation (non-standard for some schemes) | ACCEPTABLE — matches blst default DST for minimal-pubkey-size |
-| SEC-BLS-003 | INFO | Signer bitmap is Vec<bool> — not compact | KNOWN — optimize to bitfield in hardening sprint |
+| SEC-BLS-001 | ELEVATED→FIXED | Rogue-key attack without proof-of-possession | FIXED (8da45e4) — PoP added to BlsKeypair, verify_proof_of_possession() for registration |
+| SEC-BLS-002 | MEDIUM | Duplicate BLS keys in validator set can misattribute bitmap | KNOWN — enforce unique BLS keys in ValidatorSet (Sprint 006) |
+| SEC-BLS-003 | MEDIUM→FIXED | No domain separator in finality message | FIXED (8da45e4) — DENDRITE_FINALITY_V1 prefix added |
+| SEC-BLS-004 | MEDIUM→FIXED | DST tag uses NUL scheme (unsafe for aggregation) | FIXED (8da45e4) — switched to POP ciphersuite |
+| SEC-BLS-005 | MEDIUM→FIXED | Duplicate signers not deduplicated in build_certificate | FIXED (8da45e4) — skip if bitmap[idx] already set |
+| SEC-BLS-006 | LOW | Serde deserialization skips curve point validation | KNOWN — add validation in Deserialize impl (Sprint 006) |
+| SEC-BLS-007 | LOW | No chain/network ID in signed finality message | KNOWN — add chain ID to domain separator (Sprint 006) |
+| SEC-BLS-008 | LOW | Quorum parameter externally supplied to build_certificate | KNOWN — derive from ValidatorSet internally (Sprint 006) |
+| SEC-BLS-009 | INFO | Signer bitmap is Vec<bool> — not compact | KNOWN — optimize to bitfield in hardening sprint |
 
 ### Task 19: Transaction Routing
 | ID | Severity | Finding | Status |
 |----|----------|---------|--------|
-| SEC-ROUTE-001 | INFO | bincode deserialization of untrusted tx bodies | ACCEPTABLE — bincode errors return RoutingError::DecodeFailed, no panics |
-| SEC-ROUTE-002 | LOW | No max size limit on decoded transaction bodies | KNOWN — gas limit caps execution cost; payload size limit deferred |
-| SEC-ROUTE-003 | INFO | Prefix byte 0x00 and 0x04+ return UnknownType error | ACCEPTABLE — clean error path, no panic |
+| SEC-ROUTE-001 | ELEVATED→FIXED | Prefix byte not cross-checked with decoded variant (type confusion) | FIXED (b6b38c0) — PrefixMismatch error on disagreement |
+| SEC-ROUTE-002 | ELEVATED→FIXED | Unbounded bincode allocation (memory bomb) | FIXED (b6b38c0) — 1MB limit via DefaultOptions::with_limit() |
+| SEC-ROUTE-003 | LOW | Prefix-only payload handled safely | ACCEPTABLE — now has explicit test |
+| SEC-ROUTE-004 | MEDIUM | No max payload size before deserialization | FIXED (b6b38c0) — OversizedPayload error for >1MB |
+| SEC-ROUTE-005 | MEDIUM | Trailing bytes silently accepted | KNOWN — strict decode in hardening sprint |
+| SEC-ROUTE-006 | MEDIUM | func_name string not validated | KNOWN — allowlist validation (Sprint 006) |
+| SEC-ROUTE-007 | INFO | No signature verification (future phase) | KNOWN |
+| SEC-ROUTE-008 | INFO | Strong fuzz target candidate | KNOWN — add cargo-fuzz target (Sprint 006) |
 
 ### Task 20: cargo-audit
 - **5 vulnerabilities**: All transitive (ring v0.16.20, wasmtime v28 x4). No critical/high in our code.

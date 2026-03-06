@@ -21,6 +21,47 @@ Entries are prepended (newest first).
 
 ## Entries
 
+### 2026-03-06 -- security-engineer -- dendrite-execution
+**Task:** Fix routing security findings: prefix cross-check (SEC-ROUTE-001), bincode size limit (SEC-ROUTE-002)
+**Sprint:** Sprint 005, Phase 4 (post-review fixes)
+**Git Ref:** b6b38c0
+**Files Changed:**
+- crates/dendrite-execution/src/routing.rs (prefix-variant cross-check, 1MB bincode limit, OversizedPayload/PrefixMismatch errors, 2 new tests)
+**Review Notes:** Both ELEVATED routing findings resolved. Prefix mismatch now returns error. bincode deserialization capped at 1MB. 165 tests pass.
+**Security Flags:** SEC-ROUTE-001 RESOLVED, SEC-ROUTE-002 RESOLVED
+
+### 2026-03-06 -- security-engineer -- dendrite-consensus, dendrite-node
+**Task:** Fix wiring security findings: batch drop detection (SEC-WIRE-001), dead pipeline halt (SEC-WIRE-002)
+**Sprint:** Sprint 005, Phase 4 (post-review fixes)
+**Git Ref:** 27ab11b
+**Files Changed:**
+- crates/dendrite-consensus/src/engine.rs (error logging on try_send failure, warn on batch extraction failure)
+- crates/dendrite-node/src/main.rs (break on dead pipeline channel instead of silent discard)
+**Review Notes:** Both ELEVATED wiring findings resolved. Committed batches no longer silently dropped. Dead execution pipeline triggers node halt. 163 tests pass.
+**Security Flags:** SEC-WIRE-001 RESOLVED, SEC-WIRE-002 RESOLVED
+
+### 2026-03-06 -- security-engineer -- dendrite-core, dendrite-consensus
+**Task:** Fix BLS security findings: PoP (SEC-BLS-001), domain separator (SEC-BLS-003), DST switch (SEC-BLS-004), signer dedup (SEC-BLS-005)
+**Sprint:** Sprint 005, Phase 4 (post-review fixes)
+**Git Ref:** 8da45e4
+**Files Changed:**
+- crates/dendrite-core/src/bls.rs (PoP generation + verification, DST_POP constant, POP ciphersuite, 2 new tests)
+- crates/dendrite-consensus/src/finality.rs (DENDRITE_FINALITY_V1 domain separator, duplicate signer skip)
+**Review Notes:** SEC-BLS-001 ELEVATED resolved via PoP. DST switched to POP ciphersuite. Domain separator prevents cross-protocol replay. Signer dedup prevents double-counting. 163 tests pass.
+**Security Flags:** SEC-BLS-001 RESOLVED, SEC-BLS-003 RESOLVED, SEC-BLS-004 RESOLVED, SEC-BLS-005 RESOLVED
+
+### 2026-03-06 -- security-engineer -- dendrite-execution, dendrite-storage
+**Task:** Fix ELEVATED security findings SEC-PERSIST-001 (atomic flush) and SEC-PERSIST-002 (safe deserialization)
+**Sprint:** Sprint 005, Phase 4 (post-review fixes)
+**Git Ref:** 24e4262
+**Files Changed:**
+- crates/dendrite-execution/src/persist.rs (atomic flush_state via batch_put_multi, safe deserialize_account_record)
+- crates/dendrite-storage/src/store.rs (MultiTableEntry lifetime separation: 'static for TableDef, 'a for data)
+- crates/dendrite-storage/src/lib.rs (TableDef type alias, redb::TableDefinition re-export)
+- Cargo.lock (updated)
+**Review Notes:** Both ELEVATED findings now resolved. flush_state() uses single atomic transaction. All deserialization uses Option/match instead of unwrap(). 161 tests pass.
+**Security Flags:** SEC-PERSIST-001 RESOLVED, SEC-PERSIST-002 RESOLVED
+
 ### 2026-03-06 -- security-engineer + documentation-engineer -- all
 **Task:** Sprint 005 Phase 4: Security review + documentation (Tasks 16-21)
 **Sprint:** Sprint 005, Phase 4
