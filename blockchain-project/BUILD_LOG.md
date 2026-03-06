@@ -21,6 +21,28 @@ Entries are prepended (newest first).
 
 ## Entries
 
+### 2026-03-06 -- node-engineer + smart-contract-engineer -- node/execution/consensus
+**Task:** Sprint 005 Phase 1: Consensus-to-Execution Wiring + Tx Routing (Tasks 1-5)
+**Sprint:** Sprint 005, Phase 1
+**Git Ref:** pending
+**Files Changed:**
+- crates/dendrite-execution/src/routing.rs (NEW: TxKind enum, route_tx, route_batch, RoutingError)
+- crates/dendrite-execution/src/lib.rs (added routing module + exports)
+- crates/dendrite-execution/Cargo.toml (added bincode dependency)
+- crates/dendrite-node/src/pipeline.rs (NEW: ExecutionPipeline, PipelineResult, batch execution)
+- crates/dendrite-node/src/main.rs (added pipeline module, wired consensus->execution channel)
+- crates/dendrite-consensus/src/engine.rs (ConsensusOutput::BlockCommitted -> BatchCommitted with full CommittedBatch)
+**Review Notes:**
+- TxKind uses prefix byte (0x01=transfer, 0x02=deploy, 0x03=call) + bincode body
+- ExecutionPipeline receives CommittedBatch via tokio::mpsc, routes txs, executes, computes state root
+- ConsensusEngine now extracts CommittedBatch at commit time (has DAG + committed list)
+- 12 new tests (7 routing, 5 pipeline)
+- cargo clippy zero warnings, cargo fmt clean
+- Total tests: 134 (was 122)
+**Security Flags:** None
+
+---
+
 ### 2026-03-06 -- security-engineer -- cross-cutting
 **Task:** Sprint 004 Phase 4: Security Review + cargo-audit (Tasks 15-19)
 **Sprint:** Sprint 004, Phase 4

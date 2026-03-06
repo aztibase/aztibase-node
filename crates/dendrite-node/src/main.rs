@@ -1,5 +1,6 @@
 mod config;
 mod mempool;
+mod pipeline;
 
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -11,7 +12,8 @@ use tracing_subscriber::EnvFilter;
 
 use config::NodeConfig;
 use dendrite_consensus::{
-    ConsensusConfig, ConsensusEngine, ConsensusInput, ConsensusOutput, DagStore, ValidatorSet,
+    CommittedBatch, ConsensusConfig, ConsensusEngine, ConsensusInput, ConsensusOutput, DagStore,
+    ValidatorSet,
 };
 use dendrite_network::{
     Libp2pTransport, NetworkEvent, TOPIC_CONSENSUS, TOPIC_TRANSACTIONS, TransportConfig,
@@ -114,6 +116,11 @@ async fn main() -> Result<()> {
     let mut mempool = mempool::Mempool::new(10_000);
     tracing::info!("Mempool initialized (capacity: 10000)");
 
+    // Execution pipeline
+    let (pipeline_tx, pipeline_rx) = tokio::sync::mpsc::channel::<CommittedBatch>(256);
+    let exec_pipeline = pipeline::ExecutionPipeline::new(pipeline_rx);
+    tracing::info!("Execution pipeline initialized");
+
     // Network
     let transport_config = TransportConfig {
         idle_timeout_secs: config.network.idle_timeout_secs,
@@ -158,6 +165,11 @@ async fn main() -> Result<()> {
         }
     });
 
+    // Spawn execution pipeline
+    let pipeline_handle = tokio::spawn(async move {
+        exec_pipeline.run().await;
+    });
+
     // Main event loop
     loop {
         tokio::select! {
@@ -196,11 +208,15 @@ async fn main() -> Result<()> {
                             tracing::debug!(error = %e, "Failed to publish vertex");
                         }
                     }
-                    Some(ConsensusOutput::BlockCommitted(hash)) => {
+                    Some(ConsensusOutput::BatchCommitted(batch)) => {
                         tracing::info!(
-                            hash = %format!("{:02x}{:02x}{:02x}{:02x}", hash[0], hash[1], hash[2], hash[3]),
-                            "Block committed"
+                            anchor = %format!("{:02x}{:02x}{:02x}{:02x}",
+                                batch.anchor_hash[0], batch.anchor_hash[1],
+                                batch.anchor_hash[2], batch.anchor_hash[3]),
+                            txs = batch.transactions.len(),
+                            "Batch committed — forwarding to execution"
                         );
+                        let _ = pipeline_tx.send(batch).await;
                     }
                     None => {
                         tracing::info!("Consensus output channel closed");
@@ -215,7 +231,9 @@ async fn main() -> Result<()> {
     }
 
     drop(consensus_tx);
+    drop(pipeline_tx);
     let _ = consensus_handle.await;
+    let _ = pipeline_handle.await;
 
     tracing::info!("Dendrite node shut down");
     Ok(())

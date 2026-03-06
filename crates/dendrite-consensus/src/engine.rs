@@ -117,8 +117,8 @@ pub enum ConsensusInput {
 pub enum ConsensusOutput {
     /// A vertex to broadcast via gossipsub.
     BroadcastVertex(Vec<u8>),
-    /// A block was committed.
-    BlockCommitted(BlockHash),
+    /// A batch of transactions was committed via DAG consensus.
+    BatchCommitted(crate::ordering::CommittedBatch),
 }
 
 pub struct ConsensusEngine {
@@ -375,11 +375,16 @@ impl ConsensusEngine {
             match status {
                 LeaderStatus::Commit(hash) => {
                     info!(wave, hash = %short_hex(&hash), "Block committed (direct)");
+                    let already = self.state.committed_blocks().to_vec();
                     self.state.record_commit(hash);
                     self.state.last_committed_wave = Some(wave);
                     self.state.prune_before(wave * wave_len);
                     self.vrf_seed = dendrite_core::hash(&hash);
-                    let _ = self.outbox.try_send(ConsensusOutput::BlockCommitted(hash));
+                    if let Ok(batch) =
+                        crate::ordering::extract_committed_batch(&self.dag, hash, &already)
+                    {
+                        let _ = self.outbox.try_send(ConsensusOutput::BatchCommitted(batch));
+                    }
                 }
                 LeaderStatus::Skip(r) => {
                     debug!(wave, round = r, "Leader skipped");

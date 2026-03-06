@@ -3,7 +3,7 @@
 **Last Updated:** 2026-03-06
 **Updated By:** project-lead
 **Current Phase:** M3 -- Execution Layer (in progress)
-**Current Sprint:** Sprint 004 -- COMPLETE
+**Current Sprint:** Sprint 005 -- IN PROGRESS (Phase 1 complete)
 
 ---
 
@@ -33,7 +33,7 @@
 - Build-phase tracking infrastructure (5 documents)
 - Implementation depth audit (Sprint 001, Task 7)
 - Reference repos cloned (MystiCeti, Sui, Lighthouse, rust-libp2p, redb)
-- cargo build + cargo test pass (122 tests, 0 failures)
+- cargo build + cargo test pass (134 tests, 0 failures)
 - Sprint 001 closed with retrospective
 - Sprint 002 closed: 24/24 tasks, 5 phases complete
 - Sprint 003 closed: 18/18 tasks, 4 phases complete
@@ -53,27 +53,25 @@
 | dendrite-node | PARTIAL | node-engineer | YES | YES |
 
 ### In Progress
-- Nothing currently in progress
+- Sprint 005 Phase 2: State Persistence to redb
 
 ### Blocked
 - Nothing currently blocked
 
 ### Recently Completed
+- Sprint 005 Phase 1: Consensus-to-execution wiring, TxKind routing, ExecutionPipeline
 - Sprint 004 Phase 4: Security review (12-item checklist, no ELEVATED flags)
 - Sprint 004 Phase 3: WASM contract deploy + call, state roots, execution receipts
 - Sprint 004 Phase 2: AccountState, SimpleTransfer, CommittedBatch ordering, BatchResult
-- Sprint 004 Phase 1: VRF leader election, round pruning, pending_txs cap
 - Sprint 003 Phase 4: Security review + cargo-audit
 - Sprint 003 Phase 3: Commit Rule Integration + Mempool
 - Sprint 003 Phase 2: Vertex Reception & DAG Growth
 - Sprint 003 Phase 1: Consensus Round Engine
 
 ### Next Up
-1. Plan Sprint 005 (M3 continued)
-2. Anchor-based deterministic total ordering in node (wire consensus commits to execution)
-3. BLS finality certificates for light clients
-4. AccountState persistence to redb
-5. Transaction routing: classify tx type (transfer vs deploy vs call) from payload
+1. Sprint 005 Phase 2: AccountState persistence to redb (Tasks 6-10)
+2. Sprint 005 Phase 3: BLS finality certificates (Tasks 11-15)
+3. Sprint 005 Phase 4: Security review + docs (Tasks 16-21)
 
 ---
 
