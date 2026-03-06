@@ -126,10 +126,12 @@ async fn main() -> Result<()> {
         .context("Invalid execution storage path")?;
     let exec_store =
         StateStore::open(exec_storage_str).context("Failed to open execution storage")?;
+    let exec_store = Arc::new(exec_store);
     tracing::info!(path = %exec_storage_path.display(), "Execution storage initialized");
 
     let (pipeline_tx, pipeline_rx) = tokio::sync::mpsc::channel::<CommittedBatch>(256);
-    let exec_pipeline = pipeline::ExecutionPipeline::with_storage(exec_store, pipeline_rx);
+    let exec_pipeline =
+        pipeline::ExecutionPipeline::with_storage(Arc::clone(&exec_store), pipeline_rx);
     tracing::info!("Execution pipeline initialized");
 
     // RPC server
@@ -138,6 +140,7 @@ async fn main() -> Result<()> {
         exec_pipeline.shared_state(),
         mempool_tx,
         exec_pipeline.shared_batch_count(),
+        Some(exec_store),
     );
 
     if config.rpc.enabled {

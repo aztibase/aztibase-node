@@ -4,8 +4,8 @@ use std::sync::Arc;
 use dendrite_consensus::CommittedBatch;
 use dendrite_core::hash;
 use dendrite_execution::{
-    AccountState, ContractTx, TransferTx, TxKind, execute_contract_txs, execute_transfers,
-    flush_state, load_state, route_batch, store_batch_root,
+    AccountState, ContractTx, ExecutionReceipt, TransferTx, TxKind, evm, execute_contract_txs,
+    execute_transfers, flush_state, load_state, route_batch, store_batch_root, store_receipts,
 };
 use dendrite_storage::StateStore;
 use tokio::sync::{RwLock, mpsc};
@@ -18,13 +18,14 @@ pub struct PipelineResult {
     pub transfer_count: usize,
     pub contract_count: usize,
     pub routing_errors: usize,
+    pub receipts: Vec<ExecutionReceipt>,
 }
 
 /// Owns account state and executes committed batches received from consensus.
 /// Optionally persists state to redb after each batch.
 pub struct ExecutionPipeline {
     state: Arc<RwLock<AccountState>>,
-    store: Option<StateStore>,
+    store: Option<Arc<StateStore>>,
     rx: mpsc::Receiver<CommittedBatch>,
     batch_count: Arc<std::sync::atomic::AtomicU64>,
     executed_anchors: HashSet<[u8; 32]>,
@@ -32,7 +33,7 @@ pub struct ExecutionPipeline {
 
 impl ExecutionPipeline {
     /// Create a pipeline with redb persistence. Loads existing state on creation.
-    pub fn with_storage(store: StateStore, rx: mpsc::Receiver<CommittedBatch>) -> Self {
+    pub fn with_storage(store: Arc<StateStore>, rx: mpsc::Receiver<CommittedBatch>) -> Self {
         let state = match load_state(&store) {
             Ok(s) => {
                 tracing::info!(accounts = s.account_count(), "State loaded from disk");
@@ -82,6 +83,7 @@ impl ExecutionPipeline {
                         transfers = result.transfer_count,
                         contracts = result.contract_count,
                         routing_errors = result.routing_errors,
+                        receipts = result.receipts.len(),
                         "Batch executed"
                     );
                 }
@@ -107,6 +109,8 @@ impl ExecutionPipeline {
 
         let mut transfers = Vec::new();
         let mut contracts = Vec::new();
+        let mut evm_deploys = Vec::new();
+        let mut evm_calls = Vec::new();
 
         for tx in &routed {
             match tx {
@@ -161,19 +165,97 @@ impl ExecutionPipeline {
                         gas_limit: *gas_limit,
                     });
                 }
+                TxKind::EvmDeploy {
+                    deployer,
+                    code,
+                    nonce,
+                    gas_limit,
+                } => {
+                    evm_deploys.push((*deployer, code.clone(), *nonce, *gas_limit));
+                }
+                TxKind::EvmCall {
+                    caller,
+                    contract,
+                    calldata,
+                    nonce,
+                    gas_limit,
+                    value,
+                } => {
+                    evm_calls.push((
+                        *caller,
+                        *contract,
+                        calldata.clone(),
+                        *nonce,
+                        *gas_limit,
+                        *value,
+                    ));
+                }
             }
         }
 
         let transfer_count = transfers.len();
-        let contract_count = contracts.len();
+        let contract_count = contracts.len() + evm_deploys.len() + evm_calls.len();
 
         let mut state = self.state.write().await;
+        let mut receipts = Vec::new();
 
         if !transfers.is_empty() {
-            execute_transfers(&mut state, &transfers);
+            let batch_result = execute_transfers(&mut state, &transfers);
+            for tr in &batch_result.receipts {
+                receipts.push(ExecutionReceipt {
+                    tx_hash: tr.tx_hash,
+                    success: matches!(tr.status, dendrite_execution::TxStatus::Success),
+                    gas_used: tr.gas_used,
+                    contract_address: None,
+                    error: match &tr.status {
+                        dendrite_execution::TxStatus::Success => None,
+                        dendrite_execution::TxStatus::InsufficientBalance => {
+                            Some("insufficient balance".into())
+                        }
+                        dendrite_execution::TxStatus::NonceMismatch { expected, got } => {
+                            Some(format!("nonce mismatch: expected {expected}, got {got}"))
+                        }
+                    },
+                });
+            }
         }
         if !contracts.is_empty() {
-            execute_contract_txs(&mut state, &contracts);
+            let contract_receipts = execute_contract_txs(&mut state, &contracts);
+            for cr in &contract_receipts {
+                receipts.push(ExecutionReceipt {
+                    tx_hash: cr.tx_hash,
+                    success: cr.success,
+                    gas_used: cr.gas_used,
+                    contract_address: cr.contract_address,
+                    error: cr.error.clone(),
+                });
+            }
+        }
+
+        for (deployer, code, nonce, gas_limit) in &evm_deploys {
+            let tx_hash = hash(code);
+            let cr = evm::evm_deploy(&mut state, tx_hash, deployer, code, *nonce, *gas_limit);
+            receipts.push(ExecutionReceipt {
+                tx_hash: cr.tx_hash,
+                success: cr.success,
+                gas_used: cr.gas_used,
+                contract_address: cr.contract_address,
+                error: cr.error,
+            });
+        }
+
+        for (caller, contract, calldata, nonce, gas_limit, value) in &evm_calls {
+            let tx_hash = hash(calldata);
+            let cr = evm::evm_call(
+                &mut state, tx_hash, caller, contract, calldata, *nonce, *gas_limit, *value,
+            );
+            receipts.push(ExecutionReceipt {
+                tx_hash: cr.tx_hash,
+                success: cr.success,
+                gas_used: cr.gas_used,
+                contract_address: cr.contract_address,
+                error: cr.error,
+            });
         }
 
         let state_root = state.state_root();
@@ -183,6 +265,8 @@ impl ExecutionPipeline {
                 .map_err(|e| anyhow::anyhow!("fatal: flush_state failed: {e}"))?;
             store_batch_root(store, &batch.anchor_hash, &state_root)
                 .map_err(|e| anyhow::anyhow!("fatal: store_batch_root failed: {e}"))?;
+            store_receipts(store, &receipts)
+                .map_err(|e| anyhow::anyhow!("fatal: store_receipts failed: {e}"))?;
         }
 
         Ok(PipelineResult {
@@ -191,6 +275,7 @@ impl ExecutionPipeline {
             transfer_count,
             contract_count,
             routing_errors: errors.len(),
+            receipts,
         })
     }
 }
@@ -397,7 +482,7 @@ mod tests {
         let state_root;
 
         {
-            let store = StateStore::open(path.to_str().unwrap()).unwrap();
+            let store = Arc::new(StateStore::open(path.to_str().unwrap()).unwrap());
             let (_tx, rx) = mpsc::channel(16);
             let pipeline = ExecutionPipeline::with_storage(store, rx);
             pipeline.state.write().await.set_balance(&alice, 1000);
@@ -458,12 +543,135 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn pipeline_executes_evm_deploy() {
+        let (_tx, rx) = mpsc::channel(16);
+        let pipeline = make_pipeline(rx);
+
+        let deployer = [1u8; 32];
+        pipeline
+            .state
+            .write()
+            .await
+            .set_balance(&deployer, 1_000_000_000);
+
+        // EVM init code: stores 0x42 at memory[0], returns 32 bytes as runtime
+        let init_code = vec![0x60, 0x42, 0x60, 0x00, 0x52, 0x60, 0x20, 0x60, 0x00, 0xf3];
+
+        let evm_deploy = TxKind::EvmDeploy {
+            deployer,
+            code: init_code,
+            nonce: 0,
+            gas_limit: 1_000_000,
+        };
+
+        let batch = make_batch(vec![evm_deploy.encode()]);
+        let result = pipeline.execute_batch(&batch).await.unwrap();
+
+        assert_eq!(result.contract_count, 1);
+        assert_eq!(result.receipts.len(), 1);
+        assert!(
+            result.receipts[0].success,
+            "EVM deploy failed: {:?}",
+            result.receipts[0].error
+        );
+        assert!(result.receipts[0].contract_address.is_some());
+    }
+
+    #[tokio::test]
+    async fn pipeline_executes_evm_deploy_and_call() {
+        let (_tx, rx) = mpsc::channel(16);
+        let pipeline = make_pipeline(rx);
+
+        let deployer = [1u8; 32];
+        pipeline
+            .state
+            .write()
+            .await
+            .set_balance(&deployer, 1_000_000_000);
+
+        // Init code: deploys a 1-byte STOP runtime
+        let init_code = vec![0x60, 0x00, 0x60, 0x00, 0x53, 0x60, 0x01, 0x60, 0x00, 0xf3];
+
+        let evm_deploy = TxKind::EvmDeploy {
+            deployer,
+            code: init_code.clone(),
+            nonce: 0,
+            gas_limit: 1_000_000,
+        };
+
+        let batch1 = make_batch(vec![evm_deploy.encode()]);
+        let result1 = pipeline.execute_batch(&batch1).await.unwrap();
+        assert!(result1.receipts[0].success);
+        let contract_addr = result1.receipts[0].contract_address.unwrap();
+
+        let evm_call = TxKind::EvmCall {
+            caller: deployer,
+            contract: contract_addr,
+            calldata: vec![],
+            nonce: 1,
+            gas_limit: 1_000_000,
+            value: 0,
+        };
+
+        let batch2 = make_batch_with_anchor([0xBB; 32], vec![evm_call.encode()]);
+        let result2 = pipeline.execute_batch(&batch2).await.unwrap();
+        assert_eq!(result2.receipts.len(), 1);
+        assert!(
+            result2.receipts[0].success,
+            "EVM call failed: {:?}",
+            result2.receipts[0].error
+        );
+    }
+
+    #[tokio::test]
+    async fn pipeline_mixed_wasm_evm_batch() {
+        let (_tx, rx) = mpsc::channel(16);
+        let pipeline = make_pipeline(rx);
+
+        let alice = [1u8; 32];
+        let bob = [2u8; 32];
+        pipeline
+            .state
+            .write()
+            .await
+            .set_balance(&alice, 1_000_000_000);
+
+        let transfer = TxKind::Transfer {
+            from: alice,
+            to: bob,
+            value: 500,
+            nonce: 0,
+        };
+
+        let evm_deploy = TxKind::EvmDeploy {
+            deployer: alice,
+            code: vec![0x60, 0x42, 0x60, 0x00, 0x52, 0x60, 0x20, 0x60, 0x00, 0xf3],
+            nonce: 1,
+            gas_limit: 1_000_000,
+        };
+
+        let batch = make_batch(vec![transfer.encode(), evm_deploy.encode()]);
+        let result = pipeline.execute_batch(&batch).await.unwrap();
+
+        assert_eq!(result.transfer_count, 1);
+        assert_eq!(result.contract_count, 1);
+        assert_eq!(result.receipts.len(), 2);
+        assert!(result.receipts[0].success);
+        assert!(
+            result.receipts[1].success,
+            "EVM in mixed batch: {:?}",
+            result.receipts[1].error
+        );
+        assert_eq!(pipeline.state.read().await.balance(&bob), 500);
+    }
+
+    #[tokio::test]
     async fn pipeline_recovers_state_on_startup() {
         let path = test_db_path();
 
         // First pipeline: execute a transfer and flush
         {
-            let store = StateStore::open(path.to_str().unwrap()).unwrap();
+            let store = Arc::new(StateStore::open(path.to_str().unwrap()).unwrap());
             let (_tx, rx) = mpsc::channel(16);
             let pipeline = ExecutionPipeline::with_storage(store, rx);
             pipeline.state.write().await.set_balance(&[1u8; 32], 5000);
@@ -482,7 +690,7 @@ mod tests {
 
         // Second pipeline: should recover state from redb
         {
-            let store = StateStore::open(path.to_str().unwrap()).unwrap();
+            let store = Arc::new(StateStore::open(path.to_str().unwrap()).unwrap());
             let (_tx, rx) = mpsc::channel(16);
             let pipeline = ExecutionPipeline::with_storage(store, rx);
             let state = pipeline.state.read().await;

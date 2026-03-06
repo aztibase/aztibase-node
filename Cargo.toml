@@ -16,7 +16,7 @@ version = "0.1.0"
 edition = "2024"
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/dendrite-network/dendrite"
-rust-version = "1.85"
+rust-version = "1.88"
 
 [workspace.dependencies]
 # Internal crates
@@ -77,6 +77,9 @@ anyhow = "1"
 
 # WASM execution
 wasmtime = "28"
+
+# EVM execution (no default C deps — precompiles added separately)
+revm = { version = "36", default-features = false, features = ["std"] }
 
 # HTTP / RPC
 axum = "0.8"

@@ -1,6 +1,8 @@
 pub mod contract;
+pub mod evm;
 pub mod parallel;
 pub mod persist;
+pub mod receipt;
 pub mod routing;
 pub mod state;
 pub mod vm;
@@ -8,6 +10,7 @@ pub mod vm;
 pub use contract::{ContractReceipt, ContractTx, compute_contract_address, execute_contract_txs};
 pub use parallel::{BatchResult, TransferTx, TxReceipt, TxStatus, execute_transfers};
 pub use persist::{flush_state, get_batch_root, load_state, store_batch_root};
+pub use receipt::{ExecutionReceipt, get_receipt, store_receipts};
 pub use routing::{RoutingError, TxKind, route_batch, route_tx};
 pub use state::AccountState;
 pub use vm::{EngineConfig, ExecutionEngine, ExecutionResult};

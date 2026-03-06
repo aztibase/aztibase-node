@@ -10,6 +10,7 @@ use tokio::sync::{RwLock, mpsc};
 use tracing::{debug, info};
 
 use dendrite_execution::AccountState;
+use dendrite_storage::StateStore;
 
 // ── JSON-RPC 2.0 Types ─────────────────────────────────────────────
 
@@ -72,6 +73,7 @@ pub struct RpcState {
     pub accounts: Arc<RwLock<AccountState>>,
     pub tx_sender: mpsc::Sender<Vec<u8>>,
     pub batch_count: Arc<std::sync::atomic::AtomicU64>,
+    pub receipt_store: Option<Arc<StateStore>>,
 }
 
 impl Clone for RpcState {
@@ -80,6 +82,7 @@ impl Clone for RpcState {
             accounts: Arc::clone(&self.accounts),
             tx_sender: self.tx_sender.clone(),
             batch_count: Arc::clone(&self.batch_count),
+            receipt_store: self.receipt_store.clone(),
         }
     }
 }
@@ -95,12 +98,14 @@ impl RpcServer {
         accounts: Arc<RwLock<AccountState>>,
         tx_sender: mpsc::Sender<Vec<u8>>,
         batch_count: Arc<std::sync::atomic::AtomicU64>,
+        receipt_store: Option<Arc<StateStore>>,
     ) -> Self {
         Self {
             state: RpcState {
                 accounts,
                 tx_sender,
                 batch_count,
+                receipt_store,
             },
         }
     }
@@ -163,6 +168,7 @@ async fn dispatch(state: &RpcState, req: &JsonRpcRequest) -> JsonRpcResponse {
         "dndr_sendTransaction" => handle_send_transaction(state, req).await,
         "dndr_blockNumber" => handle_block_number(state, req).await,
         "dndr_getStateRoot" => handle_get_state_root(state, req).await,
+        "dndr_getTransactionReceipt" => handle_get_transaction_receipt(state, req).await,
         _ => JsonRpcResponse::error(
             req.id.clone(),
             METHOD_NOT_FOUND,
@@ -278,6 +284,70 @@ async fn handle_get_state_root(state: &RpcState, req: &JsonRpcRequest) -> JsonRp
     )
 }
 
+async fn handle_get_transaction_receipt(state: &RpcState, req: &JsonRpcRequest) -> JsonRpcResponse {
+    let hex_str = match req.params.get(0).and_then(|v| v.as_str()) {
+        Some(s) => s,
+        None => {
+            return JsonRpcResponse::error(
+                req.id.clone(),
+                INVALID_PARAMS,
+                "missing tx hash parameter".into(),
+            );
+        }
+    };
+    let hex_str = hex_str.strip_prefix("0x").unwrap_or(hex_str);
+    let hash_bytes = match hex::decode(hex_str) {
+        Ok(b) => b,
+        Err(e) => {
+            return JsonRpcResponse::error(
+                req.id.clone(),
+                INVALID_PARAMS,
+                format!("invalid hex: {e}"),
+            );
+        }
+    };
+    let tx_hash: [u8; 32] = match hash_bytes.try_into() {
+        Ok(h) => h,
+        Err(_) => {
+            return JsonRpcResponse::error(
+                req.id.clone(),
+                INVALID_PARAMS,
+                "tx hash must be 32 bytes".into(),
+            );
+        }
+    };
+
+    let store = match &state.receipt_store {
+        Some(s) => s,
+        None => {
+            return JsonRpcResponse::error(
+                req.id.clone(),
+                -32000,
+                "receipt store not available".into(),
+            );
+        }
+    };
+
+    match dendrite_execution::get_receipt(store, &tx_hash) {
+        Ok(Some(receipt)) => {
+            let mut result = serde_json::json!({
+                "txHash": format!("0x{}", hex::encode(receipt.tx_hash)),
+                "success": receipt.success,
+                "gasUsed": format!("0x{:x}", receipt.gas_used),
+            });
+            if let Some(addr) = receipt.contract_address {
+                result["contractAddress"] = serde_json::json!(format!("0x{}", hex::encode(addr)));
+            }
+            if let Some(err) = &receipt.error {
+                result["error"] = serde_json::json!(err);
+            }
+            JsonRpcResponse::success(req.id.clone(), result)
+        }
+        Ok(None) => JsonRpcResponse::success(req.id.clone(), serde_json::Value::Null),
+        Err(e) => JsonRpcResponse::error(req.id.clone(), -32000, format!("storage error: {e}")),
+    }
+}
+
 // ── Tests ───────────────────────────────────────────────────────────
 
 #[cfg(test)]
@@ -293,6 +363,7 @@ mod tests {
             accounts: Arc::new(RwLock::new(AccountState::new())),
             tx_sender: tx,
             batch_count: Arc::new(std::sync::atomic::AtomicU64::new(0)),
+            receipt_store: None,
         };
         (state, rx)
     }
@@ -309,6 +380,7 @@ mod tests {
             accounts: Arc::new(RwLock::new(accounts)),
             tx_sender: tx,
             batch_count: Arc::new(std::sync::atomic::AtomicU64::new(42)),
+            receipt_store: None,
         };
         (state, rx)
     }
@@ -489,5 +561,98 @@ mod tests {
         let hex_str = resp["result"].as_str().unwrap();
         assert!(hex_str.starts_with("0x"));
         assert_ne!(hex_str, &format!("0x{}", hex::encode([0u8; 32])));
+    }
+
+    // ── Receipt tests ────────────────────────────────────────────────
+
+    use std::sync::atomic::{AtomicU32, Ordering};
+
+    static RECEIPT_TEST_COUNTER: AtomicU32 = AtomicU32::new(0);
+
+    fn receipt_test_db_path() -> std::path::PathBuf {
+        let id = RECEIPT_TEST_COUNTER.fetch_add(1, Ordering::SeqCst);
+        let pid = std::process::id();
+        std::env::temp_dir().join(format!("dendrite_rpc_receipt_test_{}_{}", pid, id))
+    }
+
+    fn cleanup(path: &std::path::Path) {
+        let _ = std::fs::remove_file(path);
+        let lock = path.with_extension("lock");
+        let _ = std::fs::remove_file(lock);
+    }
+
+    fn test_state_with_receipts() -> (RpcState, mpsc::Receiver<Vec<u8>>, std::path::PathBuf) {
+        let path = receipt_test_db_path();
+        let store = StateStore::open(path.to_str().unwrap()).unwrap();
+        let store = Arc::new(store);
+
+        let tx_hash = dendrite_core::hash(b"test-receipt-tx");
+        let receipt = dendrite_execution::ExecutionReceipt {
+            tx_hash,
+            success: true,
+            gas_used: 21_000,
+            contract_address: None,
+            error: None,
+        };
+        dendrite_execution::store_receipts(&store, &[receipt]).unwrap();
+
+        let (tx, rx) = mpsc::channel(64);
+        let state = RpcState {
+            accounts: Arc::new(RwLock::new(AccountState::new())),
+            tx_sender: tx,
+            batch_count: Arc::new(std::sync::atomic::AtomicU64::new(0)),
+            receipt_store: Some(store),
+        };
+        (state, rx, path)
+    }
+
+    #[tokio::test]
+    async fn get_receipt_found() {
+        let (state, _rx, path) = test_state_with_receipts();
+        let tx_hash = dendrite_core::hash(b"test-receipt-tx");
+        let tx_hex = hex::encode(tx_hash);
+        let body = format!(
+            r#"{{"jsonrpc":"2.0","method":"dndr_getTransactionReceipt","params":["0x{tx_hex}"],"id":1}}"#
+        );
+        let resp = rpc_call(&state, &body).await;
+        assert!(resp.get("error").is_none(), "unexpected error: {resp}");
+        assert_eq!(resp["result"]["success"], true);
+        assert_eq!(resp["result"]["gasUsed"], "0x5208");
+        assert!(resp["result"]["txHash"].as_str().unwrap().starts_with("0x"));
+        cleanup(&path);
+    }
+
+    #[tokio::test]
+    async fn get_receipt_not_found() {
+        let (state, _rx, path) = test_state_with_receipts();
+        let missing = hex::encode([0xFFu8; 32]);
+        let body = format!(
+            r#"{{"jsonrpc":"2.0","method":"dndr_getTransactionReceipt","params":["0x{missing}"],"id":1}}"#
+        );
+        let resp = rpc_call(&state, &body).await;
+        assert!(resp.get("error").is_none());
+        assert!(resp["result"].is_null());
+        cleanup(&path);
+    }
+
+    #[tokio::test]
+    async fn get_receipt_no_store_returns_error() {
+        let (state, _rx) = test_state();
+        let hash_hex = hex::encode([0xAAu8; 32]);
+        let body = format!(
+            r#"{{"jsonrpc":"2.0","method":"dndr_getTransactionReceipt","params":["0x{hash_hex}"],"id":1}}"#
+        );
+        let resp = rpc_call(&state, &body).await;
+        assert_eq!(resp["error"]["code"], -32000);
+    }
+
+    #[tokio::test]
+    async fn get_receipt_invalid_hash() {
+        let (state, _rx, path) = test_state_with_receipts();
+        let body =
+            r#"{"jsonrpc":"2.0","method":"dndr_getTransactionReceipt","params":["0xDEAD"],"id":1}"#;
+        let resp = rpc_call(&state, &body).await;
+        assert_eq!(resp["error"]["code"], INVALID_PARAMS);
+        cleanup(&path);
     }
 }

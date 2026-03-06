@@ -2,6 +2,8 @@
 mod tests {
     use std::sync::atomic::{AtomicU32, Ordering};
 
+    use std::sync::Arc;
+
     use dendrite_consensus::{
         CommittedBatch, ValidatorSet, build_certificate, sign_finality, verify_certificate,
     };
@@ -39,7 +41,7 @@ mod tests {
     #[tokio::test]
     async fn transfer_end_to_end() {
         let path = test_db_path("xfer");
-        let store = StateStore::open(path.to_str().unwrap()).unwrap();
+        let store = Arc::new(StateStore::open(path.to_str().unwrap()).unwrap());
         let (_tx, rx) = mpsc::channel(16);
         let pipeline = ExecutionPipeline::with_storage(store, rx);
 
@@ -102,7 +104,7 @@ mod tests {
     #[tokio::test]
     async fn contract_deploy_and_call_end_to_end() {
         let path = test_db_path("contract");
-        let store = StateStore::open(path.to_str().unwrap()).unwrap();
+        let store = Arc::new(StateStore::open(path.to_str().unwrap()).unwrap());
         let (_tx, rx) = mpsc::channel(16);
         let pipeline = ExecutionPipeline::with_storage(store, rx);
 
@@ -187,7 +189,7 @@ mod tests {
     #[tokio::test]
     async fn finality_certificate_end_to_end() {
         let path = test_db_path("finality");
-        let store = StateStore::open(path.to_str().unwrap()).unwrap();
+        let store = Arc::new(StateStore::open(path.to_str().unwrap()).unwrap());
         let (_tx, rx) = mpsc::channel(16);
         let pipeline = ExecutionPipeline::with_storage(store, rx);
 
@@ -256,7 +258,7 @@ mod tests {
 
         // Pipeline 1: execute transfers, flush to redb
         {
-            let store = StateStore::open(path.to_str().unwrap()).unwrap();
+            let store = Arc::new(StateStore::open(path.to_str().unwrap()).unwrap());
             let (_tx, rx) = mpsc::channel(16);
             let pipeline = ExecutionPipeline::with_storage(store, rx);
             let shared = pipeline.shared_state();
@@ -288,7 +290,7 @@ mod tests {
 
         // Pipeline 2: recover state from redb, verify, execute more
         {
-            let store = StateStore::open(path.to_str().unwrap()).unwrap();
+            let store = Arc::new(StateStore::open(path.to_str().unwrap()).unwrap());
             let (_tx, rx) = mpsc::channel(16);
             let pipeline = ExecutionPipeline::with_storage(store, rx);
 
@@ -323,6 +325,62 @@ mod tests {
             assert_eq!(state.balance(&alice), 7000);
             assert_eq!(state.balance(&bob), 3000);
         }
+
+        cleanup(&path);
+    }
+
+    // ── Task 4 (Sprint 007): Receipt persistence end-to-end ──────────
+
+    #[tokio::test]
+    async fn receipt_persistence_end_to_end() {
+        let path = test_db_path("receipts");
+        let store = Arc::new(StateStore::open(path.to_str().unwrap()).unwrap());
+        let (_tx, rx) = mpsc::channel(16);
+        let pipeline = ExecutionPipeline::with_storage(Arc::clone(&store), rx);
+
+        let alice = [1u8; 32];
+        let bob = [2u8; 32];
+        let shared = pipeline.shared_state();
+        shared.write().await.set_balance(&alice, 10_000);
+
+        let anchor = hash(b"receipt_test_batch");
+        let batch = make_batch(
+            anchor,
+            vec![
+                TxKind::Transfer {
+                    from: alice,
+                    to: bob,
+                    value: 3000,
+                    nonce: 0,
+                }
+                .encode(),
+                TxKind::Transfer {
+                    from: alice,
+                    to: bob,
+                    value: 99_999,
+                    nonce: 1,
+                }
+                .encode(),
+            ],
+        );
+
+        let result = pipeline.execute_batch(&batch).await.unwrap();
+        assert_eq!(result.receipts.len(), 2);
+        assert!(result.receipts[0].success);
+        assert!(!result.receipts[1].success);
+
+        // Verify receipts persisted to redb
+        let r0 = dendrite_execution::get_receipt(&store, &result.receipts[0].tx_hash)
+            .unwrap()
+            .expect("receipt 0 should be persisted");
+        assert!(r0.success);
+        assert_eq!(r0.gas_used, 21_000);
+
+        let r1 = dendrite_execution::get_receipt(&store, &result.receipts[1].tx_hash)
+            .unwrap()
+            .expect("receipt 1 should be persisted");
+        assert!(!r1.success);
+        assert!(r1.error.as_deref().unwrap().contains("insufficient"));
 
         cleanup(&path);
     }

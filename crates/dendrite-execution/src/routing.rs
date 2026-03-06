@@ -6,6 +6,8 @@ type Address = [u8; 32];
 const PREFIX_TRANSFER: u8 = 0x01;
 const PREFIX_DEPLOY: u8 = 0x02;
 const PREFIX_CALL: u8 = 0x03;
+const PREFIX_EVM_DEPLOY: u8 = 0x04;
+const PREFIX_EVM_CALL: u8 = 0x05;
 
 /// Maximum encoded transaction size (1 MB). Rejects oversized payloads before
 /// deserialization to prevent memory-bomb attacks via bincode length prefixes.
@@ -33,6 +35,20 @@ pub enum TxKind {
         nonce: u64,
         gas_limit: u64,
     },
+    EvmDeploy {
+        deployer: Address,
+        code: Vec<u8>,
+        nonce: u64,
+        gas_limit: u64,
+    },
+    EvmCall {
+        caller: Address,
+        contract: Address,
+        calldata: Vec<u8>,
+        nonce: u64,
+        gas_limit: u64,
+        value: u64,
+    },
 }
 
 impl TxKind {
@@ -42,6 +58,8 @@ impl TxKind {
             TxKind::Transfer { .. } => PREFIX_TRANSFER,
             TxKind::ContractDeploy { .. } => PREFIX_DEPLOY,
             TxKind::ContractCall { .. } => PREFIX_CALL,
+            TxKind::EvmDeploy { .. } => PREFIX_EVM_DEPLOY,
+            TxKind::EvmCall { .. } => PREFIX_EVM_CALL,
         };
         let payload = bincode::serialize(self).expect("TxKind serialization cannot fail");
         let mut buf = Vec::with_capacity(1 + payload.len());
@@ -55,6 +73,8 @@ impl TxKind {
             TxKind::Transfer { .. } => PREFIX_TRANSFER,
             TxKind::ContractDeploy { .. } => PREFIX_DEPLOY,
             TxKind::ContractCall { .. } => PREFIX_CALL,
+            TxKind::EvmDeploy { .. } => PREFIX_EVM_DEPLOY,
+            TxKind::EvmCall { .. } => PREFIX_EVM_CALL,
         }
     }
 }
@@ -119,7 +139,7 @@ pub fn route_tx(raw: &[u8]) -> Result<TxKind, RoutingError> {
     }
     let (&prefix, body) = raw.split_first().ok_or(RoutingError::EmptyPayload)?;
     match prefix {
-        PREFIX_TRANSFER | PREFIX_DEPLOY | PREFIX_CALL => {}
+        PREFIX_TRANSFER | PREFIX_DEPLOY | PREFIX_CALL | PREFIX_EVM_DEPLOY | PREFIX_EVM_CALL => {}
         other => return Err(RoutingError::UnknownPrefix(other)),
     }
     let decoded: TxKind = bincode_options()
@@ -331,6 +351,36 @@ mod tests {
             route_tx(&encoded),
             Err(RoutingError::DecodeFailed(_))
         ));
+    }
+
+    #[test]
+    fn evm_deploy_roundtrip() {
+        let tx = TxKind::EvmDeploy {
+            deployer: [6u8; 32],
+            code: vec![0x60, 0x00, 0x60, 0x00, 0xf3],
+            nonce: 0,
+            gas_limit: 1_000_000,
+        };
+        let encoded = tx.encode();
+        assert_eq!(encoded[0], PREFIX_EVM_DEPLOY);
+        let decoded = route_tx(&encoded).unwrap();
+        assert_eq!(decoded, tx);
+    }
+
+    #[test]
+    fn evm_call_roundtrip() {
+        let tx = TxKind::EvmCall {
+            caller: [7u8; 32],
+            contract: [8u8; 32],
+            calldata: vec![0xa9, 0x05, 0x9c, 0xbb],
+            nonce: 1,
+            gas_limit: 500_000,
+            value: 0,
+        };
+        let encoded = tx.encode();
+        assert_eq!(encoded[0], PREFIX_EVM_CALL);
+        let decoded = route_tx(&encoded).unwrap();
+        assert_eq!(decoded, tx);
     }
 
     #[test]

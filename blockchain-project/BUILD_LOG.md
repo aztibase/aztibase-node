@@ -21,6 +21,34 @@ Entries are prepended (newest first).
 
 ## Entries
 
+### 2026-03-06 -- smart-contract-engineer -- dendrite-execution, dendrite-node
+**Task:** Sprint 007 Phase 2: EVM execution via revm v36 (Tasks 5-9)
+**Sprint:** Sprint 007, Phase 2
+**Git Ref:** pending
+**Files Changed:**
+- Cargo.toml (root: added `revm = { version = "36", default-features = false, features = ["std"] }`, MSRV 1.85→1.88)
+- crates/dendrite-execution/Cargo.toml (added `revm = { workspace = true }`)
+- crates/dendrite-execution/src/evm.rs (NEW: evm_deploy, evm_call, state adapter, 3 tests)
+- crates/dendrite-execution/src/routing.rs (EvmDeploy 0x04, EvmCall 0x05 variants, 2 new tests)
+- crates/dendrite-execution/src/lib.rs (added `pub mod evm`)
+- crates/dendrite-node/src/pipeline.rs (EVM routing + execution in execute_batch, 3 new tests)
+**Review Notes:** revm v36 integrated with `default-features = false, features = ["std"]` to avoid C deps (secp256k1-sys NOT in tree). MSRV bumped to 1.88. DNDR chain ID 0xDE0D. State adapter maps AccountState ↔ CacheDB (balance, nonce, code, storage). 32→20 byte address truncation. 209 tests pass (18 new: 3 evm, 2 routing, 3 evm pipeline, 5 receipt, 4 rpc receipt, 1 receipt e2e). Zero clippy, fmt clean.
+**Security Flags:** None. revm C-dep-free verified.
+
+### 2026-03-06 -- node-engineer -- dendrite-execution, dendrite-rpc, dendrite-node
+**Task:** Sprint 007 Phase 1: Transaction receipt store + RPC query (Tasks 1-4)
+**Sprint:** Sprint 007, Phase 1
+**Git Ref:** pending
+**Files Changed:**
+- crates/dendrite-execution/src/receipt.rs (NEW: ExecutionReceipt, store_receipts, get_receipt, 5 tests)
+- crates/dendrite-execution/src/lib.rs (pub mod receipt, exports)
+- crates/dendrite-rpc/src/server.rs (dndr_getTransactionReceipt, receipt_store in RpcState, 4 tests)
+- crates/dendrite-node/src/pipeline.rs (Arc<StateStore>, receipt collection, PipelineResult.receipts)
+- crates/dendrite-node/src/main.rs (Arc wrapping, receipt_store param)
+- crates/dendrite-node/src/integration.rs (Arc<StateStore>, receipt_persistence_end_to_end test)
+**Review Notes:** Unified ExecutionReceipt persisted to RECEIPTS_TABLE in redb. Pipeline collects receipts from transfers (TxStatus mapping) and contracts (ContractReceipt mapping). RPC queries via shared Arc<StateStore>. All existing tests updated for Arc<StateStore>.
+**Security Flags:** None
+
 ### 2026-03-06 -- security-engineer + documentation-engineer -- dendrite-rpc, docs
 **Task:** Sprint 006 Phase 4: M3 close — security review, cargo-audit, docs, ADR-005 (Tasks 20-24)
 **Sprint:** Sprint 006, Phase 4
