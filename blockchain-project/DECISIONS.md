@@ -12,6 +12,7 @@ Every non-obvious technical decision is recorded here. Each ADR is immutable onc
 | ADR-002 | Dual-license MIT / Apache-2.0 | 2026-03-05 | ACCEPTED | legal-ip-counsel |
 | ADR-003 | Workspace monorepo with 8 crates | 2026-03-05 | ACCEPTED | blockchain-architect |
 | ADR-004 | Use blst crate for BLS12-381 (C dependency exception) | 2026-03-06 | ACCEPTED | blockchain-architect + security-engineer |
+| ADR-005 | Use axum for JSON-RPC server | 2026-03-06 | ACCEPTED | node-engineer |
 
 ---
 
@@ -123,6 +124,35 @@ Use `blst` v0.3 as a justified exception to the pure-Rust policy. This is the on
 - Cross-compilation becomes slightly harder
 - If a production-grade pure-Rust BLS library emerges, this ADR should be superseded
 - Proof-of-possession (PoP) required at validator registration to prevent rogue-key attacks
+
+---
+
+## ADR-005: Use axum for JSON-RPC server
+
+**Date:** 2026-03-06
+**Status:** ACCEPTED
+**Decided By:** node-engineer
+
+### Context
+The node needs an HTTP-based JSON-RPC 2.0 server for external clients (wallets, explorers, CLI tools). Options considered:
+- `axum`: tokio-native, minimal, tower middleware ecosystem, maintained by tokio team
+- `hyper` (raw): maximum control but requires hand-rolling routing and middleware
+- `jsonrpsee`: full JSON-RPC framework with WebSocket support — heavy, opinionated
+
+### Decision
+Use axum with a hand-rolled JSON-RPC 2.0 dispatch layer. No dependency on a JSON-RPC framework.
+
+### Rationale
+- axum is already tokio-native — zero async runtime conflicts
+- Hand-rolled dispatch keeps the RPC layer simple and auditable (one file, ~280 lines)
+- jsonrpsee would add significant dependency weight for features we don't need yet (WebSocket, subscriptions)
+- 1MB body size limit via `DefaultBodyLimit` prevents DoS via oversized requests
+- tower middleware ecosystem available for future rate limiting, auth, CORS
+
+### Consequences
+- WebSocket subscriptions (e.g., newBlock events) require additional work when needed (M4+)
+- Batch JSON-RPC requests (array of requests) not supported — add if needed
+- No built-in OpenRPC/spec generation — acceptable for testnet
 
 ---
 

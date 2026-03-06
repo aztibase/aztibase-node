@@ -5,7 +5,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ---
 
-## [M3] -- Execution Layer (In Progress)
+## [M3] -- Execution Layer (COMPLETE)
 
 ### Added
 - JSON-RPC 2.0 server: axum-based HTTP server with 6 methods (dndr_getBalance, dndr_getNonce, dndr_getCode, dndr_sendTransaction, dndr_blockNumber, dndr_getStateRoot) (2026-03-06)
@@ -48,6 +48,11 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 - Integration test: contract deploy + call end-to-end — WASM deploy, storage_set call, state root change (2026-03-06)
 - Integration test: finality certificate — BLS sign, aggregate, build + verify certificate (2026-03-06)
 - Integration test: startup recovery — flush to redb, reload, verify state, execute more batches (2026-03-06)
+
+### Milestone
+- **M3 COMPLETE**: Execution layer feature-complete — WASM VM, state management, persistence, RPC, security hardened, 191 tests (2026-03-06)
+- SEC-RPC-001: 1MB request body size limit on RPC server via axum DefaultBodyLimit (2026-03-06)
+- ADR-005: axum chosen for JSON-RPC server (tokio-native, minimal, auditable) (2026-03-06)
 
 ---
 

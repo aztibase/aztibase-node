@@ -1,7 +1,7 @@
 use std::net::SocketAddr;
 use std::sync::Arc;
 
-use axum::extract::State;
+use axum::extract::{DefaultBodyLimit, State};
 use axum::http::StatusCode;
 use axum::response::IntoResponse;
 use axum::{Json, Router, routing::post};
@@ -108,6 +108,7 @@ impl RpcServer {
     pub fn router(&self) -> Router {
         Router::new()
             .route("/", post(handle_rpc))
+            .layer(DefaultBodyLimit::max(1_048_576))
             .with_state(self.state.clone())
     }
 

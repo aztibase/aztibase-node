@@ -21,6 +21,20 @@ Entries are prepended (newest first).
 
 ## Entries
 
+### 2026-03-06 -- security-engineer + documentation-engineer -- dendrite-rpc, docs
+**Task:** Sprint 006 Phase 4: M3 close — security review, cargo-audit, docs, ADR-005 (Tasks 20-24)
+**Sprint:** Sprint 006, Phase 4
+**Git Ref:** pending
+**Files Changed:**
+- crates/dendrite-rpc/src/server.rs (added 1MB DefaultBodyLimit via axum layer — SEC-RPC-001)
+- blockchain-project/DECISIONS.md (ADR-005: axum for JSON-RPC)
+- blockchain-project/STATUS.md (M3 marked COMPLETE, milestone table updated)
+- blockchain-project/sprints/SPRINT-006.md (Phase 4 DONE, retrospective, Sprint 007 candidates)
+- blockchain-project/BUILD_LOG.md (Phase 4 entry)
+- CHANGELOG.md (Phase 4 entries)
+**Review Notes:** Security review: 8-item RPC checklist (1 MEDIUM fixed, 4 LOW acceptable/deferred, 3 OK). Hardening review: all 7 fixes verified correct. cargo-audit: 5 transitive vulns (ring, wasmtime WASI), 6 warnings (unmaintained) — no action needed. ADR-005 for axum choice. M3 milestone COMPLETE. 191 tests, zero clippy, fmt clean.
+**Security Flags:** SEC-RPC-001 RESOLVED (1MB body limit). No ELEVATED flags.
+
 ### 2026-03-06 -- node-engineer + smart-contract-engineer -- dendrite-node
 **Task:** Sprint 006 Phase 3: Integration testing — 4 end-to-end tests (Tasks 16-19)
 **Sprint:** Sprint 006, Phase 3

@@ -177,53 +177,56 @@ This sprint makes the node externally accessible. The JSON-RPC server exposes ac
 
 ---
 
-## Phase 4: M3 Close + Security Review (Tasks 20-24)
+## Phase 4: M3 Close + Security Review (Tasks 20-24) -- COMPLETE
 
 **Owner:** security-engineer + documentation-engineer
 **Goal:** Final security review, close M3 milestone.
 
-### Task 20: Security review of RPC server
-- Review for injection, DoS, unauthorized access
-- Validate input sanitization on all RPC methods
-- Check error messages don't leak internal state
+### Task 20: Security review of RPC server -- DONE
+- [x] Review for injection, DoS, unauthorized access
+- [x] Validate input sanitization on all RPC methods
+- [x] Check error messages don't leak internal state
+- **Findings:** SEC-RPC-001 (MEDIUM: no body size limit) — FIXED with 1MB DefaultBodyLimit. SEC-RPC-002 (LOW: method echo), SEC-RPC-003 (LOW: no rate limit, deferred M4), SEC-RPC-005 (LOW: parse error detail), SEC-RPC-006 (LOW: no auth, by design for testnet). No ELEVATED flags.
 
-### Task 21: Security review of hardening changes
-- Verify all MEDIUM fixes are correct and complete
-- Check for regressions in existing security properties
+### Task 21: Security review of hardening changes -- DONE
+- [x] Verify all MEDIUM fixes are correct and complete
+- [x] Check for regressions in existing security properties
+- **Result:** All 7 fixes verified correct. No regressions. 191 tests pass.
 
-### Task 22: cargo-audit
-- Run `cargo audit` and document any new advisories
+### Task 22: cargo-audit -- DONE
+- [x] Run `cargo audit` and document any new advisories
+- **Result:** 5 vulnerabilities (all transitive: ring via libp2p, 4x wasmtime WASI — we don't use WASI), 6 unmaintained warnings (bincode, fxhash, instant, paste, ring, lru — all transitive). No new direct issues. No action needed.
 
-### Task 23: Update all documentation
-- STATUS.md: M3 marked COMPLETE, crate depth table updated
-- CHANGELOG.md: Sprint 006 entries
-- BUILD_LOG.md: All phase entries
-- DECISIONS.md: Any new ADRs (RPC framework choice)
+### Task 23: Update all documentation -- DONE
+- [x] STATUS.md: M3 marked COMPLETE, crate depth table updated
+- [x] CHANGELOG.md: Sprint 006 Phase 4 entries
+- [x] BUILD_LOG.md: Phase 4 entry
+- [x] DECISIONS.md: ADR-005 (axum for JSON-RPC)
 
-### Task 24: Close M3 milestone
-- Verify all M3 criteria met: WASM VM, state management, persistence, RPC
-- Update STATUS.md milestone table
-- Draft Sprint 007 candidates (M4: EVM, AI integration, state sync, testnet)
+### Task 24: Close M3 milestone -- DONE
+- [x] Verify all M3 criteria met: WASM VM, state management, persistence, RPC
+- [x] Update STATUS.md milestone table
+- [x] Sprint 007 candidates drafted (below)
 
 **Phase 4 Exit Criteria:**
-- Security review complete, no ELEVATED flags
-- All docs updated
-- M3 marked COMPLETE in STATUS.md
-- Sprint retrospective written
+- [x] Security review complete, no ELEVATED flags
+- [x] All docs updated
+- [x] M3 marked COMPLETE in STATUS.md
+- [x] Sprint retrospective written (below)
 
 ---
 
 ## Definition of Done (Sprint 006)
 
-- [ ] All 24 tasks completed or explicitly deferred with justification
-- [ ] `cargo check --workspace` passes with zero warnings
-- [ ] `cargo test --workspace` passes (target: 190+ tests)
-- [ ] `cargo clippy --workspace` passes with zero warnings
-- [ ] `cargo fmt --check` passes
-- [ ] All code has BUILD_LOG entries
-- [ ] Security review complete (no open ELEVATED flags)
-- [ ] STATUS.md updated with M3 COMPLETE
-- [ ] Sprint retrospective written
+- [x] All 24 tasks completed or explicitly deferred with justification (Task 6 deferred: receipt store needed)
+- [x] `cargo check --workspace` passes with zero warnings
+- [x] `cargo test --workspace` passes (191 tests, target was 190+)
+- [x] `cargo clippy --workspace` passes with zero warnings
+- [x] `cargo fmt --check` passes
+- [x] All code has BUILD_LOG entries
+- [x] Security review complete (no open ELEVATED flags)
+- [x] STATUS.md updated with M3 COMPLETE
+- [x] Sprint retrospective written
 
 ---
 
@@ -235,3 +238,34 @@ This sprint makes the node externally accessible. The JSON-RPC server exposes ac
 | RPC shared state access needs careful synchronization | Use Arc<RwLock<AccountState>> for read access |
 | Integration tests may be slow (WASM compilation) | Use pre-compiled WASM fixtures |
 | Strict bincode decoding may break existing payloads | Only applies to deserialization; our encode() is already canonical |
+
+---
+
+## Sprint Retrospective
+
+**End Date:** 2026-03-06
+**Status:** COMPLETE
+**Tasks:** 23/24 completed (1 deferred with justification)
+**Tests:** 191 total (26 new: 15 RPC + 7 security + 4 integration)
+
+### What went well
+- JSON-RPC server delivered cleanly in one phase — axum + hand-rolled dispatch kept it simple
+- Security hardening batch (7 MEDIUM findings) resolved efficiently with targeted fixes
+- Integration tests caught a real bug (redb lock contention on concurrent store open)
+- All 4 phases completed in a single sprint — M3 closed on schedule
+
+### What could improve
+- Temporary value borrow pattern (`Arc.read().await`) tripped us up in integration tests — need to internalize the "bind Arc to variable first" pattern
+- Should have committed Phase 2 before starting Phase 3 (batching made the diff larger than ideal)
+- Integration test redb cleanup could use `tempfile` crate instead of manual path management
+
+### Deferred items
+- Task 6 (`dndr_getTransactionReceipt`): requires receipt store not yet built — deferred to M4
+
+### Sprint 007 Candidates (M4)
+1. EVM integration via revm (dual VM: WASM + EVM)
+2. AI inference pipeline (tract integration, on-chain verification stubs)
+3. State sync / snapshot protocol
+4. Transaction receipt store + `dndr_getTransactionReceipt`
+5. Block-STM parallel execution
+6. Testnet preparation (multi-node, bootstrap, monitoring)
