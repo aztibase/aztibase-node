@@ -3,7 +3,7 @@
 **Last Updated:** 2026-03-06
 **Updated By:** project-lead
 **Current Phase:** M3 -- Execution Layer (in progress)
-**Current Sprint:** Sprint 005 -- COMPLETE (21/21 tasks, 4 phases)
+**Current Sprint:** Sprint 006 -- IN PROGRESS (JSON-RPC + Security Hardening + M3 Close)
 
 ---
 
@@ -54,7 +54,7 @@
 | dendrite-node | PARTIAL | node-engineer | YES | YES |
 
 ### In Progress
-- Sprint 006 planning
+- Sprint 006 Phase 1: JSON-RPC server (7 methods + node wiring)
 
 ### Blocked
 - Nothing currently blocked
@@ -67,7 +67,10 @@
 - Sprint 004 Phase 4: Security review (12-item checklist, no ELEVATED flags)
 
 ### Next Up
-1. Sprint 006 planning (EVM integration, RPC endpoints, state sync, integration testing)
+1. Sprint 006 Phase 1: JSON-RPC server (Tasks 1-8)
+2. Sprint 006 Phase 2: Security hardening (Tasks 9-15)
+3. Sprint 006 Phase 3: Integration testing (Tasks 16-19)
+4. Sprint 006 Phase 4: M3 close + security review (Tasks 20-24)
 
 ---
 
