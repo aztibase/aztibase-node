@@ -99,4 +99,8 @@ impl NodeConfig {
     pub fn storage_path(&self) -> PathBuf {
         self.data_dir.join("db")
     }
+
+    pub fn execution_storage_path(&self) -> PathBuf {
+        self.data_dir.join("execution_db")
+    }
 }

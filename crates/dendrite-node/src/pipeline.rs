@@ -2,8 +2,9 @@ use dendrite_consensus::CommittedBatch;
 use dendrite_core::hash;
 use dendrite_execution::{
     AccountState, ContractTx, TransferTx, TxKind, execute_contract_txs, execute_transfers,
-    route_batch,
+    flush_state, load_state, route_batch, store_batch_root,
 };
+use dendrite_storage::StateStore;
 use tokio::sync::mpsc;
 
 /// Result of executing a single committed batch.
@@ -17,15 +18,29 @@ pub struct PipelineResult {
 }
 
 /// Owns account state and executes committed batches received from consensus.
+/// Optionally persists state to redb after each batch.
 pub struct ExecutionPipeline {
     state: AccountState,
+    store: Option<StateStore>,
     rx: mpsc::Receiver<CommittedBatch>,
 }
 
 impl ExecutionPipeline {
-    pub fn new(rx: mpsc::Receiver<CommittedBatch>) -> Self {
+    /// Create a pipeline with redb persistence. Loads existing state on creation.
+    pub fn with_storage(store: StateStore, rx: mpsc::Receiver<CommittedBatch>) -> Self {
+        let state = match load_state(&store) {
+            Ok(s) => {
+                tracing::info!(accounts = s.account_count(), "State loaded from disk");
+                s
+            }
+            Err(e) => {
+                tracing::warn!(error = %e, "Failed to load state from disk, starting fresh");
+                AccountState::new()
+            }
+        };
         Self {
-            state: AccountState::new(),
+            state,
+            store: Some(store),
             rx,
         }
     }
@@ -47,7 +62,7 @@ impl ExecutionPipeline {
     }
 
     /// Execute a single committed batch: route transactions, execute each type,
-    /// return the resulting state root.
+    /// flush to disk, return the resulting state root.
     pub fn execute_batch(&mut self, batch: &CommittedBatch) -> PipelineResult {
         let (routed, errors) = route_batch(&batch.transactions);
 
@@ -120,9 +135,20 @@ impl ExecutionPipeline {
             execute_contract_txs(&mut self.state, &contracts);
         }
 
+        let state_root = self.state.state_root();
+
+        if let Some(ref store) = self.store {
+            if let Err(e) = flush_state(store, &self.state) {
+                tracing::error!(error = %e, "Failed to flush state to disk");
+            }
+            if let Err(e) = store_batch_root(store, &batch.anchor_hash, &state_root) {
+                tracing::error!(error = %e, "Failed to store batch root");
+            }
+        }
+
         PipelineResult {
             batch_anchor: batch.anchor_hash,
-            state_root: self.state.state_root(),
+            state_root,
             transfer_count,
             contract_count,
             routing_errors: errors.len(),
@@ -140,7 +166,30 @@ fn short_hex(bytes: &[u8; 32]) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use dendrite_execution::TxKind;
+    use dendrite_execution::{TxKind, get_batch_root, load_state};
+    use std::sync::atomic::{AtomicU32, Ordering};
+
+    static TEST_COUNTER: AtomicU32 = AtomicU32::new(0);
+
+    fn test_db_path() -> std::path::PathBuf {
+        let id = TEST_COUNTER.fetch_add(1, Ordering::SeqCst);
+        let pid = std::process::id();
+        std::env::temp_dir().join(format!("dendrite_pipeline_test_{}_{}", pid, id))
+    }
+
+    fn cleanup(path: &std::path::Path) {
+        let _ = std::fs::remove_file(path);
+        let lock = path.with_extension("lock");
+        let _ = std::fs::remove_file(lock);
+    }
+
+    fn make_pipeline(rx: mpsc::Receiver<CommittedBatch>) -> ExecutionPipeline {
+        ExecutionPipeline {
+            state: AccountState::new(),
+            store: None,
+            rx,
+        }
+    }
 
     fn make_batch(txs: Vec<Vec<u8>>) -> CommittedBatch {
         CommittedBatch {
@@ -150,15 +199,21 @@ mod tests {
         }
     }
 
+    fn make_batch_with_anchor(anchor: [u8; 32], txs: Vec<Vec<u8>>) -> CommittedBatch {
+        CommittedBatch {
+            anchor_hash: anchor,
+            vertex_order: vec![],
+            transactions: txs,
+        }
+    }
+
     #[test]
     fn pipeline_executes_transfers() {
-        let (tx, rx) = mpsc::channel(16);
-        let mut pipeline = ExecutionPipeline::new(rx);
+        let (_tx, rx) = mpsc::channel(16);
+        let mut pipeline = make_pipeline(rx);
 
         let alice = [1u8; 32];
         let bob = [2u8; 32];
-
-        // Pre-fund alice
         pipeline.state.set_balance(&alice, 1000);
 
         let transfer = TxKind::Transfer {
@@ -177,14 +232,12 @@ mod tests {
         assert_eq!(pipeline.state.balance(&alice), 700);
         assert_eq!(pipeline.state.balance(&bob), 300);
         assert_ne!(result.state_root, [0u8; 32]);
-
-        drop(tx);
     }
 
     #[test]
     fn pipeline_executes_mixed_batch() {
-        let (tx, rx) = mpsc::channel(16);
-        let mut pipeline = ExecutionPipeline::new(rx);
+        let (_tx, rx) = mpsc::channel(16);
+        let mut pipeline = make_pipeline(rx);
 
         let alice = [1u8; 32];
         let bob = [2u8; 32];
@@ -210,14 +263,12 @@ mod tests {
         assert_eq!(result.transfer_count, 1);
         assert_eq!(result.contract_count, 1);
         assert_eq!(pipeline.state.balance(&bob), 100);
-
-        drop(tx);
     }
 
     #[test]
     fn pipeline_handles_routing_errors() {
         let (_tx, rx) = mpsc::channel(16);
-        let mut pipeline = ExecutionPipeline::new(rx);
+        let mut pipeline = make_pipeline(rx);
 
         let good = TxKind::Transfer {
             from: [1u8; 32],
@@ -235,8 +286,8 @@ mod tests {
 
     #[tokio::test]
     async fn pipeline_processes_channel() {
-        let (tx, rx) = mpsc::channel(16);
-        let mut pipeline = ExecutionPipeline::new(rx);
+        let (_tx, rx) = mpsc::channel(16);
+        let mut pipeline = make_pipeline(rx);
 
         let alice = [1u8; 32];
         let bob = [2u8; 32];
@@ -250,19 +301,15 @@ mod tests {
         };
 
         let batch = make_batch(vec![transfer.encode()]);
-
-        // Process one batch directly (channel-based run() is for the main loop)
         let result = pipeline.execute_batch(&batch);
         assert_eq!(result.transfer_count, 1);
         assert_eq!(pipeline.state.balance(&bob), 200);
-
-        drop(tx);
     }
 
     #[test]
     fn pipeline_state_persists_across_batches() {
         let (_tx, rx) = mpsc::channel(16);
-        let mut pipeline = ExecutionPipeline::new(rx);
+        let mut pipeline = make_pipeline(rx);
 
         let alice = [1u8; 32];
         let bob = [2u8; 32];
@@ -294,5 +341,81 @@ mod tests {
         assert_eq!(pipeline.state.balance(&alice), 500);
         assert_eq!(pipeline.state.balance(&bob), 500);
         assert_ne!(result.state_root, [0u8; 32]);
+    }
+
+    // ── Persistence tests ──────────────────────────────────────────
+
+    #[test]
+    fn pipeline_flushes_to_redb() {
+        let path = test_db_path();
+        let alice = [1u8; 32];
+        let bob = [2u8; 32];
+        let anchor = [0xBB; 32];
+        let state_root;
+
+        {
+            let store = StateStore::open(path.to_str().unwrap()).unwrap();
+            let (_tx, rx) = mpsc::channel(16);
+            let mut pipeline = ExecutionPipeline::with_storage(store, rx);
+            pipeline.state.set_balance(&alice, 1000);
+
+            let transfer = TxKind::Transfer {
+                from: alice,
+                to: bob,
+                value: 400,
+                nonce: 0,
+            };
+
+            let batch = make_batch_with_anchor(anchor, vec![transfer.encode()]);
+            let result = pipeline.execute_batch(&batch);
+            state_root = result.state_root;
+        }
+
+        // Reopen db and verify flushed state
+        let store2 = StateStore::open(path.to_str().unwrap()).unwrap();
+        let loaded = load_state(&store2).unwrap();
+        assert_eq!(loaded.balance(&alice), 600);
+        assert_eq!(loaded.balance(&bob), 400);
+
+        let root = get_batch_root(&store2, &anchor).unwrap();
+        assert_eq!(root, Some(state_root));
+
+        cleanup(&path);
+    }
+
+    #[test]
+    fn pipeline_recovers_state_on_startup() {
+        let path = test_db_path();
+
+        // First pipeline: execute a transfer and flush
+        {
+            let store = StateStore::open(path.to_str().unwrap()).unwrap();
+            let (_tx, rx) = mpsc::channel(16);
+            let mut pipeline = ExecutionPipeline::with_storage(store, rx);
+            pipeline.state.set_balance(&[1u8; 32], 5000);
+
+            let batch = make_batch(vec![
+                TxKind::Transfer {
+                    from: [1u8; 32],
+                    to: [2u8; 32],
+                    value: 1500,
+                    nonce: 0,
+                }
+                .encode(),
+            ]);
+            pipeline.execute_batch(&batch);
+        }
+
+        // Second pipeline: should recover state from redb
+        {
+            let store = StateStore::open(path.to_str().unwrap()).unwrap();
+            let (_tx, rx) = mpsc::channel(16);
+            let pipeline = ExecutionPipeline::with_storage(store, rx);
+            assert_eq!(pipeline.state.balance(&[1u8; 32]), 3500);
+            assert_eq!(pipeline.state.balance(&[2u8; 32]), 1500);
+            assert_eq!(pipeline.state.nonce(&[1u8; 32]), 1);
+        }
+
+        cleanup(&path);
     }
 }

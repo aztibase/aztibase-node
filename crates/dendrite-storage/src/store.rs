@@ -26,14 +26,32 @@ pub const VALIDATORS_TABLE: TableDefinition<&[u8], &[u8]> = TableDefinition::new
 /// Verkle tree nodes keyed by node hash (32 bytes).
 pub const VERKLE_TABLE: TableDefinition<&[u8], &[u8]> = TableDefinition::new("verkle");
 
+/// Account records keyed by address (32 bytes). Value: bincode(balance, nonce).
+pub const ACCOUNTS_TABLE: TableDefinition<&[u8], &[u8]> = TableDefinition::new("accounts");
+
+/// Contract WASM bytecode keyed by contract address (32 bytes).
+pub const CONTRACT_CODE_TABLE: TableDefinition<&[u8], &[u8]> =
+    TableDefinition::new("contract_code");
+
+/// Contract storage keyed by address||key (32 + N bytes). Value: raw bytes.
+pub const CONTRACT_STORAGE_TABLE: TableDefinition<&[u8], &[u8]> =
+    TableDefinition::new("contract_storage");
+
+/// Committed batch state roots keyed by anchor hash (32 bytes).
+pub const BATCH_ROOTS_TABLE: TableDefinition<&[u8], &[u8]> = TableDefinition::new("batch_roots");
+
 /// All table definitions for batch initialization.
-const ALL_TABLES: [TableDefinition<&[u8], &[u8]>; 6] = [
+const ALL_TABLES: [TableDefinition<&[u8], &[u8]>; 10] = [
     BLOCKS_TABLE,
     STATE_TABLE,
     TX_TABLE,
     RECEIPTS_TABLE,
     VALIDATORS_TABLE,
     VERKLE_TABLE,
+    ACCOUNTS_TABLE,
+    CONTRACT_CODE_TABLE,
+    CONTRACT_STORAGE_TABLE,
+    BATCH_ROOTS_TABLE,
 ];
 
 // ── Error Type ─────────────────────────────────────────────────────

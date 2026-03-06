@@ -21,6 +21,32 @@ Entries are prepended (newest first).
 
 ## Entries
 
+### 2026-03-06 -- node-engineer + smart-contract-engineer -- storage/execution/node
+**Task:** Sprint 005 Phase 2: State Persistence to redb (Tasks 6-10)
+**Sprint:** Sprint 005, Phase 2
+**Git Ref:** pending
+**Files Changed:**
+- crates/dendrite-storage/src/store.rs (4 new tables: accounts, contract_code, contract_storage, batch_roots)
+- crates/dendrite-storage/src/lib.rs (new table exports)
+- crates/dendrite-execution/src/persist.rs (NEW: flush_state, load_state, store_batch_root, get_batch_root)
+- crates/dendrite-execution/src/state.rs (added iter_accounts())
+- crates/dendrite-execution/src/lib.rs (added persist module + exports)
+- crates/dendrite-node/src/pipeline.rs (with_storage constructor, flush after batch, state recovery)
+- crates/dendrite-node/src/main.rs (separate execution_db store for pipeline)
+- crates/dendrite-node/src/config.rs (execution_storage_path())
+**Review Notes:**
+- 4 new redb tables: accounts (addr->balance+nonce), contract_code (addr->wasm), contract_storage (addr||key->value), batch_roots (anchor->root)
+- flush_state writes full AccountState to redb after each batch
+- load_state recovers full AccountState on startup (balances, nonces, code, storage)
+- State root matches after flush/load roundtrip (verified by test)
+- Pipeline now uses with_storage() in node — state survives restarts
+- 8 new tests (6 persist, 2 pipeline persistence)
+- cargo clippy zero warnings, cargo fmt clean
+- Total tests: 148 (was 134)
+**Security Flags:** None
+
+---
+
 ### 2026-03-06 -- node-engineer + smart-contract-engineer -- node/execution/consensus
 **Task:** Sprint 005 Phase 1: Consensus-to-Execution Wiring + Tx Routing (Tasks 1-5)
 **Sprint:** Sprint 005, Phase 1

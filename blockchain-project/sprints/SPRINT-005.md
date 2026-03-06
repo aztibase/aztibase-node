@@ -51,11 +51,11 @@ This sprint makes the execution pipeline real: consensus commits flow through th
 
 | # | Task | Assigned To | Depends On | Status | Acceptance Criteria |
 |---|------|-------------|------------|--------|---------------------|
-| 6 | Define redb table layout for account state (accounts, contract_code, contract_storage) | node-engineer | -- | PENDING | Three redb tables; schema documented in code; test open/close |
-| 7 | Implement `PersistentAccountState` — redb-backed AccountState with same interface | smart-contract-engineer | Task 6 | PENDING | Get/set balance, nonce, code, storage via redb; passes same tests as in-memory |
-| 8 | Add state flush after each committed batch — write dirty accounts to redb | node-engineer | Tasks 5, 7 | PENDING | After execution, changed accounts written to redb; verified by re-read; test |
-| 9 | Implement state recovery on node startup — load AccountState from redb | node-engineer | Task 7 | PENDING | Node starts, loads last persisted state, resumes from correct balances; test |
-| 10 | Add state root to committed block metadata — stored alongside block in redb | node-engineer | Tasks 8, 13 (Phase 1 state root) | PENDING | State root persisted per committed batch; queryable by batch hash; test |
+| 6 | Define redb table layout for account state (accounts, contract_code, contract_storage) | node-engineer | -- | DONE | Four redb tables (accounts, contract_code, contract_storage, batch_roots); test open/close |
+| 7 | Implement `PersistentAccountState` — redb-backed AccountState with same interface | smart-contract-engineer | Task 6 | DONE | flush_state/load_state functions with same data as in-memory; state root roundtrip verified |
+| 8 | Add state flush after each committed batch — write dirty accounts to redb | node-engineer | Tasks 5, 7 | DONE | After execution, changed accounts written to redb; verified by re-read; test |
+| 9 | Implement state recovery on node startup — load AccountState from redb | node-engineer | Task 7 | DONE | Node starts, loads last persisted state, resumes from correct balances; test |
+| 10 | Add state root to committed block metadata — stored alongside block in redb | node-engineer | Tasks 8, 13 (Phase 1 state root) | DONE | State root persisted per committed batch; queryable by batch hash; test |
 
 **Exit criteria:** Account state persists across node restarts. State roots stored per batch. `cargo test` passes with new tests.
 

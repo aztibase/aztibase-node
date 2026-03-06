@@ -28,6 +28,10 @@ impl AccountState {
         self.accounts.get(address)
     }
 
+    pub fn iter_accounts(&self) -> impl Iterator<Item = (&Address, &Account)> {
+        self.accounts.iter()
+    }
+
     pub fn get_mut(&mut self, address: &Address) -> &mut Account {
         self.accounts.entry(*address).or_default()
     }

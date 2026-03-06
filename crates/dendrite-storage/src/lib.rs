@@ -2,7 +2,8 @@ pub mod store;
 pub mod verkle;
 
 pub use store::{
-    BLOCKS_TABLE, RECEIPTS_TABLE, STATE_TABLE, StateStore, StorageError, StorageResult, TX_TABLE,
+    ACCOUNTS_TABLE, BATCH_ROOTS_TABLE, BLOCKS_TABLE, CONTRACT_CODE_TABLE, CONTRACT_STORAGE_TABLE,
+    RECEIPTS_TABLE, STATE_TABLE, StateStore, StorageError, StorageResult, TX_TABLE,
     VALIDATORS_TABLE, VERKLE_TABLE,
 };
 
@@ -151,6 +152,10 @@ mod tests {
             RECEIPTS_TABLE,
             VALIDATORS_TABLE,
             VERKLE_TABLE,
+            ACCOUNTS_TABLE,
+            CONTRACT_CODE_TABLE,
+            CONTRACT_STORAGE_TABLE,
+            BATCH_ROOTS_TABLE,
         ];
         for (i, table) in tables.iter().enumerate() {
             let key = format!("key_{}", i);

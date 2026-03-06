@@ -116,9 +116,17 @@ async fn main() -> Result<()> {
     let mut mempool = mempool::Mempool::new(10_000);
     tracing::info!("Mempool initialized (capacity: 10000)");
 
-    // Execution pipeline
+    // Execution pipeline (separate redb for account state)
+    let exec_storage_path = config.execution_storage_path();
+    let exec_storage_str = exec_storage_path
+        .to_str()
+        .context("Invalid execution storage path")?;
+    let exec_store =
+        StateStore::open(exec_storage_str).context("Failed to open execution storage")?;
+    tracing::info!(path = %exec_storage_path.display(), "Execution storage initialized");
+
     let (pipeline_tx, pipeline_rx) = tokio::sync::mpsc::channel::<CommittedBatch>(256);
-    let exec_pipeline = pipeline::ExecutionPipeline::new(pipeline_rx);
+    let exec_pipeline = pipeline::ExecutionPipeline::with_storage(exec_store, pipeline_rx);
     tracing::info!("Execution pipeline initialized");
 
     // Network
