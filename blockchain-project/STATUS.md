@@ -3,7 +3,7 @@
 **Last Updated:** 2026-03-06
 **Updated By:** project-lead
 **Current Phase:** M4 -- Integration Testing + AI + Testnet (IN PROGRESS)
-**Current Sprint:** Sprint 007 -- IN PROGRESS (Receipt Store + EVM + AI Inference)
+**Current Sprint:** Sprint 008 -- COMPLETE (Multi-Node Testnet + AI Pipeline Integration)
 
 ---
 
@@ -33,14 +33,19 @@
 - Build-phase tracking infrastructure (5 documents)
 - Implementation depth audit (Sprint 001, Task 7)
 - Reference repos cloned (MystiCeti, Sui, Lighthouse, rust-libp2p, redb)
-- cargo build + cargo test pass (222 tests, 0 failures)
+- cargo build + cargo test pass (247 tests, 0 failures)
 - Sprint 001 closed with retrospective
 - Sprint 002 closed: 24/24 tasks, 5 phases complete
 - Sprint 003 closed: 18/18 tasks, 4 phases complete
 - Sprint 004 closed: 19/19 tasks, 4 phases complete
 - Sprint 005 closed: 21/21 tasks, 4 phases complete
 - Sprint 006 closed: 23/24 tasks (1 deferred), 4 phases complete
-- Sprint 007 Phase 1-3 complete: receipt store, EVM via revm, AI inference via tract
+- Sprint 007 complete: receipt store, EVM via revm, AI inference via tract
+- Sprint 008 complete: 17/17 tasks, 4 phases (multi-node testnet, AI pipeline, tx pool, security review)
+  - Phase 1: multi-node testnet (wire format, vertex routing, state broadcast, convergence test)
+  - Phase 2: AI inference in execution pipeline (TxKind::AiInfer, pipeline routing, inference receipts, model preload)
+  - Phase 3: Transaction pool improvements (priority ordering, eviction, hash dedup)
+  - Phase 4: Security review (2 MEDIUM — 1 fixed, 1 documented; 4 LOW), cargo-audit clean, docs updated
 
 ### Crate Status
 
@@ -56,12 +61,16 @@
 | dendrite-node | PARTIAL | node-engineer | YES | YES |
 
 ### In Progress
-- Sprint 007 Phase 4: Security review + documentation (Tasks 16-19)
+- Sprint 009 planning (Block-STM, state sync, EVM precompiles)
 
 ### Blocked
 - Nothing currently blocked
 
 ### Recently Completed
+- Sprint 008 Phase 4: Security review — 2 MEDIUM (1 fixed: bounded seen set, 1 documented: model paths), 4 LOW, zero ELEVATED
+- Sprint 008 Phase 3: Transaction pool — priority ordering, eviction policy, BLAKE3 hash dedup (10 new tests)
+- Sprint 008 Phase 2: AI inference pipeline — TxKind::AiInfer (0x06), pipeline routing to TractRuntime, inference_hash in receipts, model preload config (5 new tests)
+- Sprint 008 Phase 1: Multi-node testnet — wire format, vertex routing, state root broadcast, convergence test, launch script (10 new tests)
 - Sprint 007 Phase 3: AI inference via tract — TractRuntime, model registry, InferenceReceipt, verify_inference (12 new tests)
 - Sprint 007 Phase 2: EVM via revm v36 — evm_deploy, evm_call, CacheDB adapter, dual VM (8 new tests)
 - Sprint 007 Phase 1: Receipt store — ExecutionReceipt, store/get, RPC query, pipeline wiring (10 new tests)
@@ -75,8 +84,8 @@
 - Sprint 005 Phase 1: Consensus-to-execution wiring, TxKind routing, ExecutionPipeline
 
 ### Next Up
-1. Sprint 007 Phase 4 completion (security review + documentation)
-2. Sprint 008 planning (Block-STM parallel execution, state sync, multi-node testnet)
+1. Sprint 009: Block-STM, state sync, EVM precompiles
+2. Sprint 010: WebRTC transport, AI compute marketplace stubs
 
 ---
 
@@ -88,7 +97,9 @@
 | Domain acquisition pending | MEDIUM | legal-ip-counsel | OPEN |
 | nChain patent FTO analysis not started | HIGH | legal-ip-counsel | OPEN |
 | wasmtime trap handling on Windows | LOW | smart-contract-engineer | KNOWN |
-| Transitive dep advisories (ring, wasmtime WASI, lru, bincode) | LOW | security-engineer | DOCUMENTED |
+| Transitive dep advisories (ring, wasmtime ×4, tracing-subscriber, lru, bincode) | LOW | security-engineer | DOCUMENTED |
+| Mempool seen set memory growth (SEC-MEM-001) | MEDIUM | node-engineer | FIXED (bounded to max_size×10) |
+| AI model paths from config (SEC-AI-001) | MEDIUM | ai-integration-engineer | FIXED (path traversal blocked) |
 | BLS rogue-key attack without PoP | MEDIUM | consensus-engineer | DOCUMENTED (ADR-004) |
 
 ---

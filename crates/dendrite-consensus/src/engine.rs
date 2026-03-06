@@ -12,6 +12,7 @@ use crate::commit::{CommitConfig, CommitRule, LeaderStatus};
 use crate::dag::DagBlock;
 use crate::dag_store::DagStore;
 use crate::validator::ValidatorSet;
+use crate::wire;
 
 #[derive(Clone, Debug)]
 pub struct ConsensusConfig {
@@ -119,6 +120,16 @@ pub enum ConsensusOutput {
     BroadcastVertex(Vec<u8>),
     /// A batch of transactions was committed via DAG consensus.
     BatchCommitted(crate::ordering::CommittedBatch),
+}
+
+/// State root announcement broadcast to peers after executing a committed batch.
+/// Peers compare this against their own execution result and log divergence.
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
+pub struct StateRootAnnounce {
+    pub anchor_hash: dendrite_core::BlockHash,
+    pub state_root: [u8; 32],
+    pub batch_index: u64,
+    pub validator: dendrite_core::ValidatorId,
 }
 
 pub struct ConsensusEngine {
@@ -257,7 +268,7 @@ impl ConsensusEngine {
             .context("Failed to create vertex")?;
 
         let hash = block.hash;
-        let encoded = bincode::serialize(&block).context("Failed to serialize vertex")?;
+        let encoded = wire::encode_vertex(&block).context("Failed to encode vertex")?;
 
         self.dag
             .insert(block)
@@ -290,42 +301,15 @@ impl ConsensusEngine {
     }
 
     fn handle_received_vertex(&mut self, data: &[u8]) -> Result<()> {
-        let block: DagBlock = match bincode::deserialize(data) {
+        let block = match wire::decode_vertex(data, &self.validators, self.state.current_round) {
             Ok(b) => b,
             Err(e) => {
-                warn!(error = %e, "Failed to deserialize received vertex");
+                warn!(error = %e, "Rejected incoming vertex");
                 return Ok(());
             }
         };
 
-        if !self.validators.contains(&block.author) {
-            warn!(author = %short_hex(&block.author), "Vertex from unknown validator");
-            return Ok(());
-        }
-
         if self.dag.contains(&block.hash) {
-            return Ok(());
-        }
-
-        // Verify the block hash matches its contents
-        let expected = block.compute_hash();
-        if expected != block.hash {
-            warn!(
-                round = block.round,
-                author = %short_hex(&block.author),
-                "Vertex hash mismatch"
-            );
-            return Ok(());
-        }
-
-        // Reject vertices too far in the future (> 10 rounds ahead)
-        let max_future_rounds = 10;
-        if block.round > self.state.current_round + max_future_rounds {
-            warn!(
-                vertex_round = block.round,
-                current_round = self.state.current_round,
-                "Vertex too far in the future"
-            );
             return Ok(());
         }
 
@@ -568,7 +552,7 @@ mod tests {
 
         let genesis_hashes: Vec<BlockHash> = engine.state.vertices_at_round(0).to_vec();
         let block = DagBlock::new(1, [2u8; 32], genesis_hashes, vec![], now_ms()).unwrap();
-        let data = bincode::serialize(&block).unwrap();
+        let data = crate::wire::encode_vertex(&block).unwrap();
 
         engine.handle_received_vertex(&data).unwrap();
         assert_eq!(engine.state.vertices_at_round(1).len(), 1);
@@ -582,7 +566,7 @@ mod tests {
 
         let genesis_hashes: Vec<BlockHash> = engine.state.vertices_at_round(0).to_vec();
         let block = DagBlock::new(1, [99u8; 32], genesis_hashes, vec![], now_ms()).unwrap();
-        let data = bincode::serialize(&block).unwrap();
+        let data = crate::wire::encode_vertex(&block).unwrap();
 
         engine.handle_received_vertex(&data).unwrap();
         assert_eq!(engine.state.vertices_at_round(1).len(), 0);
@@ -592,8 +576,10 @@ mod tests {
     #[test]
     fn vertex_serialization_roundtrip() {
         let block = DagBlock::genesis([1u8; 32], 1000);
-        let encoded = bincode::serialize(&block).unwrap();
-        let decoded: DagBlock = bincode::deserialize(&encoded).unwrap();
+        let encoded = crate::wire::encode_vertex(&block).unwrap();
+        let mut vs = ValidatorSet::new();
+        vs.add([1u8; 32], 100);
+        let decoded = crate::wire::decode_vertex(&encoded, &vs, 0).unwrap();
         assert_eq!(decoded.hash, block.hash);
         assert_eq!(decoded.round, block.round);
         assert_eq!(decoded.author, block.author);
@@ -606,8 +592,9 @@ mod tests {
 
         let genesis_hashes: Vec<BlockHash> = engine.state.vertices_at_round(0).to_vec();
         let mut block = DagBlock::new(1, [2u8; 32], genesis_hashes, vec![], now_ms()).unwrap();
-        block.hash = [0xFFu8; 32]; // Tamper with hash
-        let data = bincode::serialize(&block).unwrap();
+        block.hash = [0xFFu8; 32];
+        let mut data = vec![1u8]; // version byte
+        data.extend_from_slice(&bincode::serialize(&block).unwrap());
 
         engine.handle_received_vertex(&data).unwrap();
         assert_eq!(engine.state.vertices_at_round(1).len(), 0);
@@ -618,10 +605,9 @@ mod tests {
     async fn engine_rejects_future_round_vertex() {
         let (mut engine, _in_tx, _out_rx, path) = make_test_engine();
         engine.insert_genesis().unwrap();
-        // Engine is at round 0; a vertex at round 50 should be rejected (>10 rounds ahead)
         let genesis_hashes: Vec<BlockHash> = engine.state.vertices_at_round(0).to_vec();
         let block = DagBlock::new(50, [2u8; 32], genesis_hashes, vec![], now_ms()).unwrap();
-        let data = bincode::serialize(&block).unwrap();
+        let data = crate::wire::encode_vertex(&block).unwrap();
 
         engine.handle_received_vertex(&data).unwrap();
         assert_eq!(engine.state.vertices_at_round(50).len(), 0);
@@ -632,13 +618,11 @@ mod tests {
     async fn engine_accepts_near_future_vertex() {
         let (mut engine, _in_tx, _out_rx, path) = make_test_engine();
         engine.insert_genesis().unwrap();
-        // Round 5 is within 10 rounds of round 0
         let genesis_hashes: Vec<BlockHash> = engine.state.vertices_at_round(0).to_vec();
         let block = DagBlock::new(5, [2u8; 32], genesis_hashes, vec![], now_ms()).unwrap();
-        let data = bincode::serialize(&block).unwrap();
+        let data = crate::wire::encode_vertex(&block).unwrap();
 
         engine.handle_received_vertex(&data).unwrap();
-        // DagStore may reject due to parent round mismatch, but the round check should pass
         cleanup(&path);
     }
 

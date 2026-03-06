@@ -21,6 +21,60 @@ Entries are prepended (newest first).
 
 ## Entries
 
+### 2026-03-06 -- security-engineer + documentation-engineer -- all crates
+**Task:** Sprint 008 Phase 4: Security review + documentation (Tasks 15-17)
+**Sprint:** Sprint 008, Phase 4
+**Git Ref:** pending
+**Files Changed:**
+- crates/dendrite-node/src/mempool.rs (SEC-MEM-001 fix: bounded `seen` set with max_seen + FIFO eviction, 1 new test)
+- blockchain-project/sprints/SPRINT-008.md (all tasks marked DONE, retrospective written)
+- blockchain-project/STATUS.md (Sprint 008 complete, M4 progress update)
+- blockchain-project/BUILD_LOG.md (Phase 4 entry)
+- CHANGELOG.md (security findings, Phase 4 items)
+**Review Notes:** Security review of 3 domains: multi-node gossip (wire.rs — 3 LOW findings), AI pipeline (tract_runtime + config — 1 MEDIUM documented, 2 LOW), mempool (1 MEDIUM fixed, 2 LOW). SEC-MEM-001 fixed: seen set now bounded to max_size×10 with FIFO eviction. cargo-audit: 6 transitive vulns + 7 warnings, all previously documented; 2 new wasmtime advisories (RUSTSEC-2026-0020/0021). 248 tests pass. Zero clippy warnings, fmt clean. Sprint 008 complete (17/17 tasks).
+**Security Flags:** SEC-MEM-001 MEDIUM — FIXED (bounded seen set). SEC-AI-001 MEDIUM — DOCUMENTED (model paths operator-controlled). No ELEVATED flags.
+
+### 2026-03-06 -- node-engineer -- dendrite-node
+**Task:** Sprint 008 Phase 3: Transaction pool improvements (Tasks 11-14)
+**Sprint:** Sprint 008, Phase 3
+**Git Ref:** pending
+**Files Changed:**
+- crates/dendrite-node/src/mempool.rs (complete rewrite: priority-ordered BTreeMap, eviction policy, BLAKE3 hash dedup, 16 tests)
+**Review Notes:** Mempool redesigned from BTreeMap<TxHash, Vec<u8>> to BTreeMap<(Reverse<u64>, TxHash), Vec<u8>> for priority ordering. Eviction replaces lowest-priority entry when pool is full and new tx has higher priority. BLAKE3 hash in `seen` set persists after removal to prevent tx replay. Default priority derived from TxKind prefix byte. 247 tests pass (10 new mempool tests). Zero clippy warnings, fmt clean.
+**Security Flags:** None
+
+### 2026-03-06 -- ai-integration-engineer + smart-contract-engineer -- dendrite-execution, dendrite-node, dendrite-rpc
+**Task:** Sprint 008 Phase 2: AI inference in execution pipeline (Tasks 6-10)
+**Sprint:** Sprint 008, Phase 2
+**Git Ref:** pending
+**Files Changed:**
+- crates/dendrite-execution/src/routing.rs (TxKind::AiInfer variant, PREFIX_AI_INFER 0x06, model_id validation, 2 tests)
+- crates/dendrite-execution/src/receipt.rs (inference_hash: Option<[u8; 32]> field on ExecutionReceipt)
+- crates/dendrite-node/src/pipeline.rs (ai_runtime: Option<Arc<dyn AIRuntime>>, AiInfer routing, InferenceRequest dispatch, 3 AI tests)
+- crates/dendrite-node/src/main.rs (TractRuntime creation, model preload from config, set_ai_runtime)
+- crates/dendrite-node/src/config.rs (AiConfig section with enabled + models Vec<ModelEntry>)
+- crates/dendrite-node/Cargo.toml (tract-onnx + prost dev-deps)
+- crates/dendrite-rpc/src/server.rs (inferenceHash in receipt JSON response)
+**Review Notes:** AI inference is now a first-class transaction type (0x06). Pipeline routes AiInfer to AIRuntime trait (TractRuntime implementation). ExecutionReceipt extended with inference_hash for on-chain verification. Models loadable from TOML config at startup. 237 tests pass (5 new: 2 routing + 3 pipeline). Zero clippy warnings, fmt clean.
+**Security Flags:** None — model preload uses config-specified paths only (no user-supplied paths at runtime). Inference resource bounded by max_compute_units field.
+
+### 2026-03-06 -- p2p-network-engineer + consensus-engineer + node-engineer -- dendrite-consensus, dendrite-network, dendrite-node
+**Task:** Sprint 008 Phase 1: Multi-node local testnet (Tasks 1-5)
+**Sprint:** Sprint 008, Phase 1
+**Git Ref:** pending
+**Files Changed:**
+- crates/dendrite-consensus/src/wire.rs (NEW: encode_vertex, decode_vertex, WireError, 9 tests)
+- crates/dendrite-consensus/src/engine.rs (use wire module for encode/decode, StateRootAnnounce struct)
+- crates/dendrite-consensus/src/lib.rs (export wire module, StateRootAnnounce)
+- crates/dendrite-network/src/lib.rs (export TOPIC_STATE_SYNC)
+- crates/dendrite-node/Cargo.toml (added bincode dependency)
+- crates/dendrite-node/src/main.rs (state root broadcast via TOPIC_STATE_SYNC, result_rx channel)
+- crates/dendrite-node/src/pipeline.rs (result_tx: Option<Sender<PipelineResult>>, set_result_sender)
+- crates/dendrite-node/src/integration.rs (multi_node_consensus_convergence test)
+- scripts/local-testnet.sh (NEW: 3-node testnet launch script)
+**Review Notes:** Wire format: [version:u8][bincode payload] with 512 KiB size limit. Engine now uses wire::encode_vertex for broadcast and wire::decode_vertex for reception (version check, hash integrity, validator membership, round proximity). StateRootAnnounce broadcast on TOPIC_STATE_SYNC after each batch execution. Multi-node test: 3 engines with shared genesis, async vertex routing, verified anchor + tx + state root convergence. 232 tests pass (10 new: 9 wire + 1 multi-node). Zero clippy, fmt clean.
+**Security Flags:** None
+
 ### 2026-03-06 -- security-engineer + documentation-engineer -- all crates, docs
 **Task:** Sprint 007 Phase 4: Security review + documentation (Tasks 16-19)
 **Sprint:** Sprint 007, Phase 4

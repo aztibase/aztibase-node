@@ -6,14 +6,19 @@ pub mod finality;
 pub mod ordering;
 pub mod pouw;
 pub mod validator;
+pub mod wire;
 
 pub use commit::{CommitConfig, CommitRule, LeaderStatus};
 pub use dag::{DagBlock, DagError};
 pub use dag_store::{DagStore, DagStoreError, DagStoreResult};
-pub use engine::{ConsensusConfig, ConsensusEngine, ConsensusInput, ConsensusOutput, RoundState};
+pub use engine::{
+    ConsensusConfig, ConsensusEngine, ConsensusInput, ConsensusOutput, RoundState,
+    StateRootAnnounce,
+};
 pub use finality::{FinalityCertificate, build_certificate, sign_finality, verify_certificate};
 pub use ordering::{CommittedBatch, extract_committed_batch};
 pub use validator::{ValidatorInfo, ValidatorSet};
+pub use wire::{WireError, decode_vertex, encode_vertex};
 
 #[cfg(test)]
 mod tests {

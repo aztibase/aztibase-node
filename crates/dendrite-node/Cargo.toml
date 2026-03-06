@@ -24,7 +24,10 @@ tracing-subscriber = { workspace = true }
 anyhow = { workspace = true }
 serde = { workspace = true }
 toml = { workspace = true }
+bincode = { workspace = true }
 directories = { workspace = true }
 
 [dev-dependencies]
 wat = "1"
+tract-onnx = { workspace = true }
+prost = "0.11"

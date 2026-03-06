@@ -5,7 +5,7 @@ use dendrite_storage::{RECEIPTS_TABLE, StateStore, StorageResult};
 
 type Address = [u8; 32];
 
-/// Unified receipt for all transaction types (transfers, WASM contracts, EVM).
+/// Unified receipt for all transaction types (transfers, WASM contracts, EVM, AI inference).
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ExecutionReceipt {
     pub tx_hash: TxHash,
@@ -13,6 +13,8 @@ pub struct ExecutionReceipt {
     pub gas_used: u64,
     pub contract_address: Option<Address>,
     pub error: Option<String>,
+    /// Deterministic hash for AI inference verification (None for non-AI transactions).
+    pub inference_hash: Option<[u8; 32]>,
 }
 
 /// Store a batch of receipts atomically alongside state flush.
@@ -76,6 +78,7 @@ mod tests {
             gas_used: 21_000,
             contract_address: None,
             error: None,
+            inference_hash: None,
         };
 
         store_receipts(&store, &[receipt.clone()]).unwrap();
@@ -113,6 +116,7 @@ mod tests {
             gas_used: 21_000,
             contract_address: None,
             error: Some("insufficient balance".into()),
+            inference_hash: None,
         };
 
         store_receipts(&store, &[receipt]).unwrap();
@@ -137,6 +141,7 @@ mod tests {
             gas_used: 150_000,
             contract_address: Some(contract_addr),
             error: None,
+            inference_hash: None,
         };
 
         store_receipts(&store, &[receipt]).unwrap();
@@ -166,6 +171,7 @@ mod tests {
                     } else {
                         None
                     },
+                    inference_hash: None,
                 }
             })
             .collect();

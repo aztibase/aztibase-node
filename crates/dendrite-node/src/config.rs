@@ -10,6 +10,7 @@ pub struct NodeConfig {
     pub network: NetworkConfig,
     pub rpc: RpcConfig,
     pub log: LogConfig,
+    pub ai: AiConfig,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -33,6 +34,19 @@ pub struct LogConfig {
     pub level: String,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
+pub struct AiConfig {
+    pub enabled: bool,
+    pub models: Vec<ModelEntry>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ModelEntry {
+    pub model_id: String,
+    pub path: PathBuf,
+}
+
 impl Default for NodeConfig {
     fn default() -> Self {
         Self {
@@ -40,6 +54,7 @@ impl Default for NodeConfig {
             network: NetworkConfig::default(),
             rpc: RpcConfig::default(),
             log: LogConfig::default(),
+            ai: AiConfig::default(),
         }
     }
 }
@@ -70,6 +85,15 @@ impl Default for LogConfig {
     fn default() -> Self {
         Self {
             level: "info".into(),
+        }
+    }
+}
+
+impl Default for AiConfig {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            models: Vec::new(),
         }
     }
 }

@@ -1621,6 +1621,7 @@ name = "dendrite-node"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "bincode",
  "clap",
  "dendrite-consensus",
  "dendrite-core",
@@ -1630,11 +1631,13 @@ dependencies = [
  "dendrite-runtime",
  "dendrite-storage",
  "directories",
+ "prost 0.11.9",
  "serde",
  "tokio",
  "toml",
  "tracing",
  "tracing-subscriber 0.3.22",
+ "tract-onnx",
  "wat",
 ]
 

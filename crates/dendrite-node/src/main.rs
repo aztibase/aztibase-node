@@ -15,12 +15,14 @@ use tracing_subscriber::EnvFilter;
 use config::NodeConfig;
 use dendrite_consensus::{
     CommittedBatch, ConsensusConfig, ConsensusEngine, ConsensusInput, ConsensusOutput, DagStore,
-    ValidatorSet,
+    StateRootAnnounce, ValidatorSet,
 };
 use dendrite_network::{
-    Libp2pTransport, NetworkEvent, TOPIC_CONSENSUS, TOPIC_TRANSACTIONS, TransportConfig,
+    Libp2pTransport, NetworkEvent, TOPIC_CONSENSUS, TOPIC_STATE_SYNC, TOPIC_TRANSACTIONS,
+    TransportConfig,
 };
 use dendrite_rpc::RpcServer;
+use dendrite_runtime::TractRuntime;
 use dendrite_storage::StateStore;
 
 #[derive(Parser, Debug)]
@@ -130,9 +132,63 @@ async fn main() -> Result<()> {
     tracing::info!(path = %exec_storage_path.display(), "Execution storage initialized");
 
     let (pipeline_tx, pipeline_rx) = tokio::sync::mpsc::channel::<CommittedBatch>(256);
-    let exec_pipeline =
+    let (result_tx, mut result_rx) = tokio::sync::mpsc::channel::<pipeline::PipelineResult>(256);
+    let mut exec_pipeline =
         pipeline::ExecutionPipeline::with_storage(Arc::clone(&exec_store), pipeline_rx);
-    tracing::info!("Execution pipeline initialized");
+    exec_pipeline.set_result_sender(result_tx);
+    let ai_runtime = Arc::new(TractRuntime::new());
+    let models_dir = config.data_dir.join("models");
+    if config.ai.enabled {
+        for entry in &config.ai.models {
+            if let Ok(canonical) = entry.path.canonicalize() {
+                if !canonical.starts_with(&config.data_dir) {
+                    tracing::warn!(
+                        model_id = %entry.model_id,
+                        path = %entry.path.display(),
+                        "Model path outside data_dir, skipping (path traversal blocked)"
+                    );
+                    continue;
+                }
+            } else if !entry.path.starts_with(&config.data_dir)
+                && !entry.path.starts_with(&models_dir)
+            {
+                tracing::warn!(
+                    model_id = %entry.model_id,
+                    path = %entry.path.display(),
+                    "Model path outside data_dir, skipping"
+                );
+                continue;
+            }
+            match std::fs::read(&entry.path) {
+                Ok(bytes) => match ai_runtime.register_model(&entry.model_id, &bytes) {
+                    Ok(()) => {
+                        tracing::info!(
+                            model_id = %entry.model_id,
+                            path = %entry.path.display(),
+                            "AI model loaded"
+                        );
+                    }
+                    Err(e) => {
+                        tracing::warn!(
+                            model_id = %entry.model_id,
+                            error = %e,
+                            "Failed to register AI model"
+                        );
+                    }
+                },
+                Err(e) => {
+                    tracing::warn!(
+                        model_id = %entry.model_id,
+                        path = %entry.path.display(),
+                        error = %e,
+                        "Failed to read AI model file"
+                    );
+                }
+            }
+        }
+    }
+    exec_pipeline.set_ai_runtime(ai_runtime);
+    tracing::info!("Execution pipeline initialized (AI runtime: tract)");
 
     // RPC server
     let (mempool_tx, mut mempool_rx) = tokio::sync::mpsc::channel::<Vec<u8>>(4096);
@@ -206,6 +262,8 @@ async fn main() -> Result<()> {
         exec_pipeline.run().await;
     });
 
+    let mut batch_index: u64 = 0;
+
     // Main event loop
     loop {
         tokio::select! {
@@ -229,6 +287,14 @@ async fn main() -> Result<()> {
                         );
                         if topic == TOPIC_CONSENSUS {
                             let _ = consensus_tx.send(ConsensusInput::ReceivedVertex(data)).await;
+                        } else if topic == TOPIC_STATE_SYNC {
+                            if let Ok(announce) = bincode::deserialize::<StateRootAnnounce>(&data) {
+                                tracing::debug!(
+                                    peer_validator = announce.validator[0],
+                                    batch = announce.batch_index,
+                                    "Received state root announcement"
+                                );
+                            }
                         } else if topic == TOPIC_TRANSACTIONS
                             && mempool.insert(data.clone())
                         {
@@ -268,6 +334,20 @@ async fn main() -> Result<()> {
             Some(raw_tx) = mempool_rx.recv() => {
                 if mempool.insert(raw_tx.clone()) {
                     let _ = consensus_tx.send(ConsensusInput::Transaction(raw_tx)).await;
+                }
+            }
+            Some(result) = result_rx.recv() => {
+                batch_index += 1;
+                let announce = StateRootAnnounce {
+                    anchor_hash: result.batch_anchor,
+                    state_root: result.state_root,
+                    batch_index,
+                    validator: identity,
+                };
+                if let Ok(data) = bincode::serialize(&announce)
+                    && let Err(e) = transport.publish(TOPIC_STATE_SYNC, data)
+                {
+                    tracing::debug!(error = %e, "Failed to publish state root");
                 }
             }
             _ = shutdown.notified() => {

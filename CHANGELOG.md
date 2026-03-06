@@ -8,6 +8,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 ## [M4] -- Integration Testing + AI + Testnet (IN PROGRESS)
 
 ### Added
+- Vertex wire format: version-prefixed encoding with size limits, hash integrity, validator check, round proximity (2026-03-06)
+- `encode_vertex()` / `decode_vertex()` in dendrite-consensus/wire.rs (2026-03-06)
+- `StateRootAnnounce`: broadcast state roots on TOPIC_STATE_SYNC after batch execution (2026-03-06)
+- Execution pipeline result channel: `PipelineResult` sent back to main loop for state root broadcasting (2026-03-06)
+- Multi-node consensus convergence test: 3 engines, shared genesis, async vertex routing, state root verification (2026-03-06)
+- Local testnet launch script: `scripts/local-testnet.sh` starts 3 nodes on localhost (2026-03-06)
 - Transaction receipt store: ExecutionReceipt persisted to redb RECEIPTS_TABLE with atomic batch writes (2026-03-06)
 - `dndr_getTransactionReceipt` RPC method: query receipts by tx hash (2026-03-06)
 - EVM execution via revm v36: `evm_deploy()` and `evm_call()` with CacheDB state adapter (2026-03-06)
@@ -18,6 +24,14 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 - AI inference pipeline: f32 input → tract tensor → model run → f32 output serialization (2026-03-06)
 - InferenceReceipt: deterministic BLAKE3 hash of (model_id || input || output) for verification (2026-03-06)
 - `verify_inference()` stub: re-runs inference and compares deterministic hash (2026-03-06)
+- `TxKind::AiInfer` (0x06): first-class AI inference transaction type with model_id, input, max_compute_units (2026-03-06)
+- AI inference in execution pipeline: AiInfer transactions routed to TractRuntime via `dyn AIRuntime` trait (2026-03-06)
+- `ExecutionReceipt.inference_hash`: deterministic hash field for AI inference verification (2026-03-06)
+- `inferenceHash` field in `dndr_getTransactionReceipt` RPC response for AI transactions (2026-03-06)
+- `NodeConfig.ai` section: model preload from TOML config with model_id + ONNX path (2026-03-06)
+- Mempool priority ordering: `BTreeMap<(Reverse<priority>, TxHash)>` drains highest-priority first (2026-03-06)
+- Mempool eviction: full pool evicts lowest-priority entry for higher-priority newcomer (2026-03-06)
+- Mempool BLAKE3 hash dedup: `seen` set persists after removal to prevent tx replay (2026-03-06)
 
 ### Changed
 - MSRV bumped from 1.85 to 1.88 for revm v36 compatibility (2026-03-06)
@@ -28,10 +42,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 - SEC-EVM-004: revm with `default-features = false, features = ["std"]` — no C dependencies (2026-03-06)
 - EVM nonce validation and chain ID enforcement (0xDE0D) on both deploy and call (2026-03-06)
 - AI input size validation rejects mismatched input before model execution (2026-03-06)
-- cargo-audit: 6 transitive vulns (ring, wasmtime, tracing-subscriber), 7 warnings — all transitive, no action needed (2026-03-06)
+- SEC-MEM-001 FIXED: Mempool `seen` set bounded to max_size×10 with FIFO eviction — prevents unbounded memory growth (2026-03-06)
+- SEC-AI-001 FIXED: Model path traversal blocked — paths must be under data_dir (canonicalized check) (2026-03-06)
+- Sprint 008 security review: 2 MEDIUM (both fixed), 4 LOW — zero ELEVATED flags (2026-03-06)
+- cargo-audit: 6 transitive vulns (ring, wasmtime ×3, tracing-subscriber), 7 warnings — all transitive, no action needed (2026-03-06)
 
 ### Testing
-- 222 tests total (31 new): receipt store (5), receipt RPC (4), receipt e2e (1), EVM engine (3), EVM routing (2), EVM pipeline (3), tract runtime (13) (2026-03-06)
+- 248 tests total (57 new): wire format (9), multi-node convergence (1), receipt store (5), receipt RPC (4), receipt e2e (1), EVM engine (3), EVM routing (2), EVM pipeline (3), tract runtime (13), AI routing (2), AI pipeline (3), mempool (11) (2026-03-06)
 
 ---
 

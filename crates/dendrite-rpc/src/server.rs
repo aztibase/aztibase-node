@@ -341,6 +341,9 @@ async fn handle_get_transaction_receipt(state: &RpcState, req: &JsonRpcRequest) 
             if let Some(err) = &receipt.error {
                 result["error"] = serde_json::json!(err);
             }
+            if let Some(ih) = &receipt.inference_hash {
+                result["inferenceHash"] = serde_json::json!(format!("0x{}", hex::encode(ih)));
+            }
             JsonRpcResponse::success(req.id.clone(), result)
         }
         Ok(None) => JsonRpcResponse::success(req.id.clone(), serde_json::Value::Null),
@@ -593,6 +596,7 @@ mod tests {
             gas_used: 21_000,
             contract_address: None,
             error: None,
+            inference_hash: None,
         };
         dendrite_execution::store_receipts(&store, &[receipt]).unwrap();
 

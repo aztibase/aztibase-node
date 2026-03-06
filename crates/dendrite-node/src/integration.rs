@@ -5,7 +5,8 @@ mod tests {
     use std::sync::Arc;
 
     use dendrite_consensus::{
-        CommittedBatch, ValidatorSet, build_certificate, sign_finality, verify_certificate,
+        CommittedBatch, ConsensusConfig, ConsensusEngine, ConsensusInput, ConsensusOutput,
+        DagStore, ValidatorSet, build_certificate, sign_finality, verify_certificate,
     };
     use dendrite_core::{BlsKeypair, hash};
     use dendrite_execution::{TxKind, compute_contract_address, get_batch_root, load_state};
@@ -327,6 +328,179 @@ mod tests {
         }
 
         cleanup(&path);
+    }
+
+    // ── Sprint 008 Task 4: Multi-node consensus convergence ──────────
+
+    #[tokio::test]
+    async fn multi_node_consensus_convergence() {
+        use dendrite_consensus::DagBlock;
+        use std::time::Duration;
+
+        let v1 = [1u8; 32];
+        let v2 = [2u8; 32];
+        let v3 = [3u8; 32];
+
+        let mut validators = ValidatorSet::new();
+        validators.add(v1, 100);
+        validators.add(v2, 100);
+        validators.add(v3, 100);
+
+        let config = ConsensusConfig {
+            round_duration: Duration::from_millis(200),
+            wave_length: 2,
+            max_parents: 10,
+            max_pending_txs: 4096,
+        };
+
+        // Shared genesis blocks with fixed timestamp so all DAGs are identical
+        let genesis_ts = 1000u64;
+        let genesis_blocks: Vec<DagBlock> = [v1, v2, v3]
+            .iter()
+            .map(|id| DagBlock::genesis(*id, genesis_ts))
+            .collect();
+
+        let identities = [v1, v2, v3];
+        let mut engine_inputs = Vec::new();
+        let mut handles = Vec::new();
+        let mut db_paths = Vec::new();
+
+        let (router_tx, mut router_rx) = mpsc::channel::<(usize, ConsensusOutput)>(1024);
+
+        for (i, &id) in identities.iter().enumerate() {
+            let path = test_db_path(&format!("multinode_{i}"));
+            let store = StateStore::open(path.to_str().unwrap()).unwrap();
+            let mut dag = DagStore::new(store).unwrap();
+            db_paths.push(path);
+
+            // Pre-seed DAG with identical genesis blocks
+            for g in &genesis_blocks {
+                dag.insert(g.clone()).unwrap();
+            }
+
+            let (in_tx, in_rx) = mpsc::channel::<ConsensusInput>(512);
+            let (out_tx, mut out_rx) = mpsc::channel::<ConsensusOutput>(512);
+
+            let mut engine =
+                ConsensusEngine::new(config.clone(), id, dag, validators.clone(), in_rx, out_tx);
+
+            engine_inputs.push(in_tx);
+
+            handles.push(tokio::spawn(async move {
+                let _ = engine.run().await;
+            }));
+
+            let rtx = router_tx.clone();
+            tokio::spawn(async move {
+                while let Some(output) = out_rx.recv().await {
+                    if rtx.send((i, output)).await.is_err() {
+                        break;
+                    }
+                }
+            });
+        }
+        drop(router_tx);
+
+        // Submit a transaction to node 0
+        let transfer = TxKind::Transfer {
+            from: [1u8; 32],
+            to: [2u8; 32],
+            value: 500,
+            nonce: 0,
+        };
+        engine_inputs[0]
+            .send(ConsensusInput::Transaction(transfer.encode()))
+            .await
+            .unwrap();
+
+        // Route vertices and collect committed batches
+        let mut committed: Vec<Vec<CommittedBatch>> = vec![Vec::new(), Vec::new(), Vec::new()];
+        let deadline = tokio::time::Instant::now() + Duration::from_secs(10);
+
+        loop {
+            if committed.iter().all(|c| !c.is_empty()) {
+                break;
+            }
+
+            let remaining = deadline.saturating_duration_since(tokio::time::Instant::now());
+            if remaining.is_zero() {
+                break;
+            }
+
+            match tokio::time::timeout(remaining, router_rx.recv()).await {
+                Ok(Some((node_idx, output))) => match output {
+                    ConsensusOutput::BroadcastVertex(data) => {
+                        for (j, tx) in engine_inputs.iter().enumerate() {
+                            if j != node_idx {
+                                let _ = tx.try_send(ConsensusInput::ReceivedVertex(data.clone()));
+                            }
+                        }
+                    }
+                    ConsensusOutput::BatchCommitted(batch) => {
+                        committed[node_idx].push(batch);
+                    }
+                },
+                _ => break,
+            }
+        }
+
+        // All 3 nodes should have committed at least one batch
+        for (i, batches) in committed.iter().enumerate() {
+            assert!(
+                !batches.is_empty(),
+                "Node {i} did not commit any batch within deadline"
+            );
+        }
+
+        // Verify all nodes committed a batch with the same anchor hash
+        let anchor0 = committed[0][0].anchor_hash;
+        for (i, batches) in committed.iter().enumerate().skip(1) {
+            assert_eq!(
+                batches[0].anchor_hash, anchor0,
+                "Node {i} committed different anchor than node 0"
+            );
+        }
+
+        // Verify all nodes have the same transaction set
+        let txs0 = &committed[0][0].transactions;
+        for (i, batches) in committed.iter().enumerate().skip(1) {
+            assert_eq!(
+                &batches[0].transactions, txs0,
+                "Node {i} has different transactions than node 0"
+            );
+        }
+
+        // Execute the committed batch on 3 independent pipelines
+        let mut state_roots = Vec::new();
+        for (i, batches) in committed.iter().enumerate() {
+            let exec_path = test_db_path(&format!("multinode_exec_{i}"));
+            let exec_store = Arc::new(StateStore::open(exec_path.to_str().unwrap()).unwrap());
+            let (_tx, rx) = mpsc::channel(16);
+            let pipeline = ExecutionPipeline::with_storage(exec_store, rx);
+            pipeline
+                .shared_state()
+                .write()
+                .await
+                .set_balance(&v1, 10_000);
+
+            let result = pipeline.execute_batch(&batches[0]).await.unwrap();
+            state_roots.push(result.state_root);
+            db_paths.push(exec_path);
+        }
+
+        // All state roots must match
+        assert_eq!(state_roots[0], state_roots[1], "State root 0 != 1");
+        assert_eq!(state_roots[1], state_roots[2], "State root 1 != 2");
+        assert_ne!(state_roots[0], [0u8; 32], "State root should not be zero");
+
+        // Cleanup
+        drop(engine_inputs);
+        for h in handles {
+            let _ = h.await;
+        }
+        for path in &db_paths {
+            cleanup(path);
+        }
     }
 
     // ── Task 4 (Sprint 007): Receipt persistence end-to-end ──────────

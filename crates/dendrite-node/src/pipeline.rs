@@ -7,6 +7,7 @@ use dendrite_execution::{
     AccountState, ContractTx, ExecutionReceipt, TransferTx, TxKind, evm, execute_contract_txs,
     execute_transfers, flush_state, load_state, route_batch, store_batch_root, store_receipts,
 };
+use dendrite_runtime::{AIRuntime, InferenceRequest};
 use dendrite_storage::StateStore;
 use tokio::sync::{RwLock, mpsc};
 
@@ -29,6 +30,8 @@ pub struct ExecutionPipeline {
     rx: mpsc::Receiver<CommittedBatch>,
     batch_count: Arc<std::sync::atomic::AtomicU64>,
     executed_anchors: HashSet<[u8; 32]>,
+    result_tx: Option<mpsc::Sender<PipelineResult>>,
+    ai_runtime: Option<Arc<dyn AIRuntime>>,
 }
 
 impl ExecutionPipeline {
@@ -50,7 +53,14 @@ impl ExecutionPipeline {
             rx,
             batch_count: Arc::new(std::sync::atomic::AtomicU64::new(0)),
             executed_anchors: HashSet::new(),
+            result_tx: None,
+            ai_runtime: None,
         }
+    }
+
+    /// Attach an AI runtime for inference transaction execution.
+    pub fn set_ai_runtime(&mut self, runtime: Arc<dyn AIRuntime>) {
+        self.ai_runtime = Some(runtime);
     }
 
     /// Shared read handle to account state (for RPC server).
@@ -61,6 +71,11 @@ impl ExecutionPipeline {
     /// Shared batch counter (for RPC server).
     pub fn shared_batch_count(&self) -> Arc<std::sync::atomic::AtomicU64> {
         Arc::clone(&self.batch_count)
+    }
+
+    /// Attach a channel to receive execution results (for state root broadcasting).
+    pub fn set_result_sender(&mut self, tx: mpsc::Sender<PipelineResult>) {
+        self.result_tx = Some(tx);
     }
 
     /// Run the pipeline loop, processing committed batches until the channel closes.
@@ -86,6 +101,9 @@ impl ExecutionPipeline {
                         receipts = result.receipts.len(),
                         "Batch executed"
                     );
+                    if let Some(ref tx) = self.result_tx {
+                        let _ = tx.try_send(result);
+                    }
                 }
                 Err(e) => {
                     tracing::error!(error = %e, "Pipeline halting due to fatal error");
@@ -111,6 +129,7 @@ impl ExecutionPipeline {
         let mut contracts = Vec::new();
         let mut evm_deploys = Vec::new();
         let mut evm_calls = Vec::new();
+        let mut ai_infers = Vec::new();
 
         for tx in &routed {
             match tx {
@@ -190,11 +209,27 @@ impl ExecutionPipeline {
                         *value,
                     ));
                 }
+                TxKind::AiInfer {
+                    requester,
+                    model_id,
+                    input,
+                    nonce,
+                    max_compute_units,
+                } => {
+                    ai_infers.push((
+                        *requester,
+                        model_id.clone(),
+                        input.clone(),
+                        *nonce,
+                        *max_compute_units,
+                    ));
+                }
             }
         }
 
         let transfer_count = transfers.len();
-        let contract_count = contracts.len() + evm_deploys.len() + evm_calls.len();
+        let contract_count =
+            contracts.len() + evm_deploys.len() + evm_calls.len() + ai_infers.len();
 
         let mut state = self.state.write().await;
         let mut receipts = Vec::new();
@@ -216,6 +251,7 @@ impl ExecutionPipeline {
                             Some(format!("nonce mismatch: expected {expected}, got {got}"))
                         }
                     },
+                    inference_hash: None,
                 });
             }
         }
@@ -228,6 +264,7 @@ impl ExecutionPipeline {
                     gas_used: cr.gas_used,
                     contract_address: cr.contract_address,
                     error: cr.error.clone(),
+                    inference_hash: None,
                 });
             }
         }
@@ -241,6 +278,7 @@ impl ExecutionPipeline {
                 gas_used: cr.gas_used,
                 contract_address: cr.contract_address,
                 error: cr.error,
+                inference_hash: None,
             });
         }
 
@@ -255,7 +293,54 @@ impl ExecutionPipeline {
                 gas_used: cr.gas_used,
                 contract_address: cr.contract_address,
                 error: cr.error,
+                inference_hash: None,
             });
+        }
+
+        for (requester, model_id, input, _nonce, max_compute_units) in &ai_infers {
+            let mut preimage = Vec::new();
+            preimage.extend_from_slice(requester);
+            preimage.extend_from_slice(model_id.as_bytes());
+            preimage.extend_from_slice(input);
+            let tx_hash = hash(&preimage);
+
+            let receipt = match &self.ai_runtime {
+                Some(runtime) if runtime.supports_model(model_id) => {
+                    let req = InferenceRequest {
+                        model_id: model_id.clone(),
+                        input: input.clone(),
+                        max_compute_units: *max_compute_units,
+                        metadata: Default::default(),
+                    };
+                    match runtime.infer(&req) {
+                        Ok(result) => ExecutionReceipt {
+                            tx_hash,
+                            success: true,
+                            gas_used: result.compute_units_used,
+                            contract_address: None,
+                            error: None,
+                            inference_hash: Some(result.deterministic_hash),
+                        },
+                        Err(e) => ExecutionReceipt {
+                            tx_hash,
+                            success: false,
+                            gas_used: 0,
+                            contract_address: None,
+                            error: Some(format!("inference failed: {e}")),
+                            inference_hash: None,
+                        },
+                    }
+                }
+                _ => ExecutionReceipt {
+                    tx_hash,
+                    success: false,
+                    gas_used: 0,
+                    contract_address: None,
+                    error: Some(format!("model not available: {model_id}")),
+                    inference_hash: None,
+                },
+            };
+            receipts.push(receipt);
         }
 
         let state_root = state.state_root();
@@ -291,6 +376,7 @@ fn short_hex(bytes: &[u8; 32]) -> String {
 mod tests {
     use super::*;
     use dendrite_execution::{TxKind, get_batch_root, load_state};
+    use dendrite_runtime::TractRuntime;
     use std::sync::atomic::{AtomicU32, Ordering};
 
     static TEST_COUNTER: AtomicU32 = AtomicU32::new(0);
@@ -314,6 +400,8 @@ mod tests {
             rx,
             batch_count: Arc::new(std::sync::atomic::AtomicU64::new(0)),
             executed_anchors: HashSet::new(),
+            result_tx: None,
+            ai_runtime: None,
         }
     }
 
@@ -700,5 +788,202 @@ mod tests {
         }
 
         cleanup(&path);
+    }
+
+    // ── AI inference helpers ──────────────────────────────────────
+
+    fn build_add_model_bytes() -> Vec<u8> {
+        use prost::Message;
+        use tract_onnx::pb;
+
+        let model = pb::ModelProto {
+            ir_version: 7,
+            opset_import: vec![pb::OperatorSetIdProto {
+                domain: String::new(),
+                version: 13,
+            }],
+            graph: Some(pb::GraphProto {
+                name: "add_graph".into(),
+                input: vec![pb::ValueInfoProto {
+                    name: "x".into(),
+                    r#type: Some(pb::TypeProto {
+                        denotation: String::new(),
+                        value: Some(pb::type_proto::Value::TensorType(pb::type_proto::Tensor {
+                            elem_type: 1,
+                            shape: Some(pb::TensorShapeProto {
+                                dim: vec![
+                                    pb::tensor_shape_proto::Dimension {
+                                        denotation: String::new(),
+                                        value: Some(
+                                            pb::tensor_shape_proto::dimension::Value::DimValue(1),
+                                        ),
+                                    },
+                                    pb::tensor_shape_proto::Dimension {
+                                        denotation: String::new(),
+                                        value: Some(
+                                            pb::tensor_shape_proto::dimension::Value::DimValue(3),
+                                        ),
+                                    },
+                                ],
+                            }),
+                        })),
+                    }),
+                    doc_string: String::new(),
+                }],
+                output: vec![pb::ValueInfoProto {
+                    name: "y".into(),
+                    r#type: Some(pb::TypeProto {
+                        denotation: String::new(),
+                        value: Some(pb::type_proto::Value::TensorType(pb::type_proto::Tensor {
+                            elem_type: 1,
+                            shape: Some(pb::TensorShapeProto {
+                                dim: vec![
+                                    pb::tensor_shape_proto::Dimension {
+                                        denotation: String::new(),
+                                        value: Some(
+                                            pb::tensor_shape_proto::dimension::Value::DimValue(1),
+                                        ),
+                                    },
+                                    pb::tensor_shape_proto::Dimension {
+                                        denotation: String::new(),
+                                        value: Some(
+                                            pb::tensor_shape_proto::dimension::Value::DimValue(3),
+                                        ),
+                                    },
+                                ],
+                            }),
+                        })),
+                    }),
+                    doc_string: String::new(),
+                }],
+                node: vec![pb::NodeProto {
+                    input: vec!["x".into(), "b".into()],
+                    output: vec!["y".into()],
+                    name: "add_node".into(),
+                    op_type: "Add".into(),
+                    domain: String::new(),
+                    attribute: vec![],
+                    doc_string: String::new(),
+                }],
+                initializer: vec![pb::TensorProto {
+                    name: "b".into(),
+                    dims: vec![1, 3],
+                    data_type: 1,
+                    float_data: vec![1.0, 1.0, 1.0],
+                    ..Default::default()
+                }],
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+        model.encode_to_vec()
+    }
+
+    fn make_ai_pipeline(rx: mpsc::Receiver<CommittedBatch>) -> ExecutionPipeline {
+        let rt = Arc::new(TractRuntime::new());
+        let model_bytes = build_add_model_bytes();
+        rt.register_model("add", &model_bytes).unwrap();
+
+        ExecutionPipeline {
+            state: Arc::new(RwLock::new(AccountState::new())),
+            store: None,
+            rx,
+            batch_count: Arc::new(std::sync::atomic::AtomicU64::new(0)),
+            executed_anchors: HashSet::new(),
+            result_tx: None,
+            ai_runtime: Some(rt),
+        }
+    }
+
+    fn make_f32_input(values: &[f32]) -> Vec<u8> {
+        values.iter().flat_map(|f| f.to_le_bytes()).collect()
+    }
+
+    #[tokio::test]
+    async fn pipeline_ai_infer_success() {
+        let (_tx, rx) = mpsc::channel(16);
+        let pipeline = make_ai_pipeline(rx);
+
+        let ai_tx = TxKind::AiInfer {
+            requester: [1u8; 32],
+            model_id: "add".into(),
+            input: make_f32_input(&[2.0, 3.0, 4.0]),
+            nonce: 0,
+            max_compute_units: 10_000,
+        };
+
+        let batch = make_batch(vec![ai_tx.encode()]);
+        let result = pipeline.execute_batch(&batch).await.unwrap();
+
+        assert_eq!(result.contract_count, 1);
+        assert_eq!(result.receipts.len(), 1);
+        assert!(result.receipts[0].success);
+        assert!(result.receipts[0].inference_hash.is_some());
+        assert!(result.receipts[0].gas_used > 0);
+    }
+
+    #[tokio::test]
+    async fn pipeline_ai_infer_unknown_model() {
+        let (_tx, rx) = mpsc::channel(16);
+        let pipeline = make_ai_pipeline(rx);
+
+        let ai_tx = TxKind::AiInfer {
+            requester: [1u8; 32],
+            model_id: "nonexistent".into(),
+            input: vec![1, 2, 3],
+            nonce: 0,
+            max_compute_units: 10_000,
+        };
+
+        let batch = make_batch(vec![ai_tx.encode()]);
+        let result = pipeline.execute_batch(&batch).await.unwrap();
+
+        assert_eq!(result.receipts.len(), 1);
+        assert!(!result.receipts[0].success);
+        assert!(result.receipts[0].inference_hash.is_none());
+        assert!(
+            result.receipts[0]
+                .error
+                .as_ref()
+                .unwrap()
+                .contains("not available")
+        );
+    }
+
+    #[tokio::test]
+    async fn pipeline_mixed_transfer_and_ai() {
+        let (_tx, rx) = mpsc::channel(16);
+        let pipeline = make_ai_pipeline(rx);
+
+        let alice = [1u8; 32];
+        let bob = [2u8; 32];
+        pipeline.state.write().await.set_balance(&alice, 5000);
+
+        let transfer = TxKind::Transfer {
+            from: alice,
+            to: bob,
+            value: 100,
+            nonce: 0,
+        };
+
+        let ai_tx = TxKind::AiInfer {
+            requester: alice,
+            model_id: "add".into(),
+            input: make_f32_input(&[1.0, 2.0, 3.0]),
+            nonce: 1,
+            max_compute_units: 10_000,
+        };
+
+        let batch = make_batch(vec![transfer.encode(), ai_tx.encode()]);
+        let result = pipeline.execute_batch(&batch).await.unwrap();
+
+        assert_eq!(result.transfer_count, 1);
+        assert_eq!(result.contract_count, 1);
+        assert_eq!(result.receipts.len(), 2);
+        assert!(result.receipts[0].success);
+        assert!(result.receipts[0].inference_hash.is_none());
+        assert!(result.receipts[1].success);
+        assert!(result.receipts[1].inference_hash.is_some());
+        assert_eq!(pipeline.state.read().await.balance(&bob), 100);
     }
 }
