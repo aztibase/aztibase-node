@@ -2000,7 +2000,7 @@ The following 10 name candidates are submitted for Phase 5a legal clearance by l
 | 4 | **Cortex** | CTX | The brain's outer layer where complex thought occurs. Suggests intelligence and layered architecture. Note: there is a "Cortex" (CTXC) project -- legal must assess collision risk. | Suggestive |
 | 5 | **Velum** | VLM | Latin for "veil" or "sail" -- evokes both privacy (veiled) and movement (sail). Unique in crypto. | Fanciful |
 | 6 | **Soma** | SOMA | Cell body of a neuron -- the computation center. Suggests core processing. Short, phonetically distinct. Note: Soma is also a Huxley/mythology term -- assess cultural connotations. | Arbitrary |
-| 7 | **Dendrite** | DNDR | Neural dendrites receive signals -- reflects the P2P network receiving and processing data. Scientifically grounded, unique. | Suggestive |
+| 7 | **Aztibase** | AZTB | Neural aztibases receive signals -- reflects the P2P network receiving and processing data. Scientifically grounded, unique. | Suggestive |
 | 8 | **Quen** | QUEN | Neologism -- evokes "query" and "queen" (processing authority). Short, globally pronounceable, zero collision risk expected. | Fanciful |
 | 9 | **Thalos** | THAL | Evokes "thalamus" (brain's relay center for sensory signals) and "thalos" (Greek connotation of flourishing). Unique. | Fanciful |
 | 10 | **Lumen** | LMN | Unit of light / enlightenment. Suggests clarity, intelligence, transparency. Note: Stellar Lumens uses "lumen" -- legal MUST assess collision. | Arbitrary |
@@ -7388,25 +7388,25 @@ NetworkHealthMetrics {
 
 Legal clearance was received on March 5, 2026. Of 10 candidates evaluated:
 - **1 GREEN:** Quen (QEN)
-- **4 YELLOW:** Synap, Nura, Velum, Dendrite
+- **4 YELLOW:** Synap, Nura, Velum, Aztibase
 - **5 RED (permanently blocked):** Axon, Cortex, Soma, Thalos, Lumen
 
-### 9.2 Primary Recommendation: Dendrite (DNDR) -- CONDITIONAL
+### 9.2 Primary Recommendation: Aztibase (AZTB) -- CONDITIONAL
 
 | Attribute | Value |
 |-----------|-------|
-| **Blockchain name** | Dendrite Network |
-| **Coin name** | Dendrite |
-| **Ticker** | DNDR |
+| **Blockchain name** | Aztibase Network |
+| **Coin name** | Aztibase |
+| **Ticker** | AZTB |
 | **Tagline** | "Where Intelligence Branches" |
 | **Naming score** | 78/100 |
 | **Legal status** | YELLOW -- requires re-clearance from legal-ip-counsel |
 
-**Rationale:** Dendrites are the signal-receiving branches of biological neurons. The name maps directly to Genesis Chain's architecture: DAG-based topology (branching graph structure), AI-native consensus (distributed intelligence gathering), and server-independence (no central hub, signals received from many sources). The branching visual metaphor provides exceptional logo and brand design potential. Ticker DNDR is clean across all crypto and stock exchanges.
+**Rationale:** Aztibases are the signal-receiving branches of biological neurons. The name maps directly to Genesis Chain's architecture: DAG-based topology (branching graph structure), AI-native consensus (distributed intelligence gathering), and server-independence (no central hub, signals received from many sources). The branching visual metaphor provides exceptional logo and brand design potential. Ticker AZTB is clean across all crypto and stock exchanges.
 
-**Legal risk:** Dendrite Systems Inc. holds Class 9 software trademarks. Requires formal opposition analysis. Ticker changed from DND (taken) to DNDR (clean). See NAMING_REPORT.md for full risk assessment and mitigation strategy.
+**Legal risk:** Aztibase Systems Inc. holds Class 9 software trademarks. Requires formal opposition analysis. Ticker changed from DND (taken) to AZTB (clean). See NAMING_REPORT.md for full risk assessment and mitigation strategy.
 
-**Action required:** legal-ip-counsel must re-evaluate Dendrite with DNDR ticker and "Dendrite Network" distinctiveness argument before this recommendation can be finalized.
+**Action required:** legal-ip-counsel must re-evaluate Aztibase with AZTB ticker and "Aztibase Network" distinctiveness argument before this recommendation can be finalized.
 
 ### 9.3 Fallback: Quen (QEN) -- GREEN
 
@@ -7433,21 +7433,21 @@ Legal clearance was received on March 5, 2026. Of 10 candidates evaluated:
 ### 9.5 Domain & Social Media Strategy
 
 **Primary domain targets (in priority order):**
-1. dendrite.network / quen.network
-2. dendrite.io / quen.io
-3. dendrite.xyz / quen.xyz
-4. dendrite.ai / quen.ai (if available)
-5. dendrite.com / quen.com (acquisition, likely premium)
+1. aztibase.network / quen.network
+2. aztibase.io / quen.io
+3. aztibase.xyz / quen.xyz
+4. aztibase.ai / quen.ai (if available)
+5. aztibase.com / quen.com (acquisition, likely premium)
 
 **Social handles to reserve immediately upon legal finalization:**
-- X/Twitter: @DendriteNetwork (or @QuenNetwork)
-- GitHub: dendrite-network (or quen-network) organization
-- Discord: Dendrite Network (or Quen Network) server
-- Telegram: @DendriteNetwork (or @QuenNetwork)
+- X/Twitter: @AztibaseNetwork (or @QuenNetwork)
+- GitHub: aztibase-network (or quen-network) organization
+- Discord: Aztibase Network (or Quen Network) server
+- Telegram: @AztibaseNetwork (or @QuenNetwork)
 
 ### 9.6 Naming Council Notes
 
-The full evaluation of all candidates, scoring methodology, linguistic safety checks across 9 languages, and detailed justification is in **NAMING_REPORT.md**. Key finding: the Qwen (Alibaba) phonetic collision with Quen was not captured in the legal clearance (which correctly focused on trademark/crypto registries) but is a critical branding concern for an AI-native chain. This drove the recommendation toward Dendrite despite its YELLOW legal status.
+The full evaluation of all candidates, scoring methodology, linguistic safety checks across 9 languages, and detailed justification is in **NAMING_REPORT.md**. Key finding: the Qwen (Alibaba) phonetic collision with Quen was not captured in the legal clearance (which correctly focused on trademark/crypto registries) but is a critical branding concern for an AI-native chain. This drove the recommendation toward Aztibase despite its YELLOW legal status.
 
 **Sign-off:** naming-council
 
@@ -7463,5 +7463,5 @@ The full evaluation of all candidates, scoring methodology, linguistic safety ch
 | 2026-03-05 | consensus-engineer | Section 2 | Complete consensus mechanism contribution: Synaptic Consensus (SynBFT + PoUW). DAG-BFT with anchor-based ordering, AI reputation-weighted leader selection, multi-method PoUW verification, validator selection with stake caps and diversity quotas. STACK CHALLENGE raised: BLS12-381 signatures needed alongside Ed25519. |
 | 2026-03-05 | node-engineer | Section 4 | Complete node architecture contribution: Full node (RocksDB, dual storage, DAG processing pipeline, priority mempool, 3 sync strategies, 8GB RAM target), Light node (redb, Verkle proof verification, BLS finality verification, 512MB RAM target), Browser node (WASM compilation strategy, WebRTC transport, IndexedDB storage, browser compat matrix), Mobile node (Android+iOS, battery optimization, light client variant), Validator node (vertex proposal pipeline, VRF computation, PoUW tiers, NAT traversal), State pruning (snapshot+diff model, archive vs pruned, Verkle GC). STACK ENDORSEMENT: BLS12-381 (supporting consensus-engineer). STACK REFINEMENT: redb over sled for light nodes. STACK FLAG: bandwidth concern for full nodes. |
 | 2026-03-05 | p2p-network-engineer | Section 8 | Complete P2P network design: Protocol stack (QUIC primary, TCP+Noise fallback, WebRTC for browsers, NetworkTransport abstraction), Peer discovery (6-layer bootstrap strategy, Kademlia DHT with k=20, peer diversity policy for eclipse resistance), Gossipsub v1.1 with priority batching and flow control (6 gossip topics, mesh size 8, 50ms batch flush), NAT traversal (AutoNAT + DCUtR hole punching ~85% + incentivized TURN relays ~15%, validators behind NAT supported), WebRTC browser nodes (Circuit Relay v2 for signaling, no dedicated signaling server, WebSocket fallback), Bandwidth optimization (compact block relay ~95% reduction, LZ4 wire compression, bloom filter dedup, transaction suppression), Network security (eclipse prevention via diversity + anchor detection, Sybil resistance via stake-gated scoring, DDoS rate limiting, Gossipsub peer scoring, Noise/TLS/DTLS encryption), Server-independence checklist (all 6 items PASS), Bandwidth requirements table (full node 8-12 Mbps with compact relay, light node 100-500 Kbps, browser 50-200 Kbps). No stack challenges raised. libp2p-webrtc flagged as medium-high risk requiring dedicated testing. |
-| 2026-03-05 | naming-council | Section 9 | Complete naming and branding contribution: Legal gate review (1 GREEN, 4 YELLOW, 5 RED). Critical finding: Quen (QEN) is phonetically identical to Alibaba's Qwen AI brand -- severe branding risk for AI-native chain. Primary recommendation: Dendrite Network (DNDR), scoring 78/100 -- exceptional AI/DAG meaning resonance, clean ticker, strong visual identity. CONDITIONAL on legal re-clearance (Dendrite Systems Inc. Class 9 trademark requires opposition analysis). Fallback: Quen (QEN), scoring 57/100 -- legally clean but brand-compromised. Trademark roadmap: USPTO, EUIPO, CIPC, WIPO Madrid Protocol. Full evaluation in NAMING_REPORT.md. |
+| 2026-03-05 | naming-council | Section 9 | Complete naming and branding contribution: Legal gate review (1 GREEN, 4 YELLOW, 5 RED). Critical finding: Quen (QEN) is phonetically identical to Alibaba's Qwen AI brand -- severe branding risk for AI-native chain. Primary recommendation: Aztibase Network (AZTB), scoring 78/100 -- exceptional AI/DAG meaning resonance, clean ticker, strong visual identity. CONDITIONAL on legal re-clearance (Aztibase Systems Inc. Class 9 trademark requires opposition analysis). Fallback: Quen (QEN), scoring 57/100 -- legally clean but brand-compromised. Trademark roadmap: USPTO, EUIPO, CIPC, WIPO Madrid Protocol. Full evaluation in NAMING_REPORT.md. |
 | 2026-03-05 | security-engineer | Section 5 | Complete security model contribution: Threat matrix (44 attack vectors across 8 domains: consensus, network, smart contract, cryptographic, AI-specific, economic, node-level, browser/mobile), Cryptographic standards review (BLAKE3 APPROVED, Ed25519 APPROVED with strict verification mandate, BLS12-381 APPROVED with PoP/domain separation/subgroup checking, Noise APPROVED, Verkle trees CONDITIONALLY APPROVED with quantum migration requirement), Security review of all existing sections (Sections 1, 2, 4, 8 reviewed with 13 security flags raised -- 9 SECURITY-ELEVATED, 4 STANDARD), AI security monitoring design (4 monitors: transaction anomaly, consensus behavior, contract exploit, network health + graduated threat response model with principle that AI never autonomously slashes/freezes), Quantum readiness assessment (4-phase PQC migration plan, HNDL risk analysis, Verkle-to-Merkle migration requirements), Key management (key hierarchy, wallet security tiers, HSM recommendations for validators, key rotation and recovery), Stack security review (15 dependencies evaluated with CVE analysis, supply chain security requirements including cargo-audit/cargo-vet/reproducible builds). STACK ENDORSEMENT: BLS12-381. 2 CONFLICTS raised: agent spending limit enforcement layer, VRF last-revealer bias. |

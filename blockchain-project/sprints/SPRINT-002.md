@@ -36,7 +36,7 @@ This sprint follows the build dependency order with parallelism where possible. 
 | 3 | Implement batch write operations | node-engineer | Task 2 | DONE | Atomic single + multi-table writes + 2 tests |
 | 4 | Add iterator support for range queries | node-engineer | Task 2 | DONE | Forward/reverse iteration + 4 tests |
 
-**Exit criteria:** `cargo test -p dendrite-storage` passes with 10+ tests. StateStore fully functional.
+**Exit criteria:** `cargo test -p aztibase-storage` passes with 10+ tests. StateStore fully functional.
 
 ### Phase 1b: Consensus Data Types (consensus-engineer, parallel with 1a)
 
@@ -45,7 +45,7 @@ This sprint follows the build dependency order with parallelism where possible. 
 | 5 | Implement `DagBlock` with parent validation | consensus-engineer | -- | DONE | DAG block with multi-parent, genesis, round check, hash + 8 tests |
 | 6 | Implement `ValidatorSet` (add, remove, lookup, stake-weighted selection) | consensus-engineer | -- | DONE | Add/remove/get, supermajority, leader selection + 8 tests |
 
-**Exit criteria:** `cargo test -p dendrite-consensus` passes Tasks 5-6 tests. Pure data structures, no storage dependency.
+**Exit criteria:** `cargo test -p aztibase-consensus` passes Tasks 5-6 tests. Pure data structures, no storage dependency.
 
 ---
 
@@ -56,7 +56,7 @@ This sprint follows the build dependency order with parallelism where possible. 
 | 7 | Implement `DagStore` (block insertion, parent lookup, causal ordering) | consensus-engineer | Phase 1a + 1b | DONE | DAG walk, ancestor queries + 7 tests |
 | 8 | Implement basic commit rule (direct/indirect commit) | consensus-engineer | Task 7 | DONE | MystiCeti-style commit logic + 3 tests |
 
-**Exit criteria:** `cargo test -p dendrite-consensus` passes with 10+ total tests. DAG blocks can be created, stored, and ordered.
+**Exit criteria:** `cargo test -p aztibase-consensus` passes with 10+ total tests. DAG blocks can be created, stored, and ordered.
 
 ---
 
@@ -67,12 +67,12 @@ This sprint follows the build dependency order with parallelism where possible. 
 | # | Task | Assigned To | Depends On | Status | Acceptance Criteria |
 |---|------|-------------|------------|--------|---------------------|
 | 9 | Implement `Libp2pTransport` struct implementing `NetworkTransport` trait | p2p-network-engineer | -- | DONE | Swarm creation with QUIC + TCP/Noise |
-| 10 | Add Gossipsub with 6 topic subscriptions | p2p-network-engineer | Task 9 | DONE | All 6 Dendrite topics, mesh config |
+| 10 | Add Gossipsub with 6 topic subscriptions | p2p-network-engineer | Task 9 | DONE | All 6 Aztibase topics, mesh config |
 | 11 | Add Kademlia DHT for peer discovery | p2p-network-engineer | Task 9 | DONE | Bootstrap, peer routing + test |
 | 12 | Add mDNS for local discovery | p2p-network-engineer | Task 9 | DONE | Local peer finding + test |
 | 13 | Implement peer event handling (connection, disconnection, message) | p2p-network-engineer | Task 10 | DONE | Event loop processes gossip msgs |
 
-**Exit criteria:** `cargo test -p dendrite-network` passes with 8+ tests. Two nodes can discover each other and exchange gossip messages.
+**Exit criteria:** `cargo test -p aztibase-network` passes with 8+ tests. Two nodes can discover each other and exchange gossip messages.
 
 ### Phase 3b: Execution Stubs (smart-contract-engineer, parallel with 3a)
 
@@ -82,7 +82,7 @@ This sprint follows the build dependency order with parallelism where possible. 
 | 15 | Implement host function linker (storage_get, storage_set, emit_event) | smart-contract-engineer | Task 14 | DONE | 3 host functions callable from WASM |
 | 16 | Implement basic contract execution pipeline (load module -> execute -> return) | smart-contract-engineer | Task 15 | DONE | Execute simple WASM, consume fuel + 3 tests |
 
-**Exit criteria:** `cargo test -p dendrite-execution` passes with 5+ tests. Simple WASM module executes with fuel metering.
+**Exit criteria:** `cargo test -p aztibase-execution` passes with 5+ tests. Simple WASM module executes with fuel metering.
 
 ---
 
@@ -95,7 +95,7 @@ This sprint follows the build dependency order with parallelism where possible. 
 | 19 | Add node configuration (TOML config file + CLI overrides) | node-engineer | -- | DONE | Config struct, file loading, clap integration |
 | 20 | Implement graceful shutdown (signal handling, cleanup) | node-engineer | Tasks 17-18 | DONE | SIGTERM/Ctrl-C cleanup + test |
 
-**Exit criteria:** `cargo test -p dendrite-node` passes. `cargo run -p dendrite-node` starts, opens storage, starts networking, shuts down cleanly.
+**Exit criteria:** `cargo test -p aztibase-node` passes. `cargo run -p aztibase-node` starts, opens storage, starts networking, shuts down cleanly.
 
 ---
 
@@ -118,7 +118,7 @@ This sprint follows the build dependency order with parallelism where possible. 
 |--------|--------|
 | Tasks | 24 |
 | Tests (new) | 50+ |
-| Crates upgraded | 7 (all except dendrite-core which is already COMPLETE) |
+| Crates upgraded | 7 (all except aztibase-core which is already COMPLETE) |
 | Minimum crate depth | PARTIAL for all crates |
 | Security reviews | 1 full sprint review |
 | ADRs expected | 2-3 (for any non-obvious decisions during implementation) |

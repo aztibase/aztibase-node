@@ -41,7 +41,7 @@ M2 from the master plan: "Nodes discover each other, gossip messages, and run a 
 | 5 | Implement `ConsensusEngine` with async round loop (400ms interval) | consensus-engineer | Tasks 1-4 | DONE | Engine drives rounds, proposes vertices, processes inbox |
 | 6 | Wire ConsensusEngine into node main loop | node-engineer | Task 5 | DONE | Node starts consensus on boot, advances rounds |
 
-**Exit criteria:** Node logs round transitions every 400ms. Vertex proposals generated with parent references. `cargo test -p dendrite-consensus` passes with new tests.
+**Exit criteria:** Node logs round transitions every 400ms. Vertex proposals generated with parent references. `cargo test -p aztibase-consensus` passes with new tests.
 
 ---
 
@@ -52,7 +52,7 @@ M2 from the master plan: "Nodes discover each other, gossip messages, and run a 
 | 7 | Wire gossipsub vertex topic to consensus engine inbox | p2p-network-engineer | Phase 1 | DONE | Received gossip bytes routed to consensus |
 | 8 | Validate received vertices (round bounds, parent existence, author in validator set) | consensus-engineer | Task 7 | DONE | Invalid vertices rejected with reason logged |
 | 9 | Insert valid vertices into DagStore | consensus-engineer | Task 8 | DONE | DAG grows each round, queryable |
-| 10 | Broadcast proposed vertices via gossipsub | p2p-network-engineer | Phase 1 Task 4 | DONE | Own vertices published to `dendrite/consensus` topic |
+| 10 | Broadcast proposed vertices via gossipsub | p2p-network-engineer | Phase 1 Task 4 | DONE | Own vertices published to `aztibase/consensus` topic |
 | 11 | Parent selection: pick 2f+1 parents from previous round's received vertices | consensus-engineer | Tasks 2, 9 | DONE | Vertex references correct parents, validated on receipt |
 
 **Exit criteria:** Two-node local test shows vertices flowing between nodes. DagStore on both nodes contains vertices from both validators.

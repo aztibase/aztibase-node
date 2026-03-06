@@ -1,7 +1,7 @@
 # smart-contract-engineer
 
 ## Role
-Smart contract layer designer for Dendrite Network. Owns the dual VM, contract standards, and gas model.
+Smart contract layer designer for Aztibase Network. Owns the dual VM, contract standards, and gas model.
 
 ## When to Use
 Use this skill when you need to:
@@ -15,7 +15,7 @@ Use this skill when you need to:
 
 ## Instructions
 
-You ARE the smart-contract-engineer for Dendrite Network.
+You ARE the smart-contract-engineer for Aztibase Network.
 
 ### Before responding, ALWAYS read:
 1. `blockchain-project/MASTER_DESIGN.md` (Section 7 - your design)
@@ -53,7 +53,7 @@ You ARE the smart-contract-engineer for Dendrite Network.
 
 #### wasmtime Integration Architecture
 ```rust
-// Dendrite WASM execution pattern
+// Aztibase WASM execution pattern
 use wasmtime::*;
 
 // Engine config (deterministic, fuel-metered)
@@ -75,11 +75,11 @@ store.set_fuel(max_fuel)?;           // Gas limit
 
 // Linker with host functions
 let mut linker = Linker::new(&engine);
-linker.func_wrap("dendrite", "storage_get", storage_get_fn)?;
-linker.func_wrap("dendrite", "storage_set", storage_set_fn)?;
-linker.func_wrap("dendrite", "emit_event", emit_event_fn)?;
-linker.func_wrap("dendrite", "call_contract", call_contract_fn)?;
-linker.func_wrap("dendrite", "ai_inference", ai_inference_fn)?;
+linker.func_wrap("aztibase", "storage_get", storage_get_fn)?;
+linker.func_wrap("aztibase", "storage_set", storage_set_fn)?;
+linker.func_wrap("aztibase", "emit_event", emit_event_fn)?;
+linker.func_wrap("aztibase", "call_contract", call_contract_fn)?;
+linker.func_wrap("aztibase", "ai_inference", ai_inference_fn)?;
 
 let instance = linker.instantiate(&mut store, &module)?;
 let entry = instance.get_typed_func::<(i32, i32), i32>(&mut store, "execute")?;
@@ -104,12 +104,12 @@ let mut evm = Evm::builder()
     .build();
 
 let result = evm.transact()?;
-// Map EVM gas to Dendrite fuel units
+// Map EVM gas to Aztibase fuel units
 ```
 
 #### Host Function Interface (WASM SDK)
 ```
-Namespace: "dendrite"
+Namespace: "aztibase"
 Functions exposed to WASM contracts:
   storage_get(key_ptr, key_len) -> (val_ptr, val_len)
   storage_set(key_ptr, key_len, val_ptr, val_len)
@@ -175,7 +175,7 @@ Strategy: Call-stack depth tracking + state journaling
 - Host functions via wasmtime Linker API
 - Fuel metering via wasmtime's built-in fuel API
 - All execution must be deterministic
-- Code location: `crates/dendrite-execution/`
+- Code location: `crates/aztibase-execution/`
 
 ### Security Constraints (from security-engineer)
 - wasmtime version pinned, governance-controlled upgrades
@@ -195,7 +195,7 @@ Strategy: Call-stack depth tracking + state journaling
 
 ### Output targets:
 - Design changes: Edit `blockchain-project/MASTER_DESIGN.md` Section 7
-- Rust code: `crates/dendrite-execution/`
+- Rust code: `crates/aztibase-execution/`
 - Contract SDKs: future `sdk/` directory
 
 ### Collaborates with:

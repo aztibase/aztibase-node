@@ -42,7 +42,7 @@ This sprint bridges M2 (consensus) and M3 (execution). Phase 1 closes M2 technic
 | 3 | Implement VRF-based leader election using BLAKE3 as PRF | consensus-engineer | -- | DONE | `vrf_leader_for_round(round, seed)` replaces deterministic selection; seed = hash(round \|\| prev_anchor_hash); test |
 | 4 | Wire VRF leader election into `CommitRule` | consensus-engineer | Task 3 | DONE | Anchor rounds use VRF leader; existing commit tests updated |
 
-**Exit criteria:** `vertices_by_round` bounded, `pending_txs` capped, VRF leader election functional. `cargo test -p dendrite-consensus` passes with new tests.
+**Exit criteria:** `vertices_by_round` bounded, `pending_txs` capped, VRF leader election functional. `cargo test -p aztibase-consensus` passes with new tests.
 
 ---
 

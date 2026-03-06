@@ -1,0 +1,20 @@
+[package]
+name = "aztibase-runtime"
+description = "Application layer (smart contracts, AI oracle, agent runtime) for Aztibase Network"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+aztibase-core = { workspace = true }
+aztibase-execution = { workspace = true }
+aztibase-storage = { workspace = true }
+tokio = { workspace = true }
+serde = { workspace = true }
+tracing = { workspace = true }
+thiserror = { workspace = true }
+anyhow = { workspace = true }
+tract-onnx = { workspace = true }
+
+[dev-dependencies]
+prost = "0.11"

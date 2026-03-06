@@ -1,0 +1,774 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Aztibase Network - Visual Architecture Explainer</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; background: #0a0a0f; color: #e0e0e0; overflow-x: hidden; }
+
+  /* Navigation */
+  .nav { position: fixed; top: 0; left: 0; right: 0; z-index: 100; background: rgba(10,10,15,0.95); backdrop-filter: blur(10px); border-bottom: 1px solid #1a1a2e; padding: 12px 0; }
+  .nav-inner { max-width: 1200px; margin: 0 auto; display: flex; gap: 8px; padding: 0 20px; flex-wrap: wrap; }
+  .nav-btn { padding: 6px 14px; border: 1px solid #2a2a4e; background: transparent; color: #8888aa; border-radius: 20px; cursor: pointer; font-size: 13px; transition: all 0.3s; }
+  .nav-btn:hover, .nav-btn.active { background: #1a1a3e; color: #00d4ff; border-color: #00d4ff; }
+
+  /* Sections */
+  .section { min-height: 100vh; padding: 80px 20px 40px; max-width: 1200px; margin: 0 auto; }
+  .section-title { font-size: 36px; font-weight: 700; margin-bottom: 8px; background: linear-gradient(135deg, #00d4ff, #7b2fff); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+  .section-sub { font-size: 18px; color: #666; margin-bottom: 40px; }
+
+  /* Cards */
+  .card { background: #12121f; border: 1px solid #1e1e3a; border-radius: 16px; padding: 28px; margin-bottom: 20px; transition: all 0.3s; }
+  .card:hover { border-color: #3a3a6e; transform: translateY(-2px); }
+  .card h3 { font-size: 20px; color: #00d4ff; margin-bottom: 12px; }
+  .card p { line-height: 1.7; color: #999; }
+
+  /* Grid */
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+  .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 20px; }
+  @media (max-width: 768px) { .grid-2, .grid-3 { grid-template-columns: 1fr; } }
+
+  /* Architecture Diagram */
+  .arch-diagram { position: relative; background: #0d0d18; border: 1px solid #1e1e3a; border-radius: 16px; padding: 40px 20px; margin: 30px 0; }
+  .arch-layer { display: flex; align-items: center; margin: 10px 0; }
+  .layer-label { width: 160px; text-align: right; padding-right: 20px; font-weight: 600; font-size: 14px; flex-shrink: 0; }
+  .layer-bar { flex: 1; border-radius: 12px; padding: 16px 20px; position: relative; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+  .layer-bar .tag { background: rgba(0,0,0,0.3); padding: 4px 10px; border-radius: 8px; font-size: 12px; border: 1px solid rgba(255,255,255,0.1); }
+  .l4 { background: linear-gradient(90deg, #1a0a2e, #2a1a4e); border: 1px solid #3a2a5e; }
+  .l3 { background: linear-gradient(90deg, #0a1a2e, #1a2a4e); border: 1px solid #2a3a5e; }
+  .l2 { background: linear-gradient(90deg, #0a2a1e, #1a3a2e); border: 1px solid #2a4a3e; }
+  .l1 { background: linear-gradient(90deg, #2a1a0a, #3a2a1a); border: 1px solid #4a3a2a; }
+  .layer-label.c4 { color: #b070ff; }
+  .layer-label.c3 { color: #00d4ff; }
+  .layer-label.c2 { color: #00ff88; }
+  .layer-label.c1 { color: #ff9900; }
+
+  /* DAG Visualization */
+  .dag-canvas { width: 100%; height: 400px; background: #0d0d18; border: 1px solid #1e1e3a; border-radius: 16px; margin: 20px 0; }
+
+  /* Flow diagram */
+  .flow { display: flex; align-items: center; justify-content: center; gap: 0; margin: 30px 0; flex-wrap: wrap; }
+  .flow-step { background: #12121f; border: 2px solid #1e1e3a; border-radius: 12px; padding: 16px 20px; text-align: center; min-width: 140px; }
+  .flow-step h4 { color: #00d4ff; font-size: 14px; margin-bottom: 4px; }
+  .flow-step p { font-size: 12px; color: #777; }
+  .flow-arrow { color: #3a3a6e; font-size: 24px; padding: 0 8px; flex-shrink: 0; }
+
+  /* Comparison table */
+  .comp-table { width: 100%; border-collapse: collapse; margin: 20px 0; }
+  .comp-table th { background: #1a1a2e; padding: 12px 16px; text-align: left; color: #00d4ff; font-size: 14px; border-bottom: 2px solid #2a2a4e; }
+  .comp-table td { padding: 12px 16px; border-bottom: 1px solid #1a1a2e; font-size: 14px; color: #999; }
+  .comp-table tr:hover td { background: #12121f; }
+  .check { color: #00ff88; font-weight: bold; }
+  .cross { color: #ff4466; }
+  .partial { color: #ffaa00; }
+
+  /* Node diagram */
+  .node-ring { display: flex; justify-content: center; gap: 20px; flex-wrap: wrap; margin: 30px 0; }
+  .node-card { width: 180px; text-align: center; padding: 20px; border-radius: 16px; border: 2px solid; }
+  .node-card h4 { margin: 10px 0 6px; font-size: 15px; }
+  .node-card p { font-size: 12px; color: #777; }
+  .node-card .icon { font-size: 32px; }
+  .nc-full { border-color: #00d4ff; background: rgba(0,212,255,0.05); }
+  .nc-light { border-color: #00ff88; background: rgba(0,255,136,0.05); }
+  .nc-browser { border-color: #ffaa00; background: rgba(255,170,0,0.05); }
+  .nc-mobile { border-color: #ff6688; background: rgba(255,102,136,0.05); }
+  .nc-validator { border-color: #b070ff; background: rgba(176,112,255,0.05); }
+  .nc-full h4 { color: #00d4ff; }
+  .nc-light h4 { color: #00ff88; }
+  .nc-browser h4 { color: #ffaa00; }
+  .nc-mobile h4 { color: #ff6688; }
+  .nc-validator h4 { color: #b070ff; }
+
+  /* Stats */
+  .stat-row { display: flex; gap: 20px; flex-wrap: wrap; margin: 30px 0; }
+  .stat-box { flex: 1; min-width: 150px; background: #12121f; border: 1px solid #1e1e3a; border-radius: 12px; padding: 20px; text-align: center; }
+  .stat-box .num { font-size: 32px; font-weight: 700; background: linear-gradient(135deg, #00d4ff, #7b2fff); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+  .stat-box .label { font-size: 13px; color: #666; margin-top: 4px; }
+
+  /* Token flow SVG */
+  .token-flow { width: 100%; max-width: 800px; margin: 20px auto; }
+
+  /* Adoption */
+  .adopt-bar { display: flex; align-items: center; margin: 12px 0; }
+  .adopt-label { width: 200px; font-size: 14px; color: #999; flex-shrink: 0; }
+  .adopt-track { flex: 1; height: 28px; background: #1a1a2e; border-radius: 14px; overflow: hidden; position: relative; }
+  .adopt-fill { height: 100%; border-radius: 14px; display: flex; align-items: center; padding-left: 12px; font-size: 12px; font-weight: 600; color: #fff; }
+
+  /* Risk matrix */
+  .risk-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin: 20px 0; }
+  .risk-item { padding: 16px; border-radius: 12px; border-left: 4px solid; }
+  .risk-high { background: rgba(255,68,102,0.08); border-color: #ff4466; }
+  .risk-med { background: rgba(255,170,0,0.08); border-color: #ffaa00; }
+  .risk-low { background: rgba(0,255,136,0.08); border-color: #00ff88; }
+  .risk-item h4 { font-size: 14px; margin-bottom: 4px; }
+  .risk-item p { font-size: 12px; color: #777; }
+  .risk-high h4 { color: #ff4466; }
+  .risk-med h4 { color: #ffaa00; }
+  .risk-low h4 { color: #00ff88; }
+
+  /* Highlight box */
+  .highlight { background: linear-gradient(135deg, rgba(0,212,255,0.08), rgba(123,47,255,0.08)); border: 1px solid rgba(0,212,255,0.2); border-radius: 12px; padding: 24px; margin: 20px 0; }
+  .highlight h3 { color: #00d4ff; margin-bottom: 8px; }
+
+  /* Animated pulse */
+  @keyframes pulse { 0%,100% { opacity: 0.4; } 50% { opacity: 1; } }
+  .pulse { animation: pulse 2s infinite; }
+
+  /* Separator */
+  .sep { height: 1px; background: linear-gradient(90deg, transparent, #2a2a4e, transparent); margin: 60px 0; }
+</style>
+</head>
+<body>
+
+<nav class="nav">
+  <div class="nav-inner">
+    <button class="nav-btn active" onclick="scrollToSection('overview')">Overview</button>
+    <button class="nav-btn" onclick="scrollToSection('how')">How It Works</button>
+    <button class="nav-btn" onclick="scrollToSection('consensus')">Consensus</button>
+    <button class="nav-btn" onclick="scrollToSection('nodes')">Nodes</button>
+    <button class="nav-btn" onclick="scrollToSection('ai')">AI Layer</button>
+    <button class="nav-btn" onclick="scrollToSection('token')">Tokenomics</button>
+    <button class="nav-btn" onclick="scrollToSection('unique')">What's Unique</button>
+    <button class="nav-btn" onclick="scrollToSection('adoption')">Adoption</button>
+    <button class="nav-btn" onclick="scrollToSection('risk')">Success Rate</button>
+  </div>
+</nav>
+
+<!-- SECTION 1: OVERVIEW -->
+<div class="section" id="overview">
+  <div class="section-title">Aztibase Network</div>
+  <div class="section-sub">"Where Intelligence Branches" -- A visual guide to how it all works</div>
+
+  <div class="stat-row">
+    <div class="stat-box"><div class="num">&lt;800ms</div><div class="label">Finality</div></div>
+    <div class="stat-box"><div class="num">10K+</div><div class="label">TPS at Launch</div></div>
+    <div class="stat-box"><div class="num">1B</div><div class="label">Token Hard Cap</div></div>
+    <div class="stat-box"><div class="num">0</div><div class="label">Central Servers</div></div>
+    <div class="stat-box"><div class="num">5</div><div class="label">Node Types</div></div>
+  </div>
+
+  <div class="highlight">
+    <h3>The Core Thesis</h3>
+    <p>Aztibase Network is built on three converging beliefs: (1) AI compute will become the most demanded commodity on the internet, (2) privacy creates irreversible network effects that lock users in architecturally rather than economically, and (3) true decentralization means zero dependency on centralized servers. No existing blockchain commits to all three simultaneously.</p>
+  </div>
+
+  <div class="grid-3">
+    <div class="card">
+      <h3>AI-Native</h3>
+      <p>AI lives inside consensus, state model, execution, and economics. Not bolted on -- removing AI would require redesigning the entire chain. Validators earn by running AI inference (PoUW). Contracts call ai_inference() as a built-in operation.</p>
+    </div>
+    <div class="card">
+      <h3>Server-Independent</h3>
+      <p>Every node is its own RPC endpoint. Browser users connect directly via WebRTC P2P -- no Infura, no Alchemy, no middleman. You can join the network if you can reach even one existing peer. Zero central servers after bootstrap.</p>
+    </div>
+    <div class="card">
+      <h3>Privacy-First</h3>
+      <p>Selective disclosure at protocol level. Prove you're KYC-verified without revealing identity. Once users commit private state to Aztibase, they can't take that privacy guarantee elsewhere. Privacy creates organic chain lock-in.</p>
+    </div>
+  </div>
+</div>
+
+<div class="sep"></div>
+
+<!-- SECTION 2: HOW IT WORKS (ARCHITECTURE) -->
+<div class="section" id="how">
+  <div class="section-title">How Aztibase Works</div>
+  <div class="section-sub">Four layers working together -- from network to application</div>
+
+  <div class="arch-diagram">
+    <div style="text-align:center; margin-bottom:20px; font-size:13px; color:#555;">MODULAR MONOLITH -- Single chain, four internal layers</div>
+
+    <div class="arch-layer">
+      <div class="layer-label c4">Layer 4<br>APPLICATION</div>
+      <div class="layer-bar l4">
+        <span class="tag">Smart Contracts (WASM + EVM)</span>
+        <span class="tag">AI Agents</span>
+        <span class="tag">DeFi / NFTs / dApps</span>
+        <span class="tag">AI Compute Market</span>
+      </div>
+    </div>
+
+    <div style="text-align:center; color:#3a3a6e; font-size:12px; padding: 2px 0;">contracts call down to execution layer</div>
+
+    <div class="arch-layer">
+      <div class="layer-label c3">Layer 3<br>EXECUTION</div>
+      <div class="layer-bar l3">
+        <span class="tag">wasmtime VM</span>
+        <span class="tag">revm (EVM)</span>
+        <span class="tag">Block-STM Parallel Exec</span>
+        <span class="tag">AI Auditing</span>
+        <span class="tag">Verkle State</span>
+      </div>
+    </div>
+
+    <div style="text-align:center; color:#3a3a6e; font-size:12px; padding: 2px 0;">execution results ordered by consensus</div>
+
+    <div class="arch-layer">
+      <div class="layer-label c2">Layer 2<br>CONSENSUS</div>
+      <div class="layer-bar l2">
+        <span class="tag">SynBFT (DAG-based BFT)</span>
+        <span class="tag">PoUW (AI Inference)</span>
+        <span class="tag">VRF Leader Election</span>
+        <span class="tag">BLS Aggregate Sigs</span>
+      </div>
+    </div>
+
+    <div style="text-align:center; color:#3a3a6e; font-size:12px; padding: 2px 0;">consensus messages travel over P2P network</div>
+
+    <div class="arch-layer">
+      <div class="layer-label c1">Layer 1<br>NETWORK + DATA</div>
+      <div class="layer-bar l1">
+        <span class="tag">QUIC Transport</span>
+        <span class="tag">Gossipsub v1.1</span>
+        <span class="tag">Kademlia DHT</span>
+        <span class="tag">WebRTC (Browser)</span>
+        <span class="tag">NAT Traversal</span>
+      </div>
+    </div>
+  </div>
+
+  <h3 style="color:#00d4ff; margin: 30px 0 15px;">Transaction Lifecycle: What happens when you send a transaction</h3>
+
+  <div class="flow">
+    <div class="flow-step"><h4>1. User</h4><p>Signs tx from wallet, browser, or mobile</p></div>
+    <div class="flow-arrow">--></div>
+    <div class="flow-step"><h4>2. P2P Gossip</h4><p>Tx propagates via Gossipsub to all validators</p></div>
+    <div class="flow-arrow">--></div>
+    <div class="flow-step"><h4>3. Mempool</h4><p>Validator adds tx to priority-tiered mempool</p></div>
+    <div class="flow-arrow">--></div>
+    <div class="flow-step"><h4>4. DAG Vertex</h4><p>Validator bundles txs into a vertex (400ms rounds)</p></div>
+    <div class="flow-arrow">--></div>
+    <div class="flow-step"><h4>5. Anchor Commit</h4><p>Every 4th round, anchor orders vertices</p></div>
+    <div class="flow-arrow">--></div>
+    <div class="flow-step"><h4>6. Execute</h4><p>Block-STM parallel execution in WASM/EVM</p></div>
+    <div class="flow-arrow">--></div>
+    <div class="flow-step" style="border-color:#00ff88;"><h4>7. Final</h4><p>~800ms. Irreversible. BLS cert issued.</p></div>
+  </div>
+</div>
+
+<div class="sep"></div>
+
+<!-- SECTION 3: CONSENSUS -->
+<div class="section" id="consensus">
+  <div class="section-title">Synaptic Consensus</div>
+  <div class="section-sub">DAG-based BFT + Proof of Useful Work -- how validators agree</div>
+
+  <h3 style="color:#00ff88; margin-bottom:15px;">The DAG Structure (vs Traditional Linear Chain)</h3>
+
+  <div class="grid-2">
+    <div class="card">
+      <h3 style="color:#ff6688;">Traditional Chain (Bitcoin/Ethereum)</h3>
+      <svg viewBox="0 0 500 120" style="width:100%;">
+        <defs><marker id="ah1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M 0 0 L 10 5 L 0 10 z" fill="#ff6688"/></marker></defs>
+        <rect x="20" y="40" width="70" height="40" rx="8" fill="#2a1020" stroke="#ff6688"/>
+        <text x="55" y="65" text-anchor="middle" fill="#ff6688" font-size="12">Block 1</text>
+        <line x1="90" y1="60" x2="130" y2="60" stroke="#ff6688" marker-end="url(#ah1)"/>
+        <rect x="130" y="40" width="70" height="40" rx="8" fill="#2a1020" stroke="#ff6688"/>
+        <text x="165" y="65" text-anchor="middle" fill="#ff6688" font-size="12">Block 2</text>
+        <line x1="200" y1="60" x2="240" y2="60" stroke="#ff6688" marker-end="url(#ah1)"/>
+        <rect x="240" y="40" width="70" height="40" rx="8" fill="#2a1020" stroke="#ff6688"/>
+        <text x="275" y="65" text-anchor="middle" fill="#ff6688" font-size="12">Block 3</text>
+        <line x1="310" y1="60" x2="350" y2="60" stroke="#ff6688" marker-end="url(#ah1)"/>
+        <rect x="350" y="40" width="70" height="40" rx="8" fill="#2a1020" stroke="#ff6688"/>
+        <text x="385" y="65" text-anchor="middle" fill="#ff6688" font-size="12">Block 4</text>
+        <text x="250" y="108" text-anchor="middle" fill="#777" font-size="11">One block at a time. One leader. Sequential bottleneck.</text>
+      </svg>
+    </div>
+    <div class="card">
+      <h3 style="color:#00ff88;">Aztibase DAG (Parallel Vertices)</h3>
+      <svg viewBox="0 0 500 120" style="width:100%;">
+        <defs><marker id="ah2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="5" markerHeight="5" orient="auto"><path d="M 0 0 L 10 5 L 0 10 z" fill="#00ff88"/></marker></defs>
+        <!-- Round 1 -->
+        <rect x="20" y="10" width="55" height="28" rx="6" fill="#0a2a1e" stroke="#00ff88" stroke-width="1"/>
+        <text x="47" y="28" text-anchor="middle" fill="#00ff88" font-size="9">V-A1</text>
+        <rect x="20" y="46" width="55" height="28" rx="6" fill="#0a2a1e" stroke="#00ff88" stroke-width="1"/>
+        <text x="47" y="64" text-anchor="middle" fill="#00ff88" font-size="9">V-B1</text>
+        <rect x="20" y="82" width="55" height="28" rx="6" fill="#0a2a1e" stroke="#00ff88" stroke-width="1"/>
+        <text x="47" y="100" text-anchor="middle" fill="#00ff88" font-size="9">V-C1</text>
+        <!-- Round 2 -->
+        <rect x="140" y="10" width="55" height="28" rx="6" fill="#0a2a1e" stroke="#00ff88" stroke-width="1"/>
+        <text x="167" y="28" text-anchor="middle" fill="#00ff88" font-size="9">V-A2</text>
+        <rect x="140" y="46" width="55" height="28" rx="6" fill="#0a2a1e" stroke="#00ff88" stroke-width="1"/>
+        <text x="167" y="64" text-anchor="middle" fill="#00ff88" font-size="9">V-B2</text>
+        <rect x="140" y="82" width="55" height="28" rx="6" fill="#0a2a1e" stroke="#00ff88" stroke-width="1"/>
+        <text x="167" y="100" text-anchor="middle" fill="#00ff88" font-size="9">V-C2</text>
+        <!-- Round 3 -->
+        <rect x="260" y="10" width="55" height="28" rx="6" fill="#0a2a1e" stroke="#00ff88" stroke-width="1"/>
+        <text x="287" y="28" text-anchor="middle" fill="#00ff88" font-size="9">V-A3</text>
+        <rect x="260" y="46" width="55" height="28" rx="6" fill="#0a2a1e" stroke="#00ff88" stroke-width="1"/>
+        <text x="287" y="64" text-anchor="middle" fill="#00ff88" font-size="9">V-B3</text>
+        <rect x="260" y="82" width="55" height="28" rx="6" fill="#0a2a1e" stroke="#00ff88" stroke-width="1"/>
+        <text x="287" y="100" text-anchor="middle" fill="#00ff88" font-size="9">V-C3</text>
+        <!-- Anchor Round 4 -->
+        <rect x="380" y="36" width="80" height="48" rx="8" fill="#1a3a2e" stroke="#ffaa00" stroke-width="2"/>
+        <text x="420" y="58" text-anchor="middle" fill="#ffaa00" font-size="10" font-weight="bold">ANCHOR</text>
+        <text x="420" y="72" text-anchor="middle" fill="#ffaa00" font-size="9">Commits all</text>
+        <!-- Links (simplified) -->
+        <line x1="75" y1="24" x2="140" y2="24" stroke="#00ff8855" marker-end="url(#ah2)"/>
+        <line x1="75" y1="24" x2="140" y2="60" stroke="#00ff8833"/>
+        <line x1="75" y1="60" x2="140" y2="60" stroke="#00ff8855" marker-end="url(#ah2)"/>
+        <line x1="75" y1="60" x2="140" y2="96" stroke="#00ff8833"/>
+        <line x1="75" y1="96" x2="140" y2="96" stroke="#00ff8855" marker-end="url(#ah2)"/>
+        <line x1="75" y1="96" x2="140" y2="24" stroke="#00ff8833"/>
+        <line x1="195" y1="24" x2="260" y2="24" stroke="#00ff8855" marker-end="url(#ah2)"/>
+        <line x1="195" y1="60" x2="260" y2="60" stroke="#00ff8855" marker-end="url(#ah2)"/>
+        <line x1="195" y1="96" x2="260" y2="96" stroke="#00ff8855" marker-end="url(#ah2)"/>
+        <line x1="195" y1="24" x2="260" y2="60" stroke="#00ff8833"/>
+        <line x1="195" y1="96" x2="260" y2="60" stroke="#00ff8833"/>
+        <line x1="315" y1="24" x2="380" y2="52" stroke="#ffaa0077" marker-end="url(#ah2)"/>
+        <line x1="315" y1="60" x2="380" y2="60" stroke="#ffaa0077" marker-end="url(#ah2)"/>
+        <line x1="315" y1="96" x2="380" y2="68" stroke="#ffaa0077" marker-end="url(#ah2)"/>
+      </svg>
+      <p style="font-size:11px; color:#777; margin-top:8px; text-align:center;">Multiple validators propose in parallel each 400ms. Anchor commits every 4th round.</p>
+    </div>
+  </div>
+
+  <div class="highlight">
+    <h3>Why DAG + BFT?</h3>
+    <p>Traditional chains have a single leader per block -- everyone waits for one proposer. In a DAG, ALL validators propose vertices simultaneously every 400ms round. Each vertex references 2f+1 vertices from the previous round, creating a web of cross-references. Every 4th round, a VRF-elected anchor proposer commits a batch to total order. Result: massive parallelism, no leader bottleneck, sub-second finality.</p>
+  </div>
+
+  <h3 style="color:#b070ff; margin: 30px 0 15px;">Proof of Useful Work: AI Inference as Mining</h3>
+
+  <div class="flow">
+    <div class="flow-step"><h4>User / dApp</h4><p>Submits AI inference request on-chain</p></div>
+    <div class="flow-arrow">--></div>
+    <div class="flow-step"><h4>Assigned to Validator</h4><p>Deterministic rotation prevents gaming</p></div>
+    <div class="flow-arrow">--></div>
+    <div class="flow-step"><h4>AI Inference</h4><p>Validator runs model (tract / candle runtime)</p></div>
+    <div class="flow-arrow">--></div>
+    <div class="flow-step"><h4>Verify Result</h4><p>MPRE (2-of-3) or TEE or ZK proof</p></div>
+    <div class="flow-arrow">--></div>
+    <div class="flow-step" style="border-color:#00ff88;"><h4>On-Chain</h4><p>InferenceAttestation included in block</p></div>
+  </div>
+
+  <p style="color:#777; margin-top:15px; text-align:center;">Unlike Bitcoin's wasted energy on hash puzzles, Aztibase's "mining" does real AI computation that users pay for.</p>
+</div>
+
+<div class="sep"></div>
+
+<!-- SECTION 4: NODES -->
+<div class="section" id="nodes">
+  <div class="section-title">Node Architecture</div>
+  <div class="section-sub">Five node types -- from your browser to a GPU farm. No central servers.</div>
+
+  <div class="node-ring">
+    <div class="node-card nc-browser">
+      <div class="icon">&#127760;</div>
+      <h4>Browser Node</h4>
+      <p>WASM light client<br>WebRTC P2P<br>Any modern browser<br>No install needed</p>
+    </div>
+    <div class="node-card nc-mobile">
+      <div class="icon">&#128241;</div>
+      <h4>Mobile Node</h4>
+      <p>Light client<br>ARM64 (2017+ phone)<br>256MB app RAM<br>&lt;1% battery/hour</p>
+    </div>
+    <div class="node-card nc-light">
+      <div class="icon">&#128187;</div>
+      <h4>Light Node</h4>
+      <p>Header + Verkle proofs<br>512MB RAM, 2GB disk<br>Verify without full state<br>Desktop/laptop</p>
+    </div>
+    <div class="node-card nc-full">
+      <div class="icon">&#128421;</div>
+      <h4>Full Node</h4>
+      <p>Complete chain state<br>8GB RAM, 100GB SSD<br>Own RPC endpoint<br>Consumer desktop</p>
+    </div>
+    <div class="node-card nc-validator">
+      <div class="icon">&#9889;</div>
+      <h4>Validator</h4>
+      <p>Consensus participation<br>Optional GPU for PoUW<br>Earns AZTB rewards<br>Stake: 50K AZTB</p>
+    </div>
+  </div>
+
+  <div class="highlight">
+    <h3>Server-Independence: How It Actually Works</h3>
+    <p>When you open Aztibase in your browser, a ~1.2MB WASM binary loads. It connects via WebRTC directly to other nodes in the P2P network -- not through any company's API server. Your browser IS a node. It verifies BLS aggregate finality certificates (96 bytes proves 200 validators agreed) and Verkle state proofs (500 bytes proves any account balance). No trust required. No middleman.</p>
+  </div>
+
+  <h3 style="color:#00d4ff; margin: 30px 0 15px;">Upgrade Path: Start Small, Grow Big</h3>
+  <div class="flow">
+    <div class="flow-step" style="border-color:#ffaa00;"><h4>Browser</h4><p>Try it now. No install.</p></div>
+    <div class="flow-arrow">--></div>
+    <div class="flow-step" style="border-color:#00ff88;"><h4>Light Node</h4><p>Download app. 2GB disk.</p></div>
+    <div class="flow-arrow">--></div>
+    <div class="flow-step" style="border-color:#00d4ff;"><h4>Full Node</h4><p>Be your own RPC.</p></div>
+    <div class="flow-arrow">--></div>
+    <div class="flow-step" style="border-color:#b070ff;"><h4>Validator</h4><p>Stake + earn rewards.</p></div>
+    <div class="flow-arrow">--></div>
+    <div class="flow-step" style="border-color:#b070ff; background:#1a0a2e;"><h4>Validator+PoUW</h4><p>Add GPU. Earn 2-8x more.</p></div>
+  </div>
+  <p style="color:#777; margin-top:10px; text-align:center;">Each upgrade builds on previous state -- no re-sync from scratch.</p>
+</div>
+
+<div class="sep"></div>
+
+<!-- SECTION 5: AI LAYER -->
+<div class="section" id="ai">
+  <div class="section-title">AI Integration</div>
+  <div class="section-sub">Three layers of AI -- from network health to smart contract auditing</div>
+
+  <div class="arch-diagram">
+    <div class="arch-layer">
+      <div class="layer-label c4">Layer 3<br>NETWORK AI</div>
+      <div class="layer-bar l4">
+        <span class="tag">P2P Health Monitoring</span>
+        <span class="tag">Peer Reputation Scoring</span>
+        <span class="tag">DDoS Detection</span>
+        <span class="tag">Spam Filtering</span>
+      </div>
+    </div>
+    <div class="arch-layer">
+      <div class="layer-label c3">Layer 2<br>CONTRACT AI</div>
+      <div class="layer-bar l3">
+        <span class="tag">Pre-Deploy Auditing</span>
+        <span class="tag">Runtime Exploit Detection</span>
+        <span class="tag">Gas Optimization</span>
+        <span class="tag">Circuit Breaker</span>
+      </div>
+    </div>
+    <div class="arch-layer">
+      <div class="layer-label c2">Layer 1<br>PROTOCOL AI</div>
+      <div class="layer-bar l2">
+        <span class="tag">Transaction Anomaly Detection</span>
+        <span class="tag">Block Pattern Analysis</span>
+        <span class="tag">Consensus Behavior Monitor</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="grid-2">
+    <div class="card">
+      <h3>AI Compute Market</h3>
+      <p>Users submit inference requests on-chain. PoUW validators with GPUs process them. Results are verified via 2-of-3 agreement, TEE, or ZK proofs. Pricing uses EIP-1559 dynamic fees.<br><br>
+      <strong>Fee split:</strong> 85% to compute provider, 10% to protocol (half burned), 5% to model creator.<br><br>
+      This is like AWS Lambda but decentralized, private, and censorship-resistant.</p>
+    </div>
+    <div class="card">
+      <h3>How It Differs From Competitors</h3>
+      <table class="comp-table">
+        <tr><th>Feature</th><th>Bittensor</th><th>Ritual</th><th>Aztibase</th></tr>
+        <tr><td>Smart Contracts</td><td class="cross">No</td><td class="partial">Via bridge</td><td class="check">Native</td></tr>
+        <tr><td>Quality Metrics</td><td class="cross">Speed only</td><td class="check">Yes</td><td class="check">4-dimensional</td></tr>
+        <tr><td>Privacy</td><td class="cross">No</td><td class="cross">No</td><td class="check">TEE + ZK</td></tr>
+        <tr><td>General dApps</td><td class="cross">No</td><td class="partial">Other chain</td><td class="check">Native</td></tr>
+        <tr><td>Composability</td><td class="cross">Siloed</td><td class="partial">Cross-chain</td><td class="check">Same chain</td></tr>
+      </table>
+    </div>
+  </div>
+
+  <div class="highlight">
+    <h3>Key Safety Principle</h3>
+    <p>AI is always ADVISORY, never autonomous. AI never slashes validators, freezes funds, or reverts transactions on its own. AI recommends -- validators decide. No single entity can pause the chain. This prevents AI from becoming a central point of failure or control.</p>
+  </div>
+</div>
+
+<div class="sep"></div>
+
+<!-- SECTION 6: TOKENOMICS -->
+<div class="section" id="token">
+  <div class="section-title">Tokenomics: AZTB</div>
+  <div class="section-sub">1 billion hard cap. Burn-to-deflation economics. Real utility.</div>
+
+  <div class="stat-row">
+    <div class="stat-box"><div class="num">1B</div><div class="label">Hard Cap (Fixed)</div></div>
+    <div class="stat-box"><div class="num">4%</div><div class="label">Day-1 Circulating</div></div>
+    <div class="stat-box"><div class="num">3-12%</div><div class="label">Staking APY</div></div>
+    <div class="stat-box"><div class="num">Yr 5-7</div><div class="label">Deflationary Target</div></div>
+  </div>
+
+  <h3 style="color:#00d4ff; margin: 30px 0 15px;">Token Flow: Where AZTB Comes From and Goes</h3>
+
+  <svg viewBox="0 0 800 320" style="width:100%; max-width:800px; display:block; margin:20px auto;">
+    <!-- Emission source -->
+    <rect x="10" y="120" width="120" height="60" rx="10" fill="#1a3a2e" stroke="#00ff88" stroke-width="2"/>
+    <text x="70" y="148" text-anchor="middle" fill="#00ff88" font-size="12" font-weight="bold">EMISSION</text>
+    <text x="70" y="165" text-anchor="middle" fill="#777" font-size="10">60% over 10yr</text>
+
+    <!-- Validators -->
+    <rect x="200" y="20" width="130" height="50" rx="10" fill="#0a2a1e" stroke="#00ff88"/>
+    <text x="265" y="42" text-anchor="middle" fill="#00ff88" font-size="11" font-weight="bold">Validators 70%</text>
+    <text x="265" y="58" text-anchor="middle" fill="#777" font-size="10">Consensus rewards</text>
+
+    <!-- PoUW -->
+    <rect x="200" y="80" width="130" height="50" rx="10" fill="#0a2a1e" stroke="#b070ff"/>
+    <text x="265" y="102" text-anchor="middle" fill="#b070ff" font-size="11" font-weight="bold">PoUW Pool 15%</text>
+    <text x="265" y="118" text-anchor="middle" fill="#777" font-size="10">AI compute rewards</text>
+
+    <!-- Treasury -->
+    <rect x="200" y="140" width="130" height="50" rx="10" fill="#0a2a1e" stroke="#ffaa00"/>
+    <text x="265" y="162" text-anchor="middle" fill="#ffaa00" font-size="11" font-weight="bold">Treasury 10%</text>
+    <text x="265" y="178" text-anchor="middle" fill="#777" font-size="10">Development fund</text>
+
+    <!-- Insurance -->
+    <rect x="200" y="200" width="130" height="50" rx="10" fill="#0a2a1e" stroke="#00d4ff"/>
+    <text x="265" y="222" text-anchor="middle" fill="#00d4ff" font-size="11" font-weight="bold">Insurance 5%</text>
+    <text x="265" y="238" text-anchor="middle" fill="#777" font-size="10">Staking safety net</text>
+
+    <!-- Arrows from emission -->
+    <line x1="130" y1="135" x2="200" y2="45" stroke="#00ff8866" stroke-width="2"/>
+    <line x1="130" y1="145" x2="200" y2="105" stroke="#b070ff66" stroke-width="2"/>
+    <line x1="130" y1="155" x2="200" y2="165" stroke="#ffaa0066" stroke-width="2"/>
+    <line x1="130" y1="165" x2="200" y2="225" stroke="#00d4ff66" stroke-width="2"/>
+
+    <!-- Fee sources (right side) -->
+    <rect x="430" y="20" width="130" height="50" rx="10" fill="#2a1020" stroke="#ff6688"/>
+    <text x="495" y="42" text-anchor="middle" fill="#ff6688" font-size="11" font-weight="bold">Gas Fees</text>
+    <text x="495" y="58" text-anchor="middle" fill="#777" font-size="10">EIP-1559 base fee</text>
+
+    <rect x="430" y="80" width="130" height="50" rx="10" fill="#2a1020" stroke="#ff6688"/>
+    <text x="495" y="102" text-anchor="middle" fill="#ff6688" font-size="11" font-weight="bold">AI Inference Fees</text>
+    <text x="495" y="118" text-anchor="middle" fill="#777" font-size="10">10% protocol share</text>
+
+    <rect x="430" y="140" width="130" height="50" rx="10" fill="#2a1020" stroke="#ff6688"/>
+    <text x="495" y="162" text-anchor="middle" fill="#ff6688" font-size="11" font-weight="bold">Storage Deposits</text>
+    <text x="495" y="178" text-anchor="middle" fill="#777" font-size="10">State rent burn</text>
+
+    <!-- BURN -->
+    <rect x="640" y="90" width="140" height="70" rx="12" fill="#3a1020" stroke="#ff4466" stroke-width="3"/>
+    <text x="710" y="120" text-anchor="middle" fill="#ff4466" font-size="16" font-weight="bold">BURN</text>
+    <text x="710" y="140" text-anchor="middle" fill="#ff446688" font-size="11">Removed forever</text>
+
+    <!-- Arrows to burn -->
+    <line x1="560" y1="45" x2="640" y2="110" stroke="#ff446666" stroke-width="2"/>
+    <line x1="560" y1="105" x2="640" y2="120" stroke="#ff446666" stroke-width="2"/>
+    <line x1="560" y1="165" x2="640" y2="135" stroke="#ff446666" stroke-width="2"/>
+
+    <!-- Labels -->
+    <text x="70" y="300" text-anchor="middle" fill="#00ff88" font-size="11">Supply increases</text>
+    <text x="70" y="315" text-anchor="middle" fill="#777" font-size="10">(decelerating)</text>
+    <text x="710" y="300" text-anchor="middle" fill="#ff4466" font-size="11">Supply decreases</text>
+    <text x="710" y="315" text-anchor="middle" fill="#777" font-size="10">(accelerating with use)</text>
+    <text x="400" y="290" text-anchor="middle" fill="#ffaa00" font-size="13" font-weight="bold">Deflationary crossover: Year 5-7</text>
+    <text x="400" y="308" text-anchor="middle" fill="#777" font-size="11">Burns exceed emissions under moderate adoption</text>
+  </svg>
+
+  <div class="grid-2">
+    <div class="card">
+      <h3>What AZTB Is Actually Used For</h3>
+      <p>
+        <strong>1. Gas fees</strong> -- pay for transactions and contract execution<br>
+        <strong>2. Staking</strong> -- lock 50K+ AZTB to become a validator<br>
+        <strong>3. AI inference</strong> -- pay for on-chain AI compute<br>
+        <strong>4. Storage</strong> -- deposit for on-chain state<br>
+        <strong>5. Governance</strong> -- vote on protocol upgrades<br>
+        <strong>6. Model registration</strong> -- stake to register AI models<br><br>
+        Every use case either burns AZTB or locks it, creating genuine demand.
+      </p>
+    </div>
+    <div class="card">
+      <h3>Why Fixed Supply (Not Inflationary)</h3>
+      <p>
+        <strong>Lesson from Terra/Luna:</strong> Unbounded minting created a death spiral when confidence dropped. No mechanism could halt hyperinflation.<br><br>
+        <strong>Aztibase's approach:</strong> 1 billion tokens. That's it. Ever. Emission decreases via 2-year halving. Burns increase with usage. The math converges to deflation at moderate adoption without requiring perpetual growth.
+      </p>
+    </div>
+  </div>
+</div>
+
+<div class="sep"></div>
+
+<!-- SECTION 7: WHAT'S UNIQUE -->
+<div class="section" id="unique">
+  <div class="section-title">What's Genuinely New Here</div>
+  <div class="section-sub">Not incremental improvements -- structural innovations</div>
+
+  <div class="grid-2">
+    <div class="card">
+      <h3>New Technology</h3>
+      <p>
+        <strong>Synaptic Consensus</strong> -- Novel DAG-BFT + PoUW hybrid. No existing chain uses this combination. AI inference as mining reward is genuinely new at the protocol level.<br><br>
+        <strong>AI Protocol Primitives</strong> -- AIAgent, ModelRegistry, InferenceRequest as first-class state objects. Not smart contracts simulating AI -- protocol-level constructs like accounts and balances.<br><br>
+        <strong>5-Tier Node Hierarchy</strong> -- Browser-to-validator in one chain. Most chains have 2 node types. Aztibase has 5, all server-independent, with graceful upgrade.<br><br>
+        <strong>Verkle + BLS for Light Clients</strong> -- 96-byte finality certificate + 500-byte state proof. A phone can verify the entire chain's state in milliseconds.
+      </p>
+    </div>
+    <div class="card">
+      <h3>What's NOT New (Honest Assessment)</h3>
+      <p>
+        <strong>DAG-based consensus</strong> -- Exists (Sui, IOTA, Fantom). Aztibase's innovation is the PoUW integration and AI reputation scoring, not the DAG itself.<br><br>
+        <strong>WASM VM</strong> -- NEAR, Polkadot use WASM. Aztibase's dual VM (WASM+EVM) is pragmatic, not novel.<br><br>
+        <strong>EIP-1559 fee burn</strong> -- Ethereum invented this. Aztibase applies it but didn't invent it.<br><br>
+        <strong>Rust blockchain</strong> -- Common. Solana, Sui, Aptos all use Rust.<br><br>
+        <em>Being honest about what's borrowed is as important as what's new.</em>
+      </p>
+    </div>
+  </div>
+
+  <h3 style="color:#00d4ff; margin: 30px 0 15px;">The Competitive Landscape</h3>
+  <table class="comp-table">
+    <tr><th>Capability</th><th>Bitcoin</th><th>Ethereum</th><th>Solana</th><th>Bittensor</th><th>Sui</th><th>Aztibase</th></tr>
+    <tr><td>AI-Native Consensus</td><td class="cross">No</td><td class="cross">No</td><td class="cross">No</td><td class="partial">Partial</td><td class="cross">No</td><td class="check">Yes (PoUW)</td></tr>
+    <tr><td>Smart Contracts</td><td class="cross">No</td><td class="check">Yes</td><td class="check">Yes</td><td class="cross">No</td><td class="check">Yes</td><td class="check">Dual VM</td></tr>
+    <tr><td>Server-Independent</td><td class="check">Yes</td><td class="partial">Via RPC</td><td class="cross">Datacenter</td><td class="partial">Partial</td><td class="partial">Via RPC</td><td class="check">5 node types</td></tr>
+    <tr><td>Browser Node</td><td class="cross">No</td><td class="cross">No</td><td class="cross">No</td><td class="cross">No</td><td class="cross">No</td><td class="check">WASM+WebRTC</td></tr>
+    <tr><td>Sub-Second Finality</td><td class="cross">~60min</td><td class="cross">~13min</td><td class="partial">~400ms*</td><td class="cross">~12s</td><td class="check">~480ms</td><td class="check">~800ms</td></tr>
+    <tr><td>Protocol-Level Privacy</td><td class="cross">No</td><td class="cross">No</td><td class="cross">No</td><td class="cross">No</td><td class="cross">No</td><td class="check">Selective</td></tr>
+    <tr><td>AI Compute Market</td><td class="cross">No</td><td class="cross">No</td><td class="cross">No</td><td class="check">Yes</td><td class="cross">No</td><td class="check">Yes + contracts</td></tr>
+    <tr><td>On-Chain AI Auditing</td><td class="cross">No</td><td class="cross">No</td><td class="cross">No</td><td class="cross">No</td><td class="cross">No</td><td class="check">Mandatory</td></tr>
+  </table>
+  <p style="color:#555; font-size:11px; margin-top:5px;">*Solana finality is optimistic; actual safe finality requires 31 confirmations (~12s)</p>
+</div>
+
+<div class="sep"></div>
+
+<!-- SECTION 8: ADOPTION DRIVERS -->
+<div class="section" id="adoption">
+  <div class="section-title">What Drives Adoption</div>
+  <div class="section-sub">Three killer use cases at the intersection of AI + Privacy + Decentralization</div>
+
+  <div class="grid-3">
+    <div class="card" style="border-color:#00d4ff;">
+      <h3>1. Private AI Compute</h3>
+      <p>Users submit encrypted inference requests. Validators process them in TEEs or via ZK verification. Neither the model weights nor the user data are exposed. Like AWS Lambda but private, decentralized, and censorship-resistant.<br><br><strong>Who wants this:</strong> Healthcare (HIPAA data), finance (proprietary models), individuals (private AI without Big Tech surveillance).</p>
+    </div>
+    <div class="card" style="border-color:#00ff88;">
+      <h3>2. Self-Sovereign Identity</h3>
+      <p>Prove attributes without revealing data. "I am over 18" without showing your ID. "I am KYC-verified" without revealing your name. Privacy network effect: once your identity is on Aztibase, you can't take that privacy guarantee elsewhere.<br><br><strong>Who wants this:</strong> Enterprises, governments, 4.4B people without reliable digital ID.</p>
+    </div>
+    <div class="card" style="border-color:#b070ff;">
+      <h3>3. Agent-to-Agent Payments</h3>
+      <p>AI agents with on-chain identity transact autonomously. Microtransactions for API calls, GPU time, data access. Human principals set spending constraints; agents operate within them. The AIAgent protocol primitive makes this native.<br><br><strong>Who wants this:</strong> Every AI company building autonomous agents (the entire AI industry by 2027).</p>
+    </div>
+  </div>
+
+  <h3 style="color:#00d4ff; margin: 30px 0 15px;">Adoption Interest Drivers</h3>
+
+  <div class="adopt-bar">
+    <div class="adopt-label">AI developers (PoUW income)</div>
+    <div class="adopt-track"><div class="adopt-fill" style="width:90%; background:linear-gradient(90deg,#00d4ff,#7b2fff);">Very High -- GPU owners earn by validating</div></div>
+  </div>
+  <div class="adopt-bar">
+    <div class="adopt-label">Privacy-conscious users</div>
+    <div class="adopt-track"><div class="adopt-fill" style="width:82%; background:linear-gradient(90deg,#00ff88,#00d4ff);">High -- only chain with selective disclosure</div></div>
+  </div>
+  <div class="adopt-bar">
+    <div class="adopt-label">Solidity developers</div>
+    <div class="adopt-track"><div class="adopt-fill" style="width:75%; background:linear-gradient(90deg,#ffaa00,#ff6688);">High -- EVM compatible, deploy existing code</div></div>
+  </div>
+  <div class="adopt-bar">
+    <div class="adopt-label">Node operators</div>
+    <div class="adopt-track"><div class="adopt-fill" style="width:70%; background:linear-gradient(90deg,#b070ff,#ff6688);">High -- consumer hardware, real rewards</div></div>
+  </div>
+  <div class="adopt-bar">
+    <div class="adopt-label">Enterprise / institutional</div>
+    <div class="adopt-track"><div class="adopt-fill" style="width:60%; background:linear-gradient(90deg,#00d4ff,#00ff88);">Medium-High -- privacy + compliance hooks</div></div>
+  </div>
+  <div class="adopt-bar">
+    <div class="adopt-label">DeFi protocols</div>
+    <div class="adopt-track"><div class="adopt-fill" style="width:55%; background:linear-gradient(90deg,#ffaa00,#b070ff);">Medium -- AI-audited contracts, fast finality</div></div>
+  </div>
+  <div class="adopt-bar">
+    <div class="adopt-label">Casual crypto users</div>
+    <div class="adopt-track"><div class="adopt-fill" style="width:35%; background:linear-gradient(90deg,#ff6688,#ff4466);">Lower initially -- needs dApp ecosystem first</div></div>
+  </div>
+</div>
+
+<div class="sep"></div>
+
+<!-- SECTION 9: SUCCESS RATE -->
+<div class="section" id="risk">
+  <div class="section-title">Success Rate Assessment</div>
+  <div class="section-sub">Honest analysis -- what could go right, what could go wrong</div>
+
+  <div class="highlight">
+    <h3>Overall Success Probability: 25-40%</h3>
+    <p>This is actually GOOD for a new L1 blockchain. The base rate for new blockchains reaching top-50 market cap is ~5%. Aztibase's structural advantages (real utility gap, AI timing, server-independence) push this significantly higher. But execution risk is real -- no amount of good design survives a botched launch or empty ecosystem.</p>
+  </div>
+
+  <h3 style="color:#00ff88; margin: 30px 0 15px;">What Increases Success Probability</h3>
+  <div class="risk-grid">
+    <div class="risk-item risk-low">
+      <h4>AI Market Timing (Major Tailwind)</h4>
+      <p>AI compute demand is growing exponentially. By 2027, decentralized AI inference will be a recognized market. Aztibase is positioned at the right time.</p>
+    </div>
+    <div class="risk-item risk-low">
+      <h4>EVM Compatibility (Ecosystem Bootstrap)</h4>
+      <p>Dual VM means existing Solidity projects can deploy immediately. This solves the cold-start problem that killed many technically superior chains.</p>
+    </div>
+    <div class="risk-item risk-low">
+      <h4>Browser Nodes (Viral Distribution)</h4>
+      <p>No install required. Share a link, someone is running a node. This is unprecedented for blockchain distribution. Lowers barrier to zero.</p>
+    </div>
+    <div class="risk-item risk-low">
+      <h4>GPU Owner Incentive (Built-in Community)</h4>
+      <p>Millions of GPU owners want to monetize idle hardware. PoUW gives them a reason to run validators from day one. Natural community formation.</p>
+    </div>
+  </div>
+
+  <h3 style="color:#ff4466; margin: 30px 0 15px;">What Decreases Success Probability</h3>
+  <div class="risk-grid">
+    <div class="risk-item risk-high">
+      <h4>Execution Complexity (Highest Risk)</h4>
+      <p>Building DAG consensus + PoUW + dual VM + AI integration + privacy + browser nodes simultaneously is extremely ambitious. Most projects that attempt this much fail from scope overload.</p>
+    </div>
+    <div class="risk-item risk-high">
+      <h4>Team & Funding (Unknown)</h4>
+      <p>This design requires a world-class team of ~15-25 senior Rust engineers for 12-18 months. Funding requirement: $5-15M minimum. Without this, the design stays on paper.</p>
+    </div>
+    <div class="risk-item risk-med">
+      <h4>Regulatory Risk (Medium)</h4>
+      <p>Privacy features may attract regulatory scrutiny. The Howey Test assessment shows medium risk pre-decentralization. FSCA licensing in South Africa adds complexity.</p>
+    </div>
+    <div class="risk-item risk-med">
+      <h4>Patent Risk (Medium)</h4>
+      <p>nChain holds 1,308 blockchain patents. PoUW + AI consensus is an emerging patent area. Freedom-to-operate analysis is mandatory before public disclosure.</p>
+    </div>
+    <div class="risk-item risk-med">
+      <h4>Ecosystem Cold Start</h4>
+      <p>Even with EVM compatibility, DeFi liquidity doesn't migrate easily. The AI compute market needs both supply (validators) and demand (users) simultaneously.</p>
+    </div>
+    <div class="risk-item risk-med">
+      <h4>Established Competition</h4>
+      <p>If Ethereum, Solana, or Sui add AI features before Aztibase launches, the uniqueness advantage shrinks. Speed to market matters.</p>
+    </div>
+  </div>
+
+  <h3 style="color:#ffaa00; margin: 30px 0 15px;">Success Scenarios</h3>
+  <div class="grid-3">
+    <div class="card" style="border-color:#ff4466;">
+      <h3 style="color:#ff4466;">Bear Case (40%)</h3>
+      <p>Launches but struggles with adoption. Small validator set. AI compute market doesn't reach critical mass. Remains a niche technical project. Token trades below $0.10.</p>
+    </div>
+    <div class="card" style="border-color:#ffaa00;">
+      <h3 style="color:#ffaa00;">Base Case (35%)</h3>
+      <p>Moderate success. 500-1000 validators. AI compute market finds niche (healthcare, finance). $50-200M market cap. Recognized as innovative but not yet mainstream.</p>
+    </div>
+    <div class="card" style="border-color:#00ff88;">
+      <h3 style="color:#00ff88;">Bull Case (25%)</h3>
+      <p>AI agent economy takes off. Aztibase becomes the default chain for AI-to-AI transactions. Privacy network effect locks in users. Top-50 chain. $1B+ market cap by year 3.</p>
+    </div>
+  </div>
+
+  <div class="highlight" style="margin-top:40px;">
+    <h3>The Honest Bottom Line</h3>
+    <p>Aztibase Network has a genuinely differentiated design in a market that desperately needs one. The timing (AI boom + privacy demand + agent economy) is ideal. The technology choices are sound and research-backed. But the gap between "great design document" and "successful blockchain" is filled with execution challenges, funding requirements, and market timing. The design maximizes Aztibase's chances -- now it needs a team that can build it.</p>
+  </div>
+</div>
+
+<div style="height:60px;"></div>
+
+<script>
+function scrollToSection(id) {
+  document.getElementById(id).scrollIntoView({ behavior: 'smooth' });
+  document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+  event.target.classList.add('active');
+}
+
+// Update active nav on scroll
+window.addEventListener('scroll', () => {
+  const sections = ['overview','how','consensus','nodes','ai','token','unique','adoption','risk'];
+  let current = sections[0];
+  for (const id of sections) {
+    const el = document.getElementById(id);
+    if (el && el.getBoundingClientRect().top < 200) current = id;
+  }
+  document.querySelectorAll('.nav-btn').forEach((btn, i) => {
+    btn.classList.toggle('active', sections[i] === current);
+  });
+});
+</script>
+
+</body>
+</html>

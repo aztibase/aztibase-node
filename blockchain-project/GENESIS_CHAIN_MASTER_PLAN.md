@@ -1,4 +1,4 @@
-# DENDRITE NETWORK -- GENESIS CHAIN MASTER PLAN
+# AZTIBASE NETWORK -- GENESIS CHAIN MASTER PLAN
 
 **Version:** 1.0
 **Date:** March 5, 2026
@@ -25,18 +25,18 @@
 13. [Technology Stack Summary](#13-technology-stack-summary)
 14. [Open-Source Licensing Strategy](#14-open-source-licensing-strategy)
 15. [4-Week Build Roadmap](#15-4-week-build-roadmap)
-16. [What Makes Dendrite Network Unique](#16-what-makes-dendrite-network-unique)
+16. [What Makes Aztibase Network Unique](#16-what-makes-aztibase-network-unique)
 17. [Unresolved Items and Risks](#17-unresolved-items-and-risks)
 
 ---
 
 ## 1. Executive Summary
 
-Dendrite Network is a Layer-1 blockchain designed from the ground up to treat artificial intelligence as a first-class protocol citizen. It is not another chain that "adds AI" as a marketing feature bolted onto conventional architecture. AI lives inside the consensus mechanism, the state model, the smart contract execution layer, and the economic design. Every architectural decision -- from the DAG-based consensus to the five-node-type hierarchy to the burn mechanics -- exists to serve three converging theses: that AI compute will become the most demanded commodity on the internet, that privacy creates irreversible network effects, and that true decentralization means zero dependency on centralized servers.
+Aztibase Network is a Layer-1 blockchain designed from the ground up to treat artificial intelligence as a first-class protocol citizen. It is not another chain that "adds AI" as a marketing feature bolted onto conventional architecture. AI lives inside the consensus mechanism, the state model, the smart contract execution layer, and the economic design. Every architectural decision -- from the DAG-based consensus to the five-node-type hierarchy to the burn mechanics -- exists to serve three converging theses: that AI compute will become the most demanded commodity on the internet, that privacy creates irreversible network effects, and that true decentralization means zero dependency on centralized servers.
 
 The blockchain industry as of March 2026 is crowded with generalist chains competing on speed metrics and EVM compatibility. Meanwhile, AI-blockchain integration remains shallow: Bittensor runs an AI-only network with no general smart contracts; Ritual bridges AI to existing chains through an intermediary layer; the ASI Alliance merged three separate architectures without unifying them. No production chain combines AI-native consensus, general-purpose smart contracts, protocol-level privacy, and genuine server-independence into a single coherent design.
 
-Dendrite Network occupies this gap.
+Aztibase Network occupies this gap.
 
 **Core architecture at a glance:**
 
@@ -48,33 +48,33 @@ Dendrite Network occupies this gap.
 - **P2P:** QUIC-primary networking via rust-libp2p with NetworkTransport abstraction. Six-layer bootstrap strategy. Browser nodes via WebRTC. No central servers after bootstrap.
 - **Token:** 1 billion hard cap. EIP-1559 base fee burn. Path to deflationary equilibrium by year 5-7.
 
-The name "Dendrite" reflects the chain's identity: dendrites are the branching input structures of biological neurons that receive, integrate, and process signals from many sources. The DAG topology of Synaptic Consensus is a dendritic structure. The AI-native design mirrors how dendrites gather distributed intelligence. The name teaches what the chain does.
+The name "Aztibase" reflects the chain's identity: aztibases are the branching input structures of biological neurons that receive, integrate, and process signals from many sources. The DAG topology of Synaptic Consensus is a dendritic structure. The AI-native design mirrors how aztibases gather distributed intelligence. The name teaches what the chain does.
 
 ---
 
 ## 2. Blockchain Name
 
-**Name:** Dendrite Network
+**Name:** Aztibase Network
 **Legal Status:** CONDITIONAL GREEN (cleared by legal-ip-counsel, March 5, 2026)
 
 The name scored 78/100 in the naming council's evaluation -- the highest of all candidates assessed. It was selected over Quen (QEN), which held full GREEN legal clearance but scored only 57/100 due to a devastating phonetic collision with Alibaba's Qwen AI model family (both pronounced /kwen/).
 
 ### The 5 Legal Conditions for GREEN Clearance
 
-1. **TICKER:** Must use DNDR, not DND. The DND ticker is blocked by Diamond DND, DungeonSwap, and TSX:DND. DNDR is confirmed clear across all major crypto and stock exchanges. STATUS: SATISFIED.
+1. **TICKER:** Must use AZTB, not DND. The DND ticker is blocked by Diamond DND, DungeonSwap, and TSX:DND. AZTB is confirmed clear across all major crypto and stock exchanges. STATUS: SATISFIED.
 
-2. **COEXISTENCE AGREEMENT:** Before filing a USPTO trademark application in Class 9, proactively contact Dendrite Systems Inc. to negotiate a coexistence agreement. The company is unfunded with an archived product. Estimated cost: $5,000-$15,000.
+2. **COEXISTENCE AGREEMENT:** Before filing a USPTO trademark application in Class 9, proactively contact Aztibase Systems Inc. to negotiate a coexistence agreement. The company is unfunded with an archived product. Estimated cost: $5,000-$15,000.
 
-3. **TRADEMARK FILING STRATEGY:** File Classes 36 and 42 first (minimal overlap with Dendrite Systems Inc.), then file Class 9 only after the coexistence agreement is secured. Use narrowly drafted goods/services descriptions: "Blockchain protocol software for decentralized consensus, cryptocurrency transaction processing, and distributed AI computation."
+3. **TRADEMARK FILING STRATEGY:** File Classes 36 and 42 first (minimal overlap with Aztibase Systems Inc.), then file Class 9 only after the coexistence agreement is secured. Use narrowly drafted goods/services descriptions: "Blockchain protocol software for decentralized consensus, cryptocurrency transaction processing, and distributed AI computation."
 
-4. **DOMAIN ACQUISITION:** Before public announcement, secure at minimum one primary domain. Priority: dendrite.network, then dendritenetwork.io, dendrite.xyz, or dendritenetwork.com.
+4. **DOMAIN ACQUISITION:** Before public announcement, secure at minimum one primary domain. Priority: aztibase.network, then aztibasenetwork.io, aztibase.xyz, or aztibasenetwork.com.
 
-5. **MATRIX DENDRITE AWARENESS:** The Matrix homeserver project also uses the name "Dendrite." This is not a trademark obstacle but creates minor developer community confusion. Include a brief FAQ entry in early community materials.
+5. **MATRIX AZTIBASE AWARENESS:** The Matrix homeserver project also uses the name "Aztibase." This is not a trademark obstacle but creates minor developer community confusion. Include a brief FAQ entry in early community materials.
 
-### Why "Dendrite" is the Right Name
+### Why "Aztibase" is the Right Name
 
-- The branching structure of biological dendrites maps directly to the DAG consensus topology.
-- Dendrites are the receiving structures of neurons -- they gather signals from many sources and integrate them. This mirrors the chain's distributed AI computation model.
+- The branching structure of biological aztibases maps directly to the DAG consensus topology.
+- Aztibases are the receiving structures of neurons -- they gather signals from many sources and integrate them. This mirrors the chain's distributed AI computation model.
 - The name signals genuine neuroscience literacy, not marketing-grade AI buzzwords.
 - No phonetic collision with any major tech or crypto brand.
 - Extraordinary visual design potential: branching dendritic structures provide natural logo and identity material.
@@ -85,11 +85,11 @@ The name scored 78/100 in the naming council's evaluation -- the highest of all 
 
 ## 3. Coin Name and Ticker
 
-**Coin Name:** Dendrite
-**Ticker:** DNDR
-**Legal Status:** CLEAR -- DNDR is unused across all crypto registries (CoinMarketCap, CoinGecko) and all major stock exchanges.
+**Coin Name:** Aztibase
+**Ticker:** AZTB
+**Legal Status:** CLEAR -- AZTB is unused across all crypto registries (CoinMarketCap, CoinGecko) and all major stock exchanges.
 
-The blockchain is "Dendrite Network." The coin is "Dendrite." The ticker is "DNDR." This unified branding keeps the identity simple: the network is the brand, the coin carries the brand name, the ticker is distinctive and collision-free.
+The blockchain is "Aztibase Network." The coin is "Aztibase." The ticker is "AZTB." This unified branding keeps the identity simple: the network is the brand, the coin carries the brand name, the ticker is distinctive and collision-free.
 
 **Denomination:** 18 decimal places (consistent with Ethereum/ERC-20 tooling compatibility). The smallest unit name will be determined during community engagement.
 
@@ -99,7 +99,7 @@ The blockchain is "Dendrite Network." The coin is "Dendrite." The ticker is "DND
 
 ### Filing Strategy
 
-Classes 36 (cryptocurrency financial services) and 42 (blockchain SaaS platform) are filed first because they have minimal overlap with Dendrite Systems Inc.'s Class 9 marks. Class 9 (blockchain protocol software) follows only after the coexistence agreement is secured.
+Classes 36 (cryptocurrency financial services) and 42 (blockchain SaaS platform) are filed first because they have minimal overlap with Aztibase Systems Inc.'s Class 9 marks. Class 9 (blockchain protocol software) follows only after the coexistence agreement is secured.
 
 ### Registration Roadmap
 
@@ -115,10 +115,10 @@ Classes 36 (cryptocurrency financial services) and 42 (blockchain SaaS platform)
 
 ### Immediate Actions
 
-1. Engage trademark attorney for Dendrite Systems Inc. coexistence negotiation.
-2. Confirm DNDR ticker clean across all crypto and stock exchanges.
-3. Acquire primary domain (dendrite.network preferred).
-4. Reserve social handles: @DendriteNetwork on X/Twitter, GitHub (org), Discord, Telegram.
+1. Engage trademark attorney for Aztibase Systems Inc. coexistence negotiation.
+2. Confirm AZTB ticker clean across all crypto and stock exchanges.
+3. Acquire primary domain (aztibase.network preferred).
+4. Reserve social handles: @AztibaseNetwork on X/Twitter, GitHub (org), Discord, Telegram.
 
 ---
 
@@ -219,7 +219,7 @@ Validators are scored on four dimensions to avoid Bittensor's speed-only metric 
 
 ## 7. Node Architecture
 
-Dendrite Network defines five node types. Every type is a first-class protocol citizen. No type requires a central server. The design enables graceful upgrade: a browser light client can upgrade to a full validator without re-syncing from scratch.
+Aztibase Network defines five node types. Every type is a first-class protocol citizen. No type requires a central server. The design enables graceful upgrade: a browser light client can upgrade to a full validator without re-syncing from scratch.
 
 ### Node Type Specifications
 
@@ -347,7 +347,7 @@ Four burn mechanisms create deflationary pressure:
 
 ### Three-Layer Architecture
 
-Dendrite Network integrates AI at every protocol layer, but with a critical constraint: AI must never be required for basic chain operation. Every AI feature degrades gracefully.
+Aztibase Network integrates AI at every protocol layer, but with a critical constraint: AI must never be required for basic chain operation. Every AI feature degrades gracefully.
 
 #### Layer 1 -- Protocol-Level AI (runs on every full node)
 
@@ -659,7 +659,7 @@ This roadmap covers the first 4 weeks of implementation. The goal is a minimal t
 
 | Day | Deliverable | Details |
 |-----|------------|---------|
-| 1-2 | Project scaffolding | Cargo workspace with crates: `dendrite-types`, `dendrite-crypto`, `dendrite-storage`, `dendrite-consensus`, `dendrite-network`, `dendrite-vm`, `dendrite-node`. CI/CD pipeline with cargo-audit and cargo-clippy. Dual MIT/Apache-2.0 license headers. |
+| 1-2 | Project scaffolding | Cargo workspace with crates: `aztibase-types`, `aztibase-crypto`, `aztibase-storage`, `aztibase-consensus`, `aztibase-network`, `aztibase-vm`, `aztibase-node`. CI/CD pipeline with cargo-audit and cargo-clippy. Dual MIT/Apache-2.0 license headers. |
 | 2-3 | Core types | `GenesisBlockHeader`, `GenesisBlockBody`, `Transaction`, `Account`, `ObjectState`, `AIAgentState`, `InferenceRequest`, `InferenceAttestation`, `AIComputeCommitment`. Serde serialization (Bincode internal, Protobuf wire). |
 | 3-4 | Cryptography | BLAKE3 hashing wrappers. Ed25519 keypair generation, signing, verification (strict mode). BLS12-381 keypair, signing, aggregation, verification (with proof-of-possession). VRF implementation (ECVRF-EDWARDS25519-SHA512-TAI per RFC 9381). |
 | 4-5 | Storage engine | RocksDB integration with 6 column families. Dual storage architecture (state store + state commitment). Basic key-value state read/write/delete. Genesis state initialization. |
@@ -675,7 +675,7 @@ This roadmap covers the first 4 weeks of implementation. The goal is a minimal t
 |-----|------------|---------|
 | 1-2 | NetworkTransport trait + libp2p implementation | `NetworkTransport` trait definition. `Libp2pTransport` implementation wrapping rust-libp2p Swarm. QUIC transport. Noise encryption for TCP fallback. |
 | 2-3 | Peer discovery | Kademlia DHT integration. Hardcoded bootstrap peers (for testnet). mDNS for local testing. Peer caching to redb. |
-| 3-4 | Gossipsub | Topic configuration: `dendrite/dag/vertices`, `dendrite/txs`, `dendrite/security/alerts`. Message serialization. Peer scoring (basic). Priority batching stub. |
+| 3-4 | Gossipsub | Topic configuration: `aztibase/dag/vertices`, `aztibase/txs`, `aztibase/security/alerts`. Message serialization. Peer scoring (basic). Priority batching stub. |
 | 4-5 | Basic SynBFT | Simplified single-round consensus: validators propose vertices, reference parents, basic DAG structure. No anchor commits yet. No VRF leader election. Round timer (400ms). Vertex broadcast via Gossipsub. |
 | 5 | Mempool | Transaction mempool with priority sorting. Basic deduplication. Accept transactions via local RPC. |
 
@@ -723,9 +723,9 @@ This roadmap covers the first 4 weeks of implementation. The goal is a minimal t
 
 ---
 
-## 16. What Makes Dendrite Network Unique
+## 16. What Makes Aztibase Network Unique
 
-The blockchain space in March 2026 is saturated with Layer-1 chains competing on the same axes: TPS benchmarks, EVM compatibility, and speculative token mechanics. Dendrite Network does not compete on these axes. It occupies a position that no existing chain has claimed, because that position requires making three architectural commitments simultaneously -- commitments that are individually challenging and collectively unprecedented.
+The blockchain space in March 2026 is saturated with Layer-1 chains competing on the same axes: TPS benchmarks, EVM compatibility, and speculative token mechanics. Aztibase Network does not compete on these axes. It occupies a position that no existing chain has claimed, because that position requires making three architectural commitments simultaneously -- commitments that are individually challenging and collectively unprecedented.
 
 ### Commitment 1: AI as a Protocol Primitive, Not an Afterthought
 
@@ -737,21 +737,21 @@ Every "AI blockchain" announced in 2024-2026 falls into one of three categories:
 
 - **AI mergers (ASI Alliance / Fetch.ai + SingularityNET + Ocean):** Three separate architectures bolted together under a shared token. The technical integration is cosmetic. Each component retains its own consensus, state model, and limitations.
 
-Dendrite Network is none of these. AI lives inside the consensus mechanism (PoUW validators earn rewards for verified inference), the state model (AIAgent, ModelRegistry, InferenceRequest, InferenceAttestation are protocol-level objects, not smart contract abstractions), the execution layer (contracts call `ai_inference()` as a built-in operation), and the economic design (AI inference fees create deflationary pressure through the 5% burn mechanism). Removing AI from Dendrite would require redesigning the consensus, the state model, the execution layer, and the tokenomics. That is what "first-class citizen" means.
+Aztibase Network is none of these. AI lives inside the consensus mechanism (PoUW validators earn rewards for verified inference), the state model (AIAgent, ModelRegistry, InferenceRequest, InferenceAttestation are protocol-level objects, not smart contract abstractions), the execution layer (contracts call `ai_inference()` as a built-in operation), and the economic design (AI inference fees create deflationary pressure through the 5% burn mechanism). Removing AI from Aztibase would require redesigning the consensus, the state model, the execution layer, and the tokenomics. That is what "first-class citizen" means.
 
 ### Commitment 2: True Server-Independence
 
 Most blockchains claim decentralization but depend on centralized infrastructure for practical use. Over 70% of Ethereum transactions route through three RPC providers (Infura, Alchemy, QuickNode). Solana validators require datacenter hardware. Browser users interact with blockchains through centralized APIs, never touching the P2P network directly.
 
-Dendrite Network enforces server-independence as a hard architectural constraint. Every full node is its own RPC endpoint. Browser users run WASM-compiled light clients connecting via WebRTC to the P2P network -- no centralized intermediary. NAT traversal uses incentivized decentralized relays, not corporate TURN servers. A new node can join the network if it can reach even one existing peer out of 50+ hardcoded bootstrap nodes, DNS seeds, mDNS local discovery, or cached peers.
+Aztibase Network enforces server-independence as a hard architectural constraint. Every full node is its own RPC endpoint. Browser users run WASM-compiled light clients connecting via WebRTC to the P2P network -- no centralized intermediary. NAT traversal uses incentivized decentralized relays, not corporate TURN servers. A new node can join the network if it can reach even one existing peer out of 50+ hardcoded bootstrap nodes, DNS seeds, mDNS local discovery, or cached peers.
 
 This is not a feature that can be added later. It is a constraint that shapes every other decision -- from the Verkle tree state proofs (constant-size, enabling mobile verification) to the BLS aggregate signatures (96 bytes for a finality certificate instead of 4.3KB of individual Ed25519 signatures).
 
 ### Commitment 3: Privacy as a Protocol-Level Capability
 
-Following a16z's 2026 thesis that "privacy creates chain lock-in through a privacy network effect," Dendrite implements privacy as selective disclosure at the protocol level. Bridging tokens between chains is trivial; bridging secrets is impossible. Once users commit private state to Dendrite, they cannot take that privacy guarantee with them to another chain. This creates organic lock-in that is architecturally, not just economically, defensible.
+Following a16z's 2026 thesis that "privacy creates chain lock-in through a privacy network effect," Aztibase implements privacy as selective disclosure at the protocol level. Bridging tokens between chains is trivial; bridging secrets is impossible. Once users commit private state to Aztibase, they cannot take that privacy guarantee with them to another chain. This creates organic lock-in that is architecturally, not just economically, defensible.
 
-Privacy is not full anonymity. It is user-controlled selective disclosure with regulatory compliance hooks (prove you are KYC-verified without revealing your identity). This positions Dendrite for enterprise and institutional adoption while preserving individual privacy.
+Privacy is not full anonymity. It is user-controlled selective disclosure with regulatory compliance hooks (prove you are KYC-verified without revealing your identity). This positions Aztibase for enterprise and institutional adoption while preserving individual privacy.
 
 ### The Intersection Creates the Moat
 
@@ -761,7 +761,7 @@ Each commitment alone is achievable. Bittensor does AI. Bitcoin does server-inde
 - Privacy requires ZK proofs, which are computationally expensive -- conflicting with consumer hardware validation.
 - Server-independence requires every node to verify everything independently -- conflicting with the trust assumptions that simplify AI and privacy implementations.
 
-Dendrite resolves these conflicts through careful architectural choices: PoUW is optional (the chain runs without it), Verkle proofs enable lightweight verification (browser nodes verify state without full computation), and privacy is selective (public by default, private when chosen). The resolution is not a compromise -- it is a design that makes each feature reinforce the others.
+Aztibase resolves these conflicts through careful architectural choices: PoUW is optional (the chain runs without it), Verkle proofs enable lightweight verification (browser nodes verify state without full computation), and privacy is selective (public by default, private when chosen). The resolution is not a compromise -- it is a design that makes each feature reinforce the others.
 
 ### Three Killer Applications
 
@@ -817,13 +817,13 @@ This section provides an honest accounting of open issues. A credible plan ackno
 
 **Overall patent risk is manageable but requires proactive FTO analysis and COPA membership before any public disclosure.**
 
-### Dendrite Systems Inc. Coexistence Agreement
+### Aztibase Systems Inc. Coexistence Agreement
 
-Dendrite Systems Inc. holds 4 trademarks in Class 9 (computer software) for "Dendrite" related to AI web agents and browser extensions. The company appears unfunded with an archived product. A trademark coexistence agreement is the recommended path: proactively contact them, negotiate terms ($5,000-$15,000 estimated), and secure written agreement that both parties can use "Dendrite" in their respective fields without opposition.
+Aztibase Systems Inc. holds 4 trademarks in Class 9 (computer software) for "Aztibase" related to AI web agents and browser extensions. The company appears unfunded with an archived product. A trademark coexistence agreement is the recommended path: proactively contact them, negotiate terms ($5,000-$15,000 estimated), and secure written agreement that both parties can use "Aztibase" in their respective fields without opposition.
 
-**Risk if coexistence fails:** The Class 9 trademark filing would face opposition. Classes 36 and 42 would still proceed. The project could operate as "Dendrite Network" with trademarks in Classes 36/42 while seeking alternative resolution for Class 9.
+**Risk if coexistence fails:** The Class 9 trademark filing would face opposition. Classes 36 and 42 would still proceed. The project could operate as "Aztibase Network" with trademarks in Classes 36/42 while seeking alternative resolution for Class 9.
 
-**Risk if not addressed:** Dendrite Systems Inc. could oppose the USPTO Class 9 filing, delaying registration by 12-18 months and costing $20,000-$50,000 in legal fees.
+**Risk if not addressed:** Aztibase Systems Inc. could oppose the USPTO Class 9 filing, delaying registration by 12-18 months and costing $20,000-$50,000 in legal fees.
 
 ### Technical Unknowns
 
@@ -840,7 +840,7 @@ Dendrite Systems Inc. holds 4 trademarks in Class 9 (computer software) for "Den
 ### Regulatory Unknowns
 
 1. **CLARITY Act status:** If passed, may provide a safe harbor for utility tokens. If not passed, the current regulatory ambiguity persists. Monitor closely.
-2. **FSCA stablecoin regulation:** Expected clarity in 2026. If Dendrite Network supports stablecoin functionality, additional FSCA requirements may apply.
+2. **FSCA stablecoin regulation:** Expected clarity in 2026. If Aztibase Network supports stablecoin functionality, additional FSCA requirements may apply.
 3. **MiCA enforcement strictness:** First penalties are being assessed. Actual enforcement patterns will clarify compliance requirements.
 4. **Privacy feature regulatory treatment:** The SEC's evolving framework may classify privacy features differently. Design choice (user-controlled, not protocol-enforced privacy) reduces but does not eliminate this risk.
 
@@ -853,13 +853,13 @@ This master plan synthesizes the following Phase 3-5 deliverables:
 - **MASTER_DESIGN.md** -- Complete 9-section architecture document (blockchain-architect, consensus-engineer, tokenomics-engineer, node-engineer, security-engineer, ai-integration-engineer, smart-contract-engineer, p2p-network-engineer, naming-council)
 - **RESEARCH_BRIEF.md** -- Comprehensive market and technology research (research-analyst)
 - **LEGAL_LANDSCAPE.md** -- Trademark, patent, regulatory, and licensing analysis (legal-ip-counsel)
-- **LEGAL_CLEARANCE_REPORT.md** -- 10 name candidates assessed, Dendrite upgraded to CONDITIONAL GREEN (legal-ip-counsel)
-- **NAMING_REPORT.md** -- Name evaluation and final recommendation: Dendrite Network / DNDR (naming-council)
+- **LEGAL_CLEARANCE_REPORT.md** -- 10 name candidates assessed, Aztibase upgraded to CONDITIONAL GREEN (legal-ip-counsel)
+- **NAMING_REPORT.md** -- Name evaluation and final recommendation: Aztibase Network / AZTB (naming-council)
 - **ORCHESTRATION.md** -- Skill fleet execution protocol and dependency graph
 
 ---
 
-*This document is the definitive blueprint for building Dendrite Network. It is designed to stand alone as a complete reference for any engineer, investor, legal counsel, or community member who needs to understand what Dendrite Network is, why it exists, and how it will be built.*
+*This document is the definitive blueprint for building Aztibase Network. It is designed to stand alone as a complete reference for any engineer, investor, legal counsel, or community member who needs to understand what Aztibase Network is, why it exists, and how it will be built.*
 
 *Assembled by: blockchain-architect*
 *Date: March 5, 2026*

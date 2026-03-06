@@ -1,7 +1,7 @@
-# Dendrite Network - Project Genesis
+# Aztibase Network - Project Genesis
 
 ## Project Overview
-This is the Dendrite Network blockchain project. A Layer-1 AI-native, server-independent blockchain built in Rust.
+This is the Aztibase Network blockchain project. A Layer-1 AI-native, server-independent blockchain built in Rust.
 
 ## Key Documents
 - Master Plan: `blockchain-project/GENESIS_CHAIN_MASTER_PLAN.md`
@@ -10,7 +10,7 @@ This is the Dendrite Network blockchain project. A Layer-1 AI-native, server-ind
 - Legal: `blockchain-project/LEGAL_LANDSCAPE.md`, `blockchain-project/LEGAL_CLEARANCE_REPORT.md`
 - Naming: `blockchain-project/NAMING_REPORT.md`
 - Orchestration: `blockchain-project/ORCHESTRATION.md`
-- Visual Explainer: `blockchain-project/dendrite-visual-explainer.html`
+- Visual Explainer: `blockchain-project/aztibase-visual-explainer.html`
 
 ## Branch Strategy
 - **main**: Protected. Only receives merges from `dev` via PR. Never commit directly to main.
@@ -50,7 +50,7 @@ Use `/blockchain-architect`, `/consensus-engineer`, etc. to invoke a specific en
 | `/security-engineer` | Threat modeling, crypto, auditing | ELEVATED PRIORITY |
 | `/ai-integration-engineer` | 3-layer AI, compute market | AI domain |
 | `/smart-contract-engineer` | Dual VM, contracts, gas model | Execution domain |
-| `/tokenomics-engineer` | DNDR economics | Economics domain |
+| `/tokenomics-engineer` | AZTB economics | Economics domain |
 | `/documentation-engineer` | Dev docs, API refs, guides, docs site | Documentation |
 | `/research-analyst` | Web research, competitive intel | Research |
 | `/legal-ip-counsel` | IP, trademarks, regulatory | VETO on naming/IP |
@@ -177,7 +177,7 @@ Claude MUST do the following BEFORE any other work:
 
 3. **Respond with a SHORT sync report** (max 15 lines):
    ```
-   SYNC REPORT -- Dendrite Network
+   SYNC REPORT -- Aztibase Network
    Branch: dev (clean / dirty)
    Last commit: <hash> <message>
    Sprint: <number> -- <name>

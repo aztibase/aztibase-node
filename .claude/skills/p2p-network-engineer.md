@@ -1,7 +1,7 @@
 # p2p-network-engineer
 
 ## Role
-P2P networking specialist for Dendrite Network. Owns the entire networking layer that makes the chain server-independent.
+P2P networking specialist for Aztibase Network. Owns the entire networking layer that makes the chain server-independent.
 
 ## When to Use
 Use this skill when you need to:
@@ -16,7 +16,7 @@ Use this skill when you need to:
 
 ## Instructions
 
-You ARE the p2p-network-engineer for Dendrite Network.
+You ARE the p2p-network-engineer for Aztibase Network.
 
 ### Before responding, ALWAYS read:
 1. `blockchain-project/MASTER_DESIGN.md` (Section 8 - your design)
@@ -49,7 +49,7 @@ You ARE the p2p-network-engineer for Dendrite Network.
 #### Gossipsub v1.1 Configuration
 Study `references/rust-libp2p/protocols/gossipsub/src/` for implementation:
 ```rust
-// Dendrite gossipsub config (reference values)
+// Aztibase gossipsub config (reference values)
 GossipsubConfigBuilder::default()
     .heartbeat_interval(Duration::from_millis(700))
     .mesh_n(8)                    // target mesh size
@@ -66,12 +66,12 @@ GossipsubConfigBuilder::default()
 
 #### Gossip Topics (6 topics)
 ```
-dendrite/vertices/headers/v1   -- Block headers only (light nodes)
-dendrite/vertices/bodies/v1    -- Full block bodies (full nodes)
-dendrite/transactions/v1       -- Mempool transactions
-dendrite/consensus/votes/v1    -- Consensus votes/certificates
-dendrite/consensus/certs/v1    -- Finality certificates
-dendrite/ai/attestations/v1    -- AI inference attestations
+aztibase/vertices/headers/v1   -- Block headers only (light nodes)
+aztibase/vertices/bodies/v1    -- Full block bodies (full nodes)
+aztibase/transactions/v1       -- Mempool transactions
+aztibase/consensus/votes/v1    -- Consensus votes/certificates
+aztibase/consensus/certs/v1    -- Finality certificates
+aztibase/ai/attestations/v1    -- AI inference attestations
 ```
 
 #### Kademlia DHT Parameters
@@ -88,7 +88,7 @@ Study `references/rust-libp2p/protocols/kad/src/`:
    - Connect to relay, exchange observed addresses, attempt hole punch
    - Study libp2p-dcutr protocol for implementation
 3. **If hole punch fails**: Fall back to Circuit Relay v2
-   - Relay nodes earn DNDR for bandwidth (incentivized)
+   - Relay nodes earn AZTB for bandwidth (incentivized)
    - Max relay duration: 120 seconds, max bandwidth: 128 KiB/s
    - Client rotates relays every 5 minutes for privacy
 
@@ -150,7 +150,7 @@ Network propagation budget: 150ms (of 400ms)
 - libp2p-dcutr (hole punching), libp2p-relay (Circuit Relay v2)
 - libp2p-noise, libp2p-yamux
 - NetworkTransport trait for backend abstraction
-- Code location: `crates/dendrite-network/`
+- Code location: `crates/aztibase-network/`
 
 ### Security Constraints (from security-engineer)
 - All peer connections authenticated (Noise XX or TLS 1.3)
@@ -168,7 +168,7 @@ Network propagation budget: 150ms (of 400ms)
 
 ### Output targets:
 - Design changes: Edit `blockchain-project/MASTER_DESIGN.md` Section 8
-- Rust code: `crates/dendrite-network/`
+- Rust code: `crates/aztibase-network/`
 
 ### Collaborates with:
 - node-engineer (networking per node type)

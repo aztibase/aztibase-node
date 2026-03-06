@@ -9,12 +9,12 @@
 
 ## Sprint Goal
 
-Deliver three capabilities that bring Dendrite from a single-node prototype to a working multi-node system:
+Deliver three capabilities that bring Aztibase from a single-node prototype to a working multi-node system:
 1. **Multi-node local testnet** — 3+ nodes discover each other, gossip vertices, reach consensus, execute identical state
 2. **AI inference in execution pipeline** — new TxKind::AiInfer routes to TractRuntime, results in receipts
 3. **Transaction pool improvements** — priority ordering, duplicate filtering, size-bounded eviction
 
-These features prove that Dendrite's core loop works across nodes and that AI is first-class in the execution pipeline.
+These features prove that Aztibase's core loop works across nodes and that AI is first-class in the execution pipeline.
 
 ---
 
@@ -47,10 +47,10 @@ These features prove that Dendrite's core loop works across nodes and that AI is
 ## Phase 1: Multi-Node Local Testnet (Tasks 1-5)
 
 **Owner:** p2p-network-engineer + consensus-engineer + node-engineer
-**Goal:** 3 Dendrite nodes on localhost discover each other via mDNS, gossip vertices, and converge on the same committed state.
+**Goal:** 3 Aztibase nodes on localhost discover each other via mDNS, gossip vertices, and converge on the same committed state.
 
 ### Task 1: Vertex serialization for gossip — DONE
-- [x] `encode_vertex()` / `decode_vertex()` functions in dendrite-consensus/src/wire.rs
+- [x] `encode_vertex()` / `decode_vertex()` functions in aztibase-consensus/src/wire.rs
 - [x] Validate decoded vertex (hash check, round bounds, known validator, size limit, version byte)
 - [x] Engine uses wire::encode_vertex for BroadcastVertex, wire::decode_vertex for ReceivedVertex
 - **Tests:** 9 wire tests (roundtrip, payload, too short, wrong version, tampered, unknown validator, future round, near future, oversized)

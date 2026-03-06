@@ -1,4 +1,4 @@
-# Architecture Decision Records (ADRs) -- Dendrite Network
+# Architecture Decision Records (ADRs) -- Aztibase Network
 
 Every non-obvious technical decision is recorded here. Each ADR is immutable once written -- if a decision is reversed, a new ADR supersedes it with a reference to the original.
 
@@ -48,7 +48,7 @@ Use redb as the primary embedded database for full nodes. RocksDB remains a cons
 **Decided By:** legal-ip-counsel
 
 ### Context
-Open-source license selection for the Dendrite Network codebase.
+Open-source license selection for the Aztibase Network codebase.
 
 ### Decision
 Dual-license under MIT and Apache-2.0, following the Rust ecosystem convention.
@@ -76,14 +76,14 @@ Project structure decision for the Rust codebase.
 
 ### Decision
 Single Cargo workspace with 8 domain-specific crates:
-- dendrite-core (primitives, crypto, types)
-- dendrite-consensus (SynBFT, PoUW, DAG)
-- dendrite-network (P2P, transport, gossip)
-- dendrite-storage (redb, verkle trees)
-- dendrite-execution (VM, state, parallel execution)
-- dendrite-runtime (contracts, AI oracle, agents)
-- dendrite-rpc (JSON-RPC server)
-- dendrite-node (binary entry point)
+- aztibase-core (primitives, crypto, types)
+- aztibase-consensus (SynBFT, PoUW, DAG)
+- aztibase-network (P2P, transport, gossip)
+- aztibase-storage (redb, verkle trees)
+- aztibase-execution (VM, state, parallel execution)
+- aztibase-runtime (contracts, AI oracle, agents)
+- aztibase-rpc (JSON-RPC server)
+- aztibase-node (binary entry point)
 
 ### Rationale
 - Clean separation of concerns matching engineer domains
@@ -93,7 +93,7 @@ Single Cargo workspace with 8 domain-specific crates:
 
 ### Consequences
 - Cross-crate API design is critical -- breaking changes propagate
-- Need clear ownership and review process for shared types in dendrite-core
+- Need clear ownership and review process for shared types in aztibase-core
 
 ---
 

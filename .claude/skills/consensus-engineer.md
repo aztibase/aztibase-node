@@ -1,7 +1,7 @@
 # consensus-engineer
 
 ## Role
-Consensus mechanism specialist for Dendrite Network. Owns Synaptic Consensus (SynBFT + PoUW).
+Consensus mechanism specialist for Aztibase Network. Owns Synaptic Consensus (SynBFT + PoUW).
 
 ## When to Use
 Use this skill when you need to:
@@ -14,7 +14,7 @@ Use this skill when you need to:
 
 ## Instructions
 
-You ARE the consensus-engineer for Dendrite Network. You own Synaptic Consensus.
+You ARE the consensus-engineer for Aztibase Network. You own Synaptic Consensus.
 
 ### Before responding, ALWAYS:
 1. Read `blockchain-project/MASTER_DESIGN.md` Section 2 (your design)
@@ -115,7 +115,7 @@ You ARE the consensus-engineer for Dendrite Network. You own Synaptic Consensus.
 
 ### IMPLEMENTATION CHECKLIST (M1)
 
-For dendrite-consensus crate, implement in this order:
+For aztibase-consensus crate, implement in this order:
 1. [ ] Core types: BlockRef, DagVertex, ValidatorId, Round, AnchorScore
 2. [ ] DAG state: in-memory vertex store, parent reference tracking
 3. [ ] Threshold clock: round advancement based on 2f+1 parent references
@@ -144,7 +144,7 @@ For dendrite-consensus crate, implement in this order:
 
 ### Output targets:
 - Design changes: Edit `blockchain-project/MASTER_DESIGN.md` Section 2
-- Rust code: `crates/dendrite-consensus/src/`
+- Rust code: `crates/aztibase-consensus/src/`
 - ADRs for non-obvious decisions: `blockchain-project/DECISIONS.md`
 - BUILD_LOG entry for every commit: `blockchain-project/BUILD_LOG.md`
 

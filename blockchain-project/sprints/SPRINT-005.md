@@ -65,7 +65,7 @@ This sprint makes the execution pipeline real: consensus commits flow through th
 
 | # | Task | Assigned To | Depends On | Status | Acceptance Criteria |
 |---|------|-------------|------------|--------|---------------------|
-| 11 | Add BLS12-381 key types to dendrite-core (BLS public key, secret key, signature) | consensus-engineer | -- | DONE | BLS key generation, sign, verify; uses blst crate; test |
+| 11 | Add BLS12-381 key types to aztibase-core (BLS public key, secret key, signature) | consensus-engineer | -- | DONE | BLS key generation, sign, verify; uses blst crate; test |
 | 12 | Implement BLS signature aggregation — combine 2f+1 validator signatures | consensus-engineer | Task 11 | DONE | Aggregate signatures; verify against aggregate public key; test |
 | 13 | Define `FinalityCertificate` struct — batch hash, state root, aggregated BLS signature, signer bitmap | consensus-engineer | Task 12 | DONE | Serializable certificate; contains proof of 2f+1 agreement; test |
 | 14 | Implement certificate creation — validators sign committed batch, leader aggregates | consensus-engineer | Tasks 12, 13 | DONE | After commit, validators sign (batch_hash || state_root); leader aggregates into certificate; test |
@@ -153,7 +153,7 @@ This sprint makes the execution pipeline real: consensus commits flow through th
 |----|----------|---------|--------|
 | SEC-BLS-001 | ELEVATED→FIXED | Rogue-key attack without proof-of-possession | FIXED (8da45e4) — PoP added to BlsKeypair, verify_proof_of_possession() for registration |
 | SEC-BLS-002 | MEDIUM | Duplicate BLS keys in validator set can misattribute bitmap | KNOWN — enforce unique BLS keys in ValidatorSet (Sprint 006) |
-| SEC-BLS-003 | MEDIUM→FIXED | No domain separator in finality message | FIXED (8da45e4) — DENDRITE_FINALITY_V1 prefix added |
+| SEC-BLS-003 | MEDIUM→FIXED | No domain separator in finality message | FIXED (8da45e4) — AZTIBASE_FINALITY_V1 prefix added |
 | SEC-BLS-004 | MEDIUM→FIXED | DST tag uses NUL scheme (unsafe for aggregation) | FIXED (8da45e4) — switched to POP ciphersuite |
 | SEC-BLS-005 | MEDIUM→FIXED | Duplicate signers not deduplicated in build_certificate | FIXED (8da45e4) — skip if bitmap[idx] already set |
 | SEC-BLS-006 | LOW | Serde deserialization skips curve point validation | KNOWN — add validation in Deserialize impl (Sprint 006) |

@@ -1,0 +1,33 @@
+[package]
+name = "aztibase-node"
+description = "Main node binary for Aztibase Network"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "aztibase"
+path = "src/main.rs"
+
+[dependencies]
+aztibase-core = { workspace = true }
+aztibase-network = { workspace = true }
+aztibase-storage = { workspace = true }
+aztibase-consensus = { workspace = true }
+aztibase-execution = { workspace = true }
+aztibase-runtime = { workspace = true }
+aztibase-rpc = { workspace = true }
+tokio = { workspace = true }
+clap = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+anyhow = { workspace = true }
+serde = { workspace = true }
+toml = { workspace = true }
+bincode = { workspace = true }
+directories = { workspace = true }
+
+[dev-dependencies]
+wat = "1"
+tract-onnx = { workspace = true }
+prost = "0.11"

@@ -1,4 +1,4 @@
-# Build Log -- Dendrite Network
+# Build Log -- Aztibase Network
 
 Running diary of build activity. Each entry records who built what, when, and any review notes.
 Entries are prepended (newest first).
@@ -21,12 +21,27 @@ Entries are prepended (newest first).
 
 ## Entries
 
+### 2026-03-06 -- smart-contract-engineer -- aztibase-execution, aztibase-node
+**Task:** Sprint 009 Phase 1: Block-STM parallel execution (Tasks 1-5)
+**Sprint:** Sprint 009, Phase 1
+**Git Ref:** pending
+**Files Changed:**
+- crates/aztibase-execution/src/block_stm.rs (NEW: MVMemory, MVView, Scheduler, BlockSTMExecutor, apply_block_stm_to_state, execute_full — 16 tests)
+- crates/aztibase-execution/src/lib.rs (added `pub mod block_stm`)
+- crates/aztibase-node/src/pipeline.rs (replaced execute_transfers with BlockSTMExecutor::execute_full + apply_block_stm_to_state)
+**Review Notes:**
+- Block-STM from Aptos: optimistic execution → read-set validation → re-execution on conflict
+- Single-threaded v1 for correctness; rayon parallelism deferred to Sprint 010
+- All 14 existing pipeline tests pass unchanged, proving Block-STM output matches sequential
+- 264 total tests, zero clippy warnings
+**Security Flags:** None
+
 ### 2026-03-06 -- security-engineer + documentation-engineer -- all crates
 **Task:** Sprint 008 Phase 4: Security review + documentation (Tasks 15-17)
 **Sprint:** Sprint 008, Phase 4
 **Git Ref:** pending
 **Files Changed:**
-- crates/dendrite-node/src/mempool.rs (SEC-MEM-001 fix: bounded `seen` set with max_seen + FIFO eviction, 1 new test)
+- crates/aztibase-node/src/mempool.rs (SEC-MEM-001 fix: bounded `seen` set with max_seen + FIFO eviction, 1 new test)
 - blockchain-project/sprints/SPRINT-008.md (all tasks marked DONE, retrospective written)
 - blockchain-project/STATUS.md (Sprint 008 complete, M4 progress update)
 - blockchain-project/BUILD_LOG.md (Phase 4 entry)
@@ -34,43 +49,43 @@ Entries are prepended (newest first).
 **Review Notes:** Security review of 3 domains: multi-node gossip (wire.rs — 3 LOW findings), AI pipeline (tract_runtime + config — 1 MEDIUM documented, 2 LOW), mempool (1 MEDIUM fixed, 2 LOW). SEC-MEM-001 fixed: seen set now bounded to max_size×10 with FIFO eviction. cargo-audit: 6 transitive vulns + 7 warnings, all previously documented; 2 new wasmtime advisories (RUSTSEC-2026-0020/0021). 248 tests pass. Zero clippy warnings, fmt clean. Sprint 008 complete (17/17 tasks).
 **Security Flags:** SEC-MEM-001 MEDIUM — FIXED (bounded seen set). SEC-AI-001 MEDIUM — DOCUMENTED (model paths operator-controlled). No ELEVATED flags.
 
-### 2026-03-06 -- node-engineer -- dendrite-node
+### 2026-03-06 -- node-engineer -- aztibase-node
 **Task:** Sprint 008 Phase 3: Transaction pool improvements (Tasks 11-14)
 **Sprint:** Sprint 008, Phase 3
 **Git Ref:** pending
 **Files Changed:**
-- crates/dendrite-node/src/mempool.rs (complete rewrite: priority-ordered BTreeMap, eviction policy, BLAKE3 hash dedup, 16 tests)
+- crates/aztibase-node/src/mempool.rs (complete rewrite: priority-ordered BTreeMap, eviction policy, BLAKE3 hash dedup, 16 tests)
 **Review Notes:** Mempool redesigned from BTreeMap<TxHash, Vec<u8>> to BTreeMap<(Reverse<u64>, TxHash), Vec<u8>> for priority ordering. Eviction replaces lowest-priority entry when pool is full and new tx has higher priority. BLAKE3 hash in `seen` set persists after removal to prevent tx replay. Default priority derived from TxKind prefix byte. 247 tests pass (10 new mempool tests). Zero clippy warnings, fmt clean.
 **Security Flags:** None
 
-### 2026-03-06 -- ai-integration-engineer + smart-contract-engineer -- dendrite-execution, dendrite-node, dendrite-rpc
+### 2026-03-06 -- ai-integration-engineer + smart-contract-engineer -- aztibase-execution, aztibase-node, aztibase-rpc
 **Task:** Sprint 008 Phase 2: AI inference in execution pipeline (Tasks 6-10)
 **Sprint:** Sprint 008, Phase 2
 **Git Ref:** pending
 **Files Changed:**
-- crates/dendrite-execution/src/routing.rs (TxKind::AiInfer variant, PREFIX_AI_INFER 0x06, model_id validation, 2 tests)
-- crates/dendrite-execution/src/receipt.rs (inference_hash: Option<[u8; 32]> field on ExecutionReceipt)
-- crates/dendrite-node/src/pipeline.rs (ai_runtime: Option<Arc<dyn AIRuntime>>, AiInfer routing, InferenceRequest dispatch, 3 AI tests)
-- crates/dendrite-node/src/main.rs (TractRuntime creation, model preload from config, set_ai_runtime)
-- crates/dendrite-node/src/config.rs (AiConfig section with enabled + models Vec<ModelEntry>)
-- crates/dendrite-node/Cargo.toml (tract-onnx + prost dev-deps)
-- crates/dendrite-rpc/src/server.rs (inferenceHash in receipt JSON response)
+- crates/aztibase-execution/src/routing.rs (TxKind::AiInfer variant, PREFIX_AI_INFER 0x06, model_id validation, 2 tests)
+- crates/aztibase-execution/src/receipt.rs (inference_hash: Option<[u8; 32]> field on ExecutionReceipt)
+- crates/aztibase-node/src/pipeline.rs (ai_runtime: Option<Arc<dyn AIRuntime>>, AiInfer routing, InferenceRequest dispatch, 3 AI tests)
+- crates/aztibase-node/src/main.rs (TractRuntime creation, model preload from config, set_ai_runtime)
+- crates/aztibase-node/src/config.rs (AiConfig section with enabled + models Vec<ModelEntry>)
+- crates/aztibase-node/Cargo.toml (tract-onnx + prost dev-deps)
+- crates/aztibase-rpc/src/server.rs (inferenceHash in receipt JSON response)
 **Review Notes:** AI inference is now a first-class transaction type (0x06). Pipeline routes AiInfer to AIRuntime trait (TractRuntime implementation). ExecutionReceipt extended with inference_hash for on-chain verification. Models loadable from TOML config at startup. 237 tests pass (5 new: 2 routing + 3 pipeline). Zero clippy warnings, fmt clean.
 **Security Flags:** None — model preload uses config-specified paths only (no user-supplied paths at runtime). Inference resource bounded by max_compute_units field.
 
-### 2026-03-06 -- p2p-network-engineer + consensus-engineer + node-engineer -- dendrite-consensus, dendrite-network, dendrite-node
+### 2026-03-06 -- p2p-network-engineer + consensus-engineer + node-engineer -- aztibase-consensus, aztibase-network, aztibase-node
 **Task:** Sprint 008 Phase 1: Multi-node local testnet (Tasks 1-5)
 **Sprint:** Sprint 008, Phase 1
 **Git Ref:** pending
 **Files Changed:**
-- crates/dendrite-consensus/src/wire.rs (NEW: encode_vertex, decode_vertex, WireError, 9 tests)
-- crates/dendrite-consensus/src/engine.rs (use wire module for encode/decode, StateRootAnnounce struct)
-- crates/dendrite-consensus/src/lib.rs (export wire module, StateRootAnnounce)
-- crates/dendrite-network/src/lib.rs (export TOPIC_STATE_SYNC)
-- crates/dendrite-node/Cargo.toml (added bincode dependency)
-- crates/dendrite-node/src/main.rs (state root broadcast via TOPIC_STATE_SYNC, result_rx channel)
-- crates/dendrite-node/src/pipeline.rs (result_tx: Option<Sender<PipelineResult>>, set_result_sender)
-- crates/dendrite-node/src/integration.rs (multi_node_consensus_convergence test)
+- crates/aztibase-consensus/src/wire.rs (NEW: encode_vertex, decode_vertex, WireError, 9 tests)
+- crates/aztibase-consensus/src/engine.rs (use wire module for encode/decode, StateRootAnnounce struct)
+- crates/aztibase-consensus/src/lib.rs (export wire module, StateRootAnnounce)
+- crates/aztibase-network/src/lib.rs (export TOPIC_STATE_SYNC)
+- crates/aztibase-node/Cargo.toml (added bincode dependency)
+- crates/aztibase-node/src/main.rs (state root broadcast via TOPIC_STATE_SYNC, result_rx channel)
+- crates/aztibase-node/src/pipeline.rs (result_tx: Option<Sender<PipelineResult>>, set_result_sender)
+- crates/aztibase-node/src/integration.rs (multi_node_consensus_convergence test)
 - scripts/local-testnet.sh (NEW: 3-node testnet launch script)
 **Review Notes:** Wire format: [version:u8][bincode payload] with 512 KiB size limit. Engine now uses wire::encode_vertex for broadcast and wire::decode_vertex for reception (version check, hash integrity, validator membership, round proximity). StateRootAnnounce broadcast on TOPIC_STATE_SYNC after each batch execution. Multi-node test: 3 engines with shared genesis, async vertex routing, verified anchor + tx + state root convergence. 232 tests pass (10 new: 9 wire + 1 multi-node). Zero clippy, fmt clean.
 **Security Flags:** None
@@ -80,7 +95,7 @@ Entries are prepended (newest first).
 **Sprint:** Sprint 007, Phase 4
 **Git Ref:** pending
 **Files Changed:**
-- crates/dendrite-runtime/src/tract_runtime.rs (added MAX_MODEL_SIZE 64 MiB cap + test — SEC-AI-001)
+- crates/aztibase-runtime/src/tract_runtime.rs (added MAX_MODEL_SIZE 64 MiB cap + test — SEC-AI-001)
 - blockchain-project/sprints/SPRINT-007.md (all tasks DONE, retrospective)
 - blockchain-project/STATUS.md (M4 IN PROGRESS, test count 222, recent completions)
 - blockchain-project/BUILD_LOG.md (Phase 4 entry)
@@ -88,51 +103,51 @@ Entries are prepended (newest first).
 **Review Notes:** Security review: 13 findings across receipt store (3), EVM (5), AI pipeline (5). 1 MEDIUM fixed (SEC-AI-001: 64 MiB model size cap). 0 ELEVATED. cargo-audit: 6 transitive vulns, 7 warnings — all from ring/wasmtime/lru/bincode transitive deps. ADR-006 skipped — neither revm nor tract introduce C deps. Sprint 007 COMPLETE: 18/19 tasks done + 1 skipped.
 **Security Flags:** SEC-AI-001 RESOLVED (64 MiB model size cap). No ELEVATED flags.
 
-### 2026-03-06 -- ai-integration-engineer -- dendrite-runtime
+### 2026-03-06 -- ai-integration-engineer -- aztibase-runtime
 **Task:** Sprint 007 Phase 3: AI inference via tract (Tasks 10-15)
 **Sprint:** Sprint 007, Phase 3
 **Git Ref:** pending
 **Files Changed:**
-- crates/dendrite-runtime/Cargo.toml (added `tract-onnx = { workspace = true }`, `prost = "0.11"` dev-dep)
-- crates/dendrite-runtime/src/tract_runtime.rs (NEW: TractRuntime, RegisteredModel, InferenceReceipt, verify_inference, 12 tests)
-- crates/dendrite-runtime/src/lib.rs (added `pub mod tract_runtime`, re-exports)
+- crates/aztibase-runtime/Cargo.toml (added `tract-onnx = { workspace = true }`, `prost = "0.11"` dev-dep)
+- crates/aztibase-runtime/src/tract_runtime.rs (NEW: TractRuntime, RegisteredModel, InferenceReceipt, verify_inference, 12 tests)
+- crates/aztibase-runtime/src/lib.rs (added `pub mod tract_runtime`, re-exports)
 **Review Notes:** TractRuntime implements AIRuntime trait with real ONNX model loading via tract-onnx. Model registry uses RwLock<HashMap> for thread safety. Inference pipeline: f32 input deserialization → tract tensor → model run → output serialization. Deterministic BLAKE3 hash of (model_id || input || output). InferenceReceipt + verify_inference() stub for on-chain verification foundation. Test models built programmatically via tract_onnx::pb::ModelProto + prost encode. 221 tests pass (12 new). Zero clippy, fmt clean.
 **Security Flags:** None. tract is pure Rust, no C deps.
 
-### 2026-03-06 -- smart-contract-engineer -- dendrite-execution, dendrite-node
+### 2026-03-06 -- smart-contract-engineer -- aztibase-execution, aztibase-node
 **Task:** Sprint 007 Phase 2: EVM execution via revm v36 (Tasks 5-9)
 **Sprint:** Sprint 007, Phase 2
 **Git Ref:** pending
 **Files Changed:**
 - Cargo.toml (root: added `revm = { version = "36", default-features = false, features = ["std"] }`, MSRV 1.85→1.88)
-- crates/dendrite-execution/Cargo.toml (added `revm = { workspace = true }`)
-- crates/dendrite-execution/src/evm.rs (NEW: evm_deploy, evm_call, state adapter, 3 tests)
-- crates/dendrite-execution/src/routing.rs (EvmDeploy 0x04, EvmCall 0x05 variants, 2 new tests)
-- crates/dendrite-execution/src/lib.rs (added `pub mod evm`)
-- crates/dendrite-node/src/pipeline.rs (EVM routing + execution in execute_batch, 3 new tests)
-**Review Notes:** revm v36 integrated with `default-features = false, features = ["std"]` to avoid C deps (secp256k1-sys NOT in tree). MSRV bumped to 1.88. DNDR chain ID 0xDE0D. State adapter maps AccountState ↔ CacheDB (balance, nonce, code, storage). 32→20 byte address truncation. 209 tests pass (18 new: 3 evm, 2 routing, 3 evm pipeline, 5 receipt, 4 rpc receipt, 1 receipt e2e). Zero clippy, fmt clean.
+- crates/aztibase-execution/Cargo.toml (added `revm = { workspace = true }`)
+- crates/aztibase-execution/src/evm.rs (NEW: evm_deploy, evm_call, state adapter, 3 tests)
+- crates/aztibase-execution/src/routing.rs (EvmDeploy 0x04, EvmCall 0x05 variants, 2 new tests)
+- crates/aztibase-execution/src/lib.rs (added `pub mod evm`)
+- crates/aztibase-node/src/pipeline.rs (EVM routing + execution in execute_batch, 3 new tests)
+**Review Notes:** revm v36 integrated with `default-features = false, features = ["std"]` to avoid C deps (secp256k1-sys NOT in tree). MSRV bumped to 1.88. AZTB chain ID 0xDE0D. State adapter maps AccountState ↔ CacheDB (balance, nonce, code, storage). 32→20 byte address truncation. 209 tests pass (18 new: 3 evm, 2 routing, 3 evm pipeline, 5 receipt, 4 rpc receipt, 1 receipt e2e). Zero clippy, fmt clean.
 **Security Flags:** None. revm C-dep-free verified.
 
-### 2026-03-06 -- node-engineer -- dendrite-execution, dendrite-rpc, dendrite-node
+### 2026-03-06 -- node-engineer -- aztibase-execution, aztibase-rpc, aztibase-node
 **Task:** Sprint 007 Phase 1: Transaction receipt store + RPC query (Tasks 1-4)
 **Sprint:** Sprint 007, Phase 1
 **Git Ref:** pending
 **Files Changed:**
-- crates/dendrite-execution/src/receipt.rs (NEW: ExecutionReceipt, store_receipts, get_receipt, 5 tests)
-- crates/dendrite-execution/src/lib.rs (pub mod receipt, exports)
-- crates/dendrite-rpc/src/server.rs (dndr_getTransactionReceipt, receipt_store in RpcState, 4 tests)
-- crates/dendrite-node/src/pipeline.rs (Arc<StateStore>, receipt collection, PipelineResult.receipts)
-- crates/dendrite-node/src/main.rs (Arc wrapping, receipt_store param)
-- crates/dendrite-node/src/integration.rs (Arc<StateStore>, receipt_persistence_end_to_end test)
+- crates/aztibase-execution/src/receipt.rs (NEW: ExecutionReceipt, store_receipts, get_receipt, 5 tests)
+- crates/aztibase-execution/src/lib.rs (pub mod receipt, exports)
+- crates/aztibase-rpc/src/server.rs (aztb_getTransactionReceipt, receipt_store in RpcState, 4 tests)
+- crates/aztibase-node/src/pipeline.rs (Arc<StateStore>, receipt collection, PipelineResult.receipts)
+- crates/aztibase-node/src/main.rs (Arc wrapping, receipt_store param)
+- crates/aztibase-node/src/integration.rs (Arc<StateStore>, receipt_persistence_end_to_end test)
 **Review Notes:** Unified ExecutionReceipt persisted to RECEIPTS_TABLE in redb. Pipeline collects receipts from transfers (TxStatus mapping) and contracts (ContractReceipt mapping). RPC queries via shared Arc<StateStore>. All existing tests updated for Arc<StateStore>.
 **Security Flags:** None
 
-### 2026-03-06 -- security-engineer + documentation-engineer -- dendrite-rpc, docs
+### 2026-03-06 -- security-engineer + documentation-engineer -- aztibase-rpc, docs
 **Task:** Sprint 006 Phase 4: M3 close — security review, cargo-audit, docs, ADR-005 (Tasks 20-24)
 **Sprint:** Sprint 006, Phase 4
 **Git Ref:** pending
 **Files Changed:**
-- crates/dendrite-rpc/src/server.rs (added 1MB DefaultBodyLimit via axum layer — SEC-RPC-001)
+- crates/aztibase-rpc/src/server.rs (added 1MB DefaultBodyLimit via axum layer — SEC-RPC-001)
 - blockchain-project/DECISIONS.md (ADR-005: axum for JSON-RPC)
 - blockchain-project/STATUS.md (M3 marked COMPLETE, milestone table updated)
 - blockchain-project/sprints/SPRINT-006.md (Phase 4 DONE, retrospective, Sprint 007 candidates)
@@ -141,81 +156,81 @@ Entries are prepended (newest first).
 **Review Notes:** Security review: 8-item RPC checklist (1 MEDIUM fixed, 4 LOW acceptable/deferred, 3 OK). Hardening review: all 7 fixes verified correct. cargo-audit: 5 transitive vulns (ring, wasmtime WASI), 6 warnings (unmaintained) — no action needed. ADR-005 for axum choice. M3 milestone COMPLETE. 191 tests, zero clippy, fmt clean.
 **Security Flags:** SEC-RPC-001 RESOLVED (1MB body limit). No ELEVATED flags.
 
-### 2026-03-06 -- node-engineer + smart-contract-engineer -- dendrite-node
+### 2026-03-06 -- node-engineer + smart-contract-engineer -- aztibase-node
 **Task:** Sprint 006 Phase 3: Integration testing — 4 end-to-end tests (Tasks 16-19)
 **Sprint:** Sprint 006, Phase 3
 **Git Ref:** pending
 **Files Changed:**
-- crates/dendrite-node/src/integration.rs (NEW: 4 integration tests — transfer e2e, contract deploy+call e2e, finality certificate e2e, startup recovery e2e)
-- crates/dendrite-node/src/main.rs (added `mod integration` for test module)
-- crates/dendrite-node/Cargo.toml (added `wat = "1"` dev-dependency for WASM test fixtures)
+- crates/aztibase-node/src/integration.rs (NEW: 4 integration tests — transfer e2e, contract deploy+call e2e, finality certificate e2e, startup recovery e2e)
+- crates/aztibase-node/src/main.rs (added `mod integration` for test module)
+- crates/aztibase-node/Cargo.toml (added `wat = "1"` dev-dependency for WASM test fixtures)
 **Review Notes:** 4 integration tests cover the full consensus-to-execution pipeline: transfer with state persistence + redb verification, WASM contract deploy + call with storage verification, BLS finality certificate generation + verification, and startup recovery from redb with continued execution. 191 tests pass (4 new). Zero clippy warnings, fmt clean.
 **Security Flags:** None
 
-### 2026-03-06 -- security-engineer -- dendrite-consensus, dendrite-execution, dendrite-node
+### 2026-03-06 -- security-engineer -- aztibase-consensus, aztibase-execution, aztibase-node
 **Task:** Sprint 006 Phase 2: Security hardening — 7 MEDIUM findings resolved (Tasks 9-15)
 **Sprint:** Sprint 006, Phase 2
 **Git Ref:** pending
 **Files Changed:**
-- crates/dendrite-consensus/src/engine.rs (HashSet for committed blocks, updated extract_committed_batch call)
-- crates/dendrite-consensus/src/ordering.rs (extract_committed_batch accepts HashSet)
-- crates/dendrite-consensus/src/finality.rs (has_unique_bls_keys, build_certificate takes &ValidatorSet)
-- crates/dendrite-execution/src/routing.rs (strict bincode, func_name validation, InvalidFuncName error)
-- crates/dendrite-node/src/pipeline.rs (double-execution guard, fatal flush handling, execute_batch returns Result)
+- crates/aztibase-consensus/src/engine.rs (HashSet for committed blocks, updated extract_committed_batch call)
+- crates/aztibase-consensus/src/ordering.rs (extract_committed_batch accepts HashSet)
+- crates/aztibase-consensus/src/finality.rs (has_unique_bls_keys, build_certificate takes &ValidatorSet)
+- crates/aztibase-execution/src/routing.rs (strict bincode, func_name validation, InvalidFuncName error)
+- crates/aztibase-node/src/pipeline.rs (double-execution guard, fatal flush handling, execute_batch returns Result)
 **Review Notes:** 7 MEDIUM security findings resolved: SEC-WIRE-003 (double-execution guard), SEC-WIRE-004 (fatal flush), SEC-WIRE-005 (HashSet committed), SEC-BLS-002 (unique BLS keys), SEC-BLS-008 (derive quorum), SEC-ROUTE-005 (strict bincode), SEC-ROUTE-006 (func_name validation). 7 new tests, 187 total passing. Zero clippy warnings, fmt clean.
 **Security Flags:** SEC-WIRE-003 RESOLVED, SEC-WIRE-004 RESOLVED, SEC-WIRE-005 RESOLVED, SEC-BLS-002 RESOLVED, SEC-BLS-008 RESOLVED, SEC-ROUTE-005 RESOLVED, SEC-ROUTE-006 RESOLVED
 
-### 2026-03-06 -- node-engineer -- dendrite-rpc, dendrite-node
+### 2026-03-06 -- node-engineer -- aztibase-rpc, aztibase-node
 **Task:** Sprint 006 Phase 1: JSON-RPC server + node wiring (Tasks 1-5, 7-8)
 **Sprint:** Sprint 006, Phase 1
 **Git Ref:** pending
 **Files Changed:**
-- crates/dendrite-rpc/src/server.rs (full JSON-RPC 2.0 server: 6 methods, axum router, shared state via Arc<RwLock<AccountState>>)
-- crates/dendrite-rpc/src/lib.rs (re-exports: RpcServer, RpcState)
-- crates/dendrite-rpc/Cargo.toml (added axum, hex, tower dev-dep)
-- crates/dendrite-node/src/main.rs (RPC server spawn, mempool_rx forwarding to consensus)
-- crates/dendrite-node/src/pipeline.rs (Arc<RwLock<AccountState>> shared state, batch_count AtomicU64, shared_state()/shared_batch_count() accessors)
+- crates/aztibase-rpc/src/server.rs (full JSON-RPC 2.0 server: 6 methods, axum router, shared state via Arc<RwLock<AccountState>>)
+- crates/aztibase-rpc/src/lib.rs (re-exports: RpcServer, RpcState)
+- crates/aztibase-rpc/Cargo.toml (added axum, hex, tower dev-dep)
+- crates/aztibase-node/src/main.rs (RPC server spawn, mempool_rx forwarding to consensus)
+- crates/aztibase-node/src/pipeline.rs (Arc<RwLock<AccountState>> shared state, batch_count AtomicU64, shared_state()/shared_batch_count() accessors)
 - Cargo.toml (axum workspace dep)
-**Review Notes:** 6 RPC methods: dndr_getBalance, dndr_getNonce, dndr_getCode, dndr_sendTransaction, dndr_blockNumber, dndr_getStateRoot. 15 new tests. Pipeline refactored to Arc<RwLock> for shared read access. Task 6 (getTransactionReceipt) deferred — needs receipt store. 180 tests pass, zero clippy warnings, fmt clean.
+**Review Notes:** 6 RPC methods: aztb_getBalance, aztb_getNonce, aztb_getCode, aztb_sendTransaction, aztb_blockNumber, aztb_getStateRoot. 15 new tests. Pipeline refactored to Arc<RwLock> for shared read access. Task 6 (getTransactionReceipt) deferred — needs receipt store. 180 tests pass, zero clippy warnings, fmt clean.
 **Security Flags:** None (security review pending in Phase 4)
 
-### 2026-03-06 -- security-engineer -- dendrite-execution
+### 2026-03-06 -- security-engineer -- aztibase-execution
 **Task:** Fix routing security findings: prefix cross-check (SEC-ROUTE-001), bincode size limit (SEC-ROUTE-002)
 **Sprint:** Sprint 005, Phase 4 (post-review fixes)
 **Git Ref:** b6b38c0
 **Files Changed:**
-- crates/dendrite-execution/src/routing.rs (prefix-variant cross-check, 1MB bincode limit, OversizedPayload/PrefixMismatch errors, 2 new tests)
+- crates/aztibase-execution/src/routing.rs (prefix-variant cross-check, 1MB bincode limit, OversizedPayload/PrefixMismatch errors, 2 new tests)
 **Review Notes:** Both ELEVATED routing findings resolved. Prefix mismatch now returns error. bincode deserialization capped at 1MB. 165 tests pass.
 **Security Flags:** SEC-ROUTE-001 RESOLVED, SEC-ROUTE-002 RESOLVED
 
-### 2026-03-06 -- security-engineer -- dendrite-consensus, dendrite-node
+### 2026-03-06 -- security-engineer -- aztibase-consensus, aztibase-node
 **Task:** Fix wiring security findings: batch drop detection (SEC-WIRE-001), dead pipeline halt (SEC-WIRE-002)
 **Sprint:** Sprint 005, Phase 4 (post-review fixes)
 **Git Ref:** 27ab11b
 **Files Changed:**
-- crates/dendrite-consensus/src/engine.rs (error logging on try_send failure, warn on batch extraction failure)
-- crates/dendrite-node/src/main.rs (break on dead pipeline channel instead of silent discard)
+- crates/aztibase-consensus/src/engine.rs (error logging on try_send failure, warn on batch extraction failure)
+- crates/aztibase-node/src/main.rs (break on dead pipeline channel instead of silent discard)
 **Review Notes:** Both ELEVATED wiring findings resolved. Committed batches no longer silently dropped. Dead execution pipeline triggers node halt. 163 tests pass.
 **Security Flags:** SEC-WIRE-001 RESOLVED, SEC-WIRE-002 RESOLVED
 
-### 2026-03-06 -- security-engineer -- dendrite-core, dendrite-consensus
+### 2026-03-06 -- security-engineer -- aztibase-core, aztibase-consensus
 **Task:** Fix BLS security findings: PoP (SEC-BLS-001), domain separator (SEC-BLS-003), DST switch (SEC-BLS-004), signer dedup (SEC-BLS-005)
 **Sprint:** Sprint 005, Phase 4 (post-review fixes)
 **Git Ref:** 8da45e4
 **Files Changed:**
-- crates/dendrite-core/src/bls.rs (PoP generation + verification, DST_POP constant, POP ciphersuite, 2 new tests)
-- crates/dendrite-consensus/src/finality.rs (DENDRITE_FINALITY_V1 domain separator, duplicate signer skip)
+- crates/aztibase-core/src/bls.rs (PoP generation + verification, DST_POP constant, POP ciphersuite, 2 new tests)
+- crates/aztibase-consensus/src/finality.rs (AZTIBASE_FINALITY_V1 domain separator, duplicate signer skip)
 **Review Notes:** SEC-BLS-001 ELEVATED resolved via PoP. DST switched to POP ciphersuite. Domain separator prevents cross-protocol replay. Signer dedup prevents double-counting. 163 tests pass.
 **Security Flags:** SEC-BLS-001 RESOLVED, SEC-BLS-003 RESOLVED, SEC-BLS-004 RESOLVED, SEC-BLS-005 RESOLVED
 
-### 2026-03-06 -- security-engineer -- dendrite-execution, dendrite-storage
+### 2026-03-06 -- security-engineer -- aztibase-execution, aztibase-storage
 **Task:** Fix ELEVATED security findings SEC-PERSIST-001 (atomic flush) and SEC-PERSIST-002 (safe deserialization)
 **Sprint:** Sprint 005, Phase 4 (post-review fixes)
 **Git Ref:** 24e4262
 **Files Changed:**
-- crates/dendrite-execution/src/persist.rs (atomic flush_state via batch_put_multi, safe deserialize_account_record)
-- crates/dendrite-storage/src/store.rs (MultiTableEntry lifetime separation: 'static for TableDef, 'a for data)
-- crates/dendrite-storage/src/lib.rs (TableDef type alias, redb::TableDefinition re-export)
+- crates/aztibase-execution/src/persist.rs (atomic flush_state via batch_put_multi, safe deserialize_account_record)
+- crates/aztibase-storage/src/store.rs (MultiTableEntry lifetime separation: 'static for TableDef, 'a for data)
+- crates/aztibase-storage/src/lib.rs (TableDef type alias, redb::TableDefinition re-export)
 - Cargo.lock (updated)
 **Review Notes:** Both ELEVATED findings now resolved. flush_state() uses single atomic transaction. All deserialization uses Option/match instead of unwrap(). 161 tests pass.
 **Security Flags:** SEC-PERSIST-001 RESOLVED, SEC-PERSIST-002 RESOLVED
@@ -245,16 +260,16 @@ Entries are prepended (newest first).
 **Git Ref:** pending
 **Files Changed:**
 - Cargo.toml (added blst = "0.3" to workspace deps)
-- crates/dendrite-core/Cargo.toml (added blst dependency)
-- crates/dendrite-core/src/bls.rs (NEW: BlsKeypair, BlsPublicKey, BlsSignature, aggregate_signatures, verify_aggregate)
-- crates/dendrite-core/src/lib.rs (added bls module + exports)
-- crates/dendrite-consensus/src/finality.rs (NEW: FinalityCertificate, sign_finality, build_certificate, verify_certificate)
-- crates/dendrite-consensus/src/lib.rs (added finality module + exports)
+- crates/aztibase-core/Cargo.toml (added blst dependency)
+- crates/aztibase-core/src/bls.rs (NEW: BlsKeypair, BlsPublicKey, BlsSignature, aggregate_signatures, verify_aggregate)
+- crates/aztibase-core/src/lib.rs (added bls module + exports)
+- crates/aztibase-consensus/src/finality.rs (NEW: FinalityCertificate, sign_finality, build_certificate, verify_certificate)
+- crates/aztibase-consensus/src/lib.rs (added finality module + exports)
 **Review Notes:**
 - blst is C dependency — justified exception to pure-Rust policy (ADR-002). Industry-standard BLS12-381 used by Lighthouse/Prysm. No production-audited pure-Rust alternative.
 - Custom serde for BlsPublicKey ([u8; 48]) and BlsSignature ([u8; 96]) — serde doesn't support arrays >32 by default.
 - FinalityCertificate uses signer bitmap (Vec<bool>) indexed by validator position for compact representation.
-- 19 new tests: 11 in dendrite-core (BLS primitives), 8 in dendrite-consensus (finality certificates).
+- 19 new tests: 11 in aztibase-core (BLS primitives), 8 in aztibase-consensus (finality certificates).
 - Tests cover: sign/verify, aggregation, supermajority, tampered state root, tampered batch hash, manipulated bitmap, bitmap length mismatch, insufficient signers.
 - Total tests: 161 (up from 142).
 **Security Flags:** None — rogue-key attack mitigated by proof-of-possession (PoP) requirement noted for validator registration (future sprint).
@@ -266,14 +281,14 @@ Entries are prepended (newest first).
 **Sprint:** Sprint 005, Phase 2
 **Git Ref:** pending
 **Files Changed:**
-- crates/dendrite-storage/src/store.rs (4 new tables: accounts, contract_code, contract_storage, batch_roots)
-- crates/dendrite-storage/src/lib.rs (new table exports)
-- crates/dendrite-execution/src/persist.rs (NEW: flush_state, load_state, store_batch_root, get_batch_root)
-- crates/dendrite-execution/src/state.rs (added iter_accounts())
-- crates/dendrite-execution/src/lib.rs (added persist module + exports)
-- crates/dendrite-node/src/pipeline.rs (with_storage constructor, flush after batch, state recovery)
-- crates/dendrite-node/src/main.rs (separate execution_db store for pipeline)
-- crates/dendrite-node/src/config.rs (execution_storage_path())
+- crates/aztibase-storage/src/store.rs (4 new tables: accounts, contract_code, contract_storage, batch_roots)
+- crates/aztibase-storage/src/lib.rs (new table exports)
+- crates/aztibase-execution/src/persist.rs (NEW: flush_state, load_state, store_batch_root, get_batch_root)
+- crates/aztibase-execution/src/state.rs (added iter_accounts())
+- crates/aztibase-execution/src/lib.rs (added persist module + exports)
+- crates/aztibase-node/src/pipeline.rs (with_storage constructor, flush after batch, state recovery)
+- crates/aztibase-node/src/main.rs (separate execution_db store for pipeline)
+- crates/aztibase-node/src/config.rs (execution_storage_path())
 **Review Notes:**
 - 4 new redb tables: accounts (addr->balance+nonce), contract_code (addr->wasm), contract_storage (addr||key->value), batch_roots (anchor->root)
 - flush_state writes full AccountState to redb after each batch
@@ -292,12 +307,12 @@ Entries are prepended (newest first).
 **Sprint:** Sprint 005, Phase 1
 **Git Ref:** pending
 **Files Changed:**
-- crates/dendrite-execution/src/routing.rs (NEW: TxKind enum, route_tx, route_batch, RoutingError)
-- crates/dendrite-execution/src/lib.rs (added routing module + exports)
-- crates/dendrite-execution/Cargo.toml (added bincode dependency)
-- crates/dendrite-node/src/pipeline.rs (NEW: ExecutionPipeline, PipelineResult, batch execution)
-- crates/dendrite-node/src/main.rs (added pipeline module, wired consensus->execution channel)
-- crates/dendrite-consensus/src/engine.rs (ConsensusOutput::BlockCommitted -> BatchCommitted with full CommittedBatch)
+- crates/aztibase-execution/src/routing.rs (NEW: TxKind enum, route_tx, route_batch, RoutingError)
+- crates/aztibase-execution/src/lib.rs (added routing module + exports)
+- crates/aztibase-execution/Cargo.toml (added bincode dependency)
+- crates/aztibase-node/src/pipeline.rs (NEW: ExecutionPipeline, PipelineResult, batch execution)
+- crates/aztibase-node/src/main.rs (added pipeline module, wired consensus->execution channel)
+- crates/aztibase-consensus/src/engine.rs (ConsensusOutput::BlockCommitted -> BatchCommitted with full CommittedBatch)
 **Review Notes:**
 - TxKind uses prefix byte (0x01=transfer, 0x02=deploy, 0x03=call) + bincode body
 - ExecutionPipeline receives CommittedBatch via tokio::mpsc, routes txs, executes, computes state root
@@ -334,9 +349,9 @@ Entries are prepended (newest first).
 **Sprint:** Sprint 004, Phase 3
 **Git Ref:** pending
 **Files Changed:**
-- crates/dendrite-execution/src/contract.rs (NEW: ContractTx, ContractReceipt, deploy/call execution)
-- crates/dendrite-execution/src/vm.rs (added execute_with_storage(), Clone+Debug on ContractEvent)
-- crates/dendrite-execution/src/lib.rs (added contract module exports)
+- crates/aztibase-execution/src/contract.rs (NEW: ContractTx, ContractReceipt, deploy/call execution)
+- crates/aztibase-execution/src/vm.rs (added execute_with_storage(), Clone+Debug on ContractEvent)
+- crates/aztibase-execution/src/lib.rs (added contract module exports)
 **Review Notes:**
 - Contract deployment stores WASM bytecode at deterministic address (hash(deployer || nonce))
 - Contract calls load code, execute via wasmtime, persist storage changes to AccountState
@@ -352,11 +367,11 @@ Entries are prepended (newest first).
 **Sprint:** Sprint 004, Phase 2
 **Git Ref:** pending
 **Files Changed:**
-- crates/dendrite-execution/src/state.rs (NEW: AccountState, Account, state_root computation)
-- crates/dendrite-execution/src/parallel.rs (NEW: TransferTx, execute_transfers, BatchResult)
-- crates/dendrite-consensus/src/ordering.rs (NEW: CommittedBatch, extract_committed_batch, payload parsing)
-- crates/dendrite-consensus/src/lib.rs (added ordering module exports)
-- crates/dendrite-execution/src/lib.rs (added state + parallel exports)
+- crates/aztibase-execution/src/state.rs (NEW: AccountState, Account, state_root computation)
+- crates/aztibase-execution/src/parallel.rs (NEW: TransferTx, execute_transfers, BatchResult)
+- crates/aztibase-consensus/src/ordering.rs (NEW: CommittedBatch, extract_committed_batch, payload parsing)
+- crates/aztibase-consensus/src/lib.rs (added ordering module exports)
+- crates/aztibase-execution/src/lib.rs (added state + parallel exports)
 **Review Notes:**
 - AccountState: BTreeMap-based in-memory store with balance, nonce, code, storage per account
 - State root: BLAKE3 binary Merkle tree over sorted account entries
@@ -373,10 +388,10 @@ Entries are prepended (newest first).
 **Sprint:** Sprint 004, Phase 1
 **Git Ref:** pending
 **Files Changed:**
-- crates/dendrite-consensus/src/engine.rs (round pruning, pending_txs cap, VRF seed tracking)
-- crates/dendrite-consensus/src/validator.rs (vrf_leader_for_round() method)
-- crates/dendrite-consensus/src/commit.rs (vrf_seed in CommitConfig, VRF-aware leader selection)
-- crates/dendrite-consensus/src/lib.rs (5 new VRF + commit rule tests)
+- crates/aztibase-consensus/src/engine.rs (round pruning, pending_txs cap, VRF seed tracking)
+- crates/aztibase-consensus/src/validator.rs (vrf_leader_for_round() method)
+- crates/aztibase-consensus/src/commit.rs (vrf_seed in CommitConfig, VRF-aware leader selection)
+- crates/aztibase-consensus/src/lib.rs (5 new VRF + commit rule tests)
 **Review Notes:**
 - Round pruning: prune_before() removes entries older than committed round minus 2-round buffer
 - Pending txs capped at 4096 (configurable via max_pending_txs)
@@ -416,8 +431,8 @@ Entries are prepended (newest first).
 **Sprint:** Sprint 003, Phase 3
 **Git Ref:** pending
 **Files Changed:**
-- crates/dendrite-node/src/mempool.rs (NEW: Mempool with insert, remove, peek/drain_batch, dedup, bounded)
-- crates/dendrite-node/src/main.rs (added mempool module, integrated with gossip tx routing)
+- crates/aztibase-node/src/mempool.rs (NEW: Mempool with insert, remove, peek/drain_batch, dedup, bounded)
+- crates/aztibase-node/src/main.rs (added mempool module, integrated with gossip tx routing)
 **Review Notes:**
 - Tasks 12-13 already implemented in engine.rs (evaluate_commits, RoundState tracks committed blocks)
 - Mempool: BTreeMap + HashSet seen-filter for dedup, configurable max_size (10k default)
@@ -433,12 +448,12 @@ Entries are prepended (newest first).
 **Sprint:** Sprint 003, Phase 2
 **Git Ref:** pending
 **Files Changed:**
-- crates/dendrite-consensus/src/dag.rs (added compute_hash() public method, renamed private hash fn)
-- crates/dendrite-consensus/src/engine.rs (hash verification, round bounds check, quorum-aware parent warning)
-- crates/dendrite-consensus/src/validator.rs (added quorum_count() method)
-- crates/dendrite-consensus/src/lib.rs (2 new tests: quorum_count, block_hash_verification)
-- crates/dendrite-network/src/lib.rs (exported TOPIC_CONSENSUS, TOPIC_TRANSACTIONS constants)
-- crates/dendrite-node/src/main.rs (topic-based message routing: consensus vs transactions)
+- crates/aztibase-consensus/src/dag.rs (added compute_hash() public method, renamed private hash fn)
+- crates/aztibase-consensus/src/engine.rs (hash verification, round bounds check, quorum-aware parent warning)
+- crates/aztibase-consensus/src/validator.rs (added quorum_count() method)
+- crates/aztibase-consensus/src/lib.rs (2 new tests: quorum_count, block_hash_verification)
+- crates/aztibase-network/src/lib.rs (exported TOPIC_CONSENSUS, TOPIC_TRANSACTIONS constants)
+- crates/aztibase-node/src/main.rs (topic-based message routing: consensus vs transactions)
 **Review Notes:**
 - Node filters gossip messages by topic: consensus vertices to engine, transactions to mempool
 - Received vertices validated: deserialization, author check, hash integrity, round bounds (max +10 ahead)
@@ -455,9 +470,9 @@ Entries are prepended (newest first).
 **Sprint:** Sprint 003, Phase 1
 **Git Ref:** pending
 **Files Changed:**
-- crates/dendrite-consensus/src/engine.rs (NEW: ConsensusConfig, RoundState, ConsensusEngine, ConsensusInput/Output)
-- crates/dendrite-consensus/src/lib.rs (added engine module + exports)
-- crates/dendrite-node/src/main.rs (wired ConsensusEngine into node event loop)
+- crates/aztibase-consensus/src/engine.rs (NEW: ConsensusConfig, RoundState, ConsensusEngine, ConsensusInput/Output)
+- crates/aztibase-consensus/src/lib.rs (added engine module + exports)
+- crates/aztibase-node/src/main.rs (wired ConsensusEngine into node event loop)
 **Review Notes:**
 - ConsensusEngine runs async round loop at 400ms intervals via tokio::time::interval
 - Vertex proposal, reception, validation, and commit evaluation all functional
@@ -476,11 +491,11 @@ Entries are prepended (newest first).
 **Sprint:** Sprint 002, Phase 5 (Tasks 21-24)
 **Git Ref:** pending
 **Files Changed:**
-- crates/dendrite-core/src/crypto.rs (CryptoProvider trait + DefaultCryptoProvider impl)
-- crates/dendrite-core/src/lib.rs (3 new tests for CryptoProvider)
-- crates/dendrite-runtime/src/ai_oracle.rs (AIRuntime trait, InferenceRequest/Result, PassthroughRuntime)
-- crates/dendrite-runtime/src/lib.rs (exports, 3 new tests for AIRuntime)
-- crates/dendrite-execution/src/vm.rs (bounds-checked memory access in host functions)
+- crates/aztibase-core/src/crypto.rs (CryptoProvider trait + DefaultCryptoProvider impl)
+- crates/aztibase-core/src/lib.rs (3 new tests for CryptoProvider)
+- crates/aztibase-runtime/src/ai_oracle.rs (AIRuntime trait, InferenceRequest/Result, PassthroughRuntime)
+- crates/aztibase-runtime/src/lib.rs (exports, 3 new tests for AIRuntime)
+- crates/aztibase-execution/src/vm.rs (bounds-checked memory access in host functions)
 **Review Notes:**
 - Security review: 13-item checklist passed. Found and fixed WASM host function bounds checking (vm.rs). No ELEVATED flags remaining.
 - AIRuntime trait with Passthrough/LocalInference/NetworkInference modes. PassthroughRuntime returns empty results, enabling nodes to run without AI hardware.
@@ -491,84 +506,84 @@ Entries are prepended (newest first).
 
 ---
 
-### 2026-03-05 -- node-engineer -- dendrite-node
+### 2026-03-05 -- node-engineer -- aztibase-node
 **Task:** Phase 4 complete: Node wiring (storage, network, config, shutdown)
 **Sprint:** Sprint 002, Phase 4 (Tasks 17-20)
 **Git Ref:** pending
 **Files Changed:**
 - Cargo.toml (added toml, directories workspace deps)
-- crates/dendrite-node/Cargo.toml (added serde, toml, directories deps)
-- crates/dendrite-node/src/config.rs (NodeConfig: TOML loading, CLI overrides, defaults, storage path)
-- crates/dendrite-node/src/main.rs (full node startup: storage init, network swarm, event loop, graceful shutdown)
-- crates/dendrite-network/src/lib.rs (re-exported Multiaddr)
+- crates/aztibase-node/Cargo.toml (added serde, toml, directories deps)
+- crates/aztibase-node/src/config.rs (NodeConfig: TOML loading, CLI overrides, defaults, storage path)
+- crates/aztibase-node/src/main.rs (full node startup: storage init, network swarm, event loop, graceful shutdown)
+- crates/aztibase-network/src/lib.rs (re-exported Multiaddr)
 **Review Notes:** Node opens redb storage on startup, creates libp2p swarm with TCP+QUIC, listens on configured addresses, dials boot nodes, runs event loop processing gossip/mDNS/connection events. Graceful shutdown via Ctrl+C with tokio::signal + Notify. Config supports TOML file loading with CLI overrides (--data-dir, --listen, --rpc-addr, --log-level). 6 new tests (config defaults, CLI overrides, TOML roundtrip, storage path, storage open). 66 tests total, zero clippy warnings, fmt clean.
 **Security Flags:** None
 
 ---
 
-### 2026-03-05 -- smart-contract-engineer -- dendrite-execution
+### 2026-03-05 -- smart-contract-engineer -- aztibase-execution
 **Task:** Phase 3b complete: WASM execution engine with wasmtime
 **Sprint:** Sprint 002, Phase 3b (Tasks 14-16)
 **Git Ref:** pending
 **Files Changed:**
-- crates/dendrite-execution/Cargo.toml (added wasmtime dependency)
-- crates/dendrite-execution/src/vm.rs (ExecutionEngine: deterministic config, fuel metering, host functions, execution pipeline)
-- crates/dendrite-execution/src/lib.rs (exports, 5 tests)
+- crates/aztibase-execution/Cargo.toml (added wasmtime dependency)
+- crates/aztibase-execution/src/vm.rs (ExecutionEngine: deterministic config, fuel metering, host functions, execution pipeline)
+- crates/aztibase-execution/src/lib.rs (exports, 5 tests)
 **Review Notes:** wasmtime 28 with deterministic config: SIMD disabled, relaxed SIMD disabled, threads disabled, fuel metering enabled. Three host functions: storage_set, storage_get, emit_event — all with WASM linear memory access. Execution pipeline: compile module → create store with fuel → link host functions → instantiate → call → collect results. Fuel exhaustion trap aborts on Windows (known wasmtime limitation) — tested via fuel consumption tracking instead. 5 tests passing.
 **Security Flags:** wasmtime trap handling on Windows causes process abort instead of unwinding — epoch_interruption disabled for now. To be revisited when adding time-based execution limits.
 
 ---
 
-### 2026-03-05 -- p2p-network-engineer -- dendrite-network
+### 2026-03-05 -- p2p-network-engineer -- aztibase-network
 **Task:** Phase 3a complete: libp2p transport with Gossipsub, Kademlia, mDNS
 **Sprint:** Sprint 002, Phase 3a (Tasks 9-13)
 **Git Ref:** pending
 **Files Changed:**
-- crates/dendrite-network/Cargo.toml (added futures dependency)
-- crates/dendrite-network/src/behaviour.rs (DendriteBehaviour: combined NetworkBehaviour with gossipsub + kademlia + mDNS)
-- crates/dendrite-network/src/gossip.rs (6 Dendrite topics, gossipsub config with strict validation, content-based dedup)
-- crates/dendrite-network/src/discovery.rs (Kademlia DHT with /dendrite/kad/1.0.0 protocol, replication factor 20, disjoint query paths; mDNS for local discovery)
-- crates/dendrite-network/src/transport.rs (Libp2pTransport: SwarmBuilder with TCP/Noise + QUIC, topic subscription, event handling loop with mDNS auto-peering)
-- crates/dendrite-network/src/lib.rs (exports, 8 tests)
+- crates/aztibase-network/Cargo.toml (added futures dependency)
+- crates/aztibase-network/src/behaviour.rs (AztibaseBehaviour: combined NetworkBehaviour with gossipsub + kademlia + mDNS)
+- crates/aztibase-network/src/gossip.rs (6 Aztibase topics, gossipsub config with strict validation, content-based dedup)
+- crates/aztibase-network/src/discovery.rs (Kademlia DHT with /aztibase/kad/1.0.0 protocol, replication factor 20, disjoint query paths; mDNS for local discovery)
+- crates/aztibase-network/src/transport.rs (Libp2pTransport: SwarmBuilder with TCP/Noise + QUIC, topic subscription, event handling loop with mDNS auto-peering)
+- crates/aztibase-network/src/lib.rs (exports, 8 tests)
 **Review Notes:** libp2p 0.54 with SwarmBuilder API. Transport creates swarm with TCP/Noise/Yamux + QUIC, subscribes to all 6 topics on construction. Event loop handles gossipsub messages, mDNS discovery/expiry (auto-adds to gossipsub + kademlia), connection lifecycle. Kademlia in Server mode with 60s query timeout. 8 tests: config creation, topic validation, swarm creation, peer ID, topic subscription count, TCP listening.
 **Security Flags:** None
 
 ---
 
-### 2026-03-05 -- consensus-engineer -- dendrite-consensus
+### 2026-03-05 -- consensus-engineer -- aztibase-consensus
 **Task:** Phase 2 complete: DagStore + CommitRule implementations
 **Sprint:** Sprint 002, Phase 2 (Tasks 7-8)
 **Git Ref:** pending
 **Files Changed:**
-- crates/dendrite-consensus/src/dag_store.rs (DagStore: insert, get, parent/child lookup, ancestor check, causal ordering, persistence via redb)
-- crates/dendrite-consensus/src/commit.rs (CommitRule: direct commit via supermajority voting, indirect commit via anchor, wave-based leader election)
-- crates/dendrite-consensus/src/lib.rs (exports, 10 new tests -- 7 DagStore + 3 CommitRule)
-- crates/dendrite-consensus/Cargo.toml (added bincode dependency)
+- crates/aztibase-consensus/src/dag_store.rs (DagStore: insert, get, parent/child lookup, ancestor check, causal ordering, persistence via redb)
+- crates/aztibase-consensus/src/commit.rs (CommitRule: direct commit via supermajority voting, indirect commit via anchor, wave-based leader election)
+- crates/aztibase-consensus/src/lib.rs (exports, 10 new tests -- 7 DagStore + 3 CommitRule)
+- crates/aztibase-consensus/Cargo.toml (added bincode dependency)
 **Review Notes:** DagStore: in-memory index + redb persistence, parent validation on insert, BFS ancestor traversal with round-based pruning, deterministic topological sort for causal ordering, rebuild_index from disk on startup. CommitRule: MystiCeti-inspired wave structure (configurable wave_length), direct commit checks >2/3 voting stake, indirect commit via causal ancestry from anchor block. 26 consensus tests total (16 existing + 10 new). Zero clippy warnings, fmt clean.
 **Security Flags:** None
 
 ---
 
-### 2026-03-05 -- consensus-engineer -- dendrite-consensus
+### 2026-03-05 -- consensus-engineer -- aztibase-consensus
 **Task:** Phase 1b complete: DagBlock + ValidatorSet implementations
 **Sprint:** Sprint 002, Phase 1b (Tasks 5-6)
 **Git Ref:** pending
 **Files Changed:**
-- crates/dendrite-consensus/src/dag.rs (DagBlock with hash, genesis, parent validation)
-- crates/dendrite-consensus/src/validator.rs (ValidatorSet with stake, supermajority, leader selection)
-- crates/dendrite-consensus/src/lib.rs (exports, 16 tests)
+- crates/aztibase-consensus/src/dag.rs (DagBlock with hash, genesis, parent validation)
+- crates/aztibase-consensus/src/validator.rs (ValidatorSet with stake, supermajority, leader selection)
+- crates/aztibase-consensus/src/lib.rs (exports, 16 tests)
 **Review Notes:** DagBlock: deterministic hash (BLAKE3 of round+author+parents+payload+timestamp), genesis block factory, parent round monotonicity validation. ValidatorSet: add/remove/get/contains, total_stake tracking, BFT supermajority check (>2/3), deterministic stake-weighted leader selection. 16 tests passing. Zero clippy warnings.
 **Security Flags:** None
 
 ---
 
-### 2026-03-05 -- node-engineer -- dendrite-storage
+### 2026-03-05 -- node-engineer -- aztibase-storage
 **Task:** Phase 1a complete: StateStore trait, 6 named tables, batch writes, range iteration
 **Sprint:** Sprint 002, Phase 1a (Tasks 1-4)
 **Git Ref:** pending
 **Files Changed:**
-- crates/dendrite-storage/src/store.rs (complete rewrite — StateStore with redb backend)
-- crates/dendrite-storage/src/lib.rs (exports, 15 tests)
+- crates/aztibase-storage/src/store.rs (complete rewrite — StateStore with redb backend)
+- crates/aztibase-storage/src/lib.rs (exports, 15 tests)
 **Review Notes:** Full CRUD (get/put/delete/contains), batch_put (single table), batch_put_multi (cross-table atomic), iter/range/range_reverse. All 6 tables (blocks, state, tx, receipts, validators, verkle) initialized on open. StorageError with boxed TransactionError to satisfy clippy. Zero clippy warnings, fmt clean. 15 tests passing (exit criteria was 10+).
 **Security Flags:** None
 
@@ -594,7 +609,7 @@ Entries are prepended (newest first).
 **Task:** Switched storage backend from RocksDB to redb
 **Sprint:** Pre-Sprint
 **Git Ref:** dd98662
-**Files Changed:** crates/dendrite-storage/ (Cargo.toml, src/)
+**Files Changed:** crates/aztibase-storage/ (Cargo.toml, src/)
 **Review Notes:** Pure Rust dependency, better cross-compilation story. See ADR-001.
 **Security Flags:** None
 

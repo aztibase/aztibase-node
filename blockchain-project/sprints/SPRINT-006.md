@@ -39,38 +39,38 @@ This sprint makes the node externally accessible. The JSON-RPC server exposes ac
 
 ### Task 1: RPC transport layer -- DONE
 - [x] Added axum to workspace dependencies
-- [x] Implemented HTTP server in `dendrite-rpc` that accepts POST requests
+- [x] Implemented HTTP server in `aztibase-rpc` that accepts POST requests
 - [x] Parses JSON-RPC 2.0 request envelope (id, method, params)
 - [x] Returns JSON-RPC 2.0 response envelope
 - **Tests:** 3 tests (malformed JSON, invalid version, unknown method)
 
-### Task 2: RPC method — `dndr_getBalance` -- DONE
+### Task 2: RPC method — `aztb_getBalance` -- DONE
 - [x] Query AccountState by address, return balance as hex string
 - [x] Handle unknown address (return 0)
 - **Tests:** 3 tests (known balance, unknown address, invalid address format)
 
-### Task 3: RPC method — `dndr_getNonce` -- DONE
+### Task 3: RPC method — `aztb_getNonce` -- DONE
 - [x] Query AccountState by address, return nonce
 - **Tests:** 2 tests (known nonce, unknown address)
 
-### Task 4: RPC method — `dndr_getCode` -- DONE
+### Task 4: RPC method — `aztb_getCode` -- DONE
 - [x] Query contract code by address, return hex-encoded bytecode
 - [x] Return null for non-contract accounts
 - **Tests:** 2 tests (contract with code, EOA returns null)
 
-### Task 5: RPC method — `dndr_sendTransaction` -- DONE
+### Task 5: RPC method — `aztb_sendTransaction` -- DONE
 - [x] Accept raw encoded transaction bytes (hex string)
 - [x] Validate via `route_tx()`, reject malformed
 - [x] Submit to mempool via channel
 - [x] Return transaction hash
 - **Tests:** 2 tests (valid transfer, malformed payload)
 
-### Task 6: RPC method — `dndr_getTransactionReceipt` -- DEFERRED
+### Task 6: RPC method — `aztb_getTransactionReceipt` -- DEFERRED
 - Deferred to M4: requires receipt store (not yet built)
 
-### Task 7: RPC method — `dndr_blockNumber` + `dndr_getStateRoot` -- DONE
+### Task 7: RPC method — `aztb_blockNumber` + `aztb_getStateRoot` -- DONE
 - [x] Return current committed batch count as hex
-- [x] Added bonus `dndr_getStateRoot` returning BLAKE3 Merkle root
+- [x] Added bonus `aztb_getStateRoot` returning BLAKE3 Merkle root
 - **Tests:** 3 tests (block number, state root empty, state root with data)
 
 ### Task 8: Wire RPC server into node binary -- DONE
@@ -260,12 +260,12 @@ This sprint makes the node externally accessible. The JSON-RPC server exposes ac
 - Integration test redb cleanup could use `tempfile` crate instead of manual path management
 
 ### Deferred items
-- Task 6 (`dndr_getTransactionReceipt`): requires receipt store not yet built — deferred to M4
+- Task 6 (`aztb_getTransactionReceipt`): requires receipt store not yet built — deferred to M4
 
 ### Sprint 007 Candidates (M4)
 1. EVM integration via revm (dual VM: WASM + EVM)
 2. AI inference pipeline (tract integration, on-chain verification stubs)
 3. State sync / snapshot protocol
-4. Transaction receipt store + `dndr_getTransactionReceipt`
+4. Transaction receipt store + `aztb_getTransactionReceipt`
 5. Block-STM parallel execution
 6. Testnet preparation (multi-node, bootstrap, monitoring)

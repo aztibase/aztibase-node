@@ -14,7 +14,7 @@ Deliver three foundational M4 capabilities:
 2. **EVM execution via revm** — dual VM routing (WASM + EVM), deploy + call Solidity contracts
 3. **AI inference via tract** — real model loading and inference behind the AIRuntime trait
 
-These three features define Dendrite's competitive identity: dual VM for developer reach, AI-native inference for protocol differentiation, and receipts for operational observability.
+These three features define Aztibase's competitive identity: dual VM for developer reach, AI-native inference for protocol differentiation, and receipts for operational observability.
 
 ---
 
@@ -24,14 +24,14 @@ These three features define Dendrite's competitive identity: dual VM for develop
 |---|------|-------|-------|
 | 1 | Receipt store (redb table, write on execution) | P1 | node-engineer |
 | 2 | Receipt query by tx hash | P1 | node-engineer |
-| 3 | `dndr_getTransactionReceipt` RPC method | P1 | node-engineer |
+| 3 | `aztb_getTransactionReceipt` RPC method | P1 | node-engineer |
 | 4 | Wire receipts from ExecutionPipeline to store | P1 | node-engineer |
 | 5 | Add `revm` workspace dependency | P2 | smart-contract-engineer |
-| 6 | `EvmEngine` — revm wrapper with DNDR gas config | P2 | smart-contract-engineer |
+| 6 | `EvmEngine` — revm wrapper with AZTB gas config | P2 | smart-contract-engineer |
 | 7 | `TxKind::EvmDeploy` + `TxKind::EvmCall` (prefix 0x04, 0x05) | P2 | smart-contract-engineer |
 | 8 | EVM execution integrated into `execute_contract_txs` | P2 | smart-contract-engineer |
 | 9 | EVM deploy + call tests | P2 | smart-contract-engineer |
-| 10 | Add `tract-onnx` to dendrite-runtime | P3 | ai-integration-engineer |
+| 10 | Add `tract-onnx` to aztibase-runtime | P3 | ai-integration-engineer |
 | 11 | `TractRuntime` implementing `AIRuntime` trait | P3 | ai-integration-engineer |
 | 12 | Model registry (load ONNX model from bytes, cache) | P3 | ai-integration-engineer |
 | 13 | Inference execution with deterministic hash | P3 | ai-integration-engineer |
@@ -52,7 +52,7 @@ These three features define Dendrite's competitive identity: dual VM for develop
 **Goal:** Persistent receipt storage with RPC query. Closes deferred Task 6 from Sprint 006.
 
 ### Task 1: Receipt store in redb -- DONE
-- [x] `ExecutionReceipt` struct in `dendrite-execution/src/receipt.rs`
+- [x] `ExecutionReceipt` struct in `aztibase-execution/src/receipt.rs`
 - [x] `RECEIPTS_TABLE` in redb: `TxHash -> bincode(ExecutionReceipt)`
 - [x] `store_receipts()` / `get_receipt()` functions
 - **Tests:** 5 unit tests (store/retrieve, missing, failed, deploy w/ address, batch)
@@ -62,8 +62,8 @@ These three features define Dendrite's competitive identity: dual VM for develop
 - [x] Pipeline collects receipts from contracts (ContractReceipt -> ExecutionReceipt)
 - [x] Unified `ExecutionReceipt` type covers all tx types
 
-### Task 3: `dndr_getTransactionReceipt` RPC method -- DONE
-- [x] Added to RPC dispatch in `dendrite-rpc/src/server.rs`
+### Task 3: `aztb_getTransactionReceipt` RPC method -- DONE
+- [x] Added to RPC dispatch in `aztibase-rpc/src/server.rs`
 - [x] Accepts tx hash (hex string), returns receipt JSON or null
 - [x] Receipt JSON: txHash, success, gasUsed, contractAddress, error
 - **Tests:** 4 tests (found, not found, no store error, invalid hash)
@@ -76,7 +76,7 @@ These three features define Dendrite's competitive identity: dual VM for develop
 
 **Phase 1 Exit Criteria:**
 - [x] Receipts persisted for every executed transaction
-- [x] `dndr_getTransactionReceipt` returns correct data
+- [x] `aztb_getTransactionReceipt` returns correct data
 - [x] All new tests pass
 
 ---
@@ -88,14 +88,14 @@ These three features define Dendrite's competitive identity: dual VM for develop
 
 ### Task 5: Add revm workspace dependency -- DONE
 - [x] `revm = { version = "36", default-features = false, features = ["std"] }` in workspace
-- [x] Added to `dendrite-execution/Cargo.toml`
+- [x] Added to `aztibase-execution/Cargo.toml`
 - [x] Verified no C deps (`cargo tree -i secp256k1-sys` = not found)
 - [x] MSRV bumped to 1.88 for revm v36 compatibility
 
 ### Task 6: EvmEngine — revm wrapper -- DONE
-- [x] Created `crates/dendrite-execution/src/evm.rs`
+- [x] Created `crates/aztibase-execution/src/evm.rs`
 - [x] `evm_deploy()` and `evm_call()` using revm v36 API
-- [x] DNDR chain ID (0xDE0D), CacheDB state adapter, MainnetEvm builder
+- [x] AZTB chain ID (0xDE0D), CacheDB state adapter, MainnetEvm builder
 - [x] Maps revm `ExecutionResult` to `ContractReceipt`
 - [x] State adapter: AccountState ↔ CacheDB (balance, nonce, code, storage)
 - **Tests:** 3 unit tests (deploy, nonce mismatch, deploy+call)
@@ -131,13 +131,13 @@ These three features define Dendrite's competitive identity: dual VM for develop
 **Owner:** ai-integration-engineer
 **Goal:** Real AI inference behind the AIRuntime trait. Load ONNX models, run inference, produce verifiable results.
 
-### Task 10: Add tract-onnx to dendrite-runtime -- DONE
-- [x] `tract-onnx` added to `dendrite-runtime/Cargo.toml` (already in workspace deps)
+### Task 10: Add tract-onnx to aztibase-runtime -- DONE
+- [x] `tract-onnx` added to `aztibase-runtime/Cargo.toml` (already in workspace deps)
 - [x] `prost = "0.11"` added as dev-dependency for ONNX test model construction
 - [x] `cargo check` passes — tract is pure Rust, no C deps
 
 ### Task 11: TractRuntime implementing AIRuntime -- DONE
-- [x] Created `crates/dendrite-runtime/src/tract_runtime.rs`
+- [x] Created `crates/aztibase-runtime/src/tract_runtime.rs`
 - [x] `TractRuntime` struct with `RwLock<HashMap<String, RegisteredModel>>` model registry
 - [x] Implements `AIRuntime` trait: `mode() -> LocalInference`, `infer()`, `supports_model()`
 - [x] `RegisteredModel` stores optimized `SimplePlan` + input/output fact metadata
@@ -232,7 +232,7 @@ These three features define Dendrite's competitive identity: dual VM for develop
 |------|----------|------------|
 | revm may pull C dependencies (e.g., secp256k1) | MEDIUM | Check dep tree after adding; ADR-006 if needed |
 | tract model loading may be slow for large models | LOW | Cap model size; async loading in future sprint |
-| EVM gas model differs from DNDR gas model | MEDIUM | Use revm's native gas; map to DNDR units in receipt |
+| EVM gas model differs from AZTB gas model | MEDIUM | Use revm's native gas; map to AZTB units in receipt |
 | Deterministic inference depends on tract version/platform | HIGH | Pin tract version; BLAKE3 hash includes model_id for versioning |
 | revm state adapter complexity (AccountState <-> revm DB) | MEDIUM | Start with simple in-memory adapter; optimize later |
 

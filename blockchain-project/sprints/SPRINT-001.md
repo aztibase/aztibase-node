@@ -47,16 +47,16 @@ This is a short setup sprint to transition from design phase to build phase. No 
 
 | Crate | Depth | M1-Ready? |
 |-------|-------|-----------|
-| dendrite-core | COMPLETE | YES -- crypto, types, errors all implemented with 6 tests |
-| dendrite-consensus | STUB | NO -- DagConsensus, PoUWVerifier, ValidatorSet are empty structs |
-| dendrite-storage | SKELETON | NO -- StateStore has open() only, no read/write/delete |
-| dendrite-network | SKELETON | NO -- NetworkTransport trait defined, no libp2p implementation |
-| dendrite-execution | STUB | NO -- ExecutionEngine, StateTransition, ParallelExecutor empty |
-| dendrite-runtime | STUB | NO -- ContractRuntime, AIOracleService, AgentRuntime empty |
-| dendrite-rpc | STUB | NO -- RpcServer empty |
-| dendrite-node | PARTIAL | NO -- CLI + logging only, no subsystem wiring |
+| aztibase-core | COMPLETE | YES -- crypto, types, errors all implemented with 6 tests |
+| aztibase-consensus | STUB | NO -- DagConsensus, PoUWVerifier, ValidatorSet are empty structs |
+| aztibase-storage | SKELETON | NO -- StateStore has open() only, no read/write/delete |
+| aztibase-network | SKELETON | NO -- NetworkTransport trait defined, no libp2p implementation |
+| aztibase-execution | STUB | NO -- ExecutionEngine, StateTransition, ParallelExecutor empty |
+| aztibase-runtime | STUB | NO -- ContractRuntime, AIOracleService, AgentRuntime empty |
+| aztibase-rpc | STUB | NO -- RpcServer empty |
+| aztibase-node | PARTIAL | NO -- CLI + logging only, no subsystem wiring |
 
-**Conclusion:** Only dendrite-core is M1-ready. All other crates need implementation. Build dependency order: consensus -> storage -> network -> execution -> runtime -> rpc -> node.
+**Conclusion:** Only aztibase-core is M1-ready. All other crates need implementation. Build dependency order: consensus -> storage -> network -> execution -> runtime -> rpc -> node.
 
 ---
 

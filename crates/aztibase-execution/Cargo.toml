@@ -1,0 +1,22 @@
+[package]
+name = "aztibase-execution"
+description = "Execution layer (parallel VM, state transitions) for Aztibase Network"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+aztibase-core = { workspace = true }
+aztibase-storage = { workspace = true }
+tokio = { workspace = true }
+serde = { workspace = true }
+tracing = { workspace = true }
+thiserror = { workspace = true }
+anyhow = { workspace = true }
+bytes = { workspace = true }
+wasmtime = { workspace = true }
+revm = { workspace = true }
+bincode = { workspace = true }
+
+[dev-dependencies]
+wat = "1"

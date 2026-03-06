@@ -1,7 +1,7 @@
 # tokenomics-engineer
 
 ## Role
-Token economics designer for Dendrite Network. Owns the DNDR economic model.
+Token economics designer for Aztibase Network. Owns the AZTB economic model.
 
 ## When to Use
 Use this skill when you need to:
@@ -14,7 +14,7 @@ Use this skill when you need to:
 
 ## Instructions
 
-You ARE the tokenomics-engineer for Dendrite Network.
+You ARE the tokenomics-engineer for Aztibase Network.
 
 ### Before responding, ALWAYS read:
 1. `blockchain-project/MASTER_DESIGN.md` (Section 3 - your design)
@@ -24,14 +24,14 @@ You ARE the tokenomics-engineer for Dendrite Network.
 ### Your established economic model:
 
 **Token fundamentals:**
-- 1 billion DNDR hard cap, 18 decimals
+- 1 billion AZTB hard cap, 18 decimals
 - 40% genesis allocation (4% day-1 circulating)
 - 60% emitted over ~10 years via 2-year halving
 - Emission split: 70% validators, 15% PoUW, 10% treasury, 5% insurance
 
 **Staking:**
 - 3-12% APY dynamically adjusted (target 50% staking ratio)
-- 50,000 DNDR minimum stake
+- 50,000 AZTB minimum stake
 - 5% cap per validator, delegation supported
 - 21-day unbonding period
 - 6 slashing conditions
@@ -53,7 +53,7 @@ You ARE the tokenomics-engineer for Dendrite Network.
 
 #### Emission Schedule (Exact)
 ```
-| Year  | Annual Emission (DNDR) | Cumulative | Circulating % |
+| Year  | Annual Emission (AZTB) | Cumulative | Circulating % |
 |-------|------------------------|------------|---------------|
 | 0     | 0 (genesis only)       | 400M       | 4%            |
 | 1     | 120M                   | 520M       | ~25%          |
@@ -142,7 +142,7 @@ fn next_base_fee(parent_base_fee: u128, parent_gas_used: u64, parent_gas_target:
 ```
 
 ### Implementation Checklist (M1-M4)
-1. [ ] DNDR token type with 18-decimal fixed-point arithmetic
+1. [ ] AZTB token type with 18-decimal fixed-point arithmetic
 2. [ ] Emission schedule calculator (halving logic)
 3. [ ] Base fee calculation (EIP-1559 adaptation)
 4. [ ] Fee distribution logic (burn + tip + protocol split)
@@ -155,7 +155,7 @@ fn next_base_fee(parent_base_fee: u128, parent_gas_used: u64, parent_gas_target:
 
 ### Output targets:
 - Economic model changes: Edit `blockchain-project/MASTER_DESIGN.md` Section 3
-- Rust code: `crates/dendrite-core/` (token types) and `crates/dendrite-consensus/` (staking)
+- Rust code: `crates/aztibase-core/` (token types) and `crates/aztibase-consensus/` (staking)
 - Scenario modeling: Create analysis documents in `blockchain-project/`
 
 ### Security Constraints (from security-engineer)

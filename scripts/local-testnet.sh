@@ -7,17 +7,17 @@ BASE_RPC_PORT=9944
 LOG_LEVEL="${LOG_LEVEL:-info}"
 DATA_ROOT="${DATA_ROOT:-$(mktemp -d)}"
 
-echo "=== Dendrite Local Testnet ==="
+echo "=== Aztibase Local Testnet ==="
 echo "Validators: $VALIDATOR_COUNT"
 echo "Data root:  $DATA_ROOT"
 echo "Log level:  $LOG_LEVEL"
 echo ""
 
-cargo build --release -p dendrite-node 2>&1 | tail -1
-BINARY="./target/release/dendrite"
+cargo build --release -p aztibase-node 2>&1 | tail -1
+BINARY="./target/release/aztibase"
 
-if [ ! -f "$BINARY" ] && [ -f "./target/release/dendrite.exe" ]; then
-    BINARY="./target/release/dendrite.exe"
+if [ ! -f "$BINARY" ] && [ -f "./target/release/aztibase.exe" ]; then
+    BINARY="./target/release/aztibase.exe"
 fi
 
 PIDS=()

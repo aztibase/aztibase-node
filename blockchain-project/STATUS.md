@@ -1,4 +1,4 @@
-# PROJECT STATUS: Dendrite Network
+# PROJECT STATUS: Aztibase Network
 
 **Last Updated:** 2026-03-06
 **Updated By:** project-lead
@@ -51,14 +51,14 @@
 
 | Crate | Depth | Owner | M1-Ready | M3-Ready |
 |-------|-------|-------|----------|----------|
-| dendrite-core | COMPLETE | blockchain-architect | YES | YES |
-| dendrite-consensus | PARTIAL | consensus-engineer | YES | YES |
-| dendrite-storage | PARTIAL | node-engineer | YES | YES |
-| dendrite-network | PARTIAL | p2p-network-engineer | YES | YES |
-| dendrite-execution | PARTIAL | smart-contract-engineer | YES | YES |
-| dendrite-runtime | PARTIAL | ai-integration-engineer | YES | YES |
-| dendrite-rpc | PARTIAL | node-engineer | NO | YES |
-| dendrite-node | PARTIAL | node-engineer | YES | YES |
+| aztibase-core | COMPLETE | blockchain-architect | YES | YES |
+| aztibase-consensus | PARTIAL | consensus-engineer | YES | YES |
+| aztibase-storage | PARTIAL | node-engineer | YES | YES |
+| aztibase-network | PARTIAL | p2p-network-engineer | YES | YES |
+| aztibase-execution | PARTIAL | smart-contract-engineer | YES | YES |
+| aztibase-runtime | PARTIAL | ai-integration-engineer | YES | YES |
+| aztibase-rpc | PARTIAL | node-engineer | NO | YES |
+| aztibase-node | PARTIAL | node-engineer | YES | YES |
 
 ### In Progress
 - Sprint 009 planning (Block-STM, state sync, EVM precompiles)
@@ -93,7 +93,7 @@
 
 | Risk | Severity | Owner | Status |
 |------|----------|-------|--------|
-| Dendrite Systems coexistence agreement not initiated | MEDIUM | legal-ip-counsel | OPEN |
+| Aztibase Systems coexistence agreement not initiated | MEDIUM | legal-ip-counsel | OPEN |
 | Domain acquisition pending | MEDIUM | legal-ip-counsel | OPEN |
 | nChain patent FTO analysis not started | HIGH | legal-ip-counsel | OPEN |
 | wasmtime trap handling on Windows | LOW | smart-contract-engineer | KNOWN |
@@ -108,8 +108,8 @@
 
 | # | Condition | Status |
 |---|-----------|--------|
-| 1 | Use DNDR ticker (not DND) | SATISFIED |
-| 2 | Coexistence agreement with Dendrite Systems Inc. | PENDING |
+| 1 | Use AZTB ticker (not DND) | SATISFIED |
+| 2 | Coexistence agreement with Aztibase Systems Inc. | PENDING |
 | 3 | Trademark filing strategy (Classes 36/42 first, then 9) | PENDING |
 | 4 | Domain acquisition before public announcement | PENDING |
-| 5 | Matrix Dendrite FAQ entry | PENDING |
+| 5 | Matrix Aztibase FAQ entry | PENDING |

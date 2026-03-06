@@ -11,7 +11,7 @@
 - **Legal clearance received:** YES
 - **Date:** March 5, 2026
 - **GREEN-cleared names:** Quen (QEN) -- 1 name only
-- **YELLOW names (conditional):** Synap, Nura, Velum, Dendrite
+- **YELLOW names (conditional):** Synap, Nura, Velum, Aztibase
 - **RED names (vetoed, permanently blocked):** Axon, Cortex, Soma, Thalos, Lumen
 
 ---
@@ -66,26 +66,26 @@ The Qwen collision is not a legal problem -- it is a **brand catastrophe**. For 
 
 Per SKILL.md protocol, since the only GREEN name scores poorly, I am evaluating YELLOW names with explicit risk acknowledgment. **None of these names can be finalized without legal re-clearance.**
 
-### Dendrite (DNDR) -- Best YELLOW Candidate
+### Aztibase (AZTB) -- Best YELLOW Candidate
 
 | Criterion | Score | Notes |
 |-----------|-------|-------|
-| **Memorability** | 8/10 | Dendrites are the branching structures of neurons that receive signals. The word is vivid, concrete, and evocative. People who hear it once remember it. |
+| **Memorability** | 8/10 | Aztibases are the branching structures of neurons that receive signals. The word is vivid, concrete, and evocative. People who hear it once remember it. |
 | **Pronounceability** | 7/10 | DEN-drite. Clear in English, French, Spanish, Portuguese. Three syllables is slightly long but manageable. Works across Latin-script languages. May need phonetic guidance in Mandarin/Arabic/Hindi but is pronounceable. |
-| **Uniqueness** | 8/10 | No major crypto project uses this name. No phonetic confusion with top-100 crypto names. The neuroscience reference is shared with Axon/Synapse (both blocked), but Dendrite is the least commercially exploited of the neural vocabulary. |
-| **Meaning resonance** | 9/10 | **Exceptional fit for Genesis Chain's identity.** Dendrites are the receiving structures of neurons -- they gather signals from many sources and integrate them. This mirrors: (1) DAG structure (many inputs converging), (2) AI-native consensus (gathering and processing distributed intelligence), (3) Server-independence (distributed signal reception, no central hub). The branching structure of dendrites visually mirrors DAG topology. |
-| **Domain availability** | 5/10 | dendrite.com: Taken. dendrite.io: Unknown. dendrite.network: Possibly available. dendrite.xyz: Possibly available. Would likely need dendritechain.com or dendrite.network as primary. |
-| **Social handles** | 6/10 | @dendrite on X: Likely taken or inactive. @dendritechain or @dendriteDAO: Likely available. GitHub: github.com/dendrite has some presence but organization names like dendrite-chain would be available. |
+| **Uniqueness** | 8/10 | No major crypto project uses this name. No phonetic confusion with top-100 crypto names. The neuroscience reference is shared with Axon/Synapse (both blocked), but Aztibase is the least commercially exploited of the neural vocabulary. |
+| **Meaning resonance** | 9/10 | **Exceptional fit for Genesis Chain's identity.** Aztibases are the receiving structures of neurons -- they gather signals from many sources and integrate them. This mirrors: (1) DAG structure (many inputs converging), (2) AI-native consensus (gathering and processing distributed intelligence), (3) Server-independence (distributed signal reception, no central hub). The branching structure of aztibases visually mirrors DAG topology. |
+| **Domain availability** | 5/10 | aztibase.com: Taken. aztibase.io: Unknown. aztibase.network: Possibly available. aztibase.xyz: Possibly available. Would likely need aztibasechain.com or aztibase.network as primary. |
+| **Social handles** | 6/10 | @aztibase on X: Likely taken or inactive. @aztibasechain or @aztibaseDAO: Likely available. GitHub: github.com/aztibase has some presence but organization names like aztibase-chain would be available. |
 | **Linguistic safety** | 9/10 | Scientific term with identical meaning in English, French, Spanish, Portuguese, German. No offensive connotations in any language. Universally recognized in academic/scientific contexts. |
-| **Ticker potential** | 8/10 | DNDR is clean -- not used in crypto or stock markets. Four letters, pronounceable (sounds like "dender"), distinctive. Alternative: DEND (also appears clean). |
-| **Visual design potential** | 9/10 | The branching structure of dendrites provides extraordinary visual design material. A dendrite logo naturally evokes: neural networks, tree/DAG structures, distributed systems, organic growth. The word itself has visual rhythm (DEN-DRITE, strong consonants). |
-| **AI/tech resonance** | 9/10 | Dendrites are fundamentally about AI -- they are the input receivers of biological neural networks. The name immediately signals: neural computation, distributed intelligence, biological inspiration. It positions Genesis Chain at the intersection of neuroscience and technology without being derivative of any existing brand. |
+| **Ticker potential** | 8/10 | AZTB is clean -- not used in crypto or stock markets. Four letters, pronounceable (sounds like "dender"), distinctive. Alternative: DEND (also appears clean). |
+| **Visual design potential** | 9/10 | The branching structure of aztibases provides extraordinary visual design material. A aztibase logo naturally evokes: neural networks, tree/DAG structures, distributed systems, organic growth. The word itself has visual rhythm (DEN-DRITE, strong consonants). |
+| **AI/tech resonance** | 9/10 | Aztibases are fundamentally about AI -- they are the input receivers of biological neural networks. The name immediately signals: neural computation, distributed intelligence, biological inspiration. It positions Genesis Chain at the intersection of neuroscience and technology without being derivative of any existing brand. |
 
-### Dendrite (DNDR) Total Score: 78/100
+### Aztibase (AZTB) Total Score: 78/100
 
 **Legal risks (from LEGAL_CLEARANCE_REPORT.md):**
-- Dendrite Systems Inc. holds trademarks in Class 9 (software) -- MODERATE risk, company appears small
-- DND ticker is taken; DNDR ticker appears clean
+- Aztibase Systems Inc. holds trademarks in Class 9 (software) -- MODERATE risk, company appears small
+- DND ticker is taken; AZTB ticker appears clean
 - Requires formal trademark opposition analysis
 
 ### Velum (VLM) -- Second YELLOW Candidate
@@ -145,7 +145,7 @@ Per SKILL.md protocol, since the only GREEN name scores poorly, I am evaluating 
 
 | Name | Status | Total Score | Key Strength | Key Weakness |
 |------|--------|-------------|-------------|-------------|
-| **Dendrite (DNDR)** | YELLOW | **78/100** | Perfect AI/DAG meaning resonance | Dendrite Systems Inc. trademark (Class 9) |
+| **Aztibase (AZTB)** | YELLOW | **78/100** | Perfect AI/DAG meaning resonance | Aztibase Systems Inc. trademark (Class 9) |
 | Synap (SYNP) | YELLOW | 58/100 | Neural association | Synapse Protocol confusion |
 | Quen (QEN) | GREEN | 57/100 | Clean ticker | Qwen (Alibaba) phonetic collision |
 | Nura (NRA->?) | YELLOW | 55/100 | Beautiful phonetics | Nura Labs conflict, toxic ticker |
@@ -155,17 +155,17 @@ Per SKILL.md protocol, since the only GREEN name scores poorly, I am evaluating 
 
 ## Final Recommendation
 
-### Primary Recommendation: Dendrite (DNDR) -- CONDITIONAL
+### Primary Recommendation: Aztibase (AZTB) -- CONDITIONAL
 
 **This recommendation requires legal re-clearance before finalization.**
 
-- **Blockchain name:** Dendrite Network
-- **Coin name:** Dendrite
-- **Ticker:** DNDR
+- **Blockchain name:** Aztibase Network
+- **Coin name:** Aztibase
+- **Ticker:** AZTB
 - **Tagline:** "Where Intelligence Branches"
 
 **Why "Where Intelligence Branches":**
-- Dendrites branch to receive signals -- the network branches to receive and process AI computation
+- Aztibases branch to receive signals -- the network branches to receive and process AI computation
 - DAG structures are branching graphs -- the consensus literally branches
 - "Intelligence" directly signals the AI-native nature
 - "Branches" implies organic growth, decentralization, and distributed topology
@@ -176,13 +176,13 @@ Per SKILL.md protocol, since the only GREEN name scores poorly, I am evaluating 
 - "Distributed Intelligence, Rooted in Proof"
 
 **Blockchain name vs. coin name rationale:**
-- Using "Dendrite Network" as the blockchain name and "Dendrite" as the coin keeps the branding unified and simple.
+- Using "Aztibase Network" as the blockchain name and "Aztibase" as the coin keeps the branding unified and simple.
 - The network suffix clearly distinguishes the infrastructure from the token.
-- "DNDR" as ticker is clean, four letters, and does not collide with any known asset.
+- "AZTB" as ticker is clean, four letters, and does not collide with any known asset.
 
 ### Fallback Recommendation: Quen (QEN) -- GREEN (with reservations)
 
-If legal re-clearance for Dendrite fails or Dendrite Systems Inc. poses a blocking obstacle:
+If legal re-clearance for Aztibase fails or Aztibase Systems Inc. poses a blocking obstacle:
 
 - **Blockchain name:** Quen Network
 - **Coin name:** Quen
@@ -193,28 +193,28 @@ Quen remains legally the safest choice. The Qwen collision is a branding concern
 
 ---
 
-## Required Actions for Dendrite (DNDR)
+## Required Actions for Aztibase (AZTB)
 
 ### Immediate (Before Finalization)
 
-1. **Re-engage legal-ip-counsel** to conduct formal opposition analysis against Dendrite Systems Inc. (Class 9 trademarks). Specific questions:
-   - What is Dendrite Systems Inc.'s current trademark scope and enforcement history?
-   - Is "Dendrite Network" sufficiently distinct from "Dendrite Systems" in Class 9?
-   - Can we file in Classes 36 and 42 without triggering Dendrite Systems' Class 9 marks?
+1. **Re-engage legal-ip-counsel** to conduct formal opposition analysis against Aztibase Systems Inc. (Class 9 trademarks). Specific questions:
+   - What is Aztibase Systems Inc.'s current trademark scope and enforcement history?
+   - Is "Aztibase Network" sufficiently distinct from "Aztibase Systems" in Class 9?
+   - Can we file in Classes 36 and 42 without triggering Aztibase Systems' Class 9 marks?
    - What is the risk profile of a trademark coexistence agreement?
 
-2. **Confirm DNDR ticker** is clean across all crypto exchanges (Binance, Coinbase, Kraken, etc.) and all stock exchanges.
+2. **Confirm AZTB ticker** is clean across all crypto exchanges (Binance, Coinbase, Kraken, etc.) and all stock exchanges.
 
 3. **Domain strategy:**
-   - Check: dendrite.network, dendrite.io, dendrite.xyz, dendritechain.com, dendrite.ai
+   - Check: aztibase.network, aztibase.io, aztibase.xyz, aztibasechain.com, aztibase.ai
    - Acquire the best available domain immediately upon legal clearance
-   - Budget for dendrite.com acquisition attempt (likely $10K-$100K+ range for a dictionary word .com)
+   - Budget for aztibase.com acquisition attempt (likely $10K-$100K+ range for a dictionary word .com)
 
 4. **Social handle reservation** (upon legal clearance):
-   - X/Twitter: @DendriteNetwork, @dendrite_net, @DendriteDNDR
-   - GitHub: dendrite-network (organization)
-   - Discord: Dendrite Network
-   - Telegram: @DendriteNetwork
+   - X/Twitter: @AztibaseNetwork, @aztibase_net, @AztibaseAZTB
+   - GitHub: aztibase-network (organization)
+   - Discord: Aztibase Network
+   - Telegram: @AztibaseNetwork
 
 ### Trademark Registration Roadmap
 
@@ -229,21 +229,21 @@ Quen remains legally the safest choice. The Qwen collision is a branding concern
 
 ---
 
-## Justification: Why Dendrite Wins
+## Justification: Why Aztibase Wins
 
-1. **Meaning-architecture alignment is unmatched.** Dendrites are the input-receiving branches of neurons. Genesis Chain's DAG structure IS a dendritic topology -- vertices branch and converge exactly as biological dendrites do. No other candidate name maps this directly to the chain's architecture.
+1. **Meaning-architecture alignment is unmatched.** Aztibases are the input-receiving branches of neurons. Genesis Chain's DAG structure IS a dendritic topology -- vertices branch and converge exactly as biological aztibases do. No other candidate name maps this directly to the chain's architecture.
 
-2. **AI-native credibility.** In a market where every chain claims to be "AI-powered," the name "Dendrite" communicates genuine neuroscience literacy. It signals that AI is not a marketing label but a foundational design principle -- which is exactly Genesis Chain's positioning per MASTER_DESIGN.md.
+2. **AI-native credibility.** In a market where every chain claims to be "AI-powered," the name "Aztibase" communicates genuine neuroscience literacy. It signals that AI is not a marketing label but a foundational design principle -- which is exactly Genesis Chain's positioning per MASTER_DESIGN.md.
 
-3. **No phonetic collision with major brands.** Unlike Quen (phonetically identical to Alibaba's Qwen), Dendrite occupies its own phonetic space. No one will confuse "Dendrite" with any existing tech or crypto brand.
+3. **No phonetic collision with major brands.** Unlike Quen (phonetically identical to Alibaba's Qwen), Aztibase occupies its own phonetic space. No one will confuse "Aztibase" with any existing tech or crypto brand.
 
-4. **Visual brand potential is extraordinary.** The branching structure of dendrites provides a natural, distinctive, and infinitely adaptable visual identity. A dendrite-inspired logo would be immediately recognizable and scientifically grounded -- differentiating from the geometric abstractions that dominate crypto branding.
+4. **Visual brand potential is extraordinary.** The branching structure of aztibases provides a natural, distinctive, and infinitely adaptable visual identity. A aztibase-inspired logo would be immediately recognizable and scientifically grounded -- differentiating from the geometric abstractions that dominate crypto branding.
 
-5. **The name teaches.** When someone asks "What is Dendrite?", the answer ("the receiving branches of brain neurons") immediately communicates what the chain does: receive, process, and verify distributed AI computation. The name IS the elevator pitch.
+5. **The name teaches.** When someone asks "What is Aztibase?", the answer ("the receiving branches of brain neurons") immediately communicates what the chain does: receive, process, and verify distributed AI computation. The name IS the elevator pitch.
 
-6. **Ticker DNDR is clean and distinctive.** Four letters, no conflicts, pronounceable, memorable.
+6. **Ticker AZTB is clean and distinctive.** Four letters, no conflicts, pronounceable, memorable.
 
-7. **Legal risk is manageable.** Dendrite Systems Inc. is a small company. The trademark overlap is in Class 9 (software), but "Dendrite Network" (blockchain/cryptocurrency) is arguably a distinct market from "Dendrite Systems" (browser extensions, cloud software). A trademark coexistence agreement or successful distinctiveness argument is plausible. This is a calculated risk worth taking for a dramatically superior brand.
+7. **Legal risk is manageable.** Aztibase Systems Inc. is a small company. The trademark overlap is in Class 9 (software), but "Aztibase Network" (blockchain/cryptocurrency) is arguably a distinct market from "Aztibase Systems" (browser extensions, cloud software). A trademark coexistence agreement or successful distinctiveness argument is plausible. This is a calculated risk worth taking for a dramatically superior brand.
 
 ---
 
@@ -265,9 +265,9 @@ Quen is legally clean but practically compromised for an AI-native blockchain.
 
 Per my SKILL.md, I am BLOCKED from finalizing a YELLOW name. My recommendation is therefore:
 
-1. **Dendrite (DNDR) is the naming council's top recommendation**, subject to legal re-clearance.
-2. **I formally request that legal-ip-counsel re-evaluate Dendrite** with the specific mitigations outlined above (DNDR ticker instead of DND, "Dendrite Network" vs "Dendrite Systems" distinctiveness analysis).
-3. **If Dendrite fails legal re-clearance**, I recommend generating new name candidates rather than proceeding with Quen, given the Qwen collision.
+1. **Aztibase (AZTB) is the naming council's top recommendation**, subject to legal re-clearance.
+2. **I formally request that legal-ip-counsel re-evaluate Aztibase** with the specific mitigations outlined above (AZTB ticker instead of DND, "Aztibase Network" vs "Aztibase Systems" distinctiveness analysis).
+3. **If Aztibase fails legal re-clearance**, I recommend generating new name candidates rather than proceeding with Quen, given the Qwen collision.
 4. **Quen (QEN) remains the legal fallback** if timeline pressure requires an immediate decision and the team accepts the branding risk.
 
 ---
