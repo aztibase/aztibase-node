@@ -8,6 +8,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 ## [M3] -- Execution Layer (In Progress)
 
 ### Added
+- JSON-RPC 2.0 server: axum-based HTTP server with 6 methods (dndr_getBalance, dndr_getNonce, dndr_getCode, dndr_sendTransaction, dndr_blockNumber, dndr_getStateRoot) (2026-03-06)
+- RPC server wired into node binary with shared state via Arc<RwLock<AccountState>> (2026-03-06)
+- Transaction submission via RPC flows to mempool and consensus engine (2026-03-06)
 - ExecutionPipeline: consensus-to-execution wiring via tokio::mpsc channel (2026-03-06)
 - TxKind routing: prefix-byte wire format (0x01=Transfer, 0x02=Deploy, 0x03=Call) (2026-03-06)
 - State persistence: flush/load AccountState to redb across 4 tables (2026-03-06)

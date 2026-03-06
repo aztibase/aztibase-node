@@ -21,6 +21,20 @@ Entries are prepended (newest first).
 
 ## Entries
 
+### 2026-03-06 -- node-engineer -- dendrite-rpc, dendrite-node
+**Task:** Sprint 006 Phase 1: JSON-RPC server + node wiring (Tasks 1-5, 7-8)
+**Sprint:** Sprint 006, Phase 1
+**Git Ref:** pending
+**Files Changed:**
+- crates/dendrite-rpc/src/server.rs (full JSON-RPC 2.0 server: 6 methods, axum router, shared state via Arc<RwLock<AccountState>>)
+- crates/dendrite-rpc/src/lib.rs (re-exports: RpcServer, RpcState)
+- crates/dendrite-rpc/Cargo.toml (added axum, hex, tower dev-dep)
+- crates/dendrite-node/src/main.rs (RPC server spawn, mempool_rx forwarding to consensus)
+- crates/dendrite-node/src/pipeline.rs (Arc<RwLock<AccountState>> shared state, batch_count AtomicU64, shared_state()/shared_batch_count() accessors)
+- Cargo.toml (axum workspace dep)
+**Review Notes:** 6 RPC methods: dndr_getBalance, dndr_getNonce, dndr_getCode, dndr_sendTransaction, dndr_blockNumber, dndr_getStateRoot. 15 new tests. Pipeline refactored to Arc<RwLock> for shared read access. Task 6 (getTransactionReceipt) deferred — needs receipt store. 180 tests pass, zero clippy warnings, fmt clean.
+**Security Flags:** None (security review pending in Phase 4)
+
 ### 2026-03-06 -- security-engineer -- dendrite-execution
 **Task:** Fix routing security findings: prefix cross-check (SEC-ROUTE-001), bincode size limit (SEC-ROUTE-002)
 **Sprint:** Sprint 005, Phase 4 (post-review fixes)

@@ -18,6 +18,7 @@ use dendrite_consensus::{
 use dendrite_network::{
     Libp2pTransport, NetworkEvent, TOPIC_CONSENSUS, TOPIC_TRANSACTIONS, TransportConfig,
 };
+use dendrite_rpc::RpcServer;
 use dendrite_storage::StateStore;
 
 #[derive(Parser, Debug)]
@@ -129,6 +130,28 @@ async fn main() -> Result<()> {
     let exec_pipeline = pipeline::ExecutionPipeline::with_storage(exec_store, pipeline_rx);
     tracing::info!("Execution pipeline initialized");
 
+    // RPC server
+    let (mempool_tx, mut mempool_rx) = tokio::sync::mpsc::channel::<Vec<u8>>(4096);
+    let rpc_server = RpcServer::new(
+        exec_pipeline.shared_state(),
+        mempool_tx,
+        exec_pipeline.shared_batch_count(),
+    );
+
+    if config.rpc.enabled {
+        let rpc_addr: std::net::SocketAddr = config
+            .rpc
+            .listen_addr
+            .parse()
+            .with_context(|| format!("Invalid RPC address: {}", config.rpc.listen_addr))?;
+        tokio::spawn(async move {
+            if let Err(e) = rpc_server.serve(rpc_addr).await {
+                tracing::error!(error = %e, "RPC server failed");
+            }
+        });
+        tracing::info!(addr = %config.rpc.listen_addr, "RPC server started");
+    }
+
     // Network
     let transport_config = TransportConfig {
         idle_timeout_secs: config.network.idle_timeout_secs,
@@ -235,6 +258,11 @@ async fn main() -> Result<()> {
                         tracing::info!("Consensus output channel closed");
                         break;
                     }
+                }
+            }
+            Some(raw_tx) = mempool_rx.recv() => {
+                if mempool.insert(raw_tx.clone()) {
+                    let _ = consensus_tx.send(ConsensusInput::Transaction(raw_tx)).await;
                 }
             }
             _ = shutdown.notified() => {

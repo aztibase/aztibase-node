@@ -33,7 +33,7 @@
 - Build-phase tracking infrastructure (5 documents)
 - Implementation depth audit (Sprint 001, Task 7)
 - Reference repos cloned (MystiCeti, Sui, Lighthouse, rust-libp2p, redb)
-- cargo build + cargo test pass (165 tests, 0 failures)
+- cargo build + cargo test pass (180 tests, 0 failures)
 - Sprint 001 closed with retrospective
 - Sprint 002 closed: 24/24 tasks, 5 phases complete
 - Sprint 003 closed: 18/18 tasks, 4 phases complete
@@ -50,16 +50,17 @@
 | dendrite-network | PARTIAL | p2p-network-engineer | YES | YES |
 | dendrite-execution | PARTIAL | smart-contract-engineer | YES | YES |
 | dendrite-runtime | PARTIAL | ai-integration-engineer | YES | NO |
-| dendrite-rpc | STUB | node-engineer | NO | NO |
+| dendrite-rpc | PARTIAL | node-engineer | NO | YES |
 | dendrite-node | PARTIAL | node-engineer | YES | YES |
 
 ### In Progress
-- Sprint 006 Phase 1: JSON-RPC server (7 methods + node wiring)
+- Sprint 006 Phase 2: Security hardening (Tasks 9-15)
 
 ### Blocked
 - Nothing currently blocked
 
 ### Recently Completed
+- Sprint 006 Phase 1: JSON-RPC server (6 methods, 15 tests, node wiring, shared state)
 - Sprint 005 Phase 4: Security review (zero ELEVATED flags), cargo-audit, docs update
 - Sprint 005 Phase 3: BLS finality certificates (blst, aggregation, FinalityCertificate, creation, verification)
 - Sprint 005 Phase 2: State persistence to redb, batch root storage, startup recovery
@@ -67,10 +68,9 @@
 - Sprint 004 Phase 4: Security review (12-item checklist, no ELEVATED flags)
 
 ### Next Up
-1. Sprint 006 Phase 1: JSON-RPC server (Tasks 1-8)
-2. Sprint 006 Phase 2: Security hardening (Tasks 9-15)
-3. Sprint 006 Phase 3: Integration testing (Tasks 16-19)
-4. Sprint 006 Phase 4: M3 close + security review (Tasks 20-24)
+1. Sprint 006 Phase 2: Security hardening (Tasks 9-15)
+2. Sprint 006 Phase 3: Integration testing (Tasks 16-19)
+3. Sprint 006 Phase 4: M3 close + security review (Tasks 20-24)
 
 ---
 

@@ -1,3 +1,492 @@
-/// JSON-RPC server. Every node exposes its own RPC endpoint
-/// (no centralized RPC provider dependency).
-pub struct RpcServer;
+use std::net::SocketAddr;
+use std::sync::Arc;
+
+use axum::extract::State;
+use axum::http::StatusCode;
+use axum::response::IntoResponse;
+use axum::{Json, Router, routing::post};
+use serde::{Deserialize, Serialize};
+use tokio::sync::{RwLock, mpsc};
+use tracing::{debug, info};
+
+use dendrite_execution::AccountState;
+
+// ── JSON-RPC 2.0 Types ─────────────────────────────────────────────
+
+#[derive(Deserialize)]
+pub struct JsonRpcRequest {
+    pub jsonrpc: String,
+    pub method: String,
+    #[serde(default)]
+    pub params: serde_json::Value,
+    pub id: serde_json::Value,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct JsonRpcResponse {
+    pub jsonrpc: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub result: Option<serde_json::Value>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub error: Option<JsonRpcError>,
+    pub id: serde_json::Value,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct JsonRpcError {
+    pub code: i32,
+    pub message: String,
+}
+
+impl JsonRpcResponse {
+    fn success(id: serde_json::Value, result: serde_json::Value) -> Self {
+        Self {
+            jsonrpc: "2.0".into(),
+            result: Some(result),
+            error: None,
+            id,
+        }
+    }
+
+    fn error(id: serde_json::Value, code: i32, message: String) -> Self {
+        Self {
+            jsonrpc: "2.0".into(),
+            result: None,
+            error: Some(JsonRpcError { code, message }),
+            id,
+        }
+    }
+}
+
+// JSON-RPC error codes
+const PARSE_ERROR: i32 = -32700;
+const INVALID_REQUEST: i32 = -32600;
+const METHOD_NOT_FOUND: i32 = -32601;
+const INVALID_PARAMS: i32 = -32602;
+
+// ── Shared State ────────────────────────────────────────────────────
+
+/// Shared state accessible by RPC handlers. The execution pipeline updates
+/// the AccountState via the write lock; RPC handlers read via the read lock.
+pub struct RpcState {
+    pub accounts: Arc<RwLock<AccountState>>,
+    pub tx_sender: mpsc::Sender<Vec<u8>>,
+    pub batch_count: Arc<std::sync::atomic::AtomicU64>,
+}
+
+impl Clone for RpcState {
+    fn clone(&self) -> Self {
+        Self {
+            accounts: Arc::clone(&self.accounts),
+            tx_sender: self.tx_sender.clone(),
+            batch_count: Arc::clone(&self.batch_count),
+        }
+    }
+}
+
+// ── RPC Server ──────────────────────────────────────────────────────
+
+pub struct RpcServer {
+    state: RpcState,
+}
+
+impl RpcServer {
+    pub fn new(
+        accounts: Arc<RwLock<AccountState>>,
+        tx_sender: mpsc::Sender<Vec<u8>>,
+        batch_count: Arc<std::sync::atomic::AtomicU64>,
+    ) -> Self {
+        Self {
+            state: RpcState {
+                accounts,
+                tx_sender,
+                batch_count,
+            },
+        }
+    }
+
+    pub fn router(&self) -> Router {
+        Router::new()
+            .route("/", post(handle_rpc))
+            .with_state(self.state.clone())
+    }
+
+    pub async fn serve(self, addr: SocketAddr) -> anyhow::Result<()> {
+        let router = self.router();
+        info!(%addr, "RPC server listening");
+        let listener = tokio::net::TcpListener::bind(addr).await?;
+        axum::serve(listener, router).await?;
+        Ok(())
+    }
+}
+
+// ── Request Handler ─────────────────────────────────────────────────
+
+async fn handle_rpc(State(state): State<RpcState>, body: String) -> impl IntoResponse {
+    let request: JsonRpcRequest = match serde_json::from_str(&body) {
+        Ok(r) => r,
+        Err(e) => {
+            return (
+                StatusCode::OK,
+                Json(JsonRpcResponse::error(
+                    serde_json::Value::Null,
+                    PARSE_ERROR,
+                    format!("Parse error: {e}"),
+                )),
+            );
+        }
+    };
+
+    if request.jsonrpc != "2.0" {
+        return (
+            StatusCode::OK,
+            Json(JsonRpcResponse::error(
+                request.id,
+                INVALID_REQUEST,
+                "Invalid JSON-RPC version".into(),
+            )),
+        );
+    }
+
+    debug!(method = %request.method, "RPC request");
+
+    let response = dispatch(&state, &request).await;
+    (StatusCode::OK, Json(response))
+}
+
+async fn dispatch(state: &RpcState, req: &JsonRpcRequest) -> JsonRpcResponse {
+    match req.method.as_str() {
+        "dndr_getBalance" => handle_get_balance(state, req).await,
+        "dndr_getNonce" => handle_get_nonce(state, req).await,
+        "dndr_getCode" => handle_get_code(state, req).await,
+        "dndr_sendTransaction" => handle_send_transaction(state, req).await,
+        "dndr_blockNumber" => handle_block_number(state, req).await,
+        "dndr_getStateRoot" => handle_get_state_root(state, req).await,
+        _ => JsonRpcResponse::error(
+            req.id.clone(),
+            METHOD_NOT_FOUND,
+            format!("Method not found: {}", req.method),
+        ),
+    }
+}
+
+// ── Method Handlers ─────────────────────────────────────────────────
+
+fn parse_address(params: &serde_json::Value) -> Result<[u8; 32], String> {
+    let hex_str = params
+        .get(0)
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| "missing address parameter".to_string())?;
+    let hex_str = hex_str.strip_prefix("0x").unwrap_or(hex_str);
+    let bytes = hex::decode(hex_str).map_err(|e| format!("invalid hex: {e}"))?;
+    let address: [u8; 32] = bytes
+        .try_into()
+        .map_err(|_| "address must be 32 bytes".to_string())?;
+    Ok(address)
+}
+
+async fn handle_get_balance(state: &RpcState, req: &JsonRpcRequest) -> JsonRpcResponse {
+    let address = match parse_address(&req.params) {
+        Ok(a) => a,
+        Err(e) => return JsonRpcResponse::error(req.id.clone(), INVALID_PARAMS, e),
+    };
+    let accounts = state.accounts.read().await;
+    let balance = accounts.balance(&address);
+    JsonRpcResponse::success(req.id.clone(), serde_json::json!(format!("0x{balance:x}")))
+}
+
+async fn handle_get_nonce(state: &RpcState, req: &JsonRpcRequest) -> JsonRpcResponse {
+    let address = match parse_address(&req.params) {
+        Ok(a) => a,
+        Err(e) => return JsonRpcResponse::error(req.id.clone(), INVALID_PARAMS, e),
+    };
+    let accounts = state.accounts.read().await;
+    let nonce = accounts.nonce(&address);
+    JsonRpcResponse::success(req.id.clone(), serde_json::json!(nonce))
+}
+
+async fn handle_get_code(state: &RpcState, req: &JsonRpcRequest) -> JsonRpcResponse {
+    let address = match parse_address(&req.params) {
+        Ok(a) => a,
+        Err(e) => return JsonRpcResponse::error(req.id.clone(), INVALID_PARAMS, e),
+    };
+    let accounts = state.accounts.read().await;
+    match accounts.code(&address) {
+        Some(code) => JsonRpcResponse::success(
+            req.id.clone(),
+            serde_json::json!(format!("0x{}", hex::encode(code))),
+        ),
+        None => JsonRpcResponse::success(req.id.clone(), serde_json::Value::Null),
+    }
+}
+
+async fn handle_send_transaction(state: &RpcState, req: &JsonRpcRequest) -> JsonRpcResponse {
+    let hex_str = match req.params.get(0).and_then(|v| v.as_str()) {
+        Some(s) => s,
+        None => {
+            return JsonRpcResponse::error(
+                req.id.clone(),
+                INVALID_PARAMS,
+                "missing transaction hex string".into(),
+            );
+        }
+    };
+    let hex_str = hex_str.strip_prefix("0x").unwrap_or(hex_str);
+    let raw = match hex::decode(hex_str) {
+        Ok(b) => b,
+        Err(e) => {
+            return JsonRpcResponse::error(
+                req.id.clone(),
+                INVALID_PARAMS,
+                format!("invalid hex: {e}"),
+            );
+        }
+    };
+
+    if let Err(e) = dendrite_execution::route_tx(&raw) {
+        return JsonRpcResponse::error(req.id.clone(), INVALID_PARAMS, format!("invalid tx: {e}"));
+    }
+
+    let tx_hash = dendrite_core::hash(&raw);
+
+    match state.tx_sender.try_send(raw) {
+        Ok(()) => JsonRpcResponse::success(
+            req.id.clone(),
+            serde_json::json!(format!("0x{}", hex::encode(tx_hash))),
+        ),
+        Err(mpsc::error::TrySendError::Full(_)) => {
+            JsonRpcResponse::error(req.id.clone(), -32000, "mempool full".into())
+        }
+        Err(mpsc::error::TrySendError::Closed(_)) => {
+            JsonRpcResponse::error(req.id.clone(), -32000, "node shutting down".into())
+        }
+    }
+}
+
+async fn handle_block_number(state: &RpcState, req: &JsonRpcRequest) -> JsonRpcResponse {
+    let count = state.batch_count.load(std::sync::atomic::Ordering::Relaxed);
+    JsonRpcResponse::success(req.id.clone(), serde_json::json!(format!("0x{count:x}")))
+}
+
+async fn handle_get_state_root(state: &RpcState, req: &JsonRpcRequest) -> JsonRpcResponse {
+    let accounts = state.accounts.read().await;
+    let root = accounts.state_root();
+    JsonRpcResponse::success(
+        req.id.clone(),
+        serde_json::json!(format!("0x{}", hex::encode(root))),
+    )
+}
+
+// ── Tests ───────────────────────────────────────────────────────────
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use axum::body::Body;
+    use axum::http::Request;
+    use tower::ServiceExt;
+
+    fn test_state() -> (RpcState, mpsc::Receiver<Vec<u8>>) {
+        let (tx, rx) = mpsc::channel(64);
+        let state = RpcState {
+            accounts: Arc::new(RwLock::new(AccountState::new())),
+            tx_sender: tx,
+            batch_count: Arc::new(std::sync::atomic::AtomicU64::new(0)),
+        };
+        (state, rx)
+    }
+
+    fn test_state_with_accounts() -> (RpcState, mpsc::Receiver<Vec<u8>>) {
+        let mut accounts = AccountState::new();
+        let addr = [0x01u8; 32];
+        accounts.set_balance(&addr, 1000);
+        accounts.get_mut(&addr).nonce = 5;
+        accounts.set_code(&addr, vec![0x00, 0x61, 0x73, 0x6d]);
+
+        let (tx, rx) = mpsc::channel(64);
+        let state = RpcState {
+            accounts: Arc::new(RwLock::new(accounts)),
+            tx_sender: tx,
+            batch_count: Arc::new(std::sync::atomic::AtomicU64::new(42)),
+        };
+        (state, rx)
+    }
+
+    async fn rpc_call(state: &RpcState, body: &str) -> serde_json::Value {
+        let router = Router::new()
+            .route("/", post(handle_rpc))
+            .with_state(state.clone());
+
+        let request = Request::builder()
+            .method("POST")
+            .uri("/")
+            .header("content-type", "application/json")
+            .body(Body::from(body.to_string()))
+            .unwrap();
+
+        let response = router.oneshot(request).await.unwrap();
+        let bytes = axum::body::to_bytes(response.into_body(), 1_048_576)
+            .await
+            .unwrap();
+        serde_json::from_slice(&bytes).unwrap()
+    }
+
+    #[tokio::test]
+    async fn malformed_json_returns_parse_error() {
+        let (state, _rx) = test_state();
+        let resp = rpc_call(&state, "not json").await;
+        assert_eq!(resp["error"]["code"], PARSE_ERROR);
+    }
+
+    #[tokio::test]
+    async fn invalid_version_returns_error() {
+        let (state, _rx) = test_state();
+        let resp = rpc_call(
+            &state,
+            r#"{"jsonrpc":"1.0","method":"dndr_blockNumber","id":1}"#,
+        )
+        .await;
+        assert_eq!(resp["error"]["code"], INVALID_REQUEST);
+    }
+
+    #[tokio::test]
+    async fn unknown_method_returns_error() {
+        let (state, _rx) = test_state();
+        let resp = rpc_call(
+            &state,
+            r#"{"jsonrpc":"2.0","method":"unknown_method","id":1}"#,
+        )
+        .await;
+        assert_eq!(resp["error"]["code"], METHOD_NOT_FOUND);
+    }
+
+    #[tokio::test]
+    async fn get_balance_known_address() {
+        let (state, _rx) = test_state_with_accounts();
+        let addr_hex = hex::encode([0x01u8; 32]);
+        let body = format!(
+            r#"{{"jsonrpc":"2.0","method":"dndr_getBalance","params":["0x{addr_hex}"],"id":1}}"#
+        );
+        let resp = rpc_call(&state, &body).await;
+        assert_eq!(resp["result"], "0x3e8");
+    }
+
+    #[tokio::test]
+    async fn get_balance_unknown_address() {
+        let (state, _rx) = test_state();
+        let addr_hex = hex::encode([0xFFu8; 32]);
+        let body = format!(
+            r#"{{"jsonrpc":"2.0","method":"dndr_getBalance","params":["0x{addr_hex}"],"id":1}}"#
+        );
+        let resp = rpc_call(&state, &body).await;
+        assert_eq!(resp["result"], "0x0");
+    }
+
+    #[tokio::test]
+    async fn get_balance_invalid_address() {
+        let (state, _rx) = test_state();
+        let body = r#"{"jsonrpc":"2.0","method":"dndr_getBalance","params":["0xDEAD"],"id":1}"#;
+        let resp = rpc_call(&state, body).await;
+        assert_eq!(resp["error"]["code"], INVALID_PARAMS);
+    }
+
+    #[tokio::test]
+    async fn get_nonce_known_address() {
+        let (state, _rx) = test_state_with_accounts();
+        let addr_hex = hex::encode([0x01u8; 32]);
+        let body = format!(
+            r#"{{"jsonrpc":"2.0","method":"dndr_getNonce","params":["0x{addr_hex}"],"id":1}}"#
+        );
+        let resp = rpc_call(&state, &body).await;
+        assert_eq!(resp["result"], 5);
+    }
+
+    #[tokio::test]
+    async fn get_nonce_unknown_address() {
+        let (state, _rx) = test_state();
+        let addr_hex = hex::encode([0xAAu8; 32]);
+        let body = format!(
+            r#"{{"jsonrpc":"2.0","method":"dndr_getNonce","params":["0x{addr_hex}"],"id":1}}"#
+        );
+        let resp = rpc_call(&state, &body).await;
+        assert_eq!(resp["result"], 0);
+    }
+
+    #[tokio::test]
+    async fn get_code_contract_address() {
+        let (state, _rx) = test_state_with_accounts();
+        let addr_hex = hex::encode([0x01u8; 32]);
+        let body = format!(
+            r#"{{"jsonrpc":"2.0","method":"dndr_getCode","params":["0x{addr_hex}"],"id":1}}"#
+        );
+        let resp = rpc_call(&state, &body).await;
+        assert_eq!(resp["result"], "0x0061736d");
+    }
+
+    #[tokio::test]
+    async fn get_code_eoa_returns_null() {
+        let (state, _rx) = test_state();
+        let addr_hex = hex::encode([0xBBu8; 32]);
+        let body = format!(
+            r#"{{"jsonrpc":"2.0","method":"dndr_getCode","params":["0x{addr_hex}"],"id":1}}"#
+        );
+        let resp = rpc_call(&state, &body).await;
+        assert!(resp["result"].is_null());
+    }
+
+    #[tokio::test]
+    async fn send_transaction_valid() {
+        let (state, _rx) = test_state();
+        let tx = dendrite_execution::TxKind::Transfer {
+            from: [1u8; 32],
+            to: [2u8; 32],
+            value: 100,
+            nonce: 0,
+        };
+        let encoded = tx.encode();
+        let tx_hex = hex::encode(&encoded);
+        let body = format!(
+            r#"{{"jsonrpc":"2.0","method":"dndr_sendTransaction","params":["0x{tx_hex}"],"id":1}}"#
+        );
+        let resp = rpc_call(&state, &body).await;
+        assert!(resp.get("error").is_none(), "unexpected error: {}", resp);
+        assert!(resp["result"].as_str().unwrap().starts_with("0x"));
+    }
+
+    #[tokio::test]
+    async fn send_transaction_malformed() {
+        let (state, _rx) = test_state();
+        let body =
+            r#"{"jsonrpc":"2.0","method":"dndr_sendTransaction","params":["0xDEADBEEF"],"id":1}"#;
+        let resp = rpc_call(&state, body).await;
+        assert_eq!(resp["error"]["code"], INVALID_PARAMS);
+    }
+
+    #[tokio::test]
+    async fn block_number_returns_count() {
+        let (state, _rx) = test_state_with_accounts();
+        let body = r#"{"jsonrpc":"2.0","method":"dndr_blockNumber","id":1}"#;
+        let resp = rpc_call(&state, body).await;
+        assert_eq!(resp["result"], "0x2a");
+    }
+
+    #[tokio::test]
+    async fn get_state_root_empty() {
+        let (state, _rx) = test_state();
+        let body = r#"{"jsonrpc":"2.0","method":"dndr_getStateRoot","id":1}"#;
+        let resp = rpc_call(&state, body).await;
+        let hex_str = resp["result"].as_str().unwrap();
+        assert!(hex_str.starts_with("0x"));
+        assert_eq!(hex_str.len(), 66);
+    }
+
+    #[tokio::test]
+    async fn get_state_root_with_data() {
+        let (state, _rx) = test_state_with_accounts();
+        let body = r#"{"jsonrpc":"2.0","method":"dndr_getStateRoot","id":1}"#;
+        let resp = rpc_call(&state, body).await;
+        let hex_str = resp["result"].as_str().unwrap();
+        assert!(hex_str.starts_with("0x"));
+        assert_ne!(hex_str, &format!("0x{}", hex::encode([0u8; 32])));
+    }
+}
