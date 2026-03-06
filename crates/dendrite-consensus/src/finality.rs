@@ -17,9 +17,11 @@ pub struct FinalityCertificate {
     pub signer_bitmap: Vec<bool>,
 }
 
-/// Message that validators sign: BLAKE3(batch_hash || state_root).
+/// Message that validators sign: BLAKE3(domain || batch_hash || state_root).
+/// Domain separator prevents cross-protocol signature replay.
 fn finality_message(batch_hash: &BlockHash, state_root: &[u8; 32]) -> [u8; 32] {
-    let mut buf = Vec::with_capacity(64);
+    let mut buf = Vec::with_capacity(84);
+    buf.extend_from_slice(b"DENDRITE_FINALITY_V1");
     buf.extend_from_slice(batch_hash);
     buf.extend_from_slice(state_root);
     hash(&buf)
@@ -59,6 +61,9 @@ pub fn build_certificate(
 
     for (pk, sig) in signers {
         if let Some(idx) = validator_bls_keys.iter().position(|k| k == pk) {
+            if bitmap[idx] {
+                continue;
+            }
             bitmap[idx] = true;
             sigs.push(sig.clone());
         }

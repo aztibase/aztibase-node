@@ -2,12 +2,14 @@ use blst::BLST_ERROR;
 use blst::min_pk::{AggregatePublicKey, AggregateSignature, PublicKey, SecretKey, Signature};
 use serde::{Deserialize, Serialize};
 
-const DST: &[u8] = b"BLS_SIG_BLS12381G2_XMD:SHA-256_SSWU_RO_NUL_";
+const DST: &[u8] = b"BLS_SIG_BLS12381G2_XMD:SHA-256_SSWU_RO_POP_";
+const DST_POP: &[u8] = b"BLS_POP_BLS12381G2_XMD:SHA-256_SSWU_RO_POP_";
 
 #[derive(Clone)]
 pub struct BlsKeypair {
     secret: SecretKey,
     public: BlsPublicKey,
+    proof_of_possession: BlsSignature,
 }
 
 impl BlsKeypair {
@@ -16,9 +18,12 @@ impl BlsKeypair {
         rand::RngCore::fill_bytes(&mut rand::rngs::OsRng, &mut ikm);
         let secret = SecretKey::key_gen(&ikm, &[]).expect("valid IKM length");
         let pk = secret.sk_to_pk();
+        let pk_bytes = pk.to_bytes();
+        let pop = secret.sign(&pk_bytes, DST_POP, &[]);
         Self {
             secret,
-            public: BlsPublicKey(pk.to_bytes()),
+            public: BlsPublicKey(pk_bytes),
+            proof_of_possession: BlsSignature(pop.to_bytes()),
         }
     }
 
@@ -30,6 +35,25 @@ impl BlsKeypair {
     pub fn public_key(&self) -> &BlsPublicKey {
         &self.public
     }
+
+    pub fn proof_of_possession(&self) -> &BlsSignature {
+        &self.proof_of_possession
+    }
+}
+
+/// Verify a proof-of-possession: the validator signed their own public key
+/// using the dedicated PoP DST. This prevents rogue-key attacks on aggregate
+/// signatures.
+pub fn verify_proof_of_possession(public_key: &BlsPublicKey, pop: &BlsSignature) -> bool {
+    let pk = match PublicKey::from_bytes(&public_key.0) {
+        Ok(pk) => pk,
+        Err(_) => return false,
+    };
+    let sig = match Signature::from_bytes(&pop.0) {
+        Ok(sig) => sig,
+        Err(_) => return false,
+    };
+    sig.verify(true, &public_key.0, DST_POP, &[], &pk, true) == BLST_ERROR::BLST_SUCCESS
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -167,6 +191,25 @@ mod tests {
         let msg = b"test message";
         let sig = kp.sign(msg);
         assert!(kp.public_key().verify(msg, &sig));
+    }
+
+    #[test]
+    fn proof_of_possession_valid() {
+        let kp = BlsKeypair::generate();
+        assert!(verify_proof_of_possession(
+            kp.public_key(),
+            kp.proof_of_possession()
+        ));
+    }
+
+    #[test]
+    fn proof_of_possession_rejects_wrong_key() {
+        let kp1 = BlsKeypair::generate();
+        let kp2 = BlsKeypair::generate();
+        assert!(!verify_proof_of_possession(
+            kp2.public_key(),
+            kp1.proof_of_possession()
+        ));
     }
 
     #[test]
