@@ -1,11 +1,14 @@
 pub mod store;
 pub mod verkle;
 
+pub use redb::TableDefinition;
 pub use store::{
     ACCOUNTS_TABLE, BATCH_ROOTS_TABLE, BLOCKS_TABLE, CONTRACT_CODE_TABLE, CONTRACT_STORAGE_TABLE,
     RECEIPTS_TABLE, STATE_TABLE, StateStore, StorageError, StorageResult, TX_TABLE,
     VALIDATORS_TABLE, VERKLE_TABLE,
 };
+
+pub type TableDef = TableDefinition<'static, &'static [u8], &'static [u8]>;
 
 #[cfg(test)]
 mod tests {

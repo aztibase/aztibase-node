@@ -87,7 +87,13 @@ impl From<redb::TransactionError> for StorageError {
 pub type StorageResult<T> = std::result::Result<T, StorageError>;
 
 /// Entry for cross-table batch writes: (table, key, value).
-pub type MultiTableEntry<'a> = (TableDefinition<'a, &'a [u8], &'a [u8]>, &'a [u8], &'a [u8]);
+/// Table lifetime is separate from key/value lifetime to allow static table
+/// definitions with borrowed data.
+pub type MultiTableEntry<'a> = (
+    TableDefinition<'static, &'static [u8], &'static [u8]>,
+    &'a [u8],
+    &'a [u8],
+);
 
 // ── StateStore ─────────────────────────────────────────────────────
 

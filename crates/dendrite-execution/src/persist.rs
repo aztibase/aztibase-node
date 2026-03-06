@@ -1,14 +1,12 @@
 use dendrite_storage::{
     ACCOUNTS_TABLE, BATCH_ROOTS_TABLE, CONTRACT_CODE_TABLE, CONTRACT_STORAGE_TABLE, StateStore,
-    StorageResult,
+    StorageResult, TableDef,
 };
 
 use crate::state::AccountState;
 
 type Address = [u8; 32];
 
-/// Serialized form of an account record (balance + nonce only).
-/// Code and storage are stored in separate tables.
 fn serialize_account_record(balance: u64, nonce: u64) -> Vec<u8> {
     let mut buf = Vec::with_capacity(16);
     buf.extend_from_slice(&balance.to_le_bytes());
@@ -16,13 +14,15 @@ fn serialize_account_record(balance: u64, nonce: u64) -> Vec<u8> {
     buf
 }
 
-fn deserialize_account_record(data: &[u8]) -> (u64, u64) {
-    let balance = u64::from_le_bytes(data[..8].try_into().unwrap());
-    let nonce = u64::from_le_bytes(data[8..16].try_into().unwrap());
-    (balance, nonce)
+fn deserialize_account_record(data: &[u8]) -> Option<(u64, u64)> {
+    if data.len() < 16 {
+        return None;
+    }
+    let balance = u64::from_le_bytes(data[..8].try_into().ok()?);
+    let nonce = u64::from_le_bytes(data[8..16].try_into().ok()?);
+    Some((balance, nonce))
 }
 
-/// Composite key for contract storage: address (32 bytes) || storage_key.
 fn storage_key(address: &Address, key: &[u8]) -> Vec<u8> {
     let mut composite = Vec::with_capacity(32 + key.len());
     composite.extend_from_slice(address);
@@ -30,23 +30,30 @@ fn storage_key(address: &Address, key: &[u8]) -> Vec<u8> {
     composite
 }
 
-/// Flush the in-memory AccountState to redb in a single logical batch.
+/// Flush the in-memory AccountState to redb in a single atomic transaction.
 /// Writes accounts, code, and contract storage across three tables.
 pub fn flush_state(store: &StateStore, state: &AccountState) -> StorageResult<()> {
+    let mut owned: Vec<(TableDef, Vec<u8>, Vec<u8>)> = Vec::new();
+
     for (address, account) in state.iter_accounts() {
         let record = serialize_account_record(account.balance, account.nonce);
-        store.put(ACCOUNTS_TABLE, address, &record)?;
+        owned.push((ACCOUNTS_TABLE, address.to_vec(), record));
 
         if !account.code.is_empty() {
-            store.put(CONTRACT_CODE_TABLE, address, &account.code)?;
+            owned.push((CONTRACT_CODE_TABLE, address.to_vec(), account.code.clone()));
         }
 
         for (k, v) in &account.storage {
-            let composite = storage_key(address, k);
-            store.put(CONTRACT_STORAGE_TABLE, &composite, v)?;
+            owned.push((CONTRACT_STORAGE_TABLE, storage_key(address, k), v.clone()));
         }
     }
-    Ok(())
+
+    let mut refs: Vec<(TableDef, &[u8], &[u8])> = Vec::with_capacity(owned.len());
+    for (t, k, v) in &owned {
+        refs.push((*t, k.as_slice(), v.as_slice()));
+    }
+
+    store.batch_put_multi(&refs)
 }
 
 /// Load full AccountState from redb.
@@ -55,11 +62,14 @@ pub fn load_state(store: &StateStore) -> StorageResult<AccountState> {
 
     let accounts = store.iter(ACCOUNTS_TABLE)?;
     for (addr_bytes, record_bytes) in &accounts {
-        if addr_bytes.len() != 32 || record_bytes.len() < 16 {
-            continue;
-        }
-        let address: Address = addr_bytes.as_slice().try_into().unwrap();
-        let (balance, nonce) = deserialize_account_record(record_bytes);
+        let address: Address = match addr_bytes.as_slice().try_into() {
+            Ok(a) => a,
+            Err(_) => continue,
+        };
+        let (balance, nonce) = match deserialize_account_record(record_bytes) {
+            Some(r) => r,
+            None => continue,
+        };
 
         if balance > 0 || nonce > 0 {
             state.set_balance(&address, balance);
@@ -70,19 +80,22 @@ pub fn load_state(store: &StateStore) -> StorageResult<AccountState> {
 
     let code_entries = store.iter(CONTRACT_CODE_TABLE)?;
     for (addr_bytes, code) in code_entries {
-        if addr_bytes.len() != 32 {
-            continue;
-        }
-        let address: Address = addr_bytes.as_slice().try_into().unwrap();
+        let address: Address = match addr_bytes.as_slice().try_into() {
+            Ok(a) => a,
+            Err(_) => continue,
+        };
         state.set_code(&address, code);
     }
 
     let storage_entries = store.iter(CONTRACT_STORAGE_TABLE)?;
     for (composite_key, value) in storage_entries {
-        if composite_key.len() <= 32 {
+        if composite_key.len() < 32 {
             continue;
         }
-        let address: Address = composite_key[..32].try_into().unwrap();
+        let address: Address = match composite_key[..32].try_into() {
+            Ok(a) => a,
+            Err(_) => continue,
+        };
         let key = composite_key[32..].to_vec();
         state.set_storage(&address, key, value);
     }
@@ -105,7 +118,9 @@ pub fn get_batch_root(
     anchor_hash: &[u8; 32],
 ) -> StorageResult<Option<[u8; 32]>> {
     match store.get(BATCH_ROOTS_TABLE, anchor_hash)? {
-        Some(bytes) if bytes.len() == 32 => Ok(Some(bytes.as_slice().try_into().unwrap())),
+        Some(bytes) if bytes.len() == 32 => {
+            Ok(Some(bytes.as_slice().try_into().unwrap_or([0u8; 32])))
+        }
         _ => Ok(None),
     }
 }
