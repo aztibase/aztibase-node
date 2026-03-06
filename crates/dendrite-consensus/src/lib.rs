@@ -2,6 +2,7 @@ pub mod commit;
 pub mod dag;
 pub mod dag_store;
 pub mod engine;
+pub mod finality;
 pub mod ordering;
 pub mod pouw;
 pub mod validator;
@@ -10,6 +11,7 @@ pub use commit::{CommitConfig, CommitRule, LeaderStatus};
 pub use dag::{DagBlock, DagError};
 pub use dag_store::{DagStore, DagStoreError, DagStoreResult};
 pub use engine::{ConsensusConfig, ConsensusEngine, ConsensusInput, ConsensusOutput, RoundState};
+pub use finality::{FinalityCertificate, build_certificate, sign_finality, verify_certificate};
 pub use ordering::{CommittedBatch, extract_committed_batch};
 pub use validator::{ValidatorInfo, ValidatorSet};
 

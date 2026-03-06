@@ -65,11 +65,11 @@ This sprint makes the execution pipeline real: consensus commits flow through th
 
 | # | Task | Assigned To | Depends On | Status | Acceptance Criteria |
 |---|------|-------------|------------|--------|---------------------|
-| 11 | Add BLS12-381 key types to dendrite-core (BLS public key, secret key, signature) | consensus-engineer | -- | PENDING | BLS key generation, sign, verify; uses blst crate; test |
-| 12 | Implement BLS signature aggregation — combine 2f+1 validator signatures | consensus-engineer | Task 11 | PENDING | Aggregate signatures; verify against aggregate public key; test |
-| 13 | Define `FinalityCertificate` struct — batch hash, state root, aggregated BLS signature, signer bitmap | consensus-engineer | Task 12 | PENDING | Serializable certificate; contains proof of 2f+1 agreement; test |
-| 14 | Implement certificate creation — validators sign committed batch, leader aggregates | consensus-engineer | Tasks 12, 13 | PENDING | After commit, validators sign (batch_hash || state_root); leader aggregates into certificate; test |
-| 15 | Implement certificate verification — any node can verify with known validator set | consensus-engineer | Tasks 13, 14 | PENDING | Verify aggregated sig against signer bitmap + validator set; reject if <2f+1; test |
+| 11 | Add BLS12-381 key types to dendrite-core (BLS public key, secret key, signature) | consensus-engineer | -- | DONE | BLS key generation, sign, verify; uses blst crate; test |
+| 12 | Implement BLS signature aggregation — combine 2f+1 validator signatures | consensus-engineer | Task 11 | DONE | Aggregate signatures; verify against aggregate public key; test |
+| 13 | Define `FinalityCertificate` struct — batch hash, state root, aggregated BLS signature, signer bitmap | consensus-engineer | Task 12 | DONE | Serializable certificate; contains proof of 2f+1 agreement; test |
+| 14 | Implement certificate creation — validators sign committed batch, leader aggregates | consensus-engineer | Tasks 12, 13 | DONE | After commit, validators sign (batch_hash || state_root); leader aggregates into certificate; test |
+| 15 | Implement certificate verification — any node can verify with known validator set | consensus-engineer | Tasks 13, 14 | DONE | Verify aggregated sig against signer bitmap + validator set; reject if <2f+1; test |
 
 **Exit criteria:** BLS finality certificates created after commit and verifiable by any node. `cargo test` passes with new tests.
 

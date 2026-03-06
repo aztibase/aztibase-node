@@ -9,6 +9,7 @@ license.workspace = true
 serde = { workspace = true }
 blake3 = { workspace = true }
 ed25519-dalek = { workspace = true }
+blst = { workspace = true }
 rand = { workspace = true }
 thiserror = { workspace = true }
 bytes = { workspace = true }

@@ -21,6 +21,28 @@ Entries are prepended (newest first).
 
 ## Entries
 
+### 2026-03-06 -- consensus-engineer -- core/consensus
+**Task:** Sprint 005 Phase 3: BLS finality certificates (Tasks 11-15)
+**Sprint:** Sprint 005, Phase 3
+**Git Ref:** pending
+**Files Changed:**
+- Cargo.toml (added blst = "0.3" to workspace deps)
+- crates/dendrite-core/Cargo.toml (added blst dependency)
+- crates/dendrite-core/src/bls.rs (NEW: BlsKeypair, BlsPublicKey, BlsSignature, aggregate_signatures, verify_aggregate)
+- crates/dendrite-core/src/lib.rs (added bls module + exports)
+- crates/dendrite-consensus/src/finality.rs (NEW: FinalityCertificate, sign_finality, build_certificate, verify_certificate)
+- crates/dendrite-consensus/src/lib.rs (added finality module + exports)
+**Review Notes:**
+- blst is C dependency — justified exception to pure-Rust policy (ADR-002). Industry-standard BLS12-381 used by Lighthouse/Prysm. No production-audited pure-Rust alternative.
+- Custom serde for BlsPublicKey ([u8; 48]) and BlsSignature ([u8; 96]) — serde doesn't support arrays >32 by default.
+- FinalityCertificate uses signer bitmap (Vec<bool>) indexed by validator position for compact representation.
+- 19 new tests: 11 in dendrite-core (BLS primitives), 8 in dendrite-consensus (finality certificates).
+- Tests cover: sign/verify, aggregation, supermajority, tampered state root, tampered batch hash, manipulated bitmap, bitmap length mismatch, insufficient signers.
+- Total tests: 161 (up from 142).
+**Security Flags:** None — rogue-key attack mitigated by proof-of-possession (PoP) requirement noted for validator registration (future sprint).
+
+---
+
 ### 2026-03-06 -- node-engineer + smart-contract-engineer -- storage/execution/node
 **Task:** Sprint 005 Phase 2: State Persistence to redb (Tasks 6-10)
 **Sprint:** Sprint 005, Phase 2

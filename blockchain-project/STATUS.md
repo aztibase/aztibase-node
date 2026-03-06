@@ -3,7 +3,7 @@
 **Last Updated:** 2026-03-06
 **Updated By:** project-lead
 **Current Phase:** M3 -- Execution Layer (in progress)
-**Current Sprint:** Sprint 005 -- IN PROGRESS (Phase 2 complete)
+**Current Sprint:** Sprint 005 -- IN PROGRESS (Phase 3 complete)
 
 ---
 
@@ -33,7 +33,7 @@
 - Build-phase tracking infrastructure (5 documents)
 - Implementation depth audit (Sprint 001, Task 7)
 - Reference repos cloned (MystiCeti, Sui, Lighthouse, rust-libp2p, redb)
-- cargo build + cargo test pass (142 tests, 0 failures)
+- cargo build + cargo test pass (161 tests, 0 failures)
 - Sprint 001 closed with retrospective
 - Sprint 002 closed: 24/24 tasks, 5 phases complete
 - Sprint 003 closed: 18/18 tasks, 4 phases complete
@@ -53,12 +53,13 @@
 | dendrite-node | PARTIAL | node-engineer | YES | YES |
 
 ### In Progress
-- Sprint 005 Phase 3: BLS finality certificates
+- Sprint 005 Phase 4: Security review + documentation
 
 ### Blocked
 - Nothing currently blocked
 
 ### Recently Completed
+- Sprint 005 Phase 3: BLS finality certificates (blst, aggregation, FinalityCertificate, creation, verification)
 - Sprint 005 Phase 2: State persistence to redb, batch root storage, startup recovery
 - Sprint 005 Phase 1: Consensus-to-execution wiring, TxKind routing, ExecutionPipeline
 - Sprint 004 Phase 4: Security review (12-item checklist, no ELEVATED flags)
@@ -70,8 +71,7 @@
 - Sprint 003 Phase 1: Consensus Round Engine
 
 ### Next Up
-1. Sprint 005 Phase 3: BLS finality certificates (Tasks 11-15)
-2. Sprint 005 Phase 4: Security review + docs (Tasks 16-21)
+1. Sprint 005 Phase 4: Security review + docs (Tasks 16-21)
 
 ---
 

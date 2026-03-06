@@ -11,6 +11,7 @@ Every non-obvious technical decision is recorded here. Each ADR is immutable onc
 | ADR-001 | Switch storage from RocksDB to redb | 2026-03-05 | ACCEPTED | blockchain-architect |
 | ADR-002 | Dual-license MIT / Apache-2.0 | 2026-03-05 | ACCEPTED | legal-ip-counsel |
 | ADR-003 | Workspace monorepo with 8 crates | 2026-03-05 | ACCEPTED | blockchain-architect |
+| ADR-004 | Use blst crate for BLS12-381 (C dependency exception) | 2026-03-06 | ACCEPTED | blockchain-architect + security-engineer |
 
 ---
 
@@ -92,6 +93,36 @@ Single Cargo workspace with 8 domain-specific crates:
 ### Consequences
 - Cross-crate API design is critical -- breaking changes propagate
 - Need clear ownership and review process for shared types in dendrite-core
+
+---
+
+## ADR-004: Use blst crate for BLS12-381 (C dependency exception)
+
+**Date:** 2026-03-06
+**Status:** ACCEPTED
+**Decided By:** blockchain-architect + security-engineer
+
+### Context
+BLS finality certificates require BLS12-381 signature primitives (key generation, signing, verification, aggregation). ADR-001 established a pure-Rust dependency policy. BLS12-381 implementations available:
+- `blst` (v0.3): C library with Rust bindings. Used by Lighthouse, Prysm, and other production validators. Audited.
+- `bls12_381` (zkcrypto): Pure Rust, low-level. No high-level BLS signature API — would require hand-rolling aggregate signature scheme.
+- `ark-bls12-381` (arkworks): Pure Rust, heavy dependency tree. Not audited for BLS signature use.
+
+### Decision
+Use `blst` v0.3 as a justified exception to the pure-Rust policy. This is the only C dependency in the project.
+
+### Rationale
+- BLS signature correctness is security-critical — aggregate signature bugs can forge finality proofs
+- `blst` is the only production-audited BLS12-381 implementation available
+- Used by Ethereum's two largest consensus clients (Lighthouse, Prysm)
+- Rolling our own from low-level primitives introduces unacceptable risk
+- `blst` compiles on all target platforms (Linux, macOS, Windows) via `cc`
+
+### Consequences
+- Requires C compiler in build toolchain (MSVC on Windows, gcc/clang on Unix)
+- Cross-compilation becomes slightly harder
+- If a production-grade pure-Rust BLS library emerges, this ADR should be superseded
+- Proof-of-possession (PoP) required at validator registration to prevent rogue-key attacks
 
 ---
 
