@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::sync::Arc;
 
 use dendrite_consensus::CommittedBatch;
@@ -26,6 +27,7 @@ pub struct ExecutionPipeline {
     store: Option<StateStore>,
     rx: mpsc::Receiver<CommittedBatch>,
     batch_count: Arc<std::sync::atomic::AtomicU64>,
+    executed_anchors: HashSet<[u8; 32]>,
 }
 
 impl ExecutionPipeline {
@@ -46,6 +48,7 @@ impl ExecutionPipeline {
             store: Some(store),
             rx,
             batch_count: Arc::new(std::sync::atomic::AtomicU64::new(0)),
+            executed_anchors: HashSet::new(),
         }
     }
 
@@ -62,24 +65,44 @@ impl ExecutionPipeline {
     /// Run the pipeline loop, processing committed batches until the channel closes.
     pub async fn run(mut self) {
         while let Some(batch) = self.rx.recv().await {
-            let result = self.execute_batch(&batch).await;
-            self.batch_count
-                .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-            tracing::info!(
-                anchor = %short_hex(&result.batch_anchor),
-                state_root = %short_hex(&result.state_root),
-                transfers = result.transfer_count,
-                contracts = result.contract_count,
-                routing_errors = result.routing_errors,
-                "Batch executed"
-            );
+            if !self.executed_anchors.insert(batch.anchor_hash) {
+                tracing::warn!(
+                    anchor = %short_hex(&batch.anchor_hash),
+                    "Duplicate batch skipped"
+                );
+                continue;
+            }
+            match self.execute_batch(&batch).await {
+                Ok(result) => {
+                    self.batch_count
+                        .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                    tracing::info!(
+                        anchor = %short_hex(&result.batch_anchor),
+                        state_root = %short_hex(&result.state_root),
+                        transfers = result.transfer_count,
+                        contracts = result.contract_count,
+                        routing_errors = result.routing_errors,
+                        "Batch executed"
+                    );
+                }
+                Err(e) => {
+                    tracing::error!(error = %e, "Pipeline halting due to fatal error");
+                    break;
+                }
+            }
         }
         tracing::info!("Execution pipeline shutting down");
     }
 
     /// Execute a single committed batch: route transactions, execute each type,
     /// flush to disk, return the resulting state root.
-    pub async fn execute_batch(&self, batch: &CommittedBatch) -> PipelineResult {
+    ///
+    /// Returns `Err` if state flush or batch root storage fails — the caller
+    /// must treat this as fatal and halt.
+    pub async fn execute_batch(
+        &self,
+        batch: &CommittedBatch,
+    ) -> Result<PipelineResult, anyhow::Error> {
         let (routed, errors) = route_batch(&batch.transactions);
 
         let mut transfers = Vec::new();
@@ -156,21 +179,19 @@ impl ExecutionPipeline {
         let state_root = state.state_root();
 
         if let Some(ref store) = self.store {
-            if let Err(e) = flush_state(store, &state) {
-                tracing::error!(error = %e, "Failed to flush state to disk");
-            }
-            if let Err(e) = store_batch_root(store, &batch.anchor_hash, &state_root) {
-                tracing::error!(error = %e, "Failed to store batch root");
-            }
+            flush_state(store, &state)
+                .map_err(|e| anyhow::anyhow!("fatal: flush_state failed: {e}"))?;
+            store_batch_root(store, &batch.anchor_hash, &state_root)
+                .map_err(|e| anyhow::anyhow!("fatal: store_batch_root failed: {e}"))?;
         }
 
-        PipelineResult {
+        Ok(PipelineResult {
             batch_anchor: batch.anchor_hash,
             state_root,
             transfer_count,
             contract_count,
             routing_errors: errors.len(),
-        }
+        })
     }
 }
 
@@ -207,6 +228,7 @@ mod tests {
             store: None,
             rx,
             batch_count: Arc::new(std::sync::atomic::AtomicU64::new(0)),
+            executed_anchors: HashSet::new(),
         }
     }
 
@@ -243,7 +265,7 @@ mod tests {
         };
 
         let batch = make_batch(vec![transfer.encode()]);
-        let result = pipeline.execute_batch(&batch).await;
+        let result = pipeline.execute_batch(&batch).await.unwrap();
 
         assert_eq!(result.transfer_count, 1);
         assert_eq!(result.contract_count, 0);
@@ -278,7 +300,7 @@ mod tests {
         };
 
         let batch = make_batch(vec![transfer.encode(), deploy.encode()]);
-        let result = pipeline.execute_batch(&batch).await;
+        let result = pipeline.execute_batch(&batch).await.unwrap();
 
         assert_eq!(result.transfer_count, 1);
         assert_eq!(result.contract_count, 1);
@@ -298,7 +320,7 @@ mod tests {
         };
 
         let batch = make_batch(vec![good.encode(), vec![0xFE, 0x00]]);
-        let result = pipeline.execute_batch(&batch).await;
+        let result = pipeline.execute_batch(&batch).await.unwrap();
 
         assert_eq!(result.transfer_count, 1);
         assert_eq!(result.routing_errors, 1);
@@ -321,7 +343,7 @@ mod tests {
         };
 
         let batch = make_batch(vec![transfer.encode()]);
-        let result = pipeline.execute_batch(&batch).await;
+        let result = pipeline.execute_batch(&batch).await.unwrap();
         assert_eq!(result.transfer_count, 1);
         assert_eq!(pipeline.state.read().await.balance(&bob), 200);
     }
@@ -355,8 +377,8 @@ mod tests {
             .encode(),
         ]);
 
-        pipeline.execute_batch(&batch1).await;
-        let result = pipeline.execute_batch(&batch2).await;
+        pipeline.execute_batch(&batch1).await.unwrap();
+        let result = pipeline.execute_batch(&batch2).await.unwrap();
 
         let state = pipeline.state.read().await;
         assert_eq!(state.balance(&alice), 500);
@@ -388,7 +410,7 @@ mod tests {
             };
 
             let batch = make_batch_with_anchor(anchor, vec![transfer.encode()]);
-            let result = pipeline.execute_batch(&batch).await;
+            let result = pipeline.execute_batch(&batch).await.unwrap();
             state_root = result.state_root;
         }
 
@@ -402,6 +424,37 @@ mod tests {
         assert_eq!(root, Some(state_root));
 
         cleanup(&path);
+    }
+
+    #[tokio::test]
+    async fn pipeline_rejects_duplicate_anchor() {
+        let (tx, rx) = mpsc::channel(16);
+        let pipeline = make_pipeline(rx);
+
+        let alice = [1u8; 32];
+        let bob = [2u8; 32];
+        let shared_state = pipeline.shared_state();
+        shared_state.write().await.set_balance(&alice, 1000);
+
+        let batch = make_batch(vec![
+            TxKind::Transfer {
+                from: alice,
+                to: bob,
+                value: 300,
+                nonce: 0,
+            }
+            .encode(),
+        ]);
+
+        tx.send(batch.clone()).await.unwrap();
+        tx.send(batch).await.unwrap();
+        drop(tx);
+
+        pipeline.run().await;
+
+        let state = shared_state.read().await;
+        assert_eq!(state.balance(&alice), 700);
+        assert_eq!(state.balance(&bob), 300);
     }
 
     #[tokio::test]
@@ -424,7 +477,7 @@ mod tests {
                 }
                 .encode(),
             ]);
-            pipeline.execute_batch(&batch).await;
+            pipeline.execute_batch(&batch).await.unwrap();
         }
 
         // Second pipeline: should recover state from redb

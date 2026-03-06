@@ -1,3 +1,5 @@
+use std::collections::HashSet;
+
 use dendrite_core::BlockHash;
 
 use crate::dag_store::DagStore;
@@ -18,7 +20,7 @@ pub struct CommittedBatch {
 pub fn extract_committed_batch(
     dag: &DagStore,
     anchor_hash: BlockHash,
-    already_committed: &[BlockHash],
+    already_committed: &HashSet<BlockHash>,
 ) -> Result<CommittedBatch, crate::dag_store::DagStoreError> {
     let order = dag.causal_order(&[anchor_hash])?;
 
@@ -113,7 +115,7 @@ mod tests {
         let b1h = b1.hash;
         dag.insert(b1).unwrap();
 
-        let batch = extract_committed_batch(&dag, b1h, &[]).unwrap();
+        let batch = extract_committed_batch(&dag, b1h, &HashSet::new()).unwrap();
         assert_eq!(batch.transactions.len(), 2);
         assert_eq!(batch.transactions[0], b"hello");
         assert_eq!(batch.transactions[1], b"world");
@@ -137,7 +139,7 @@ mod tests {
         let b1h = b1.hash;
         dag.insert(b1).unwrap();
 
-        let batch = extract_committed_batch(&dag, b1h, &[g1h]).unwrap();
+        let batch = extract_committed_batch(&dag, b1h, &HashSet::from([g1h])).unwrap();
         assert!(!batch.vertex_order.contains(&g1h));
         assert!(batch.vertex_order.contains(&b1h));
 

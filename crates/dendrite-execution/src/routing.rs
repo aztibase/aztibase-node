@@ -66,6 +66,7 @@ pub enum RoutingError {
     DecodeFailed(String),
     PrefixMismatch { declared: u8, actual: u8 },
     OversizedPayload(usize),
+    InvalidFuncName(String),
 }
 
 impl std::fmt::Display for RoutingError {
@@ -83,6 +84,9 @@ impl std::fmt::Display for RoutingError {
             RoutingError::OversizedPayload(len) => {
                 write!(f, "payload too large: {len} bytes (max {MAX_TX_SIZE})")
             }
+            RoutingError::InvalidFuncName(name) => {
+                write!(f, "invalid function name: {name}")
+            }
         }
     }
 }
@@ -93,7 +97,18 @@ fn bincode_options() -> impl Options {
     bincode::DefaultOptions::new()
         .with_limit(MAX_TX_SIZE)
         .with_fixint_encoding()
-        .allow_trailing_bytes()
+}
+
+fn is_valid_func_name(name: &str) -> bool {
+    if name.is_empty() || name.len() > 128 {
+        return false;
+    }
+    let mut chars = name.chars();
+    let first = chars.next().unwrap();
+    if !first.is_ascii_alphabetic() && first != '_' {
+        return false;
+    }
+    chars.all(|c| c.is_ascii_alphanumeric() || c == '_')
 }
 
 /// Decode raw payload bytes into a typed transaction.
@@ -116,6 +131,11 @@ pub fn route_tx(raw: &[u8]) -> Result<TxKind, RoutingError> {
             declared: prefix,
             actual,
         });
+    }
+    if let TxKind::ContractCall { ref func_name, .. } = decoded
+        && !is_valid_func_name(func_name)
+    {
+        return Err(RoutingError::InvalidFuncName(func_name.clone()));
     }
     Ok(decoded)
 }
@@ -229,6 +249,87 @@ mod tests {
         assert!(matches!(
             route_tx(&encoded),
             Err(RoutingError::PrefixMismatch { .. })
+        ));
+    }
+
+    #[test]
+    fn valid_func_name_accepted() {
+        let tx = TxKind::ContractCall {
+            caller: [4u8; 32],
+            contract: [5u8; 32],
+            func_name: "transfer_tokens".into(),
+            args_data: vec![],
+            nonce: 0,
+            gas_limit: 100_000,
+        };
+        let encoded = tx.encode();
+        assert!(route_tx(&encoded).is_ok());
+    }
+
+    #[test]
+    fn empty_func_name_rejected() {
+        let tx = TxKind::ContractCall {
+            caller: [4u8; 32],
+            contract: [5u8; 32],
+            func_name: "".into(),
+            args_data: vec![],
+            nonce: 0,
+            gas_limit: 100_000,
+        };
+        let encoded = tx.encode();
+        assert!(matches!(
+            route_tx(&encoded),
+            Err(RoutingError::InvalidFuncName(_))
+        ));
+    }
+
+    #[test]
+    fn special_char_func_name_rejected() {
+        let tx = TxKind::ContractCall {
+            caller: [4u8; 32],
+            contract: [5u8; 32],
+            func_name: "drop;--".into(),
+            args_data: vec![],
+            nonce: 0,
+            gas_limit: 100_000,
+        };
+        let encoded = tx.encode();
+        assert!(matches!(
+            route_tx(&encoded),
+            Err(RoutingError::InvalidFuncName(_))
+        ));
+    }
+
+    #[test]
+    fn too_long_func_name_rejected() {
+        let tx = TxKind::ContractCall {
+            caller: [4u8; 32],
+            contract: [5u8; 32],
+            func_name: "a".repeat(129),
+            args_data: vec![],
+            nonce: 0,
+            gas_limit: 100_000,
+        };
+        let encoded = tx.encode();
+        assert!(matches!(
+            route_tx(&encoded),
+            Err(RoutingError::InvalidFuncName(_))
+        ));
+    }
+
+    #[test]
+    fn trailing_bytes_rejected() {
+        let tx = TxKind::Transfer {
+            from: [1u8; 32],
+            to: [2u8; 32],
+            value: 500,
+            nonce: 3,
+        };
+        let mut encoded = tx.encode();
+        encoded.push(0xFF);
+        assert!(matches!(
+            route_tx(&encoded),
+            Err(RoutingError::DecodeFailed(_))
         ));
     }
 

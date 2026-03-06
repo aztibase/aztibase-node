@@ -1,3 +1,5 @@
+use std::collections::HashSet;
+
 use dendrite_core::{
     BlockHash, BlsKeypair, BlsPublicKey, BlsSignature, aggregate_signatures, hash, verify_aggregate,
 };
@@ -37,6 +39,11 @@ pub fn sign_finality(
     keypair.sign(&msg)
 }
 
+fn has_unique_bls_keys(keys: &[BlsPublicKey]) -> bool {
+    let set: HashSet<&[u8; 48]> = keys.iter().map(|k| k.as_bytes()).collect();
+    set.len() == keys.len()
+}
+
 /// Build a finality certificate from individual validator signatures.
 ///
 /// `signers` maps validator BLS public keys to their signatures.
@@ -50,9 +57,15 @@ pub fn build_certificate(
     state_root: [u8; 32],
     validator_bls_keys: &[BlsPublicKey],
     signers: &[(BlsPublicKey, BlsSignature)],
-    quorum: usize,
+    validator_set: &ValidatorSet,
 ) -> Option<FinalityCertificate> {
+    let quorum = validator_set.quorum_count();
+
     if signers.len() < quorum {
+        return None;
+    }
+
+    if !has_unique_bls_keys(validator_bls_keys) {
         return None;
     }
 
@@ -94,6 +107,10 @@ pub fn verify_certificate(
     validator_set: &ValidatorSet,
 ) -> bool {
     if cert.signer_bitmap.len() != validator_bls_keys.len() {
+        return false;
+    }
+
+    if !has_unique_bls_keys(validator_bls_keys) {
         return false;
     }
 
@@ -148,14 +165,7 @@ mod tests {
             })
             .collect();
 
-        let cert = build_certificate(
-            batch_hash,
-            state_root,
-            &bls_keys,
-            &signers,
-            vs.quorum_count(),
-        )
-        .unwrap();
+        let cert = build_certificate(batch_hash, state_root, &bls_keys, &signers, &vs).unwrap();
 
         assert_eq!(cert.batch_hash, batch_hash);
         assert_eq!(cert.state_root, state_root);
@@ -176,14 +186,7 @@ mod tests {
             })
             .collect();
 
-        let cert = build_certificate(
-            batch_hash,
-            state_root,
-            &bls_keys,
-            &signers,
-            vs.quorum_count(),
-        )
-        .unwrap();
+        let cert = build_certificate(batch_hash, state_root, &bls_keys, &signers, &vs).unwrap();
 
         assert!(verify_certificate(&cert, &bls_keys, &vs));
     }
@@ -203,13 +206,7 @@ mod tests {
             })
             .collect();
 
-        let cert = build_certificate(
-            batch_hash,
-            state_root,
-            &bls_keys,
-            &signers,
-            vs.quorum_count(),
-        );
+        let cert = build_certificate(batch_hash, state_root, &bls_keys, &signers, &vs);
         assert!(cert.is_none());
     }
 
@@ -227,14 +224,7 @@ mod tests {
             })
             .collect();
 
-        let mut cert = build_certificate(
-            batch_hash,
-            state_root,
-            &bls_keys,
-            &signers,
-            vs.quorum_count(),
-        )
-        .unwrap();
+        let mut cert = build_certificate(batch_hash, state_root, &bls_keys, &signers, &vs).unwrap();
 
         // Tamper with state root
         cert.state_root = hash(b"tampered");
@@ -255,14 +245,7 @@ mod tests {
             })
             .collect();
 
-        let mut cert = build_certificate(
-            batch_hash,
-            state_root,
-            &bls_keys,
-            &signers,
-            vs.quorum_count(),
-        )
-        .unwrap();
+        let mut cert = build_certificate(batch_hash, state_root, &bls_keys, &signers, &vs).unwrap();
 
         cert.batch_hash = hash(b"tampered_batch");
         assert!(!verify_certificate(&cert, &bls_keys, &vs));
@@ -283,10 +266,12 @@ mod tests {
             })
             .collect();
 
-        // Force build with quorum=2 (would normally need 3)
-        let cert = build_certificate(batch_hash, state_root, &bls_keys, &signers, 2).unwrap();
+        // Build with a 2-validator set (quorum=2), so cert is valid for it
+        let (small_vs, _, _) = setup_validators(2);
+        let cert =
+            build_certificate(batch_hash, state_root, &bls_keys, &signers, &small_vs).unwrap();
 
-        // But verification uses the real validator set quorum (3)
+        // But verification uses the real 4-validator set (quorum=3)
         assert!(!verify_certificate(&cert, &bls_keys, &vs));
     }
 
@@ -304,18 +289,32 @@ mod tests {
             })
             .collect();
 
-        let mut cert = build_certificate(
-            batch_hash,
-            state_root,
-            &bls_keys,
-            &signers,
-            vs.quorum_count(),
-        )
-        .unwrap();
+        let mut cert = build_certificate(batch_hash, state_root, &bls_keys, &signers, &vs).unwrap();
 
         // Tamper: add extra entry to bitmap
         cert.signer_bitmap.push(true);
         assert!(!verify_certificate(&cert, &bls_keys, &vs));
+    }
+
+    #[test]
+    fn reject_duplicate_bls_keys() {
+        let (vs, keypairs, mut bls_keys) = setup_validators(4);
+        let batch_hash = hash(b"batch_dup");
+        let state_root = hash(b"state_dup");
+
+        // Duplicate the first key into the second slot
+        bls_keys[1] = bls_keys[0].clone();
+
+        let signers: Vec<(BlsPublicKey, BlsSignature)> = keypairs[..3]
+            .iter()
+            .map(|kp| {
+                let sig = sign_finality(kp, &batch_hash, &state_root);
+                (kp.public_key().clone(), sig)
+            })
+            .collect();
+
+        let cert = build_certificate(batch_hash, state_root, &bls_keys, &signers, &vs);
+        assert!(cert.is_none());
     }
 
     #[test]
@@ -332,14 +331,7 @@ mod tests {
             })
             .collect();
 
-        let cert = build_certificate(
-            batch_hash,
-            state_root,
-            &bls_keys,
-            &signers,
-            vs.quorum_count(),
-        )
-        .unwrap();
+        let cert = build_certificate(batch_hash, state_root, &bls_keys, &signers, &vs).unwrap();
 
         assert!(verify_certificate(&cert, &bls_keys, &vs));
         assert!(cert.signer_bitmap.iter().all(|s| *s));

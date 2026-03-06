@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::time::Duration;
 
 use anyhow::{Context, Result};
@@ -36,7 +36,7 @@ impl Default for ConsensusConfig {
 pub struct RoundState {
     pub current_round: u64,
     vertices_by_round: HashMap<u64, Vec<BlockHash>>,
-    committed: Vec<BlockHash>,
+    committed: HashSet<BlockHash>,
     last_committed_wave: Option<u64>,
     prune_horizon: u64,
 }
@@ -52,7 +52,7 @@ impl RoundState {
         Self {
             current_round: 0,
             vertices_by_round: HashMap::new(),
-            committed: Vec::new(),
+            committed: HashSet::new(),
             last_committed_wave: None,
             prune_horizon: 0,
         }
@@ -78,10 +78,10 @@ impl RoundState {
     }
 
     pub fn record_commit(&mut self, hash: BlockHash) {
-        self.committed.push(hash);
+        self.committed.insert(hash);
     }
 
-    pub fn committed_blocks(&self) -> &[BlockHash] {
+    pub fn committed_blocks(&self) -> &HashSet<BlockHash> {
         &self.committed
     }
 
@@ -375,12 +375,15 @@ impl ConsensusEngine {
             match status {
                 LeaderStatus::Commit(hash) => {
                     info!(wave, hash = %short_hex(&hash), "Block committed (direct)");
-                    let already = self.state.committed_blocks().to_vec();
                     self.state.record_commit(hash);
                     self.state.last_committed_wave = Some(wave);
                     self.state.prune_before(wave * wave_len);
                     self.vrf_seed = dendrite_core::hash(&hash);
-                    match crate::ordering::extract_committed_batch(&self.dag, hash, &already) {
+                    match crate::ordering::extract_committed_batch(
+                        &self.dag,
+                        hash,
+                        self.state.committed_blocks(),
+                    ) {
                         Ok(batch) => {
                             if let Err(e) =
                                 self.outbox.try_send(ConsensusOutput::BatchCommitted(batch))
