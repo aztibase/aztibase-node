@@ -5,6 +5,30 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ---
 
+## [M3] -- Execution Layer (In Progress)
+
+### Added
+- ExecutionPipeline: consensus-to-execution wiring via tokio::mpsc channel (2026-03-06)
+- TxKind routing: prefix-byte wire format (0x01=Transfer, 0x02=Deploy, 0x03=Call) (2026-03-06)
+- State persistence: flush/load AccountState to redb across 4 tables (2026-03-06)
+- Batch root storage: state root per committed batch, queryable by anchor hash (2026-03-06)
+- Startup recovery: node loads persisted state from redb on launch (2026-03-06)
+- BLS12-381 primitives: BlsKeypair, BlsPublicKey, BlsSignature via blst crate (2026-03-06)
+- BLS signature aggregation and verification (2026-03-06)
+- FinalityCertificate: batch hash + state root + aggregated BLS sig + signer bitmap (2026-03-06)
+- Certificate creation (build_certificate) and verification (verify_certificate) (2026-03-06)
+
+### Changed
+- ConsensusOutput::BatchCommitted now carries full CommittedBatch instead of BlockHash (2026-03-06)
+- Separate redb databases for consensus DAG and execution state (2026-03-06)
+
+### Security
+- ADR-004: blst C dependency justified exception for BLS12-381 (2026-03-06)
+- Security review: consensus-execution wiring, state persistence, BLS certificates, tx routing (2026-03-06)
+- cargo-audit: transitive advisories (ring, wasmtime WASI, lru, bincode) — no new critical issues (2026-03-06)
+
+---
+
 ## [M2] -- P2P Networking + Basic Consensus (Complete)
 
 ### Added

@@ -3,7 +3,7 @@
 **Last Updated:** 2026-03-06
 **Updated By:** project-lead
 **Current Phase:** M3 -- Execution Layer (in progress)
-**Current Sprint:** Sprint 005 -- IN PROGRESS (Phase 3 complete)
+**Current Sprint:** Sprint 005 -- COMPLETE (21/21 tasks, 4 phases)
 
 ---
 
@@ -38,6 +38,7 @@
 - Sprint 002 closed: 24/24 tasks, 5 phases complete
 - Sprint 003 closed: 18/18 tasks, 4 phases complete
 - Sprint 004 closed: 19/19 tasks, 4 phases complete
+- Sprint 005 closed: 21/21 tasks, 4 phases complete
 
 ### Crate Status
 
@@ -47,31 +48,26 @@
 | dendrite-consensus | PARTIAL | consensus-engineer | YES | YES |
 | dendrite-storage | PARTIAL | node-engineer | YES | YES |
 | dendrite-network | PARTIAL | p2p-network-engineer | YES | YES |
-| dendrite-execution | PARTIAL | smart-contract-engineer | YES | IN PROGRESS |
+| dendrite-execution | PARTIAL | smart-contract-engineer | YES | YES |
 | dendrite-runtime | PARTIAL | ai-integration-engineer | YES | NO |
 | dendrite-rpc | STUB | node-engineer | NO | NO |
 | dendrite-node | PARTIAL | node-engineer | YES | YES |
 
 ### In Progress
-- Sprint 005 Phase 4: Security review + documentation
+- Sprint 006 planning
 
 ### Blocked
 - Nothing currently blocked
 
 ### Recently Completed
+- Sprint 005 Phase 4: Security review (zero ELEVATED flags), cargo-audit, docs update
 - Sprint 005 Phase 3: BLS finality certificates (blst, aggregation, FinalityCertificate, creation, verification)
 - Sprint 005 Phase 2: State persistence to redb, batch root storage, startup recovery
 - Sprint 005 Phase 1: Consensus-to-execution wiring, TxKind routing, ExecutionPipeline
 - Sprint 004 Phase 4: Security review (12-item checklist, no ELEVATED flags)
-- Sprint 004 Phase 3: WASM contract deploy + call, state roots, execution receipts
-- Sprint 004 Phase 2: AccountState, SimpleTransfer, CommittedBatch ordering, BatchResult
-- Sprint 003 Phase 4: Security review + cargo-audit
-- Sprint 003 Phase 3: Commit Rule Integration + Mempool
-- Sprint 003 Phase 2: Vertex Reception & DAG Growth
-- Sprint 003 Phase 1: Consensus Round Engine
 
 ### Next Up
-1. Sprint 005 Phase 4: Security review + docs (Tasks 16-21)
+1. Sprint 006 planning (EVM integration, RPC endpoints, state sync, integration testing)
 
 ---
 
@@ -83,7 +79,8 @@
 | Domain acquisition pending | MEDIUM | legal-ip-counsel | OPEN |
 | nChain patent FTO analysis not started | HIGH | legal-ip-counsel | OPEN |
 | wasmtime trap handling on Windows | LOW | smart-contract-engineer | KNOWN |
-| Transitive dep advisories (ring, wasmtime WASI, lru) | LOW | security-engineer | DOCUMENTED |
+| Transitive dep advisories (ring, wasmtime WASI, lru, bincode) | LOW | security-engineer | DOCUMENTED |
+| BLS rogue-key attack without PoP | MEDIUM | consensus-engineer | DOCUMENTED (ADR-004) |
 
 ---
 

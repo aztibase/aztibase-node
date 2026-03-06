@@ -21,6 +21,25 @@ Entries are prepended (newest first).
 
 ## Entries
 
+### 2026-03-06 -- security-engineer + documentation-engineer -- all
+**Task:** Sprint 005 Phase 4: Security review + documentation (Tasks 16-21)
+**Sprint:** Sprint 005, Phase 4
+**Git Ref:** pending
+**Files Changed:**
+- blockchain-project/sprints/SPRINT-005.md (security review results, retrospective, DoD checked)
+- blockchain-project/STATUS.md (sprint complete, test count 161, crate status updated)
+- blockchain-project/CHANGELOG.md (M3 section added)
+- blockchain-project/DECISIONS.md (ADR-004: blst dependency)
+- blockchain-project/BUILD_LOG.md (Phase 3 + Phase 4 entries)
+**Review Notes:**
+- 4 security reviews: wiring, persistence, BLS, routing
+- 12 findings: 0 ELEVATED, 1 MEDIUM (rogue-key without PoP), 3 LOW, 8 INFO
+- cargo-audit: 5 transitive vulns, 6 warnings — all in ring/wasmtime/libp2p/bincode
+- Sprint 005 DoD: all 10 items checked
+**Security Flags:** None ELEVATED. SEC-BLS-001 (rogue-key) is MEDIUM — PoP required before multi-validator testnet.
+
+---
+
 ### 2026-03-06 -- consensus-engineer -- core/consensus
 **Task:** Sprint 005 Phase 3: BLS finality certificates (Tasks 11-15)
 **Sprint:** Sprint 005, Phase 3
