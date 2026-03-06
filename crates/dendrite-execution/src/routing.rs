@@ -1,3 +1,4 @@
+use bincode::Options;
 use serde::{Deserialize, Serialize};
 
 type Address = [u8; 32];
@@ -5,6 +6,10 @@ type Address = [u8; 32];
 const PREFIX_TRANSFER: u8 = 0x01;
 const PREFIX_DEPLOY: u8 = 0x02;
 const PREFIX_CALL: u8 = 0x03;
+
+/// Maximum encoded transaction size (1 MB). Rejects oversized payloads before
+/// deserialization to prevent memory-bomb attacks via bincode length prefixes.
+const MAX_TX_SIZE: u64 = 1_048_576;
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum TxKind {
@@ -44,6 +49,14 @@ impl TxKind {
         buf.extend_from_slice(&payload);
         buf
     }
+
+    fn expected_prefix(&self) -> u8 {
+        match self {
+            TxKind::Transfer { .. } => PREFIX_TRANSFER,
+            TxKind::ContractDeploy { .. } => PREFIX_DEPLOY,
+            TxKind::ContractCall { .. } => PREFIX_CALL,
+        }
+    }
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -51,6 +64,8 @@ pub enum RoutingError {
     EmptyPayload,
     UnknownPrefix(u8),
     DecodeFailed(String),
+    PrefixMismatch { declared: u8, actual: u8 },
+    OversizedPayload(usize),
 }
 
 impl std::fmt::Display for RoutingError {
@@ -59,21 +74,50 @@ impl std::fmt::Display for RoutingError {
             RoutingError::EmptyPayload => write!(f, "empty transaction payload"),
             RoutingError::UnknownPrefix(p) => write!(f, "unknown tx prefix: 0x{p:02x}"),
             RoutingError::DecodeFailed(e) => write!(f, "tx decode failed: {e}"),
+            RoutingError::PrefixMismatch { declared, actual } => {
+                write!(
+                    f,
+                    "prefix mismatch: declared 0x{declared:02x}, actual 0x{actual:02x}"
+                )
+            }
+            RoutingError::OversizedPayload(len) => {
+                write!(f, "payload too large: {len} bytes (max {MAX_TX_SIZE})")
+            }
         }
     }
 }
 
 impl std::error::Error for RoutingError {}
 
+fn bincode_options() -> impl Options {
+    bincode::DefaultOptions::new()
+        .with_limit(MAX_TX_SIZE)
+        .with_fixint_encoding()
+        .allow_trailing_bytes()
+}
+
 /// Decode raw payload bytes into a typed transaction.
 /// Wire format: [prefix_byte][bincode-encoded TxKind].
 pub fn route_tx(raw: &[u8]) -> Result<TxKind, RoutingError> {
+    if raw.len() as u64 > MAX_TX_SIZE {
+        return Err(RoutingError::OversizedPayload(raw.len()));
+    }
     let (&prefix, body) = raw.split_first().ok_or(RoutingError::EmptyPayload)?;
     match prefix {
         PREFIX_TRANSFER | PREFIX_DEPLOY | PREFIX_CALL => {}
         other => return Err(RoutingError::UnknownPrefix(other)),
     }
-    bincode::deserialize(body).map_err(|e| RoutingError::DecodeFailed(e.to_string()))
+    let decoded: TxKind = bincode_options()
+        .deserialize(body)
+        .map_err(|e| RoutingError::DecodeFailed(e.to_string()))?;
+    let actual = decoded.expected_prefix();
+    if prefix != actual {
+        return Err(RoutingError::PrefixMismatch {
+            declared: prefix,
+            actual,
+        });
+    }
+    Ok(decoded)
 }
 
 /// Classify and decode a batch of raw payloads, collecting successes and errors.
@@ -170,5 +214,29 @@ mod tests {
         assert_eq!(routed[0], good);
         assert_eq!(errors.len(), 1);
         assert_eq!(errors[0].0, 1);
+    }
+
+    #[test]
+    fn prefix_mismatch_rejected() {
+        let tx = TxKind::ContractDeploy {
+            deployer: [3u8; 32],
+            code: vec![0x00],
+            nonce: 0,
+            gas_limit: 100,
+        };
+        let mut encoded = tx.encode();
+        encoded[0] = PREFIX_TRANSFER;
+        assert!(matches!(
+            route_tx(&encoded),
+            Err(RoutingError::PrefixMismatch { .. })
+        ));
+    }
+
+    #[test]
+    fn prefix_only_no_body() {
+        assert!(matches!(
+            route_tx(&[PREFIX_TRANSFER]),
+            Err(RoutingError::DecodeFailed(_))
+        ));
     }
 }
