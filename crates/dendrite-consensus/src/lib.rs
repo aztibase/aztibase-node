@@ -2,6 +2,7 @@ pub mod commit;
 pub mod dag;
 pub mod dag_store;
 pub mod engine;
+pub mod ordering;
 pub mod pouw;
 pub mod validator;
 
@@ -9,6 +10,7 @@ pub use commit::{CommitConfig, CommitRule, LeaderStatus};
 pub use dag::{DagBlock, DagError};
 pub use dag_store::{DagStore, DagStoreError, DagStoreResult};
 pub use engine::{ConsensusConfig, ConsensusEngine, ConsensusInput, ConsensusOutput, RoundState};
+pub use ordering::{CommittedBatch, extract_committed_batch};
 pub use validator::{ValidatorInfo, ValidatorSet};
 
 #[cfg(test)]
@@ -405,7 +407,10 @@ mod tests {
     fn test_direct_commit_with_supermajority() {
         let (mut dag, path) = make_dag_store();
         let (vs, v1, v2, v3) = build_3validator_set();
-        let config = CommitConfig { wave_length: 2 };
+        let config = CommitConfig {
+            wave_length: 2,
+            vrf_seed: None,
+        };
 
         // Wave 0: leader round = 0, voting round = 1.
         // Elect leader for round 0 -- use whoever the ValidatorSet picks.
@@ -440,7 +445,10 @@ mod tests {
     fn test_direct_skip_no_leader_block() {
         let (dag, path) = make_dag_store();
         let (vs, _, _, _) = build_3validator_set();
-        let config = CommitConfig { wave_length: 2 };
+        let config = CommitConfig {
+            wave_length: 2,
+            vrf_seed: None,
+        };
 
         // No blocks at all -- leader block missing.
         let rule = CommitRule::new(&dag, &vs, config);
@@ -454,7 +462,10 @@ mod tests {
     fn test_indirect_commit_via_anchor() {
         let (mut dag, path) = make_dag_store();
         let (vs, v1, v2, v3) = build_3validator_set();
-        let config = CommitConfig { wave_length: 2 };
+        let config = CommitConfig {
+            wave_length: 2,
+            vrf_seed: None,
+        };
 
         // Wave 0: leader at round 0.
         let leader_w0 = vs.leader_for_round(0).unwrap();
@@ -487,6 +498,98 @@ mod tests {
         let rule = CommitRule::new(&dag, &vs, config);
         let status = rule.try_indirect_commit(0, &lh1);
         assert_eq!(status, LeaderStatus::Commit(lh0));
+
+        cleanup(&path);
+    }
+
+    #[test]
+    fn test_vrf_leader_deterministic() {
+        let mut vs = ValidatorSet::new();
+        vs.add([1u8; 32], 100);
+        vs.add([2u8; 32], 100);
+        vs.add([3u8; 32], 100);
+
+        let seed = [42u8; 32];
+        let l1 = vs.vrf_leader_for_round(0, &seed);
+        let l2 = vs.vrf_leader_for_round(0, &seed);
+        assert_eq!(l1, l2);
+    }
+
+    #[test]
+    fn test_vrf_leader_varies_by_seed() {
+        let mut vs = ValidatorSet::new();
+        vs.add([1u8; 32], 100);
+        vs.add([2u8; 32], 100);
+        vs.add([3u8; 32], 100);
+
+        let mut seen = std::collections::HashSet::new();
+        for i in 0..100u8 {
+            let seed = hash(&[i]);
+            let leader = vs.vrf_leader_for_round(0, &seed).unwrap();
+            seen.insert(leader);
+        }
+        assert!(
+            seen.len() > 1,
+            "VRF should produce varied leaders across seeds"
+        );
+    }
+
+    #[test]
+    fn test_vrf_leader_varies_by_round() {
+        let mut vs = ValidatorSet::new();
+        vs.add([1u8; 32], 100);
+        vs.add([2u8; 32], 100);
+        vs.add([3u8; 32], 100);
+
+        let seed = [99u8; 32];
+        let mut seen = std::collections::HashSet::new();
+        for round in 0..100 {
+            let leader = vs.vrf_leader_for_round(round, &seed).unwrap();
+            seen.insert(leader);
+        }
+        assert!(
+            seen.len() > 1,
+            "VRF should produce varied leaders across rounds"
+        );
+    }
+
+    #[test]
+    fn test_vrf_leader_empty_set() {
+        let vs = ValidatorSet::new();
+        assert_eq!(vs.vrf_leader_for_round(0, &[0u8; 32]), None);
+    }
+
+    #[test]
+    fn test_commit_rule_uses_vrf_when_seeded() {
+        let (mut dag, path) = make_dag_store();
+        let (vs, v1, v2, v3) = build_3validator_set();
+        let seed = [77u8; 32];
+        let config = CommitConfig {
+            wave_length: 2,
+            vrf_seed: Some(seed),
+        };
+
+        let leader = vs.vrf_leader_for_round(0, &seed).unwrap();
+        let leader_block = DagBlock::genesis(leader, 1000);
+        let lh = leader_block.hash;
+        dag.insert(leader_block).unwrap();
+
+        let others: Vec<[u8; 32]> = [v1, v2, v3].into_iter().filter(|v| *v != leader).collect();
+        for v in &others {
+            dag.insert(DagBlock::genesis(*v, 1000)).unwrap();
+        }
+
+        let voting_blocks: Vec<DagBlock> = [v1, v2, v3]
+            .iter()
+            .map(|v| DagBlock::new(1, *v, vec![lh], vec![], 2000).unwrap())
+            .collect();
+        for vb in voting_blocks {
+            dag.insert(vb).unwrap();
+        }
+
+        let rule = CommitRule::new(&dag, &vs, config);
+        let status = rule.try_direct_commit(0);
+        assert_eq!(status, LeaderStatus::Commit(lh));
 
         cleanup(&path);
     }

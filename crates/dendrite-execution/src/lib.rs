@@ -1,7 +1,11 @@
+pub mod contract;
 pub mod parallel;
 pub mod state;
 pub mod vm;
 
+pub use contract::{ContractReceipt, ContractTx, compute_contract_address, execute_contract_txs};
+pub use parallel::{BatchResult, TransferTx, TxReceipt, TxStatus, execute_transfers};
+pub use state::AccountState;
 pub use vm::{EngineConfig, ExecutionEngine, ExecutionResult};
 
 #[cfg(test)]

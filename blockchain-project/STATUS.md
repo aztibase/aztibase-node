@@ -2,8 +2,8 @@
 
 **Last Updated:** 2026-03-06
 **Updated By:** project-lead
-**Current Phase:** M2 -- P2P Networking + Basic Consensus
-**Current Sprint:** Sprint 003 -- COMPLETE
+**Current Phase:** M3 -- Execution Layer (in progress)
+**Current Sprint:** Sprint 004 -- COMPLETE
 
 ---
 
@@ -13,8 +13,8 @@
 |-----------|-------------|--------|--------------|----------------|
 | M0 | Design complete (all MASTER_DESIGN sections) | DONE | 2026-03-05 | 2026-03-05 |
 | M1 | Core primitives (data types, crypto, basic structs) | DONE | 2026-03-05 | 2026-03-05 |
-| M2 | P2P networking + basic consensus | IN PROGRESS | 2026-03-05 | -- |
-| M3 | Execution layer (WASM VM, state management) | NOT STARTED | -- | -- |
+| M2 | P2P networking + basic consensus | DONE | 2026-03-05 | 2026-03-06 |
+| M3 | Execution layer (WASM VM, state management) | IN PROGRESS | 2026-03-06 | -- |
 | M4 | Integration testing + basic AI + testnet | NOT STARTED | -- | -- |
 | M5 | Light/browser nodes + wallet | NOT STARTED | -- | -- |
 | M6 | AI compute market + PoUW | NOT STARTED | -- | -- |
@@ -33,23 +33,24 @@
 - Build-phase tracking infrastructure (5 documents)
 - Implementation depth audit (Sprint 001, Task 7)
 - Reference repos cloned (MystiCeti, Sui, Lighthouse, rust-libp2p, redb)
-- cargo build + cargo test pass (93 tests, 0 failures)
+- cargo build + cargo test pass (122 tests, 0 failures)
 - Sprint 001 closed with retrospective
 - Sprint 002 closed: 24/24 tasks, 5 phases complete
 - Sprint 003 closed: 18/18 tasks, 4 phases complete
+- Sprint 004 closed: 19/19 tasks, 4 phases complete
 
 ### Crate Status
 
-| Crate | Depth | Owner | M1-Ready |
-|-------|-------|-------|----------|
-| dendrite-core | COMPLETE | blockchain-architect | YES |
-| dendrite-consensus | PARTIAL | consensus-engineer | YES |
-| dendrite-storage | PARTIAL | node-engineer | YES |
-| dendrite-network | PARTIAL | p2p-network-engineer | YES |
-| dendrite-execution | PARTIAL | smart-contract-engineer | YES |
-| dendrite-runtime | PARTIAL | ai-integration-engineer | YES |
-| dendrite-rpc | STUB | node-engineer | NO |
-| dendrite-node | PARTIAL | node-engineer | YES |
+| Crate | Depth | Owner | M1-Ready | M3-Ready |
+|-------|-------|-------|----------|----------|
+| dendrite-core | COMPLETE | blockchain-architect | YES | YES |
+| dendrite-consensus | PARTIAL | consensus-engineer | YES | YES |
+| dendrite-storage | PARTIAL | node-engineer | YES | YES |
+| dendrite-network | PARTIAL | p2p-network-engineer | YES | YES |
+| dendrite-execution | PARTIAL | smart-contract-engineer | YES | IN PROGRESS |
+| dendrite-runtime | PARTIAL | ai-integration-engineer | YES | NO |
+| dendrite-rpc | STUB | node-engineer | NO | NO |
+| dendrite-node | PARTIAL | node-engineer | YES | YES |
 
 ### In Progress
 - Nothing currently in progress
@@ -58,21 +59,21 @@
 - Nothing currently blocked
 
 ### Recently Completed
-- Sprint 003 Phase 4: Security review + cargo-audit (12-item checklist, no ELEVATED flags)
-- Sprint 003 Phase 3: Commit Rule Integration + Mempool (Mempool struct, gossip tx routing, vertex payload)
-- Sprint 003 Phase 2: Vertex Reception & DAG Growth (topic routing, hash/round validation, quorum parents)
-- Sprint 003 Phase 1: Consensus Round Engine (ConsensusConfig, RoundState, ConsensusEngine, node wiring)
-- Sprint 002 Phase 5: Security review (13-item checklist), AIRuntime trait, CryptoProvider trait, cargo-audit
-- Sprint 002 Phase 4: Node wiring (storage init, network swarm, TOML config, graceful shutdown)
-- Sprint 002 Phase 3: Network transport (libp2p) + Execution engine (wasmtime)
-- Sprint 002 Phase 2: Consensus persistence (DagStore, CommitRule)
-- Sprint 002 Phase 1: Storage foundation + Consensus data types
+- Sprint 004 Phase 4: Security review (12-item checklist, no ELEVATED flags)
+- Sprint 004 Phase 3: WASM contract deploy + call, state roots, execution receipts
+- Sprint 004 Phase 2: AccountState, SimpleTransfer, CommittedBatch ordering, BatchResult
+- Sprint 004 Phase 1: VRF leader election, round pruning, pending_txs cap
+- Sprint 003 Phase 4: Security review + cargo-audit
+- Sprint 003 Phase 3: Commit Rule Integration + Mempool
+- Sprint 003 Phase 2: Vertex Reception & DAG Growth
+- Sprint 003 Phase 1: Consensus Round Engine
 
 ### Next Up
-1. Plan Sprint 004 (M2 continued or M3 start)
-2. VRF leader election (deferred from Sprint 003)
-3. Round pruning for unbounded vertices_by_round HashMap
-4. Explicit pending_txs cap in ConsensusEngine
+1. Plan Sprint 005 (M3 continued)
+2. Anchor-based deterministic total ordering in node (wire consensus commits to execution)
+3. BLS finality certificates for light clients
+4. AccountState persistence to redb
+5. Transaction routing: classify tx type (transfer vs deploy vs call) from payload
 
 ---
 

@@ -19,11 +19,17 @@ pub enum LeaderStatus {
 pub struct CommitConfig {
     /// Number of rounds per wave (leader, voting, decision).
     pub wave_length: u64,
+    /// VRF seed for leader election. When set, uses BLAKE3 PRF instead of
+    /// deterministic round-robin.
+    pub vrf_seed: Option<[u8; 32]>,
 }
 
 impl Default for CommitConfig {
     fn default() -> Self {
-        Self { wave_length: 3 }
+        Self {
+            wave_length: 3,
+            vrf_seed: None,
+        }
     }
 }
 
@@ -54,9 +60,13 @@ impl<'a> CommitRule<'a> {
         }
     }
 
-    /// Determine the leader for a given round.
+    /// Determine the leader for a given round. Uses VRF-based selection when
+    /// a seed is configured, falling back to deterministic round-robin.
     pub fn leader_for_round(&self, round: u64) -> Option<ValidatorId> {
-        self.validators.leader_for_round(round)
+        match &self.config.vrf_seed {
+            Some(seed) => self.validators.vrf_leader_for_round(round, seed),
+            None => self.validators.leader_for_round(round),
+        }
     }
 
     /// Find the leader block at the given round (the block authored by the elected leader).

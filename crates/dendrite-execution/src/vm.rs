@@ -18,6 +18,7 @@ impl Default for EngineConfig {
     }
 }
 
+#[derive(Clone, Debug)]
 pub struct ContractEvent {
     pub topic: Vec<u8>,
     pub data: Vec<u8>,
@@ -70,6 +71,60 @@ impl ExecutionEngine {
             &self.engine,
             HostState {
                 storage: HashMap::new(),
+                events: Vec::new(),
+            },
+        );
+        store
+            .set_fuel(self.fuel_limit)
+            .context("Failed to set fuel")?;
+
+        let mut linker = wasmtime::Linker::new(&self.engine);
+        Self::register_host_functions(&mut linker)?;
+
+        let instance = linker
+            .instantiate(&mut store, &module)
+            .context("Failed to instantiate module")?;
+
+        let func = instance
+            .get_func(&mut store, func_name)
+            .context("Function not found")?;
+
+        let num_results = func.ty(&store).results().len();
+        let mut results = vec![wasmtime::Val::I32(0); num_results];
+
+        func.call(&mut store, args, &mut results)
+            .context("Execution failed")?;
+
+        let fuel_remaining = store.get_fuel().context("Failed to get fuel")?;
+        let fuel_consumed = self.fuel_limit - fuel_remaining;
+
+        let host_state = store.into_data();
+
+        Ok(ExecutionResult {
+            values: results,
+            fuel_consumed,
+            storage: host_state.storage,
+            events: host_state.events,
+        })
+    }
+
+    /// Execute a WASM module with pre-loaded storage. Used for contract calls
+    /// where existing contract state needs to be available to host functions.
+    pub fn execute_with_storage(
+        &self,
+        wasm_bytes: &[u8],
+        func_name: &str,
+        args: &[wasmtime::Val],
+        initial_storage: std::collections::BTreeMap<Vec<u8>, Vec<u8>>,
+    ) -> Result<ExecutionResult> {
+        let module = wasmtime::Module::new(&self.engine, wasm_bytes)
+            .context("Failed to compile WASM module")?;
+
+        let storage: HashMap<Vec<u8>, Vec<u8>> = initial_storage.into_iter().collect();
+        let mut store = wasmtime::Store::new(
+            &self.engine,
+            HostState {
+                storage,
                 events: Vec::new(),
             },
         );

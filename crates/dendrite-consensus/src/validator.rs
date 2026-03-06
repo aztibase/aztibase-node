@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use dendrite_core::ValidatorId;
+use dendrite_core::{ValidatorId, hash};
 use serde::{Deserialize, Serialize};
 
 /// A single validator's record.
@@ -126,6 +126,38 @@ impl ValidatorSet {
         }
         let f = (n - 1) / 3;
         n - f
+    }
+
+    /// Select a leader using a VRF-like BLAKE3 PRF: hash(round || seed) mapped
+    /// to a stake-weighted position. The seed should be derived from the
+    /// previous anchor hash to prevent pre-computation beyond one wave.
+    pub fn vrf_leader_for_round(&self, round: u64, seed: &[u8; 32]) -> Option<ValidatorId> {
+        if self.validators.is_empty() {
+            return None;
+        }
+
+        let mut preimage = Vec::with_capacity(40);
+        preimage.extend_from_slice(&round.to_le_bytes());
+        preimage.extend_from_slice(seed);
+        let vrf_hash = hash(&preimage);
+
+        let mut sorted: Vec<(ValidatorId, u64)> = self
+            .validators
+            .iter()
+            .map(|(id, stake)| (*id, *stake))
+            .collect();
+        sorted.sort_by_key(|(id, _)| *id);
+
+        let position = u64::from_le_bytes(vrf_hash[..8].try_into().unwrap()) % self.total_stake;
+        let mut cumulative = 0u64;
+        for (id, stake) in &sorted {
+            cumulative += stake;
+            if position < cumulative {
+                return Some(*id);
+            }
+        }
+
+        Some(sorted[0].0)
     }
 
     /// Iterate over all validators as (id, stake) pairs.

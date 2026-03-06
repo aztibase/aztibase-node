@@ -18,6 +18,7 @@ pub struct ConsensusConfig {
     pub round_duration: Duration,
     pub wave_length: u64,
     pub max_parents: usize,
+    pub max_pending_txs: usize,
 }
 
 impl Default for ConsensusConfig {
@@ -26,6 +27,7 @@ impl Default for ConsensusConfig {
             round_duration: Duration::from_millis(400),
             wave_length: 4,
             max_parents: 20,
+            max_pending_txs: 4096,
         }
     }
 }
@@ -36,6 +38,7 @@ pub struct RoundState {
     vertices_by_round: HashMap<u64, Vec<BlockHash>>,
     committed: Vec<BlockHash>,
     last_committed_wave: Option<u64>,
+    prune_horizon: u64,
 }
 
 impl Default for RoundState {
@@ -51,6 +54,7 @@ impl RoundState {
             vertices_by_round: HashMap::new(),
             committed: Vec::new(),
             last_committed_wave: None,
+            prune_horizon: 0,
         }
     }
 
@@ -80,6 +84,23 @@ impl RoundState {
     pub fn committed_blocks(&self) -> &[BlockHash] {
         &self.committed
     }
+
+    /// Remove round entries older than `committed_round` to bound memory usage.
+    /// Keeps a 2-round buffer below the committed round for parent lookups.
+    pub fn prune_before(&mut self, committed_round: u64) {
+        let safe = committed_round.saturating_sub(2);
+        if safe <= self.prune_horizon {
+            return;
+        }
+        for round in self.prune_horizon..safe {
+            self.vertices_by_round.remove(&round);
+        }
+        self.prune_horizon = safe;
+    }
+
+    pub fn tracked_rounds(&self) -> usize {
+        self.vertices_by_round.len()
+    }
 }
 
 /// Messages flowing into the consensus engine.
@@ -107,6 +128,7 @@ pub struct ConsensusEngine {
     validators: ValidatorSet,
     state: RoundState,
     pending_txs: Vec<Vec<u8>>,
+    vrf_seed: [u8; 32],
     inbox: mpsc::Receiver<ConsensusInput>,
     outbox: mpsc::Sender<ConsensusOutput>,
 }
@@ -127,6 +149,7 @@ impl ConsensusEngine {
             validators,
             state: RoundState::new(),
             pending_txs: Vec::new(),
+            vrf_seed: [0u8; 32],
             inbox,
             outbox,
         }
@@ -256,7 +279,11 @@ impl ConsensusEngine {
                 self.handle_received_vertex(&data)?;
             }
             ConsensusInput::Transaction(tx) => {
-                self.pending_txs.push(tx);
+                if self.pending_txs.len() < self.config.max_pending_txs {
+                    self.pending_txs.push(tx);
+                } else {
+                    debug!("Pending tx queue full, dropping transaction");
+                }
             }
         }
         Ok(())
@@ -339,6 +366,7 @@ impl ConsensusEngine {
 
         let commit_config = CommitConfig {
             wave_length: wave_len,
+            vrf_seed: Some(self.vrf_seed),
         };
         let rule = CommitRule::new(&self.dag, &self.validators, commit_config);
 
@@ -349,6 +377,8 @@ impl ConsensusEngine {
                     info!(wave, hash = %short_hex(&hash), "Block committed (direct)");
                     self.state.record_commit(hash);
                     self.state.last_committed_wave = Some(wave);
+                    self.state.prune_before(wave * wave_len);
+                    self.vrf_seed = dendrite_core::hash(&hash);
                     let _ = self.outbox.try_send(ConsensusOutput::BlockCommitted(hash));
                 }
                 LeaderStatus::Skip(r) => {
@@ -438,6 +468,7 @@ mod tests {
             round_duration: Duration::from_millis(50),
             wave_length: 2,
             max_parents: 10,
+            max_pending_txs: 4096,
         };
 
         let (in_tx, in_rx) = mpsc::channel(64);
@@ -619,6 +650,57 @@ mod tests {
         // 4 bytes len + 3 bytes data + 4 bytes len + 2 bytes data = 13
         assert_eq!(payload.len(), 13);
         assert!(engine.pending_txs.is_empty());
+        cleanup(&path);
+    }
+
+    #[test]
+    fn round_pruning_removes_old_rounds() {
+        let mut state = RoundState::new();
+        for round in 0..20u64 {
+            state.record_vertex(round, [round as u8; 32]);
+        }
+        assert_eq!(state.tracked_rounds(), 20);
+
+        state.prune_before(10);
+        // Rounds 0..8 pruned (10 - 2 buffer = 8), rounds 8..19 remain
+        assert_eq!(state.vertices_at_round(7).len(), 0);
+        assert_eq!(state.vertices_at_round(8).len(), 1);
+        assert_eq!(state.vertices_at_round(10).len(), 1);
+    }
+
+    #[test]
+    fn round_pruning_is_idempotent() {
+        let mut state = RoundState::new();
+        for round in 0..10u64 {
+            state.record_vertex(round, [round as u8; 32]);
+        }
+        state.prune_before(5);
+        let count_after_first = state.tracked_rounds();
+        state.prune_before(5);
+        assert_eq!(state.tracked_rounds(), count_after_first);
+    }
+
+    #[test]
+    fn pending_txs_cap_enforced() {
+        let path = test_db_path();
+        let store = StateStore::open(path.to_str().unwrap()).unwrap();
+        let dag = DagStore::new(store).unwrap();
+        let validators = ValidatorSet::new();
+        let (_, in_rx) = mpsc::channel(1);
+        let (out_tx, _) = mpsc::channel(1);
+
+        let config = ConsensusConfig {
+            max_pending_txs: 3,
+            ..ConsensusConfig::default()
+        };
+        let mut engine = ConsensusEngine::new(config, [1u8; 32], dag, validators, in_rx, out_tx);
+
+        for i in 0..5u8 {
+            engine
+                .handle_input(ConsensusInput::Transaction(vec![i]))
+                .unwrap();
+        }
+        assert_eq!(engine.pending_txs.len(), 3);
         cleanup(&path);
     }
 }

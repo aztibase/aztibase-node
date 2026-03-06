@@ -22,6 +22,86 @@ Entries are prepended (newest first).
 ## Entries
 
 ### 2026-03-06 -- security-engineer -- cross-cutting
+**Task:** Sprint 004 Phase 4: Security Review + cargo-audit (Tasks 15-19)
+**Sprint:** Sprint 004, Phase 4
+**Git Ref:** pending
+**Files Changed:**
+- (Review only -- no code changes required)
+**Review Notes:**
+- 12-item security checklist passed across VRF leader election, transfer execution, contract execution, state roots
+- VRF seed derived from hash(committed_anchor_hash) -- not manipulable by proposer
+- Balance arithmetic uses checked subtraction + saturating_add -- no overflow/underflow
+- Nonce enforcement strict: mismatch = failure, failed txs still increment nonce
+- WASM fuel metering enforced (100M default), host function bounds checked (unchanged from Sprint 002)
+- Contract storage isolated per address in AccountState
+- Round pruning keeps 2-round buffer for safety
+- cargo-audit: same transitive advisories as Sprint 003 + 2 new wasmtime WASI advisories (not used)
+- No ELEVATED flags
+**Security Flags:** None
+
+---
+
+### 2026-03-06 -- smart-contract-engineer -- execution
+**Task:** Sprint 004 Phase 3: WASM Contract Execution + State Roots (Tasks 10-14)
+**Sprint:** Sprint 004, Phase 3
+**Git Ref:** pending
+**Files Changed:**
+- crates/dendrite-execution/src/contract.rs (NEW: ContractTx, ContractReceipt, deploy/call execution)
+- crates/dendrite-execution/src/vm.rs (added execute_with_storage(), Clone+Debug on ContractEvent)
+- crates/dendrite-execution/src/lib.rs (added contract module exports)
+**Review Notes:**
+- Contract deployment stores WASM bytecode at deterministic address (hash(deployer || nonce))
+- Contract calls load code, execute via wasmtime, persist storage changes to AccountState
+- execute_with_storage() pre-loads existing contract storage into host state
+- 5 new contract tests including full deploy-and-call WASM test with storage verification
+- cargo clippy zero warnings, cargo fmt clean
+**Security Flags:** None
+
+---
+
+### 2026-03-06 -- smart-contract-engineer + consensus-engineer -- execution/consensus
+**Task:** Sprint 004 Phase 2: Transaction Ordering + Execution Pipeline (Tasks 5-9)
+**Sprint:** Sprint 004, Phase 2
+**Git Ref:** pending
+**Files Changed:**
+- crates/dendrite-execution/src/state.rs (NEW: AccountState, Account, state_root computation)
+- crates/dendrite-execution/src/parallel.rs (NEW: TransferTx, execute_transfers, BatchResult)
+- crates/dendrite-consensus/src/ordering.rs (NEW: CommittedBatch, extract_committed_batch, payload parsing)
+- crates/dendrite-consensus/src/lib.rs (added ordering module exports)
+- crates/dendrite-execution/src/lib.rs (added state + parallel exports)
+**Review Notes:**
+- AccountState: BTreeMap-based in-memory store with balance, nonce, code, storage per account
+- State root: BLAKE3 binary Merkle tree over sorted account entries
+- SimpleTransfer execution: nonce check, balance check, debit/credit, receipt generation
+- CommittedBatch: topological ordering of committed vertices with payload transaction extraction
+- 21 new tests (8 state, 5 transfer, 3 ordering, 5 contract)
+- cargo clippy zero warnings, cargo fmt clean
+**Security Flags:** None
+
+---
+
+### 2026-03-06 -- consensus-engineer -- consensus
+**Task:** Sprint 004 Phase 1: Close M2 Debt (Tasks 1-4)
+**Sprint:** Sprint 004, Phase 1
+**Git Ref:** pending
+**Files Changed:**
+- crates/dendrite-consensus/src/engine.rs (round pruning, pending_txs cap, VRF seed tracking)
+- crates/dendrite-consensus/src/validator.rs (vrf_leader_for_round() method)
+- crates/dendrite-consensus/src/commit.rs (vrf_seed in CommitConfig, VRF-aware leader selection)
+- crates/dendrite-consensus/src/lib.rs (5 new VRF + commit rule tests)
+**Review Notes:**
+- Round pruning: prune_before() removes entries older than committed round minus 2-round buffer
+- Pending txs capped at 4096 (configurable via max_pending_txs)
+- VRF leader: BLAKE3(round || seed) mapped to stake-weighted position
+- Seed updated on commit: hash(committed_anchor_hash)
+- CommitRule uses VRF when seed is set, falls back to deterministic for backwards compat
+- 8 new tests (2 pruning, 1 cap, 5 VRF/commit)
+- cargo clippy zero warnings, cargo fmt clean
+**Security Flags:** None
+
+---
+
+### 2026-03-06 -- security-engineer -- cross-cutting
 **Task:** Sprint 003 Phase 4: Security Review + cargo-audit (Tasks 17-18)
 **Sprint:** Sprint 003, Phase 4
 **Git Ref:** pending

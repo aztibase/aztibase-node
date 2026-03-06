@@ -5,6 +5,27 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ---
 
+## [M2] -- P2P Networking + Basic Consensus (Complete)
+
+### Added
+- ConsensusEngine: async round loop at 400ms with vertex proposal/reception (2026-03-06)
+- VRF-based leader election via BLAKE3 PRF with stake-weighted selection (2026-03-06)
+- CommittedBatch: deterministic topological ordering of committed vertices (2026-03-06)
+- AccountState: in-memory account store with balance, nonce, code, contract storage (2026-03-06)
+- SimpleTransfer execution: native token transfers with nonce/balance validation (2026-03-06)
+- WASM contract deployment and execution with persisted storage (2026-03-06)
+- BLAKE3 Merkle state root computation over sorted account state (2026-03-06)
+- Mempool: bounded priority queue with dedup (2026-03-06)
+- Round pruning: bounded vertices_by_round with 2-round safety buffer (2026-03-06)
+
+### Security
+- Security review: 12-item checklist passed, zero ELEVATED flags (Sprint 004) (2026-03-06)
+- VRF seed derived from committed anchor hash -- not manipulable by proposer (2026-03-06)
+- Balance arithmetic: checked subtraction + saturating_add -- no overflow/underflow (2026-03-06)
+- cargo-audit: transitive advisories documented, no new issues affecting our code (2026-03-06)
+
+---
+
 ## [M1] -- Core Primitives (Complete)
 
 ### Added
