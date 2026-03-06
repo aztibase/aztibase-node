@@ -131,53 +131,50 @@ These three features define Dendrite's competitive identity: dual VM for develop
 **Owner:** ai-integration-engineer
 **Goal:** Real AI inference behind the AIRuntime trait. Load ONNX models, run inference, produce verifiable results.
 
-### Task 10: Add tract-onnx to dendrite-runtime -- PENDING
-- [ ] `tract-onnx` already in `[workspace.dependencies]` — add to `dendrite-runtime/Cargo.toml`
-- [ ] Verify `cargo check` passes
-- [ ] tract is pure Rust — no C dependency issues expected
+### Task 10: Add tract-onnx to dendrite-runtime -- DONE
+- [x] `tract-onnx` added to `dendrite-runtime/Cargo.toml` (already in workspace deps)
+- [x] `prost = "0.11"` added as dev-dependency for ONNX test model construction
+- [x] `cargo check` passes — tract is pure Rust, no C deps
 
-### Task 11: TractRuntime implementing AIRuntime -- PENDING
-- [ ] Create `crates/dendrite-runtime/src/tract_runtime.rs`
-- [ ] `TractRuntime` struct with model registry (`HashMap<String, TypedModel>`)
-- [ ] Implement `AIRuntime` trait: `mode() -> LocalInference`, `infer()`, `supports_model()`
-- [ ] Thread-safe: `Arc<RwLock<HashMap>>` for model cache
-- **Tests:** TractRuntime creation, mode check, unsupported model check
+### Task 11: TractRuntime implementing AIRuntime -- DONE
+- [x] Created `crates/dendrite-runtime/src/tract_runtime.rs`
+- [x] `TractRuntime` struct with `RwLock<HashMap<String, RegisteredModel>>` model registry
+- [x] Implements `AIRuntime` trait: `mode() -> LocalInference`, `infer()`, `supports_model()`
+- [x] `RegisteredModel` stores optimized `SimplePlan` + input/output fact metadata
+- **Tests:** tract_runtime_mode, infer_unknown_model_fails (2 tests)
 
-### Task 12: Model registry -- PENDING
-- [ ] `TractRuntime::register_model(model_id: &str, onnx_bytes: &[u8]) -> Result<()>`
-- [ ] Parse ONNX bytes via `tract_onnx::onnx().model_for_read()`
-- [ ] Optimize model: `.into_optimized()?.into_runnable()?`
-- [ ] Store in registry keyed by model_id
-- [ ] `TractRuntime::unregister_model(model_id: &str)`
-- **Tests:** register valid model, register invalid bytes fails, unregister
+### Task 12: Model registry -- DONE
+- [x] `TractRuntime::register_model(model_id, onnx_bytes)` — parse, optimize, store
+- [x] Pipeline: `onnx().model_for_read()` → `into_optimized()` → `into_runnable()`
+- [x] Stores input/output shapes for validation
+- [x] `TractRuntime::unregister_model(model_id)` removes from registry
+- **Tests:** register_and_supports_model, register_invalid_bytes_fails, unregister_model (3 tests)
 
-### Task 13: Inference execution -- PENDING
-- [ ] `TractRuntime::infer()` implementation:
-  - Look up model in registry
-  - Deserialize input bytes to tract tensor (format TBD — likely f32 array with shape prefix)
-  - Run model
-  - Serialize output tensor to bytes
-  - Compute deterministic BLAKE3 hash of (model_id || input || output)
-  - Return `InferenceResult` with compute_units = model FLOPs estimate
-- **Tests:** infer on simple model, deterministic hash verified, compute units > 0
+### Task 13: Inference execution -- DONE
+- [x] `TractRuntime::infer()`: deserialize f32 input → tract tensor → run → serialize output
+- [x] Input validation: checks byte length matches expected element count × 4
+- [x] Deterministic BLAKE3 hash: `hash(model_id || input_bytes || output_bytes)`
+- [x] Compute units = number of output elements (proxy for FLOPs)
+- **Tests:** infer_add_model, infer_deterministic_hash, infer_wrong_input_size_fails (3 tests)
 
-### Task 14: InferenceReceipt + verification stub -- PENDING
-- [ ] `InferenceReceipt` struct: request hash, result hash, model_id, compute_units, deterministic_hash
-- [ ] `verify_inference()` stub: re-runs inference locally and compares deterministic_hash
-- [ ] This is the foundation for on-chain verification (full protocol in M6)
-- **Tests:** receipt creation, verification passes for correct result, fails for tampered
+### Task 14: InferenceReceipt + verification stub -- DONE
+- [x] `InferenceReceipt` struct: request_hash, result_hash, model_id, compute_units, deterministic_hash
+- [x] `verify_inference()`: re-runs inference and compares deterministic_hash
+- [x] Foundation for on-chain verification (full protocol in M6)
+- **Tests:** inference_receipt_creation, verify_inference_succeeds, verify_inference_rejects_tampered (3 tests)
 
-### Task 15: AI unit tests with simple ONNX model -- PENDING
-- [ ] Create a minimal ONNX model programmatically (e.g., linear: y = 2x + 1) using tract's builder or a pre-built fixture
-- [ ] Test full pipeline: register model -> infer -> verify receipt
-- [ ] Test concurrent inference (two models registered, infer both)
-- **Tests:** 3+ unit tests
+### Task 15: AI unit tests with simple ONNX model -- DONE
+- [x] Minimal ONNX model built programmatically via `tract_onnx::pb::ModelProto` + prost
+- [x] Model: Add node (y = x + [1,1,1]) with 3-element f32 input/output
+- [x] Full pipeline tested: register → infer → verify receipt
+- [x] Concurrent inference: two_models_coexist test
+- **Tests:** 12 total unit tests (3 registry, 3 inference, 3 verification, 3 model/pipeline)
 
 **Phase 3 Exit Criteria:**
-- [ ] ONNX model can be loaded and inference executed
-- [ ] Inference results are deterministic (same input -> same hash)
-- [ ] Verification stub confirms correctness
-- [ ] All new tests pass
+- [x] ONNX model can be loaded and inference executed
+- [x] Inference results are deterministic (same input -> same hash)
+- [x] Verification stub confirms correctness
+- [x] All new tests pass (12 new, 221 total)
 
 ---
 

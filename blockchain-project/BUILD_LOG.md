@@ -21,6 +21,17 @@ Entries are prepended (newest first).
 
 ## Entries
 
+### 2026-03-06 -- ai-integration-engineer -- dendrite-runtime
+**Task:** Sprint 007 Phase 3: AI inference via tract (Tasks 10-15)
+**Sprint:** Sprint 007, Phase 3
+**Git Ref:** pending
+**Files Changed:**
+- crates/dendrite-runtime/Cargo.toml (added `tract-onnx = { workspace = true }`, `prost = "0.11"` dev-dep)
+- crates/dendrite-runtime/src/tract_runtime.rs (NEW: TractRuntime, RegisteredModel, InferenceReceipt, verify_inference, 12 tests)
+- crates/dendrite-runtime/src/lib.rs (added `pub mod tract_runtime`, re-exports)
+**Review Notes:** TractRuntime implements AIRuntime trait with real ONNX model loading via tract-onnx. Model registry uses RwLock<HashMap> for thread safety. Inference pipeline: f32 input deserialization → tract tensor → model run → output serialization. Deterministic BLAKE3 hash of (model_id || input || output). InferenceReceipt + verify_inference() stub for on-chain verification foundation. Test models built programmatically via tract_onnx::pb::ModelProto + prost encode. 221 tests pass (12 new). Zero clippy, fmt clean.
+**Security Flags:** None. tract is pure Rust, no C deps.
+
 ### 2026-03-06 -- smart-contract-engineer -- dendrite-execution, dendrite-node
 **Task:** Sprint 007 Phase 2: EVM execution via revm v36 (Tasks 5-9)
 **Sprint:** Sprint 007, Phase 2
