@@ -1,4 +1,6 @@
 mod config;
+#[cfg(test)]
+mod integration;
 mod mempool;
 mod pipeline;
 

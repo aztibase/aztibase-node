@@ -35,6 +35,19 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 - Safe deserialization: all unwrap() in persistence replaced with graceful error handling (2026-03-06)
 - Duplicate signer deduplication in build_certificate (2026-03-06)
 - cargo-audit: transitive advisories (ring, wasmtime WASI, lru, bincode) — no new critical issues (2026-03-06)
+- SEC-WIRE-005: HashSet for committed blocks — O(1) dedup in extract_committed_batch (2026-03-06)
+- SEC-WIRE-003: Double-execution guard — anchor_hash dedup prevents re-executing batches (2026-03-06)
+- SEC-WIRE-004: Fatal flush handling — pipeline halts on persistence failure (2026-03-06)
+- SEC-BLS-002: Unique BLS keys enforcement — duplicate keys rejected in certificate operations (2026-03-06)
+- SEC-BLS-008: Quorum derived from ValidatorSet — prevents caller-supplied quorum manipulation (2026-03-06)
+- SEC-ROUTE-006: func_name validation — rejects injection via malformed function names (2026-03-06)
+- SEC-ROUTE-005: Strict bincode decoding — trailing bytes rejected (2026-03-06)
+
+### Testing
+- Integration test: transfer end-to-end — balances, nonces, redb persistence, batch root (2026-03-06)
+- Integration test: contract deploy + call end-to-end — WASM deploy, storage_set call, state root change (2026-03-06)
+- Integration test: finality certificate — BLS sign, aggregate, build + verify certificate (2026-03-06)
+- Integration test: startup recovery — flush to redb, reload, verify state, execute more batches (2026-03-06)
 
 ---
 

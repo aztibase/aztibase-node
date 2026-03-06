@@ -959,6 +959,7 @@ dependencies = [
  "toml",
  "tracing",
  "tracing-subscriber",
+ "wat",
 ]
 
 [[package]]

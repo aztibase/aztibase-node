@@ -21,6 +21,30 @@ Entries are prepended (newest first).
 
 ## Entries
 
+### 2026-03-06 -- node-engineer + smart-contract-engineer -- dendrite-node
+**Task:** Sprint 006 Phase 3: Integration testing — 4 end-to-end tests (Tasks 16-19)
+**Sprint:** Sprint 006, Phase 3
+**Git Ref:** pending
+**Files Changed:**
+- crates/dendrite-node/src/integration.rs (NEW: 4 integration tests — transfer e2e, contract deploy+call e2e, finality certificate e2e, startup recovery e2e)
+- crates/dendrite-node/src/main.rs (added `mod integration` for test module)
+- crates/dendrite-node/Cargo.toml (added `wat = "1"` dev-dependency for WASM test fixtures)
+**Review Notes:** 4 integration tests cover the full consensus-to-execution pipeline: transfer with state persistence + redb verification, WASM contract deploy + call with storage verification, BLS finality certificate generation + verification, and startup recovery from redb with continued execution. 191 tests pass (4 new). Zero clippy warnings, fmt clean.
+**Security Flags:** None
+
+### 2026-03-06 -- security-engineer -- dendrite-consensus, dendrite-execution, dendrite-node
+**Task:** Sprint 006 Phase 2: Security hardening — 7 MEDIUM findings resolved (Tasks 9-15)
+**Sprint:** Sprint 006, Phase 2
+**Git Ref:** pending
+**Files Changed:**
+- crates/dendrite-consensus/src/engine.rs (HashSet for committed blocks, updated extract_committed_batch call)
+- crates/dendrite-consensus/src/ordering.rs (extract_committed_batch accepts HashSet)
+- crates/dendrite-consensus/src/finality.rs (has_unique_bls_keys, build_certificate takes &ValidatorSet)
+- crates/dendrite-execution/src/routing.rs (strict bincode, func_name validation, InvalidFuncName error)
+- crates/dendrite-node/src/pipeline.rs (double-execution guard, fatal flush handling, execute_batch returns Result)
+**Review Notes:** 7 MEDIUM security findings resolved: SEC-WIRE-003 (double-execution guard), SEC-WIRE-004 (fatal flush), SEC-WIRE-005 (HashSet committed), SEC-BLS-002 (unique BLS keys), SEC-BLS-008 (derive quorum), SEC-ROUTE-005 (strict bincode), SEC-ROUTE-006 (func_name validation). 7 new tests, 187 total passing. Zero clippy warnings, fmt clean.
+**Security Flags:** SEC-WIRE-003 RESOLVED, SEC-WIRE-004 RESOLVED, SEC-WIRE-005 RESOLVED, SEC-BLS-002 RESOLVED, SEC-BLS-008 RESOLVED, SEC-ROUTE-005 RESOLVED, SEC-ROUTE-006 RESOLVED
+
 ### 2026-03-06 -- node-engineer -- dendrite-rpc, dendrite-node
 **Task:** Sprint 006 Phase 1: JSON-RPC server + node wiring (Tasks 1-5, 7-8)
 **Sprint:** Sprint 006, Phase 1
