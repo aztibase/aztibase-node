@@ -3,7 +3,7 @@
 **Last Updated:** 2026-03-07
 **Updated By:** project-lead
 **Current Phase:** M4 -- Integration Testing + AI + Testnet (IN PROGRESS)
-**Current Sprint:** Sprint 011 -- COMPLETE (Transaction Signatures + Nonce Enforcement + Fee Market)
+**Current Sprint:** Sprint 012 -- COMPLETE (Fee Hardening + Testnet Tooling)
 
 ---
 
@@ -33,7 +33,7 @@
 - Build-phase tracking infrastructure (5 documents)
 - Implementation depth audit (Sprint 001, Task 7)
 - Reference repos cloned (MystiCeti, Sui, Lighthouse, rust-libp2p, redb)
-- cargo build + cargo test pass (353 tests, 0 failures)
+- cargo build + cargo test pass (372 tests, 0 failures)
 - Sprint 001 closed with retrospective
 - Sprint 002 closed: 24/24 tasks, 5 phases complete
 - Sprint 003 closed: 18/18 tasks, 4 phases complete
@@ -41,6 +41,7 @@
 - Sprint 005 closed: 21/21 tasks, 4 phases complete
 - Sprint 006 closed: 23/24 tasks (1 deferred), 4 phases complete
 - Sprint 007 complete: receipt store, EVM via revm, AI inference via tract
+- Sprint 012 complete: 15/15 tasks, 4 phases (fee escrow, persistent base fee, genesis config, CLI wallet, security review)
 - Sprint 011 complete: 15/15 tasks, 4 phases (signed tx envelopes, nonce enforcement, fee market, security review)
 - Sprint 010 complete: 15/15 tasks, 4 phases (rayon parallelism, gossipsub hardening, account abstraction, security review)
 - Sprint 009 complete: 16/16 tasks, 4 phases (Block-STM, state sync, EVM precompiles, security review)
@@ -64,12 +65,15 @@
 | aztibase-node | PARTIAL | node-engineer | YES | YES |
 
 ### In Progress
-- Sprint 012 planning
+- Sprint 013 planning
 
 ### Blocked
 - Nothing currently blocked
 
 ### Recently Completed
+- Sprint 012 Phase 3: Genesis config + CLI wallet — GenesisConfig TOML, generate_genesis, write_genesis, wallet generate/show/transfer, --genesis flag (7 new tests)
+- Sprint 012 Phase 2: Persistent base fee + validation hardening — persistent BaseFeeCalculator, pipeline nonce validation, mempool gas price floor (7 new tests)
+- Sprint 012 Phase 1: Pre-execution fee escrow — escrow_fee wired, collect_fees removed, refund_unused, PipelineResult.total_fees_burned (5 new tests)
 - Sprint 011 Phase 4: Security review — 0 ELEVATED, 2 MEDIUM documented, 6 LOW
 - Sprint 011 Phase 3: Fee market — gas_price on all TxKind variants, collect_fees, BaseFeeCalculator, escrow_fee/refund_unused, aztb_gasPrice + aztb_estimateGas RPC (19 new tests)
 - Sprint 011 Phase 2: Nonce enforcement — mempool insert_checked with MAX_NONCE_GAP, nonce-ordered batch execution (5 new tests)
@@ -99,7 +103,7 @@
 - Sprint 005 Phase 1: Consensus-to-execution wiring, TxKind routing, ExecutionPipeline
 
 ### Next Up
-1. Sprint 012: Pre-execution fee escrow, persistent base fee, WebRTC transport, or Verkle trees
+1. Sprint 013: WebRTC transport, Verkle tree foundations, or validator key management (BLS in genesis)
 
 ---
 

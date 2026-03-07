@@ -23,6 +23,18 @@ impl Keypair {
         Self { signing_key }
     }
 
+    /// Reconstruct from raw secret key bytes.
+    pub fn from_secret_bytes(bytes: &[u8; 32]) -> Self {
+        Self {
+            signing_key: SigningKey::from_bytes(bytes),
+        }
+    }
+
+    /// Get the raw secret key bytes.
+    pub fn secret_bytes(&self) -> [u8; 32] {
+        self.signing_key.to_bytes()
+    }
+
     /// Sign a message.
     pub fn sign(&self, message: &[u8]) -> Vec<u8> {
         let signature: Signature = self.signing_key.sign(message);

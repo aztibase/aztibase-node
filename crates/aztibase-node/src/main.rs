@@ -1,9 +1,11 @@
 mod config;
+mod genesis;
 #[cfg(test)]
 mod integration;
 mod mempool;
 mod pipeline;
 mod sync;
+mod wallet;
 
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -33,12 +35,15 @@ use sync::{
 #[derive(Parser, Debug)]
 #[command(name = "aztibase", about = "Aztibase Network Node")]
 struct Cli {
+    #[command(subcommand)]
+    command: Option<Command>,
+
     /// Path to TOML configuration file
-    #[arg(long, short)]
+    #[arg(long, short, global = true)]
     config: Option<PathBuf>,
 
     /// Override data directory
-    #[arg(long)]
+    #[arg(long, global = true)]
     data_dir: Option<PathBuf>,
 
     /// Override P2P listen address (may be repeated)
@@ -50,7 +55,7 @@ struct Cli {
     rpc_addr: Option<String>,
 
     /// Override log level (trace, debug, info, warn, error)
-    #[arg(long)]
+    #[arg(long, global = true)]
     log_level: Option<String>,
 
     /// Validator index for testing (1-255). Each node needs a unique index.
@@ -60,6 +65,64 @@ struct Cli {
     /// Total number of validators in the test network
     #[arg(long, default_value = "1")]
     validator_count: u8,
+
+    /// Path to genesis.toml for initial state
+    #[arg(long)]
+    genesis: Option<PathBuf>,
+}
+
+#[derive(clap::Subcommand, Debug)]
+enum Command {
+    /// Generate a new genesis configuration
+    Genesis {
+        /// Number of validators
+        #[arg(long, default_value = "4")]
+        validators: usize,
+        /// Number of pre-funded accounts
+        #[arg(long, default_value = "2")]
+        funded: usize,
+        /// Output directory
+        #[arg(long, default_value = "genesis")]
+        output: PathBuf,
+    },
+    /// Wallet key management and transaction signing
+    Wallet {
+        #[command(subcommand)]
+        action: WalletAction,
+    },
+}
+
+#[derive(clap::Subcommand, Debug)]
+enum WalletAction {
+    /// Generate a new Ed25519 keypair
+    Generate {
+        /// Output key file path
+        #[arg(long, default_value = "wallet.json")]
+        output: PathBuf,
+    },
+    /// Show address and public key from a key file
+    Show {
+        /// Path to key file
+        keyfile: PathBuf,
+    },
+    /// Sign and encode a transfer transaction
+    Transfer {
+        /// Path to sender key file
+        #[arg(long)]
+        from: PathBuf,
+        /// Recipient address (hex)
+        #[arg(long)]
+        to: String,
+        /// Transfer amount
+        #[arg(long)]
+        value: u64,
+        /// Sender nonce
+        #[arg(long)]
+        nonce: u64,
+        /// Gas price
+        #[arg(long, default_value = "1")]
+        gas_price: u64,
+    },
 }
 
 impl Cli {
@@ -83,6 +146,51 @@ impl Cli {
 #[tokio::main]
 async fn main() -> Result<()> {
     let cli = Cli::parse();
+
+    match cli.command {
+        Some(Command::Genesis {
+            validators,
+            funded,
+            output,
+        }) => {
+            let timestamp = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_millis() as u64;
+            let generated = genesis::generate_genesis(validators, funded, timestamp);
+            genesis::write_genesis(&generated, &output)?;
+            println!(
+                "Genesis written to {} ({} validators, {} funded accounts)",
+                output.display(),
+                validators,
+                funded
+            );
+            return Ok(());
+        }
+        Some(Command::Wallet { action }) => {
+            match action {
+                WalletAction::Generate { output } => {
+                    wallet::generate_key(&output)?;
+                }
+                WalletAction::Show { keyfile } => {
+                    wallet::show_key(&keyfile)?;
+                }
+                WalletAction::Transfer {
+                    from,
+                    to,
+                    value,
+                    nonce,
+                    gas_price,
+                } => {
+                    let envelope = wallet::sign_transfer(&from, &to, value, nonce, gas_price)?;
+                    let hex = genesis::hex_encode(&envelope);
+                    println!("{hex}");
+                }
+            }
+            return Ok(());
+        }
+        None => {}
+    }
 
     let config = NodeConfig::load_or_default(cli.config.as_deref())?;
     let config = cli.apply_overrides(config);
@@ -194,6 +302,22 @@ async fn main() -> Result<()> {
     }
     exec_pipeline.set_ai_runtime(ai_runtime);
     tracing::info!("Execution pipeline initialized (AI runtime: tract)");
+
+    if let Some(ref genesis_path) = cli.genesis {
+        let gen_config = genesis::load_genesis(genesis_path)?;
+        let shared = exec_pipeline.shared_state();
+        let mut state_guard = shared.write().await;
+        if state_guard.account_count() == 0 {
+            genesis::apply_genesis(&gen_config, &mut state_guard);
+            tracing::info!(
+                accounts = state_guard.account_count(),
+                "Genesis state applied"
+            );
+        } else {
+            tracing::info!("State already populated, skipping genesis");
+        }
+        drop(state_guard);
+    }
 
     // RPC server
     let (mempool_tx, mut mempool_rx) = tokio::sync::mpsc::channel::<Vec<u8>>(4096);
@@ -514,6 +638,7 @@ mod tests {
     #[test]
     fn cli_overrides_data_dir() {
         let cli = Cli {
+            command: None,
             config: None,
             data_dir: Some(PathBuf::from("/tmp/test")),
             listen: vec![],
@@ -521,6 +646,7 @@ mod tests {
             log_level: None,
             validator_index: 1,
             validator_count: 1,
+            genesis: None,
         };
         let config = cli.apply_overrides(NodeConfig::default());
         assert_eq!(config.data_dir, PathBuf::from("/tmp/test"));
@@ -529,6 +655,7 @@ mod tests {
     #[test]
     fn cli_overrides_listen_addresses() {
         let cli = Cli {
+            command: None,
             config: None,
             data_dir: None,
             listen: vec!["/ip4/127.0.0.1/tcp/9999".into()],
@@ -536,6 +663,7 @@ mod tests {
             log_level: None,
             validator_index: 1,
             validator_count: 1,
+            genesis: None,
         };
         let config = cli.apply_overrides(NodeConfig::default());
         assert_eq!(config.network.listen_addresses.len(), 1);

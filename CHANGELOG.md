@@ -8,6 +8,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 ## [M4] -- Integration Testing + AI + Testnet (IN PROGRESS)
 
 ### Security
+- Sprint 012 security review: 0 ELEVATED, 0 MEDIUM, 4 LOW (SEC-KEY-001/002, SEC-FEE-004, SEC-BASE-001) (2026-03-07)
 - SEC-FEE-002 CLOSED: Pre-execution fee escrow prevents underfunded execution (2026-03-07)
 - SEC-FEE-003 CLOSED: BaseFeeCalculator persists to redb, loads on startup, drives real gas prices (2026-03-07)
 - SEC-SIG-002 CLOSED: Pipeline validates nonces at execution time, not just mempool (2026-03-07)
@@ -21,6 +22,11 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 - Sprint 009 security review: 2 ELEVATED fixed, 8 MEDIUM (2 fixed, 6 documented), 5 LOW documented (2026-03-07)
 
 ### Added
+- `GenesisConfig` struct with TOML serialization for network bootstrapping (2026-03-07)
+- `aztibase genesis` CLI: generates genesis.toml + Ed25519 key files for validators and funded accounts (2026-03-07)
+- `aztibase wallet generate/show/transfer` CLI: key management and transaction signing (2026-03-07)
+- `--genesis <path>` flag on node startup: applies genesis config to empty state (2026-03-07)
+- `Keypair::from_secret_bytes()` / `Keypair::secret_bytes()` for key file persistence (2026-03-07)
 - Pre-execution fee escrow: `escrow_fee()` wired into pipeline, `collect_fees()` removed, `refund_unused()` after execution (2026-03-07)
 - `PipelineResult.total_fees_burned`: tracks total fees burned per batch (2026-03-07)
 - Persistent base fee: `store_base_fee()` / `load_base_fee()` in redb STATE_TABLE (2026-03-07)

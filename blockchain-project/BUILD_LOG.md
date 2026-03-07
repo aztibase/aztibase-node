@@ -21,6 +21,42 @@ Entries are prepended (newest first).
 
 ## Entries
 
+### 2026-03-07 -- security-engineer + project-lead -- all crates
+**Task:** Sprint 012 Phase 4: Security Review + Documentation (Tasks 13-15)
+**Sprint:** Sprint 012, Phase 4
+**Git Ref:** pending
+**Files Changed:**
+- blockchain-project/sprints/SPRINT-012.md (all 15 tasks marked DONE, security findings, retrospective)
+- blockchain-project/BUILD_LOG.md (entries for all 4 phases)
+- blockchain-project/STATUS.md (sprint 012 complete, 372 tests)
+- CHANGELOG.md (genesis, wallet entries)
+**Review Notes:**
+- Security review: 0 ELEVATED, 0 MEDIUM, 4 LOW (SEC-KEY-001/002, SEC-FEE-004, SEC-BASE-001)
+- 3 prior MEDIUM findings CLOSED: SEC-FEE-002, SEC-FEE-003, SEC-SIG-002
+- cargo clippy: zero warnings; cargo fmt: clean; 372 tests passing
+- cargo audit: no new advisories (same transitive deps as Sprint 011)
+- Sprint 012 fully complete: 15/15 tasks, 4/4 phases, 19 new tests
+**Security Flags:** 0 ELEVATED, 0 MEDIUM, 4 LOW documented
+
+### 2026-03-07 -- node-engineer -- aztibase-core, aztibase-node
+**Task:** Sprint 012 Phase 3: Genesis Config + CLI Wallet (Tasks 9-12)
+**Sprint:** Sprint 012, Phase 3
+**Git Ref:** pending
+**Files Changed:**
+- crates/aztibase-core/src/crypto.rs (Keypair::from_secret_bytes, Keypair::secret_bytes)
+- crates/aztibase-node/src/genesis.rs (NEW: GenesisConfig, apply_genesis, generate_genesis, write_genesis, load_genesis, load_keyfile, KeyFile, hex_encode/hex_decode, +5 tests)
+- crates/aztibase-node/src/wallet.rs (NEW: generate_key, show_key, sign_transfer, +2 tests)
+- crates/aztibase-node/src/main.rs (CLI subcommands: genesis, wallet; --genesis flag for node startup; Command/WalletAction enums)
+- crates/aztibase-node/Cargo.toml (serde_json dependency)
+- blockchain-project/sprints/SPRINT-012.md (Phase 3 marked DONE)
+**Review Notes:**
+- GenesisConfig: TOML-serialized, supports validators + pre-funded accounts
+- CLI: `aztibase genesis`, `aztibase wallet generate/show/transfer`
+- Node startup: `--genesis genesis.toml` applies genesis to empty state
+- 7 new tests; 372 total passing
+- cargo clippy: zero warnings; cargo fmt: clean
+**Security Flags:** None (key file stores unencrypted secret key — acceptable for testnet, encryption deferred)
+
 ### 2026-03-07 -- smart-contract-engineer + node-engineer -- aztibase-execution, aztibase-node, aztibase-rpc
 **Task:** Sprint 012 Phase 2: Persistent Base Fee + Validation Hardening (Tasks 5-8)
 **Sprint:** Sprint 012, Phase 2
