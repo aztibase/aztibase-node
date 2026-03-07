@@ -135,6 +135,21 @@ enum WalletAction {
         #[arg(long)]
         passphrase: Option<String>,
     },
+    /// Derive a child keypair from a mnemonic at a given account index
+    Derive {
+        /// The BIP-39 mnemonic phrase (12 or 24 words)
+        #[arg(long)]
+        phrase: String,
+        /// Account index (m/44'/aztb'/INDEX'/0/0)
+        #[arg(long)]
+        index: u32,
+        /// Output key file path (optional, saves encrypted keyfile)
+        #[arg(long)]
+        output: Option<PathBuf>,
+        /// Passphrase for encrypting the derived keyfile
+        #[arg(long)]
+        passphrase: Option<String>,
+    },
     /// Sign and broadcast a transfer transaction
     Transfer {
         /// Path to sender key file
@@ -241,6 +256,41 @@ async fn main() -> Result<()> {
                     let addr = aztibase_core::address_from_pubkey(kp.public_key().as_bytes());
                     wallet::generate_key(&output)?;
                     println!("Recovered address: {}", genesis::hex_encode(&addr));
+                }
+                WalletAction::Derive {
+                    phrase,
+                    index,
+                    output,
+                    passphrase,
+                } => {
+                    let kp = wallet::derive_account(&phrase, index)?;
+                    let addr = aztibase_core::address_from_pubkey(kp.public_key().as_bytes());
+                    println!("Account index: {index}");
+                    println!("Address: {}", genesis::hex_encode(&addr));
+                    println!(
+                        "Public key: {}",
+                        genesis::hex_encode(kp.public_key().as_bytes())
+                    );
+                    if let Some(out_path) = output {
+                        let pass = passphrase.unwrap_or_else(|| {
+                            eprintln!("Enter passphrase for keyfile encryption:");
+                            let mut buf = String::new();
+                            std::io::stdin().read_line(&mut buf).unwrap();
+                            buf.trim().to_string()
+                        });
+                        let encrypted = wallet::encrypt_keyfile_pub(&kp.secret_bytes(), &pass)?;
+                        let enc_kf = wallet::EncryptedKeyFile {
+                            public_key: genesis::hex_encode(kp.public_key().as_bytes()),
+                            address: genesis::hex_encode(&addr),
+                            encrypted,
+                        };
+                        if let Some(parent) = out_path.parent() {
+                            std::fs::create_dir_all(parent)?;
+                        }
+                        let json = serde_json::to_string_pretty(&enc_kf)?;
+                        std::fs::write(&out_path, json)?;
+                        println!("Key file (encrypted): {}", out_path.display());
+                    }
                 }
                 WalletAction::Show {
                     keyfile,

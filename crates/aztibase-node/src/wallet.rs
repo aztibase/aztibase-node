@@ -121,6 +121,10 @@ pub struct EncryptedPayload {
     pub argon2_parallelism: u32,
 }
 
+pub fn encrypt_keyfile_pub(secret_key: &[u8; 32], passphrase: &str) -> Result<EncryptedPayload> {
+    encrypt_keyfile(secret_key, passphrase)
+}
+
 fn encrypt_keyfile(secret_key: &[u8; 32], passphrase: &str) -> Result<EncryptedPayload> {
     use argon2::Argon2;
     use chacha20poly1305::{
@@ -206,6 +210,24 @@ fn decrypt_keyfile(payload: &EncryptedPayload, passphrase: &str) -> Result<[u8; 
         .map_err(|_| anyhow::anyhow!("Decrypted key must be 32 bytes"))?;
 
     Ok(secret)
+}
+
+pub fn derive_account(phrase: &str, account_index: u32) -> Result<Keypair> {
+    let mnemonic = bip39::Mnemonic::parse_in_normalized(bip39::Language::English, phrase)
+        .map_err(|e| anyhow::anyhow!("Invalid mnemonic: {e}"))?;
+    let mut seed = mnemonic.to_seed("");
+    let context = format!("aztibase m/44'/aztb'/{account_index}'/0/0");
+    let mut derived = blake3::derive_key(&context, &seed);
+    seed.zeroize();
+    let kp = Keypair::from_secret_bytes(&derived);
+    derived.zeroize();
+    Ok(kp)
+}
+
+#[cfg(test)]
+fn derive_child(parent_secret: &[u8; 32], index: u32) -> [u8; 32] {
+    let context = format!("aztibase child/{index}");
+    blake3::derive_key(&context, parent_secret)
 }
 
 pub fn show_key(path: &Path) -> Result<()> {
@@ -455,6 +477,50 @@ mod tests {
         }
 
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn derive_index_0_matches_existing() {
+        let (mnemonic, kp_original) = generate_mnemonic().unwrap();
+        let phrase = mnemonic.to_string();
+        let kp_derived = derive_account(&phrase, 0).unwrap();
+        assert_eq!(
+            kp_original.public_key().as_bytes(),
+            kp_derived.public_key().as_bytes()
+        );
+    }
+
+    #[test]
+    fn derive_indices_produce_unique_keys() {
+        let (mnemonic, _) = generate_mnemonic().unwrap();
+        let phrase = mnemonic.to_string();
+        let mut keys = std::collections::HashSet::new();
+        for i in 0..10 {
+            let kp = derive_account(&phrase, i).unwrap();
+            assert!(
+                keys.insert(*kp.public_key().as_bytes()),
+                "index {i} produced duplicate key"
+            );
+        }
+    }
+
+    #[test]
+    fn derive_is_deterministic() {
+        let (mnemonic, _) = generate_mnemonic().unwrap();
+        let phrase = mnemonic.to_string();
+        let kp1 = derive_account(&phrase, 5).unwrap();
+        let kp2 = derive_account(&phrase, 5).unwrap();
+        assert_eq!(kp1.public_key().as_bytes(), kp2.public_key().as_bytes());
+    }
+
+    #[test]
+    fn derive_child_deterministic() {
+        let parent = [42u8; 32];
+        let c1 = derive_child(&parent, 0);
+        let c2 = derive_child(&parent, 0);
+        assert_eq!(c1, c2);
+        let c3 = derive_child(&parent, 1);
+        assert_ne!(c1, c3);
     }
 
     #[tokio::test]

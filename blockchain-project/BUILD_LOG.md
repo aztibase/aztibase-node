@@ -21,6 +21,33 @@ Entries are prepended (newest first).
 
 ## Entries
 
+### 2026-03-07 -- project-lead -- Sprint 019 Complete
+**Task:** Sprint 019: Browser WASM Light Node & HD Wallet Derivation (16 tasks, 4 phases)
+**Sprint:** Sprint 019, Phases 1-4
+**Git Ref:** pending
+**Files Changed:**
+- Cargo.toml (workspace: aztibase-wasm member, wasm-bindgen + js-sys deps)
+- crates/aztibase-wasm/Cargo.toml (NEW: wasm-bindgen, js-sys, blake3, serde, bincode)
+- crates/aztibase-wasm/src/lib.rs (NEW: WASM entry points — verifyHeaderChain, verifyMerkleProof, verifyVerkleProof, verifyLightClientProof, blake3Hash, buildHeaderRequest, latestSyncedRound; 4 tests)
+- crates/aztibase-wasm/src/sync.rs (NEW: SyncHeader, SyncFinalityCert, verify_header_chain, JsSyncState; 7 tests)
+- crates/aztibase-wasm/src/proof.rs (NEW: MerkleProof, VerkleProof, verify_merkle_proof, verify_verkle_proof, verify_light_client_proof, JS type adapters; 10 tests)
+- crates/aztibase-wasm/web/light-client.js (NEW: LightClient class, HeaderCache with IndexedDB, WebSocket transport bridge)
+- crates/aztibase-wasm/web/index.html (NEW: browser demo page — connect, sync headers, verify proofs)
+- crates/aztibase-node/src/wallet.rs (derive_account, encrypt_keyfile_pub, derive_child test helper; 4 new tests)
+- crates/aztibase-node/src/main.rs (WalletAction::Derive subcommand with --phrase, --index, --output, --passphrase)
+- blockchain-project/sprints/SPRINT-019.md (all tasks marked DONE)
+- blockchain-project/STATUS.md, BUILD_LOG.md, CHANGELOG.md updated
+**Review Notes:**
+- Phase 1: aztibase-wasm crate (cdylib + rlib), wasm-bindgen exports, re-implemented Merkle/Verkle verify without aztibase-execution deps (avoids wasmtime/revm in WASM)
+- Phase 2: LightClient JS API with WebSocket framing, IndexedDB header cache, dark-themed demo page
+- Phase 3: BLAKE3 domain-separated HD derivation (m/44'/aztb'/N'/0/0), index 0 backward-compatible with Sprint 017
+- Phase 4: Security review, 481 tests passing, clippy/fmt clean
+**Security Flags:**
+- SEC-WASM-001 (LOW): WASM linear memory may expose key material to JS; verification-only crate mitigates (no secrets in WASM)
+- SEC-WS-001 (LOW): WebSocket transport has no built-in auth/encryption; relies on wss:// for confidentiality
+- SEC-HD-001 (LOW): Non-standard HD derivation (BLAKE3, not HMAC-SHA512 BIP-32); documented, Aztibase-specific by design
+- 0 ELEVATED, 0 MEDIUM
+
 ### 2026-03-07 -- project-lead -- Sprint 018 Complete
 **Task:** Sprint 018: Light Node P2P Integration & Wallet Transfers (16 tasks, 4 phases)
 **Sprint:** Sprint 018, Phases 1-4

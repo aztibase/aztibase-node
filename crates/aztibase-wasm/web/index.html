@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Aztibase Light Client</title>
+  <style>
+    :root {
+      --bg: #0d1117;
+      --surface: #161b22;
+      --border: #30363d;
+      --text: #c9d1d9;
+      --accent: #58a6ff;
+      --green: #3fb950;
+      --red: #f85149;
+      --mono: 'JetBrains Mono', 'Fira Code', monospace;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: var(--mono);
+      background: var(--bg);
+      color: var(--text);
+      padding: 2rem;
+      line-height: 1.6;
+    }
+    h1 { color: var(--accent); margin-bottom: 0.5rem; font-size: 1.4rem; }
+    .subtitle { color: #8b949e; margin-bottom: 2rem; font-size: 0.85rem; }
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 1.2rem;
+      margin-bottom: 1rem;
+    }
+    .card h2 {
+      font-size: 0.9rem;
+      color: var(--accent);
+      margin-bottom: 0.8rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+    .stat { display: flex; justify-content: space-between; padding: 0.3rem 0; }
+    .stat-label { color: #8b949e; }
+    .stat-value { font-weight: bold; }
+    .connected { color: var(--green); }
+    .disconnected { color: var(--red); }
+    .controls { display: flex; gap: 0.8rem; margin-bottom: 1rem; flex-wrap: wrap; }
+    input, button {
+      font-family: var(--mono);
+      font-size: 0.85rem;
+      padding: 0.5rem 1rem;
+      border-radius: 4px;
+      border: 1px solid var(--border);
+      background: var(--bg);
+      color: var(--text);
+    }
+    input { flex: 1; min-width: 200px; }
+    button {
+      cursor: pointer;
+      background: var(--accent);
+      color: var(--bg);
+      border-color: var(--accent);
+      font-weight: bold;
+    }
+    button:disabled { opacity: 0.4; cursor: not-allowed; }
+    button:hover:not(:disabled) { opacity: 0.85; }
+    #log {
+      max-height: 300px;
+      overflow-y: auto;
+      font-size: 0.8rem;
+      padding: 0.8rem;
+    }
+    #log p { margin: 0.15rem 0; }
+    .log-ok { color: var(--green); }
+    .log-err { color: var(--red); }
+    .log-info { color: #8b949e; }
+    .proof-section { margin-top: 0.8rem; }
+    textarea {
+      font-family: var(--mono);
+      font-size: 0.75rem;
+      width: 100%;
+      height: 80px;
+      background: var(--bg);
+      color: var(--text);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 0.5rem;
+      resize: vertical;
+    }
+  </style>
+</head>
+<body>
+  <h1>Aztibase Light Client</h1>
+  <p class="subtitle">Browser WASM light node — trustless header verification</p>
+
+  <div class="controls">
+    <input id="ws-url" type="text" placeholder="ws://127.0.0.1:9944/ws" value="ws://127.0.0.1:9944/ws" />
+    <button id="btn-connect" onclick="doConnect()">Connect</button>
+    <button id="btn-sync" onclick="doSync()" disabled>Sync</button>
+    <button id="btn-disconnect" onclick="doDisconnect()" disabled>Disconnect</button>
+  </div>
+
+  <div class="card">
+    <h2>Status</h2>
+    <div class="stat">
+      <span class="stat-label">Connection</span>
+      <span class="stat-value" id="status-conn">disconnected</span>
+    </div>
+    <div class="stat">
+      <span class="stat-label">Synced Round</span>
+      <span class="stat-value" id="status-round">0</span>
+    </div>
+    <div class="stat">
+      <span class="stat-label">Target Round</span>
+      <span class="stat-value" id="status-target">0</span>
+    </div>
+    <div class="stat">
+      <span class="stat-label">Cached Headers</span>
+      <span class="stat-value" id="status-cached">0</span>
+    </div>
+    <div class="stat">
+      <span class="stat-label">WASM Module</span>
+      <span class="stat-value" id="status-wasm">loading...</span>
+    </div>
+  </div>
+
+  <div class="card proof-section">
+    <h2>Verify Proof</h2>
+    <textarea id="proof-input" placeholder='Paste light client proof JSON here...'></textarea>
+    <div style="margin-top:0.5rem;">
+      <input id="leaf-hex" type="text" placeholder="Leaf hash (hex)" style="margin-bottom:0.5rem;" />
+      <button onclick="doVerifyProof()">Verify</button>
+      <span id="proof-result" style="margin-left:1rem;"></span>
+    </div>
+  </div>
+
+  <div class="card" id="log">
+    <h2>Log</h2>
+  </div>
+
+  <script src="light-client.js"></script>
+  <script type="module">
+    let client = null;
+    let wasm = null;
+
+    window.doConnect = doConnect;
+    window.doSync = doSync;
+    window.doDisconnect = doDisconnect;
+    window.doVerifyProof = doVerifyProof;
+
+    async function initWasm() {
+      try {
+        const mod = await import("./pkg/aztibase_wasm.js");
+        await mod.default();
+        wasm = mod;
+        document.getElementById("status-wasm").textContent = "loaded";
+        document.getElementById("status-wasm").classList.add("connected");
+        log("WASM module loaded", "ok");
+      } catch (e) {
+        document.getElementById("status-wasm").textContent = "failed";
+        document.getElementById("status-wasm").classList.add("disconnected");
+        log(`WASM load failed: ${e.message}`, "err");
+        log("Run: wasm-pack build --target web crates/aztibase-wasm", "info");
+      }
+    }
+
+    async function doConnect() {
+      const url = document.getElementById("ws-url").value;
+      if (!wasm) {
+        log("WASM module not loaded", "err");
+        return;
+      }
+
+      client = new LightClient(wasm);
+      client.onSync = (info) => {
+        log(`Synced ${info.synced} headers to round ${info.round}`, "ok");
+        updateStatus();
+      };
+      client.onError = (err) => {
+        log(`Error: ${err.message || err}`, "err");
+      };
+
+      try {
+        log(`Connecting to ${url}...`, "info");
+        await client.connect(url);
+        log("Connected", "ok");
+        updateStatus();
+        document.getElementById("btn-sync").disabled = false;
+        document.getElementById("btn-disconnect").disabled = false;
+        document.getElementById("btn-connect").disabled = true;
+      } catch (e) {
+        log(`Connection failed: ${e.message || e}`, "err");
+      }
+    }
+
+    async function doSync() {
+      if (!client || !client.connected) {
+        log("Not connected", "err");
+        return;
+      }
+      log("Requesting headers...", "info");
+      try {
+        const result = await client.sync();
+        if (result.error) {
+          log(`Sync failed: ${result.error}`, "err");
+        } else {
+          log(`Sync complete: ${result.synced} headers, round ${result.round}`, "ok");
+        }
+        updateStatus();
+      } catch (e) {
+        log(`Sync error: ${e.message}`, "err");
+      }
+    }
+
+    function doDisconnect() {
+      if (client) {
+        client.disconnect();
+        log("Disconnected", "info");
+        updateStatus();
+        document.getElementById("btn-sync").disabled = true;
+        document.getElementById("btn-disconnect").disabled = true;
+        document.getElementById("btn-connect").disabled = false;
+      }
+    }
+
+    function doVerifyProof() {
+      if (!wasm) {
+        log("WASM not loaded", "err");
+        return;
+      }
+      const proofJson = document.getElementById("proof-input").value;
+      const leafHex = document.getElementById("leaf-hex").value;
+      const resultEl = document.getElementById("proof-result");
+
+      if (!proofJson || !leafHex) {
+        resultEl.textContent = "Provide proof JSON and leaf hash";
+        resultEl.className = "log-err";
+        return;
+      }
+
+      const result = wasm.verifyLightClientProof(proofJson, leafHex);
+      if (result === true) {
+        resultEl.textContent = "VALID";
+        resultEl.className = "connected";
+        log("Proof verified: VALID", "ok");
+      } else {
+        resultEl.textContent = typeof result === "string" ? result : "INVALID";
+        resultEl.className = "disconnected";
+        log(`Proof verification: ${result}`, "err");
+      }
+    }
+
+    async function updateStatus() {
+      const conn = document.getElementById("status-conn");
+      if (client && client.connected) {
+        conn.textContent = "connected";
+        conn.className = "stat-value connected";
+      } else {
+        conn.textContent = "disconnected";
+        conn.className = "stat-value disconnected";
+      }
+      document.getElementById("status-round").textContent = client ? client.synced : 0;
+      document.getElementById("status-target").textContent = client ? client.target : 0;
+
+      if (client && client.cache && client.cache.db) {
+        const count = await client.cache.headerCount();
+        document.getElementById("status-cached").textContent = count;
+      }
+    }
+
+    function log(msg, type) {
+      const el = document.getElementById("log");
+      const p = document.createElement("p");
+      p.className = `log-${type}`;
+      const ts = new Date().toLocaleTimeString();
+      p.textContent = `[${ts}] ${msg}`;
+      el.appendChild(p);
+      el.scrollTop = el.scrollHeight;
+    }
+
+    initWasm();
+  </script>
+</body>
+</html>

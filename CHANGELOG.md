@@ -8,6 +8,18 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 ## [M5] -- Light/Browser Nodes + Wallet (IN PROGRESS)
 
 ### Added
+- `aztibase-wasm` crate: browser-compatible WASM light client (cdylib + rlib), wasm-bindgen exports for trustless verification (2026-03-07)
+- WASM header chain verification: `verifyHeaderChain(headersJson, certJson, expectedStart)` — validates sequential rounds, quorum, signatures (2026-03-07)
+- WASM Merkle proof verification: `verifyMerkleProof(proofJson, rootHex, leafHex)` — sibling-path reconstruction (2026-03-07)
+- WASM Verkle proof verification: `verifyVerkleProof(proofJson, rootHex)` — path commitment check (2026-03-07)
+- WASM light client proof verification: `verifyLightClientProof(proofJson, leafHex)` — inner Merkle/Verkle dispatch with finality cert check (2026-03-07)
+- WASM utility: `blake3Hash(data)` returns hex-encoded BLAKE3 hash, `buildHeaderRequest(fromRound, count)` builds sync request JSON (2026-03-07)
+- `LightClient` JS class: `connect(wsUrl)`, `sync()`, `getBalance(address)`, `verifyProof(proofJson, leafHex)`, WebSocket transport bridge (2026-03-07)
+- `HeaderCache` JS class: IndexedDB-backed header persistence (`headers` + `meta` stores), survives page reloads (2026-03-07)
+- Browser demo page: dark-themed UI with connect/sync/disconnect controls, proof verification panel, event log (2026-03-07)
+- HD wallet derivation: `derive_account(phrase, account_index)` for path `m/44'/aztb'/N'/0/0` using BLAKE3 domain separation (2026-03-07)
+- `aztibase wallet derive` CLI: `--phrase`, `--index`, optional `--output` + `--passphrase` for encrypted keyfile export (2026-03-07)
+- Index 0 backward-compatible: `derive_account(phrase, 0)` produces same keypair as existing `keypair_from_mnemonic` (2026-03-07)
 - BIP-39 mnemonic wallet: `generate_mnemonic()` (24-word), `recover_from_mnemonic()` (12/24-word), BLAKE3 domain-separated key derivation `m/44'/aztb'/0'/0/0` (2026-03-07)
 - Argon2id encrypted keyfiles: `encrypt_keyfile()` / `decrypt_keyfile()` with ChaCha20-Poly1305 AEAD, 256MB memory cost, 3 iterations (2026-03-07)
 - `EncryptedKeyFile` JSON format: salt, nonce, Argon2id params, ciphertext — passphrase-protected secret key storage (2026-03-07)
@@ -32,6 +44,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 - `PeerId` re-exported from `aztibase-network` for cross-crate use (2026-03-07)
 
 ### Security
+- Sprint 019 security review: 0 ELEVATED, 0 MEDIUM, 3 LOW (2026-03-07)
+  - SEC-WASM-001 (LOW): WASM linear memory may expose data to JS host; mitigated by verification-only design (no secrets in WASM module)
+  - SEC-WS-001 (LOW): WebSocket transport has no built-in auth; relies on wss:// for confidentiality
+  - SEC-HD-001 (LOW): Non-standard HD derivation (BLAKE3, not HMAC-SHA512 BIP-32); documented, Aztibase-specific by design
 - Sprint 018 security review: 0 ELEVATED, 0 MEDIUM, 2 LOW (2026-03-07)
   - SEC-P2P-001 (LOW): Single-peer sync per cycle; eclipse mitigated by scoring but not multi-peer cross-validation
   - SEC-RPC-001 (LOW): Wallet broadcast doesn't enforce HTTPS; user responsibility to use secure endpoint

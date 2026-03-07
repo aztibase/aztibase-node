@@ -3,7 +3,7 @@
 **Last Updated:** 2026-03-07
 **Updated By:** project-lead
 **Current Phase:** M5 -- Light/Browser Nodes + Wallet (IN PROGRESS)
-**Current Sprint:** Sprint 018 -- COMPLETE (Light Node P2P Integration & Wallet Transfers)
+**Current Sprint:** Sprint 019 -- COMPLETE (Browser WASM Light Node & HD Wallet Derivation)
 
 ---
 
@@ -33,7 +33,7 @@
 - Build-phase tracking infrastructure (5 documents)
 - Implementation depth audit (Sprint 001, Task 7)
 - Reference repos cloned (MystiCeti, Sui, Lighthouse, rust-libp2p, redb)
-- cargo build + cargo test pass (456 tests, 0 failures)
+- cargo build + cargo test pass (481 tests, 0 failures)
 - Sprint 001 closed with retrospective
 - Sprint 002 closed: 24/24 tasks, 5 phases complete
 - Sprint 003 closed: 18/18 tasks, 4 phases complete
@@ -41,6 +41,7 @@
 - Sprint 005 closed: 21/21 tasks, 4 phases complete
 - Sprint 006 closed: 23/24 tasks (1 deferred), 4 phases complete
 - Sprint 007 complete: receipt store, EVM via revm, AI inference via tract
+- Sprint 019 complete: 16/16 tasks, 4 phases (WASM light client crate, browser transport bridge + demo, HD wallet derivation, security review)
 - Sprint 018 complete: 16/16 tasks, 4 phases (light sync P2P handler, sync loop with peer scoring, wallet transfer broadcast, security review)
 - Sprint 017 complete: 16/16 tasks, 4 phases (wallet hardening BIP-39/Argon2id, light node storage, header sync protocol, security review)
 - Sprint 016 complete: 16/16 tasks, 4 phases (anomaly scoring, cross-VM bridge, PoUW type foundations, security review)
@@ -69,14 +70,19 @@
 | aztibase-runtime | PARTIAL | ai-integration-engineer | YES | YES |
 | aztibase-rpc | PARTIAL | node-engineer | NO | YES |
 | aztibase-node | PARTIAL | node-engineer | YES | YES |
+| aztibase-wasm | PARTIAL | p2p-network-engineer | NO | YES |
 
 ### In Progress
-- Sprint 019 planning
+- Sprint 020 planning
 
 ### Blocked
 - Nothing currently blocked
 
 ### Recently Completed
+- Sprint 019 Phase 4: Security review — 0 ELEVATED, 0 MEDIUM, 3 LOW (SEC-WASM-001, SEC-WS-001, SEC-HD-001); clippy/fmt/test clean; 481 tests
+- Sprint 019 Phase 3: HD wallet derivation — derive_account(phrase, index) with BLAKE3 domain separation, index 0 backward-compatible, wallet derive CLI (4 new tests)
+- Sprint 019 Phase 2: Browser transport bridge — LightClient JS API, WebSocket adapter, IndexedDB header cache, demo HTML page
+- Sprint 019 Phase 1: WASM light client core — aztibase-wasm crate, wasm-bindgen exports (verifyHeaderChain, verifyMerkleProof, verifyVerkleProof, verifyLightClientProof), 21 tests
 - Sprint 018 Phase 4: Security review — 0 ELEVATED, 0 MEDIUM, 2 LOW (SEC-P2P-001, SEC-RPC-001); clippy/fmt/test clean; 456 tests
 - Sprint 018 Phase 3: Wallet transfer broadcast — sign_transfer_encrypted, broadcast_transaction via reqwest, --passphrase/--rpc CLI flags (3 new tests)
 - Sprint 018 Phase 2: Light node sync loop — async P2P sync, peer scoring (failure/latency), header chain verify + LightStore persist (3 new tests)
@@ -131,7 +137,7 @@
 - Sprint 005 Phase 1: Consensus-to-execution wiring, TxKind routing, ExecutionPipeline
 
 ### Next Up
-1. Sprint 019: TBD (candidate areas: browser WASM light node, full Verkle IPA/KZG, Docker deployment, HD wallet derivation)
+1. Sprint 020: TBD (candidate areas: full Verkle IPA/KZG, Docker deployment, WebSocket full-node endpoint, wallet export/import)
 
 ---
 
