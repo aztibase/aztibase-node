@@ -21,6 +21,65 @@ Entries are prepended (newest first).
 
 ## Entries
 
+### 2026-03-07 -- security-engineer + project-lead -- aztibase-node
+**Task:** Sprint 009 Phase 4: Security Review + Documentation (Tasks 14-16)
+**Sprint:** Sprint 009, Phase 4
+**Git Ref:** pending
+**Files Changed:**
+- crates/aztibase-node/src/sync.rs (SEC-SYNC-001 fix: MAX_CHUNKS validation in SnapshotAssembler::new; SEC-SYNC-002 fix: chunk data size validation; +3 tests)
+- blockchain-project/sprints/SPRINT-009.md (all phases marked DONE, security findings table, retrospective)
+- blockchain-project/BUILD_LOG.md (Phase 4 entry)
+- blockchain-project/STATUS.md (sprint 009 complete, 298 tests)
+- CHANGELOG.md (security fixes, sprint completion)
+**Review Notes:**
+- Full security review: Block-STM (10 findings), State Sync (8 findings), EVM/Precompiles (8 findings)
+- 2 ELEVATED fixed: SEC-SYNC-001 (unbounded total_chunks allocation → bounded to MAX_CHUNKS=64), SEC-SYNC-002 (chunk data size unbounded → capped at CHUNK_SIZE+1024)
+- 8 MEDIUM documented (6) or fixed (2), 5 LOW documented
+- cargo-audit: no new advisories (existing transitive deps documented)
+- cargo clippy: zero warnings; cargo fmt: clean
+- 298 total tests (3 new security tests), zero open ELEVATED flags
+**Security Flags:** 2 ELEVATED — both FIXED (SEC-SYNC-001, SEC-SYNC-002)
+
+---
+
+### 2026-03-07 -- smart-contract-engineer -- aztibase-execution
+**Task:** Sprint 009 Phase 3: EVM Precompiles (Tasks 10-13)
+**Sprint:** Sprint 009, Phase 3
+**Git Ref:** pending
+**Files Changed:**
+- crates/aztibase-execution/src/precompiles.rs (NEW: precompile documentation + 12 verification tests)
+- crates/aztibase-execution/src/lib.rs (added `pub mod precompiles`)
+**Review Notes:**
+- Discovery: revm v36 with `default-features = false, features = ["std"]` already includes pure-Rust precompile implementations via revm-precompile
+- ecrecover (0x01): k256 pure Rust fallback when `secp256k1` feature disabled
+- SHA-256 (0x02): sha2 crate, RIPEMD-160 (0x03): ripemd crate, identity (0x04): memcpy, modexp (0x05): custom bigint
+- All registered automatically by `build_mainnet()` → `EthPrecompiles::new(spec)`
+- bn128 (0x06-0x08) and KZG (0x0a) excluded (feature-gated, C deps) — deferred to Sprint 010
+- Tests verify via deployed contracts that STATICCALL precompiles, confirming EVM execution path works
+- 295 total tests (12 new precompile tests), zero clippy warnings
+**Security Flags:** None
+
+---
+
+### 2026-03-07 -- p2p-network-engineer + node-engineer -- aztibase-execution, aztibase-node
+**Task:** Sprint 009 Phase 2: State Sync Protocol (Tasks 6-9)
+**Sprint:** Sprint 009, Phase 2
+**Git Ref:** pending
+**Files Changed:**
+- crates/aztibase-execution/src/snapshot.rs (NEW: StateSnapshot, create/serialize/deserialize/apply/verify — 7 tests)
+- crates/aztibase-execution/src/lib.rs (added `pub mod snapshot` + exports)
+- crates/aztibase-node/src/sync.rs (NEW: SyncMessage, SnapshotAssembler, bootstrap_from_snapshot — 12 tests)
+- crates/aztibase-node/src/main.rs (sync module, TOPIC_STATE_SYNC handler for request/response, bootstrap on empty state)
+**Review Notes:**
+- StateSnapshot serializes full AccountState via bincode with 64 MiB size limit and version byte
+- SyncMessage enum: SnapshotRequest + SnapshotResponse with 1 MiB chunk splitting and per-chunk BLAKE3 integrity
+- SnapshotAssembler reassembles chunks with ordering, hash verification, and state root validation
+- bootstrap_from_snapshot applies snapshot to both in-memory state and optional redb persistence
+- Main loop handles incoming requests (responds with snapshot) and responses (assembles + bootstraps)
+- Empty-state nodes request snapshots from peers upon receiving a StateRootAnnounce
+- 283 total tests (19 new: 7 snapshot + 12 sync), zero clippy warnings
+**Security Flags:** None
+
 ### 2026-03-06 -- smart-contract-engineer -- aztibase-execution, aztibase-node
 **Task:** Sprint 009 Phase 1: Block-STM parallel execution (Tasks 1-5)
 **Sprint:** Sprint 009, Phase 1

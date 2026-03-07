@@ -3,8 +3,10 @@ pub mod contract;
 pub mod evm;
 pub mod parallel;
 pub mod persist;
+pub mod precompiles;
 pub mod receipt;
 pub mod routing;
+pub mod snapshot;
 pub mod state;
 pub mod vm;
 
@@ -13,6 +15,10 @@ pub use parallel::{BatchResult, TransferTx, TxReceipt, TxStatus, execute_transfe
 pub use persist::{flush_state, get_batch_root, load_state, store_batch_root};
 pub use receipt::{ExecutionReceipt, get_receipt, store_receipts};
 pub use routing::{RoutingError, TxKind, route_batch, route_tx};
+pub use snapshot::{
+    SnapshotError, StateSnapshot, apply_snapshot, create_snapshot, deserialize_snapshot,
+    serialize_snapshot, snapshot_hash,
+};
 pub use state::AccountState;
 pub use vm::{EngineConfig, ExecutionEngine, ExecutionResult};
 

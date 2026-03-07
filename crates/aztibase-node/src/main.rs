@@ -3,6 +3,7 @@ mod config;
 mod integration;
 mod mempool;
 mod pipeline;
+mod sync;
 
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -24,6 +25,10 @@ use aztibase_rpc::RpcServer;
 use aztibase_runtime::TractRuntime;
 use aztibase_storage::StateStore;
 use config::NodeConfig;
+use sync::{
+    SnapshotAssembler, SyncMessage, build_snapshot_request, build_snapshot_response,
+    decode_sync_message, encode_sync_message,
+};
 
 #[derive(Parser, Debug)]
 #[command(name = "aztibase", about = "Aztibase Network Node")]
@@ -257,12 +262,25 @@ async fn main() -> Result<()> {
         }
     });
 
+    // Shared state for sync protocol
+    let shared_state = exec_pipeline.shared_state();
+
     // Spawn execution pipeline
     let pipeline_handle = tokio::spawn(async move {
         exec_pipeline.run().await;
     });
 
     let mut batch_index: u64 = 0;
+    let mut sync_assembler: Option<SnapshotAssembler> = None;
+    let mut sync_bootstrapped = false;
+
+    // Request snapshot if state is empty (new node joining the network)
+    {
+        let state_guard = shared_state.read().await;
+        if state_guard.account_count() == 0 {
+            tracing::info!("State is empty — will request snapshot from peers after connecting");
+        }
+    }
 
     // Main event loop
     loop {
@@ -288,12 +306,112 @@ async fn main() -> Result<()> {
                         if topic == TOPIC_CONSENSUS {
                             let _ = consensus_tx.send(ConsensusInput::ReceivedVertex(data)).await;
                         } else if topic == TOPIC_STATE_SYNC {
-                            if let Ok(announce) = bincode::deserialize::<StateRootAnnounce>(&data) {
+                            if let Ok(msg) = decode_sync_message(&data) {
+                                match msg {
+                                    SyncMessage::SnapshotRequest { requester, .. } => {
+                                        tracing::info!(
+                                            requester = requester[0],
+                                            "Peer requested state snapshot"
+                                        );
+                                        let state_guard = shared_state.read().await;
+                                        if state_guard.account_count() > 0 {
+                                            match build_snapshot_response(&state_guard, batch_index) {
+                                                Ok(msgs) => {
+                                                    for m in &msgs {
+                                                        if let Ok(encoded) = encode_sync_message(m) {
+                                                            let _ = transport.publish(TOPIC_STATE_SYNC, encoded);
+                                                        }
+                                                    }
+                                                    tracing::info!(
+                                                        chunks = msgs.len(),
+                                                        batch = batch_index,
+                                                        "Sent state snapshot"
+                                                    );
+                                                }
+                                                Err(e) => {
+                                                    tracing::warn!(error = %e, "Failed to build snapshot response");
+                                                }
+                                            }
+                                        }
+                                    }
+                                    SyncMessage::SnapshotResponse {
+                                        batch_index: bi,
+                                        state_root: sr,
+                                        total_chunks,
+                                        chunk_index,
+                                        chunk_hash,
+                                        data: chunk_data,
+                                        ..
+                                    } => {
+                                        if sync_bootstrapped {
+                                            continue;
+                                        }
+                                        if sync_assembler.is_none() {
+                                            match SnapshotAssembler::new(total_chunks, bi, sr) {
+                                                Ok(a) => {
+                                                    tracing::info!(
+                                                        total_chunks,
+                                                        batch = bi,
+                                                        "Receiving state snapshot"
+                                                    );
+                                                    sync_assembler = Some(a);
+                                                }
+                                                Err(e) => {
+                                                    tracing::warn!(error = %e, "Invalid snapshot metadata");
+                                                    continue;
+                                                }
+                                            }
+                                        }
+                                        let assembler = sync_assembler.as_mut().unwrap();
+                                        if let Err(e) = assembler.add_chunk(chunk_index, chunk_hash, chunk_data) {
+                                            tracing::warn!(error = %e, "Bad snapshot chunk");
+                                            sync_assembler = None;
+                                        } else if assembler.is_complete() {
+                                            let asm = sync_assembler.take().unwrap();
+                                            match asm.assemble() {
+                                                Ok(snapshot) => {
+                                                    match sync::bootstrap_from_snapshot(
+                                                        &snapshot,
+                                                        &shared_state,
+                                                        None,
+                                                    ).await {
+                                                        Ok(()) => {
+                                                            tracing::info!(
+                                                                batch = snapshot.batch_index,
+                                                                "State bootstrapped from snapshot"
+                                                            );
+                                                            batch_index = snapshot.batch_index;
+                                                            sync_bootstrapped = true;
+                                                        }
+                                                        Err(e) => {
+                                                            tracing::warn!(error = %e, "Snapshot bootstrap failed");
+                                                        }
+                                                    }
+                                                }
+                                                Err(e) => {
+                                                    tracing::warn!(error = %e, "Snapshot assembly failed");
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            } else if let Ok(announce) = bincode::deserialize::<StateRootAnnounce>(&data) {
                                 tracing::debug!(
                                     peer_validator = announce.validator[0],
                                     batch = announce.batch_index,
                                     "Received state root announcement"
                                 );
+                                // If state is empty and we haven't bootstrapped, request a snapshot
+                                if !sync_bootstrapped && sync_assembler.is_none() {
+                                    let state_guard = shared_state.read().await;
+                                    if state_guard.account_count() == 0 {
+                                        let req = build_snapshot_request(identity);
+                                        if let Ok(encoded) = encode_sync_message(&req) {
+                                            let _ = transport.publish(TOPIC_STATE_SYNC, encoded);
+                                            tracing::info!("Sent snapshot request to peers");
+                                        }
+                                    }
+                                }
                             }
                         } else if topic == TOPIC_TRANSACTIONS
                             && mempool.insert(data.clone())

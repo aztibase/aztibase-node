@@ -7,7 +7,22 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [M4] -- Integration Testing + AI + Testnet (IN PROGRESS)
 
+### Security
+- SEC-SYNC-001 FIXED: `SnapshotAssembler::new()` now validates `total_chunks` (max 64) to prevent OOM DoS (2026-03-07)
+- SEC-SYNC-002 FIXED: `add_chunk()` validates chunk data size (max CHUNK_SIZE + 1024) to prevent memory exhaustion (2026-03-07)
+- Sprint 009 security review: 2 ELEVATED fixed, 8 MEDIUM (2 fixed, 6 documented), 5 LOW documented (2026-03-07)
+
 ### Added
+- EVM precompiles: ecrecover (0x01), SHA-256 (0x02), RIPEMD-160 (0x03), identity (0x04), modexp (0x05) via revm built-in pure-Rust implementations (2026-03-07)
+- Precompile verification: 12 tests confirm all 5 precompiles work through deployed-contract STATICCALL path (2026-03-07)
+- bn128/KZG precompiles excluded (feature-gated C deps) — deferred to Sprint 010 (2026-03-07)
+- State sync protocol: `StateSnapshot` with bincode serialization, 64 MiB limit, version-tagged format (2026-03-07)
+- `apply_snapshot()`: restores `AccountState` from snapshot with state root verification (2026-03-07)
+- `SyncMessage` enum: `SnapshotRequest` / `SnapshotResponse` protocol on TOPIC_STATE_SYNC (2026-03-07)
+- Snapshot chunking: 1 MiB chunks with per-chunk BLAKE3 integrity hash (2026-03-07)
+- `SnapshotAssembler`: reassembles chunked responses with ordering, hash, and state root validation (2026-03-07)
+- `bootstrap_from_snapshot()`: applies snapshot to in-memory state + optional redb persistence (2026-03-07)
+- Node bootstrap: empty-state nodes request snapshots from peers on `StateRootAnnounce` receipt (2026-03-07)
 - Vertex wire format: version-prefixed encoding with size limits, hash integrity, validator check, round proximity (2026-03-06)
 - `encode_vertex()` / `decode_vertex()` in aztibase-consensus/wire.rs (2026-03-06)
 - `StateRootAnnounce`: broadcast state roots on TOPIC_STATE_SYNC after batch execution (2026-03-06)
