@@ -18,6 +18,7 @@ Every non-obvious technical decision is recorded here. Each ADR is immutable onc
 | ADR-008 | Metrics via opaque JSON to avoid cross-crate coupling | 2026-03-07 | ACCEPTED | node-engineer |
 | ADR-009 | WebSocket gateway via axum upgrade (not separate server) | 2026-03-07 | ACCEPTED | node-engineer |
 | ADR-010 | PoUW scoring formula and attestation quorum design | 2026-03-07 | ACCEPTED | blockchain-architect + consensus-engineer |
+| ADR-011 | Attestation signature scheme and settlement flow | 2026-03-07 | ACCEPTED | blockchain-architect + security-engineer |
 
 ---
 
@@ -309,6 +310,44 @@ The Proof of Useful Work (PoUW) system needs a concrete scoring formula to rank 
 - The formula parameters (weights, max_latency, expected_tasks_per_window) are configurable per-network
 - StubPoUWScore remains available as fallback for networks without AI compute validators
 - Future work: weighted reward distribution, dynamic quorum based on task reward value, attestation signature verification
+
+---
+
+## ADR-011: Attestation Signature Scheme and Settlement Flow
+
+**Date:** 2026-03-07
+**Status:** ACCEPTED
+**Decided By:** blockchain-architect + security-engineer
+**Git Ref:** pending (Sprint 022)
+
+### Context
+
+Sprint 022 wires the task execution loop end-to-end: PostTask → TaskPool → SubmitAttestation → quorum check → reward settlement. The attestation flow requires signature verification to ensure only the claimed validator submitted the attestation, and settlement must be atomic to prevent partial reward distribution.
+
+### Decision
+
+1. **Ed25519 signatures on attestation_hash**: Validators sign `attestation_hash = BLAKE3(task_id || result_hash || compute_units || validator_id)` using their Ed25519 keypair. The pipeline verifies via `aztibase_core::PublicKey::from_bytes().verify()` — no new dependencies.
+
+2. **TaskSettlement as reusable settlement primitive**: The `TaskSettlement::settle()` function encapsulates aggregation + reward splitting. The pipeline delegates to it rather than inlining the logic, keeping settlement logic testable in isolation.
+
+3. **Atomic settlement**: On quorum (≥ 2 matching result_hash), the pipeline atomically removes the task from the pool, credits validator balances, and cleans up state storage and attestation buffer in a single `execute_batch` pass.
+
+4. **Attestation buffer cleanup on expiry**: When tasks expire and are evicted from the TaskPool, their corresponding attestation buffer entries are also cleaned up to prevent unbounded memory growth.
+
+5. **CommitCompute stake bond**: Validators lock `committed_stake` as a bond when registering as compute providers. The bond is deducted from their balance immediately; refund on deregistration is deferred to a future sprint.
+
+### Rationale
+
+- **Reusing aztibase_core::PublicKey**: Avoids adding ed25519-dalek as a direct dependency to the node crate. The core crate already wraps it with strict verification (rejects non-canonical S values, preventing signature malleability).
+- **TaskSettlement delegation**: Keeps pipeline code focused on orchestration. Settlement logic (quorum check, reward division, remainder handling) is unit-testable without constructing full batches.
+- **Attestation buffer cleanup**: Without cleanup, attestation buffers for tasks that expire before quorum would leak memory indefinitely. Cleaning up during the expiry pass ensures bounded growth.
+
+### Consequences
+
+- Validators must have a valid Ed25519 keypair to submit attestations (already required for transaction signing)
+- Settlement is deterministic across all nodes (same quorum → same payouts)
+- CommitCompute overwrites previous commitments without refunding prior stake — a known limitation addressed by future deregistration support
+- The attestation buffer is ephemeral (in-memory only) — node restarts lose pending attestations, which is acceptable since unfinished quorums will eventually expire
 
 ---
 

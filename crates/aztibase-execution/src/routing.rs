@@ -12,6 +12,8 @@ const PREFIX_AI_INFER: u8 = 0x06;
 const PREFIX_CREATE_AGENT: u8 = 0x07;
 const PREFIX_REGISTER_MODEL: u8 = 0x08;
 const PREFIX_POST_TASK: u8 = 0x09;
+const PREFIX_SUBMIT_ATTESTATION: u8 = 0x0A;
+const PREFIX_COMMIT_COMPUTE: u8 = 0x0B;
 
 /// Maximum encoded transaction size (1 MB). Rejects oversized payloads before
 /// deserialization to prevent memory-bomb attacks via bincode length prefixes.
@@ -90,6 +92,22 @@ pub enum TxKind {
         nonce: u64,
         gas_price: u64,
     },
+    SubmitAttestation {
+        validator: Address,
+        task_id: [u8; 32],
+        result_hash: [u8; 32],
+        compute_units: u64,
+        signature: Vec<u8>,
+        nonce: u64,
+        gas_price: u64,
+    },
+    CommitCompute {
+        validator: Address,
+        supported_models: Vec<String>,
+        committed_stake: u64,
+        nonce: u64,
+        gas_price: u64,
+    },
 }
 
 impl TxKind {
@@ -105,6 +123,8 @@ impl TxKind {
             TxKind::CreateAgent { .. } => PREFIX_CREATE_AGENT,
             TxKind::RegisterModel { .. } => PREFIX_REGISTER_MODEL,
             TxKind::PostTask { .. } => PREFIX_POST_TASK,
+            TxKind::SubmitAttestation { .. } => PREFIX_SUBMIT_ATTESTATION,
+            TxKind::CommitCompute { .. } => PREFIX_COMMIT_COMPUTE,
         };
         let payload = bincode::serialize(self).expect("TxKind serialization cannot fail");
         let mut buf = Vec::with_capacity(1 + payload.len());
@@ -123,7 +143,9 @@ impl TxKind {
             | TxKind::AiInfer { nonce, .. }
             | TxKind::CreateAgent { nonce, .. }
             | TxKind::RegisterModel { nonce, .. }
-            | TxKind::PostTask { nonce, .. } => *nonce,
+            | TxKind::PostTask { nonce, .. }
+            | TxKind::SubmitAttestation { nonce, .. }
+            | TxKind::CommitCompute { nonce, .. } => *nonce,
         }
     }
 
@@ -137,7 +159,9 @@ impl TxKind {
             | TxKind::AiInfer { gas_price, .. }
             | TxKind::CreateAgent { gas_price, .. }
             | TxKind::RegisterModel { gas_price, .. }
-            | TxKind::PostTask { gas_price, .. } => *gas_price,
+            | TxKind::PostTask { gas_price, .. }
+            | TxKind::SubmitAttestation { gas_price, .. }
+            | TxKind::CommitCompute { gas_price, .. } => *gas_price,
         }
     }
 
@@ -154,6 +178,8 @@ impl TxKind {
             TxKind::CreateAgent { .. } => 53_000,
             TxKind::RegisterModel { .. } => 100_000,
             TxKind::PostTask { .. } => 42_000,
+            TxKind::SubmitAttestation { .. } => 50_000,
+            TxKind::CommitCompute { .. } => 75_000,
         }
     }
 
@@ -168,6 +194,8 @@ impl TxKind {
             TxKind::CreateAgent { creator, .. } => creator,
             TxKind::RegisterModel { owner, .. } => owner,
             TxKind::PostTask { requester, .. } => requester,
+            TxKind::SubmitAttestation { validator, .. } => validator,
+            TxKind::CommitCompute { validator, .. } => validator,
         }
     }
 
@@ -182,6 +210,8 @@ impl TxKind {
             TxKind::CreateAgent { .. } => PREFIX_CREATE_AGENT,
             TxKind::RegisterModel { .. } => PREFIX_REGISTER_MODEL,
             TxKind::PostTask { .. } => PREFIX_POST_TASK,
+            TxKind::SubmitAttestation { .. } => PREFIX_SUBMIT_ATTESTATION,
+            TxKind::CommitCompute { .. } => PREFIX_COMMIT_COMPUTE,
         }
     }
 }
@@ -254,7 +284,9 @@ pub fn route_tx(raw: &[u8]) -> Result<TxKind, RoutingError> {
         | PREFIX_AI_INFER
         | PREFIX_CREATE_AGENT
         | PREFIX_REGISTER_MODEL
-        | PREFIX_POST_TASK => {}
+        | PREFIX_POST_TASK
+        | PREFIX_SUBMIT_ATTESTATION
+        | PREFIX_COMMIT_COMPUTE => {}
         other => return Err(RoutingError::UnknownPrefix(other)),
     }
     let decoded: TxKind = bincode_options()
@@ -601,5 +633,75 @@ mod tests {
             route_tx(&encoded),
             Err(RoutingError::InvalidFuncName(_))
         ));
+    }
+
+    #[test]
+    fn register_model_roundtrip() {
+        let tx = TxKind::RegisterModel {
+            owner: [0xA0; 32],
+            model_id: "llama_7b".into(),
+            fingerprint: [0xBB; 32],
+            compute_cost: 500,
+            min_stake: 1000,
+            nonce: 3,
+            gas_price: 2,
+        };
+        let encoded = tx.encode();
+        let decoded = route_tx(&encoded).unwrap();
+        assert_eq!(decoded.nonce(), 3);
+        assert_eq!(decoded.gas_price(), 2);
+        assert_eq!(*decoded.sender(), [0xA0; 32]);
+    }
+
+    #[test]
+    fn post_task_roundtrip() {
+        let tx = TxKind::PostTask {
+            requester: [0xC0; 32],
+            model_id: "llama_7b".into(),
+            input_hash: [0xDD; 32],
+            reward: 100,
+            deadline_round: 50,
+            nonce: 7,
+            gas_price: 1,
+        };
+        let encoded = tx.encode();
+        let decoded = route_tx(&encoded).unwrap();
+        assert_eq!(decoded.nonce(), 7);
+        assert_eq!(decoded.gas_price(), 1);
+        assert_eq!(*decoded.sender(), [0xC0; 32]);
+    }
+
+    #[test]
+    fn submit_attestation_roundtrip() {
+        let tx = TxKind::SubmitAttestation {
+            validator: [0xE0; 32],
+            task_id: [0x11; 32],
+            result_hash: [0x22; 32],
+            compute_units: 42,
+            signature: vec![0xAA; 64],
+            nonce: 10,
+            gas_price: 3,
+        };
+        let encoded = tx.encode();
+        let decoded = route_tx(&encoded).unwrap();
+        assert_eq!(decoded.nonce(), 10);
+        assert_eq!(decoded.gas_price(), 3);
+        assert_eq!(*decoded.sender(), [0xE0; 32]);
+    }
+
+    #[test]
+    fn commit_compute_roundtrip() {
+        let tx = TxKind::CommitCompute {
+            validator: [0xF0; 32],
+            supported_models: vec!["llama-7b".into(), "gpt-neo".into()],
+            committed_stake: 5000,
+            nonce: 15,
+            gas_price: 4,
+        };
+        let encoded = tx.encode();
+        let decoded = route_tx(&encoded).unwrap();
+        assert_eq!(decoded.nonce(), 15);
+        assert_eq!(decoded.gas_price(), 4);
+        assert_eq!(*decoded.sender(), [0xF0; 32]);
     }
 }

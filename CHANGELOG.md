@@ -23,9 +23,19 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 - `aztb_getTaskStatus` RPC: query pending inference task by task_id (2026-03-07)
 - Pipeline execution for RegisterModel and PostTask transactions with nonce checks, fee escrow, and receipts (2026-03-07)
 - ADR-010: PoUW scoring formula and attestation quorum design (2026-03-07)
+- `TxKind::SubmitAttestation` (0x0A): validators submit signed attestations with Ed25519 signature verification (2026-03-07)
+- `TxKind::CommitCompute` (0x0B): validators register as compute providers with stake bond (2026-03-07)
+- TaskPool wired into ExecutionPipeline: PostTask inserts into live pool, expired tasks auto-refunded (2026-03-07)
+- Attestation → quorum → settlement flow: `TaskSettlement::settle()` distributes rewards on quorum (≥ 2 matching) (2026-03-07)
+- `aztb_pendingTaskCount` RPC: query count of pending inference tasks (2026-03-07)
+- `aztb_getComputeCommitment` RPC: query validator compute commitment by ID (2026-03-07)
+- `aztb_listComputeProviders` RPC: list validators committed to a specific model (2026-03-07)
+- Attestation buffer cleanup on task expiry to prevent unbounded memory growth (2026-03-07)
+- ADR-011: Attestation signature scheme and settlement flow design (2026-03-07)
 
 ### Fixed
 - SEC-SYBIL-001: `AttestationAggregator` now deduplicates attestations by validator_id, preventing single-validator quorum faking (2026-03-07)
+- SEC-ATT-LEAK-001 (LOW): Attestation buffer entries now cleaned up when tasks expire, preventing memory leak (2026-03-07)
 
 ---
 

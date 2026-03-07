@@ -1,8 +1,10 @@
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
-use aztibase_consensus::CommittedBatch;
-use aztibase_core::hash;
+use aztibase_consensus::{
+    AttestationAggregator, CommittedBatch, ComputeCommitmentStore, InferenceAttestation,
+};
+use aztibase_core::{Hash, hash};
 use aztibase_execution::{
     AccountState, BaseFeeCalculator, ContractTx, ExecutionReceipt, FeeEscrow, TransferTx, TxKind,
     block_stm::{BlockSTMExecutor, apply_block_stm_to_state},
@@ -15,6 +17,8 @@ use aztibase_execution::{
 use aztibase_runtime::{AIRuntime, AnomalyScorer, InferenceRequest, TxFeatures};
 use aztibase_storage::StateStore;
 use tokio::sync::{RwLock, mpsc};
+
+use crate::task_pool::{SettlementResult, TaskPool, TaskSettlement};
 
 /// Result of executing a single committed batch.
 #[derive(Clone, Debug)]
@@ -41,6 +45,12 @@ pub struct ExecutionPipeline {
     base_fee: Arc<std::sync::atomic::AtomicU64>,
     base_fee_calculator: BaseFeeCalculator,
     anomaly_scorer: AnomalyScorer,
+    task_pool: Arc<RwLock<TaskPool>>,
+    pending_task_count: Arc<std::sync::atomic::AtomicU64>,
+    current_round: u64,
+    attestation_buffer: HashMap<Hash, Vec<InferenceAttestation>>,
+    attestation_aggregator: AttestationAggregator,
+    compute_commitments: Arc<RwLock<ComputeCommitmentStore>>,
 }
 
 impl ExecutionPipeline {
@@ -76,7 +86,18 @@ impl ExecutionPipeline {
             base_fee,
             base_fee_calculator: calculator,
             anomaly_scorer: AnomalyScorer::new(),
+            task_pool: Arc::new(RwLock::new(TaskPool::new())),
+            pending_task_count: Arc::new(std::sync::atomic::AtomicU64::new(0)),
+            current_round: 0,
+            attestation_buffer: HashMap::new(),
+            attestation_aggregator: AttestationAggregator::new(2),
+            compute_commitments: Arc::new(RwLock::new(ComputeCommitmentStore::new())),
         }
+    }
+
+    /// Shared compute commitment store (for RPC server).
+    pub fn shared_compute_commitments(&self) -> Arc<RwLock<ComputeCommitmentStore>> {
+        Arc::clone(&self.compute_commitments)
     }
 
     /// Attach an AI runtime for inference transaction execution.
@@ -97,6 +118,11 @@ impl ExecutionPipeline {
     /// Shared base fee (for RPC server and mempool validation).
     pub fn shared_base_fee(&self) -> Arc<std::sync::atomic::AtomicU64> {
         Arc::clone(&self.base_fee)
+    }
+
+    /// Shared pending task count (for RPC server).
+    pub fn shared_pending_task_count(&self) -> Arc<std::sync::atomic::AtomicU64> {
+        Arc::clone(&self.pending_task_count)
     }
 
     /// Attach a channel to receive execution results (for state root broadcasting).
@@ -150,6 +176,33 @@ impl ExecutionPipeline {
         &mut self,
         batch: &CommittedBatch,
     ) -> Result<PipelineResult, anyhow::Error> {
+        self.current_round += 1;
+
+        // Evict expired tasks and refund their rewards to requesters.
+        {
+            let mut pool = self.task_pool.write().await;
+            let expired_tasks = pool.drain_expired(self.current_round);
+            if !expired_tasks.is_empty() {
+                let mut state_guard = self.state.write().await;
+                for task in &expired_tasks {
+                    let prev = state_guard.balance(&task.requester);
+                    state_guard.set_balance(&task.requester, prev + task.reward);
+                    tracing::debug!(
+                        task_id = %short_hex(&task.task_id),
+                        requester = %short_hex(&task.requester),
+                        refund = task.reward,
+                        "Expired task refunded"
+                    );
+                }
+                drop(state_guard);
+            }
+            for task in &expired_tasks {
+                self.attestation_buffer.remove(&task.task_id);
+            }
+            self.pending_task_count
+                .store(pool.len() as u64, std::sync::atomic::Ordering::Relaxed);
+        }
+
         let (mut routed, errors) = verify_and_route_batch(&batch.transactions);
 
         routed.sort_by(|a, b| a.sender().cmp(b.sender()).then(a.nonce().cmp(&b.nonce())));
@@ -250,6 +303,8 @@ impl ExecutionPipeline {
         let mut create_agents = Vec::new();
         let mut register_models = Vec::new();
         let mut post_tasks = Vec::new();
+        let mut submit_attestations = Vec::new();
+        let mut commit_computes = Vec::new();
 
         for tx in &executable {
             match tx {
@@ -394,6 +449,38 @@ impl ExecutionPipeline {
                         *nonce,
                     ));
                 }
+                TxKind::SubmitAttestation {
+                    validator,
+                    task_id,
+                    result_hash,
+                    compute_units,
+                    signature,
+                    nonce,
+                    ..
+                } => {
+                    submit_attestations.push((
+                        *validator,
+                        *task_id,
+                        *result_hash,
+                        *compute_units,
+                        signature.clone(),
+                        *nonce,
+                    ));
+                }
+                TxKind::CommitCompute {
+                    validator,
+                    supported_models,
+                    committed_stake,
+                    nonce,
+                    ..
+                } => {
+                    commit_computes.push((
+                        *validator,
+                        supported_models.clone(),
+                        *committed_stake,
+                        *nonce,
+                    ));
+                }
             }
         }
 
@@ -404,7 +491,9 @@ impl ExecutionPipeline {
             + ai_infers.len()
             + create_agents.len()
             + register_models.len()
-            + post_tasks.len();
+            + post_tasks.len()
+            + submit_attestations.len()
+            + commit_computes.len();
 
         // Phase 2: Execute transactions.
         let mut exec_receipts = Vec::new();
@@ -622,6 +711,8 @@ impl ExecutionPipeline {
             }
         }
 
+        let mut pending_new_tasks: Vec<aztibase_consensus::InferenceTask> = Vec::new();
+
         for (requester, model_id, input_hash, reward, deadline_round, nonce) in &post_tasks {
             let mut preimage = Vec::new();
             preimage.extend_from_slice(requester);
@@ -695,6 +786,7 @@ impl ExecutionPipeline {
                 .insert(task_key.into_bytes(), bincode::serialize(&task).unwrap());
 
             state.increment_nonce(requester);
+            pending_new_tasks.push(task.clone());
 
             exec_receipts.push(ExecutionReceipt {
                 tx_hash,
@@ -703,6 +795,215 @@ impl ExecutionPipeline {
                 contract_address: None,
                 error: None,
                 inference_hash: Some(task.task_id),
+                anomaly_score: 0.0,
+            });
+        }
+
+        // Insert successfully posted tasks into the live TaskPool.
+        if !pending_new_tasks.is_empty() {
+            let mut pool = self.task_pool.write().await;
+            for task in pending_new_tasks {
+                pool.insert(task);
+            }
+            self.pending_task_count
+                .store(pool.len() as u64, std::sync::atomic::Ordering::Relaxed);
+        }
+
+        // Execute SubmitAttestation transactions.
+        for (validator, task_id, result_hash, compute_units, signature, nonce) in
+            &submit_attestations
+        {
+            let mut preimage = Vec::new();
+            preimage.extend_from_slice(validator);
+            preimage.extend_from_slice(task_id);
+            preimage.extend_from_slice(result_hash);
+            let tx_hash = hash(&preimage);
+
+            let val_nonce = state.nonce(validator);
+            if *nonce != val_nonce {
+                state.increment_nonce(validator);
+                exec_receipts.push(ExecutionReceipt {
+                    tx_hash,
+                    success: false,
+                    gas_used: 21_000,
+                    contract_address: None,
+                    error: Some(format!("nonce mismatch: expected {val_nonce}, got {nonce}")),
+                    inference_hash: None,
+                    anomaly_score: 0.0,
+                });
+                continue;
+            }
+
+            // Verify Ed25519 signature over attestation_hash
+            let att = InferenceAttestation::new(
+                *task_id,
+                *result_hash,
+                *compute_units,
+                *validator,
+                signature.clone(),
+            );
+            let att_hash = att.attestation_hash();
+            let sig_valid = aztibase_core::PublicKey::from_bytes(validator)
+                .is_some_and(|pk| pk.verify(&att_hash, signature));
+
+            if !sig_valid {
+                state.increment_nonce(validator);
+                exec_receipts.push(ExecutionReceipt {
+                    tx_hash,
+                    success: false,
+                    gas_used: 25_000,
+                    contract_address: None,
+                    error: Some("invalid attestation signature".into()),
+                    inference_hash: None,
+                    anomaly_score: 0.0,
+                });
+                continue;
+            }
+
+            // Check task exists in pool
+            let task_exists = {
+                let pool = self.task_pool.read().await;
+                pool.get(task_id).is_some()
+            };
+
+            if !task_exists {
+                state.increment_nonce(validator);
+                exec_receipts.push(ExecutionReceipt {
+                    tx_hash,
+                    success: false,
+                    gas_used: 25_000,
+                    contract_address: None,
+                    error: Some(format!("task not found: 0x{}", hex::encode(&task_id[..4]))),
+                    inference_hash: None,
+                    anomaly_score: 0.0,
+                });
+                continue;
+            }
+
+            self.attestation_buffer
+                .entry(*task_id)
+                .or_default()
+                .push(att);
+            state.increment_nonce(validator);
+
+            // Check quorum via TaskSettlement
+            let atts = &self.attestation_buffer[task_id];
+            let task_opt = {
+                let pool = self.task_pool.read().await;
+                pool.get(task_id).cloned()
+            };
+            if let Some(task) = task_opt {
+                let result = TaskSettlement::settle(&task, atts, &self.attestation_aggregator);
+                if let SettlementResult::Settled {
+                    result_hash,
+                    payouts,
+                    ..
+                } = result
+                {
+                    {
+                        let mut pool = self.task_pool.write().await;
+                        pool.remove(task_id);
+                    }
+
+                    for (validator_id, payout) in &payouts {
+                        let prev = state.balance(validator_id);
+                        state.set_balance(validator_id, prev + payout);
+                    }
+
+                    let task_key = format!("task:{}", hex::encode(task.task_id));
+                    let registry_acct = state.get_mut(&MODEL_REGISTRY_ADDRESS);
+                    registry_acct.storage.remove(&task_key.into_bytes());
+
+                    self.pending_task_count.store(
+                        {
+                            let pool = self.task_pool.read().await;
+                            pool.len() as u64
+                        },
+                        std::sync::atomic::Ordering::Relaxed,
+                    );
+
+                    tracing::info!(
+                        task_id = %short_hex(&task.task_id),
+                        result_hash = %short_hex(&result_hash),
+                        validators = payouts.len(),
+                        reward = task.reward,
+                        "Task settled — quorum reached"
+                    );
+
+                    self.attestation_buffer.remove(task_id);
+                }
+            }
+
+            exec_receipts.push(ExecutionReceipt {
+                tx_hash,
+                success: true,
+                gas_used: 50_000,
+                contract_address: None,
+                error: None,
+                inference_hash: Some(*task_id),
+                anomaly_score: 0.0,
+            });
+        }
+
+        // Execute CommitCompute transactions.
+        for (validator, supported_models, committed_stake, nonce) in &commit_computes {
+            let mut preimage = Vec::new();
+            preimage.extend_from_slice(validator);
+            for m in supported_models {
+                preimage.extend_from_slice(m.as_bytes());
+            }
+            preimage.extend_from_slice(&committed_stake.to_le_bytes());
+            let tx_hash = hash(&preimage);
+
+            let val_nonce = state.nonce(validator);
+            if *nonce != val_nonce {
+                state.increment_nonce(validator);
+                exec_receipts.push(ExecutionReceipt {
+                    tx_hash,
+                    success: false,
+                    gas_used: 21_000,
+                    contract_address: None,
+                    error: Some(format!("nonce mismatch: expected {val_nonce}, got {nonce}")),
+                    inference_hash: None,
+                    anomaly_score: 0.0,
+                });
+                continue;
+            }
+
+            let balance = state.balance(validator);
+            if balance < *committed_stake {
+                state.increment_nonce(validator);
+                exec_receipts.push(ExecutionReceipt {
+                    tx_hash,
+                    success: false,
+                    gas_used: 21_000,
+                    contract_address: None,
+                    error: Some("insufficient balance for compute stake bond".into()),
+                    inference_hash: None,
+                    anomaly_score: 0.0,
+                });
+                continue;
+            }
+
+            let new_balance = balance - *committed_stake;
+            state.set_balance(validator, new_balance);
+
+            let commitment = aztibase_consensus::ComputeCommitment::new(
+                *validator,
+                supported_models.clone(),
+                *committed_stake,
+                self.current_round,
+            );
+            self.compute_commitments.write().await.register(commitment);
+            state.increment_nonce(validator);
+
+            exec_receipts.push(ExecutionReceipt {
+                tx_hash,
+                success: true,
+                gas_used: 75_000,
+                contract_address: None,
+                error: None,
+                inference_hash: None,
                 anomaly_score: 0.0,
             });
         }
@@ -833,6 +1134,28 @@ fn compute_tx_hash(tx: &TxKind) -> [u8; 32] {
             buf.extend_from_slice(input_hash);
             hash(&buf)
         }
+        TxKind::SubmitAttestation {
+            validator,
+            task_id,
+            result_hash,
+            ..
+        } => {
+            let mut buf = Vec::new();
+            buf.extend_from_slice(validator);
+            buf.extend_from_slice(task_id);
+            buf.extend_from_slice(result_hash);
+            hash(&buf)
+        }
+        TxKind::CommitCompute {
+            validator,
+            committed_stake,
+            ..
+        } => {
+            let mut buf = Vec::new();
+            buf.extend_from_slice(validator);
+            buf.extend_from_slice(&committed_stake.to_le_bytes());
+            hash(&buf)
+        }
     }
 }
 
@@ -910,6 +1233,12 @@ mod tests {
             base_fee: Arc::new(std::sync::atomic::AtomicU64::new(calculator.base_fee())),
             base_fee_calculator: calculator,
             anomaly_scorer: AnomalyScorer::new(),
+            task_pool: Arc::new(RwLock::new(TaskPool::new())),
+            pending_task_count: Arc::new(std::sync::atomic::AtomicU64::new(0)),
+            current_round: 0,
+            attestation_buffer: HashMap::new(),
+            attestation_aggregator: AttestationAggregator::new(2),
+            compute_commitments: Arc::new(RwLock::new(ComputeCommitmentStore::new())),
         }
     }
 
@@ -1419,6 +1748,12 @@ mod tests {
             base_fee: Arc::new(std::sync::atomic::AtomicU64::new(calculator.base_fee())),
             base_fee_calculator: calculator,
             anomaly_scorer: AnomalyScorer::new(),
+            task_pool: Arc::new(RwLock::new(TaskPool::new())),
+            pending_task_count: Arc::new(std::sync::atomic::AtomicU64::new(0)),
+            current_round: 0,
+            attestation_buffer: HashMap::new(),
+            attestation_aggregator: AttestationAggregator::new(2),
+            compute_commitments: Arc::new(RwLock::new(ComputeCommitmentStore::new())),
         }
     }
 
@@ -2223,6 +2558,208 @@ mod tests {
                 .as_ref()
                 .unwrap()
                 .contains("insufficient balance")
+        );
+    }
+
+    // ── Phase: TaskPool wiring tests ────────────────────────────────
+
+    #[tokio::test]
+    async fn pipeline_post_task_inserts_into_task_pool() {
+        let (_tx, rx) = mpsc::channel(16);
+        let mut pipeline = make_pipeline(rx);
+
+        let (owner_kp, owner) = make_sender();
+        let (req_kp, requester) = make_sender();
+        pipeline.state.write().await.set_balance(&requester, 10_000);
+
+        let reg = TxKind::RegisterModel {
+            owner,
+            model_id: "pool_test".into(),
+            fingerprint: hash(b"fp"),
+            compute_cost: 100,
+            min_stake: 0,
+            nonce: 0,
+            gas_price: 0,
+        };
+        let batch1 = make_batch(vec![sign(&reg, &owner_kp)]);
+        pipeline.execute_batch(&batch1).await.unwrap();
+
+        assert_eq!(
+            pipeline
+                .pending_task_count
+                .load(std::sync::atomic::Ordering::Relaxed),
+            0
+        );
+
+        let post = TxKind::PostTask {
+            requester,
+            model_id: "pool_test".into(),
+            input_hash: hash(b"input"),
+            reward: 500,
+            deadline_round: 100,
+            nonce: 0,
+            gas_price: 0,
+        };
+        let batch2 = make_batch_with_anchor([0xBB; 32], vec![sign(&post, &req_kp)]);
+        let result = pipeline.execute_batch(&batch2).await.unwrap();
+
+        assert!(result.receipts[0].success);
+        assert_eq!(
+            pipeline
+                .pending_task_count
+                .load(std::sync::atomic::Ordering::Relaxed),
+            1
+        );
+
+        let pool = pipeline.task_pool.read().await;
+        assert_eq!(pool.len(), 1);
+        let task_id = result.receipts[0].inference_hash.unwrap();
+        assert!(pool.get(&task_id).is_some());
+    }
+
+    #[tokio::test]
+    async fn pipeline_evicts_expired_tasks_and_refunds() {
+        let (_tx, rx) = mpsc::channel(16);
+        let mut pipeline = make_pipeline(rx);
+
+        let (owner_kp, owner) = make_sender();
+        let (req_kp, requester) = make_sender();
+        pipeline.state.write().await.set_balance(&requester, 10_000);
+
+        let reg = TxKind::RegisterModel {
+            owner,
+            model_id: "expiry_test".into(),
+            fingerprint: hash(b"fp"),
+            compute_cost: 100,
+            min_stake: 0,
+            nonce: 0,
+            gas_price: 0,
+        };
+        let batch1 = make_batch(vec![sign(&reg, &owner_kp)]);
+        pipeline.execute_batch(&batch1).await.unwrap();
+
+        // Post task with deadline_round=3 (expires after round 3)
+        let post = TxKind::PostTask {
+            requester,
+            model_id: "expiry_test".into(),
+            input_hash: hash(b"input"),
+            reward: 2000,
+            deadline_round: 3,
+            nonce: 0,
+            gas_price: 0,
+        };
+        let batch2 = make_batch_with_anchor([0xBB; 32], vec![sign(&post, &req_kp)]);
+        pipeline.execute_batch(&batch2).await.unwrap();
+
+        // After batch2, current_round=2. Balance should be 10000-2000=8000
+        assert_eq!(pipeline.state.read().await.balance(&requester), 8_000);
+        assert_eq!(pipeline.task_pool.read().await.len(), 1);
+
+        // Execute empty batch to advance to round 3 — task not yet expired (deadline=3, expired when round>3)
+        let batch3 = make_batch_with_anchor([0xCC; 32], vec![]);
+        pipeline.execute_batch(&batch3).await.unwrap();
+        assert_eq!(pipeline.task_pool.read().await.len(), 1);
+
+        // Execute empty batch to advance to round 4 — now task is expired (4 > 3)
+        let batch4 = make_batch_with_anchor([0xDD; 32], vec![]);
+        pipeline.execute_batch(&batch4).await.unwrap();
+
+        assert_eq!(pipeline.task_pool.read().await.len(), 0);
+        assert_eq!(
+            pipeline
+                .pending_task_count
+                .load(std::sync::atomic::Ordering::Relaxed),
+            0
+        );
+        // Reward should be refunded
+        assert_eq!(pipeline.state.read().await.balance(&requester), 10_000);
+    }
+
+    #[tokio::test]
+    async fn pipeline_task_pool_tracks_multiple_tasks() {
+        let (_tx, rx) = mpsc::channel(16);
+        let mut pipeline = make_pipeline(rx);
+
+        let (owner_kp, owner) = make_sender();
+        let (req_kp, requester) = make_sender();
+        pipeline.state.write().await.set_balance(&requester, 50_000);
+
+        let reg = TxKind::RegisterModel {
+            owner,
+            model_id: "multi".into(),
+            fingerprint: hash(b"fp"),
+            compute_cost: 100,
+            min_stake: 0,
+            nonce: 0,
+            gas_price: 0,
+        };
+        let batch1 = make_batch(vec![sign(&reg, &owner_kp)]);
+        pipeline.execute_batch(&batch1).await.unwrap();
+
+        let post1 = TxKind::PostTask {
+            requester,
+            model_id: "multi".into(),
+            input_hash: hash(b"in1"),
+            reward: 100,
+            deadline_round: 100,
+            nonce: 0,
+            gas_price: 0,
+        };
+        let post2 = TxKind::PostTask {
+            requester,
+            model_id: "multi".into(),
+            input_hash: hash(b"in2"),
+            reward: 200,
+            deadline_round: 100,
+            nonce: 1,
+            gas_price: 0,
+        };
+        let batch2 = make_batch_with_anchor(
+            [0xBB; 32],
+            vec![sign(&post1, &req_kp), sign(&post2, &req_kp)],
+        );
+        let result = pipeline.execute_batch(&batch2).await.unwrap();
+
+        assert_eq!(result.receipts.len(), 2);
+        assert!(result.receipts[0].success);
+        assert!(result.receipts[1].success);
+        assert_eq!(pipeline.task_pool.read().await.len(), 2);
+        assert_eq!(
+            pipeline
+                .pending_task_count
+                .load(std::sync::atomic::Ordering::Relaxed),
+            2
+        );
+    }
+
+    #[tokio::test]
+    async fn pipeline_failed_post_task_not_in_pool() {
+        let (_tx, rx) = mpsc::channel(16);
+        let mut pipeline = make_pipeline(rx);
+
+        let (req_kp, requester) = make_sender();
+        pipeline.state.write().await.set_balance(&requester, 10_000);
+
+        // Post task for unregistered model — should fail
+        let post = TxKind::PostTask {
+            requester,
+            model_id: "missing".into(),
+            input_hash: hash(b"data"),
+            reward: 500,
+            deadline_round: 100,
+            nonce: 0,
+            gas_price: 0,
+        };
+        let batch = make_batch(vec![sign(&post, &req_kp)]);
+        let result = pipeline.execute_batch(&batch).await.unwrap();
+
+        assert!(!result.receipts[0].success);
+        assert_eq!(pipeline.task_pool.read().await.len(), 0);
+        assert_eq!(
+            pipeline
+                .pending_task_count
+                .load(std::sync::atomic::Ordering::Relaxed),
+            0
         );
     }
 }

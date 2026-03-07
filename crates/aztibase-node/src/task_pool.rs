@@ -74,6 +74,20 @@ impl TaskPool {
         count
     }
 
+    /// Remove all expired tasks, returning them for refund processing.
+    pub fn drain_expired(&mut self, current_round: u64) -> Vec<InferenceTask> {
+        let expired_ids: Vec<Hash> = self
+            .tasks
+            .values()
+            .filter(|t| t.is_expired(current_round))
+            .map(|t| t.task_id)
+            .collect();
+        expired_ids
+            .into_iter()
+            .filter_map(|id| self.remove(&id))
+            .collect()
+    }
+
     pub fn len(&self) -> usize {
         self.tasks.len()
     }
@@ -329,5 +343,20 @@ mod tests {
             }
             _ => panic!("Expected Settled"),
         }
+    }
+
+    #[test]
+    fn drain_expired_returns_tasks() {
+        let mut pool = TaskPool::new();
+        let t1 = make_task("m1", 10);
+        let t2 = InferenceTask::new("m2".into(), hash(b"other"), [2u8; 32], 500, 50);
+        let t1_id = t1.task_id;
+        pool.insert(t1);
+        pool.insert(t2);
+
+        let drained = pool.drain_expired(20);
+        assert_eq!(drained.len(), 1);
+        assert_eq!(drained[0].task_id, t1_id);
+        assert_eq!(pool.len(), 1);
     }
 }

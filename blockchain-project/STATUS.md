@@ -3,7 +3,7 @@
 **Last Updated:** 2026-03-07
 **Updated By:** project-lead
 **Current Phase:** M6 -- AI Compute Market + PoUW (IN PROGRESS)
-**Current Sprint:** Sprint 021 -- COMPLETE (AI Compute Market & PoUW Scoring)
+**Current Sprint:** Sprint 022 -- COMPLETE (Task Execution Loop & Attestation Flow)
 
 ---
 
@@ -41,6 +41,7 @@
 - Sprint 005 closed: 21/21 tasks, 4 phases complete
 - Sprint 006 closed: 23/24 tasks (1 deferred), 4 phases complete
 - Sprint 007 complete: receipt store, EVM via revm, AI inference via tract
+- Sprint 022 complete: 16/16 tasks, 4 phases (TaskPool wiring, SubmitAttestation Ed25519 sig verify, CommitCompute stake bond, settlement flow, 3 RPC endpoints, security review)
 - Sprint 021 complete: 16/16 tasks, 4 phases (ModelRegistry, PoUW multi-metric scoring, task marketplace + settlement, security review)
 - Sprint 020 complete: 16/16 tasks, 4 phases (WebSocket gateway, RPC subscriptions, wallet management CLI, Docker deployment)
 - Sprint 019 complete: 16/16 tasks, 4 phases (WASM light client crate, browser transport bridge + demo, HD wallet derivation, security review)

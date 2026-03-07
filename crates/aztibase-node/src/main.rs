@@ -5,7 +5,7 @@ mod integration;
 mod mempool;
 mod pipeline;
 mod sync;
-#[cfg(test)]
+#[allow(dead_code)]
 mod task_pool;
 mod wallet;
 
@@ -599,7 +599,9 @@ async fn main() -> Result<()> {
         Some(exec_store),
         exec_pipeline.shared_base_fee(),
     )
-    .with_event_bus(Arc::clone(&event_bus));
+    .with_event_bus(Arc::clone(&event_bus))
+    .with_pending_task_count(exec_pipeline.shared_pending_task_count())
+    .with_compute_commitments(exec_pipeline.shared_compute_commitments());
 
     if config.metrics.enabled || cli.metrics {
         rpc_server = rpc_server.with_metrics(Arc::clone(&node_metrics));

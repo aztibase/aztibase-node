@@ -21,6 +21,31 @@ Entries are prepended (newest first).
 
 ## Entries
 
+### 2026-03-07 -- project-lead -- Sprint 022 Complete
+**Task:** Sprint 022: Task Execution Loop & Attestation Flow (16 tasks, 4 phases)
+**Sprint:** Sprint 022, Phases 1-4
+**Git Ref:** pending
+**Files Changed:**
+- crates/aztibase-execution/src/routing.rs (SubmitAttestation 0x0A, CommitCompute 0x0B variants + 4 roundtrip tests)
+- crates/aztibase-node/src/main.rs (un-gate task_pool module, wire pending_task_count + compute_commitments to RPC)
+- crates/aztibase-node/src/pipeline.rs (TaskPool wiring, expiry refund, SubmitAttestation exec with Ed25519 sig verify, CommitCompute exec with stake bond, TaskSettlement delegation, attestation buffer cleanup, 4 tests)
+- crates/aztibase-node/src/task_pool.rs (drain_expired method + test)
+- crates/aztibase-rpc/src/server.rs (aztb_pendingTaskCount, aztb_getComputeCommitment, aztb_listComputeProviders handlers + 4 tests, INTERNAL_ERROR constant)
+- crates/aztibase-rpc/Cargo.toml (no changes needed — already depends on aztibase-consensus)
+- blockchain-project/sprints/SPRINT-022.md (sprint plan)
+- blockchain-project/DECISIONS.md (ADR-011)
+- CHANGELOG.md (Sprint 022 entries)
+**Review Notes:**
+- Pipeline refactored to use TaskSettlement::settle() instead of inline settlement logic
+- Ed25519 sig verification uses existing aztibase_core::PublicKey wrapper (no new deps)
+- Attestation buffer cleanup on task expiry prevents unbounded memory growth
+- 544 tests pass, 0 clippy warnings, fmt clean
+**Security Flags:**
+- SEC-ATT-LEAK-001 LOW FIXED: attestation buffer entries cleaned on task expiry
+- SEC-COMMIT-OVERWRITE LOW ACCEPTED: CommitCompute overwrites previous commitment without refunding prior stake (deregistration deferred)
+
+---
+
 ### 2026-03-07 -- project-lead -- Sprint 021 Complete
 **Task:** Sprint 021: AI Compute Market & PoUW Scoring (16 tasks, 4 phases)
 **Sprint:** Sprint 021, Phases 1-4

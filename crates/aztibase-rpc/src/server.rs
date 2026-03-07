@@ -16,6 +16,7 @@ use serde::{Deserialize, Serialize};
 use tokio::sync::{RwLock, broadcast, mpsc};
 use tracing::{debug, info};
 
+use aztibase_consensus::ComputeCommitmentStore;
 use aztibase_execution::AccountState;
 use aztibase_execution::model_registry::{MODEL_REGISTRY_ADDRESS, ModelMetadata, ModelRegistry};
 use aztibase_storage::StateStore;
@@ -72,6 +73,7 @@ const PARSE_ERROR: i32 = -32700;
 const INVALID_REQUEST: i32 = -32600;
 const METHOD_NOT_FOUND: i32 = -32601;
 const INVALID_PARAMS: i32 = -32602;
+const INTERNAL_ERROR: i32 = -32603;
 
 // ── Subscription Event ──────────────────────────────────────────────
 
@@ -92,6 +94,8 @@ pub struct RpcState {
     pub node_metrics: Option<Arc<RwLock<serde_json::Value>>>,
     pub event_bus: Arc<EventBus>,
     ws_connection_count: Arc<AtomicU64>,
+    pub pending_task_count: Arc<AtomicU64>,
+    pub compute_commitments: Option<Arc<RwLock<ComputeCommitmentStore>>>,
 }
 
 impl Clone for RpcState {
@@ -105,6 +109,8 @@ impl Clone for RpcState {
             node_metrics: self.node_metrics.clone(),
             event_bus: Arc::clone(&self.event_bus),
             ws_connection_count: Arc::clone(&self.ws_connection_count),
+            pending_task_count: Arc::clone(&self.pending_task_count),
+            compute_commitments: self.compute_commitments.clone(),
         }
     }
 }
@@ -177,6 +183,8 @@ impl RpcServer {
                 node_metrics: None,
                 event_bus: Arc::new(EventBus::new()),
                 ws_connection_count: Arc::new(AtomicU64::new(0)),
+                pending_task_count: Arc::new(AtomicU64::new(0)),
+                compute_commitments: None,
             },
         }
     }
@@ -188,6 +196,16 @@ impl RpcServer {
 
     pub fn with_event_bus(mut self, bus: Arc<EventBus>) -> Self {
         self.state.event_bus = bus;
+        self
+    }
+
+    pub fn with_pending_task_count(mut self, count: Arc<AtomicU64>) -> Self {
+        self.state.pending_task_count = count;
+        self
+    }
+
+    pub fn with_compute_commitments(mut self, store: Arc<RwLock<ComputeCommitmentStore>>) -> Self {
+        self.state.compute_commitments = Some(store);
         self
     }
 
@@ -276,6 +294,9 @@ async fn dispatch(state: &RpcState, req: &JsonRpcRequest) -> JsonRpcResponse {
         "aztb_getModelInfo" => handle_get_model_info(state, req).await,
         "aztb_listModels" => handle_list_models(state, req).await,
         "aztb_getTaskStatus" => handle_get_task_status(state, req).await,
+        "aztb_pendingTaskCount" => handle_pending_task_count(state, req).await,
+        "aztb_getComputeCommitment" => handle_get_compute_commitment(state, req).await,
+        "aztb_listComputeProviders" => handle_list_compute_providers(state, req).await,
         _ => JsonRpcResponse::error(
             req.id.clone(),
             METHOD_NOT_FOUND,
@@ -801,6 +822,99 @@ async fn handle_get_task_status(state: &RpcState, req: &JsonRpcRequest) -> JsonR
     }
 }
 
+async fn handle_pending_task_count(state: &RpcState, req: &JsonRpcRequest) -> JsonRpcResponse {
+    let count = state.pending_task_count.load(Ordering::Relaxed);
+    JsonRpcResponse::success(req.id.clone(), serde_json::json!(count))
+}
+
+async fn handle_get_compute_commitment(state: &RpcState, req: &JsonRpcRequest) -> JsonRpcResponse {
+    let store = match &state.compute_commitments {
+        Some(s) => s,
+        None => {
+            return JsonRpcResponse::error(
+                req.id.clone(),
+                INTERNAL_ERROR,
+                "Compute commitments not available".into(),
+            );
+        }
+    };
+
+    let validator_hex = match req.params.get(0).and_then(|v| v.as_str()) {
+        Some(h) => h,
+        None => {
+            return JsonRpcResponse::error(
+                req.id.clone(),
+                INVALID_PARAMS,
+                "Expected validator hex string as first parameter".into(),
+            );
+        }
+    };
+
+    let hex_str = validator_hex.strip_prefix("0x").unwrap_or(validator_hex);
+    let validator_bytes = match hex::decode(hex_str) {
+        Ok(b) if b.len() == 32 => {
+            let mut arr = [0u8; 32];
+            arr.copy_from_slice(&b);
+            arr
+        }
+        _ => {
+            return JsonRpcResponse::error(
+                req.id.clone(),
+                INVALID_PARAMS,
+                "Invalid validator hex (expected 32-byte hex)".into(),
+            );
+        }
+    };
+
+    let guard = store.read().await;
+    match guard.get(&validator_bytes) {
+        Some(c) => JsonRpcResponse::success(
+            req.id.clone(),
+            serde_json::json!({
+                "validatorId": format!("0x{}", hex::encode(c.validator_id)),
+                "supportedModels": c.supported_models,
+                "committedStake": c.committed_stake,
+                "registeredRound": c.registered_round,
+                "active": c.active,
+            }),
+        ),
+        None => JsonRpcResponse::success(req.id.clone(), serde_json::Value::Null),
+    }
+}
+
+async fn handle_list_compute_providers(state: &RpcState, req: &JsonRpcRequest) -> JsonRpcResponse {
+    let store = match &state.compute_commitments {
+        Some(s) => s,
+        None => {
+            return JsonRpcResponse::error(
+                req.id.clone(),
+                INTERNAL_ERROR,
+                "Compute commitments not available".into(),
+            );
+        }
+    };
+
+    let model_id = match req.params.get(0).and_then(|v| v.as_str()) {
+        Some(m) => m,
+        None => {
+            return JsonRpcResponse::error(
+                req.id.clone(),
+                INVALID_PARAMS,
+                "Expected model_id string as first parameter".into(),
+            );
+        }
+    };
+
+    let guard = store.read().await;
+    let validators: Vec<String> = guard
+        .validators_for_model(model_id)
+        .into_iter()
+        .map(|v| format!("0x{}", hex::encode(v)))
+        .collect();
+
+    JsonRpcResponse::success(req.id.clone(), serde_json::json!(validators))
+}
+
 fn model_to_json(meta: &ModelMetadata) -> serde_json::Value {
     serde_json::json!({
         "modelId": meta.model_id,
@@ -848,6 +962,8 @@ mod tests {
             node_metrics: None,
             event_bus: Arc::new(EventBus::new()),
             ws_connection_count: Arc::new(AtomicU64::new(0)),
+            pending_task_count: Arc::new(AtomicU64::new(0)),
+            compute_commitments: None,
         };
         (state, rx)
     }
@@ -869,6 +985,8 @@ mod tests {
             node_metrics: None,
             event_bus: Arc::new(EventBus::new()),
             ws_connection_count: Arc::new(AtomicU64::new(0)),
+            pending_task_count: Arc::new(AtomicU64::new(0)),
+            compute_commitments: None,
         };
         (state, rx)
     }
@@ -1099,6 +1217,8 @@ mod tests {
             node_metrics: None,
             event_bus: Arc::new(EventBus::new()),
             ws_connection_count: Arc::new(AtomicU64::new(0)),
+            pending_task_count: Arc::new(AtomicU64::new(0)),
+            compute_commitments: None,
         };
         (state, rx, path)
     }
@@ -1439,6 +1559,8 @@ mod tests {
             node_metrics: None,
             event_bus: Arc::new(EventBus::new()),
             ws_connection_count: Arc::new(AtomicU64::new(0)),
+            pending_task_count: Arc::new(AtomicU64::new(0)),
+            compute_commitments: None,
         };
         (state, rx)
     }
@@ -1520,6 +1642,8 @@ mod tests {
             node_metrics: None,
             event_bus: Arc::new(EventBus::new()),
             ws_connection_count: Arc::new(AtomicU64::new(0)),
+            pending_task_count: Arc::new(AtomicU64::new(0)),
+            compute_commitments: None,
         };
 
         let task_hex = hex::encode(task_id);
@@ -1548,6 +1672,93 @@ mod tests {
                 let (_, response) = result.unwrap();
                 response.status() == axum::http::StatusCode::SERVICE_UNAVAILABLE
             }
+        );
+    }
+
+    #[tokio::test]
+    async fn pending_task_count_returns_count() {
+        let (state, _rx) = test_state();
+        state.pending_task_count.store(42, Ordering::Relaxed);
+        let resp = rpc_call(
+            &state,
+            r#"{"jsonrpc":"2.0","method":"aztb_pendingTaskCount","params":[],"id":1}"#,
+        )
+        .await;
+        assert_eq!(resp["result"], 42);
+    }
+
+    #[tokio::test]
+    async fn get_compute_commitment_found() {
+        let (state, _rx) = test_state();
+        let validator = [0xAA; 32];
+        let store = Arc::new(RwLock::new(ComputeCommitmentStore::new()));
+        {
+            let mut guard = store.write().await;
+            guard.register(aztibase_consensus::ComputeCommitment::new(
+                validator,
+                vec!["llama-7b".into()],
+                5000,
+                1,
+            ));
+        }
+        let mut state = state;
+        state.compute_commitments = Some(store);
+
+        let hex_id = hex::encode(validator);
+        let body = format!(
+            r#"{{"jsonrpc":"2.0","method":"aztb_getComputeCommitment","params":["0x{hex_id}"],"id":1}}"#
+        );
+        let resp = rpc_call(&state, &body).await;
+        assert!(resp.get("error").is_none(), "unexpected error: {resp}");
+        assert_eq!(resp["result"]["committedStake"], 5000);
+        assert_eq!(resp["result"]["active"], true);
+        assert_eq!(resp["result"]["supportedModels"][0], "llama-7b");
+    }
+
+    #[tokio::test]
+    async fn get_compute_commitment_not_found() {
+        let (state, _rx) = test_state();
+        let store = Arc::new(RwLock::new(ComputeCommitmentStore::new()));
+        let mut state = state;
+        state.compute_commitments = Some(store);
+
+        let hex_id = hex::encode([0xBB; 32]);
+        let body = format!(
+            r#"{{"jsonrpc":"2.0","method":"aztb_getComputeCommitment","params":["0x{hex_id}"],"id":1}}"#
+        );
+        let resp = rpc_call(&state, &body).await;
+        assert!(resp["result"].is_null());
+    }
+
+    #[tokio::test]
+    async fn list_compute_providers_returns_validators() {
+        let (state, _rx) = test_state();
+        let store = Arc::new(RwLock::new(ComputeCommitmentStore::new()));
+        {
+            let mut guard = store.write().await;
+            guard.register(aztibase_consensus::ComputeCommitment::new(
+                [0x01; 32],
+                vec!["llama-7b".into()],
+                1000,
+                1,
+            ));
+            guard.register(aztibase_consensus::ComputeCommitment::new(
+                [0x02; 32],
+                vec!["gpt-neo".into()],
+                2000,
+                1,
+            ));
+        }
+        let mut state = state;
+        state.compute_commitments = Some(store);
+
+        let body = r#"{"jsonrpc":"2.0","method":"aztb_listComputeProviders","params":["llama-7b"],"id":1}"#;
+        let resp = rpc_call(&state, body).await;
+        let providers = resp["result"].as_array().unwrap();
+        assert_eq!(providers.len(), 1);
+        assert_eq!(
+            providers[0].as_str().unwrap(),
+            format!("0x{}", hex::encode([0x01; 32]))
         );
     }
 }
