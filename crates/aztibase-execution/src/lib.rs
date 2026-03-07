@@ -1,6 +1,7 @@
 pub mod block_stm;
 pub mod contract;
 pub mod evm;
+pub mod fee;
 pub mod parallel;
 pub mod persist;
 pub mod precompiles;
@@ -8,11 +9,15 @@ pub mod receipt;
 pub mod routing;
 pub mod snapshot;
 pub mod state;
+pub mod tx;
 pub mod vm;
 
 pub use contract::{ContractReceipt, ContractTx, compute_contract_address, execute_contract_txs};
+pub use fee::{BaseFeeCalculator, FeeEscrow, escrow_fee, refund_unused};
 pub use parallel::{BatchResult, TransferTx, TxReceipt, TxStatus, execute_transfers};
-pub use persist::{flush_state, get_batch_root, load_state, store_batch_root};
+pub use persist::{
+    flush_state, get_batch_root, load_base_fee, load_state, store_base_fee, store_batch_root,
+};
 pub use receipt::{ExecutionReceipt, get_receipt, store_receipts};
 pub use routing::{RoutingError, TxKind, route_batch, route_tx};
 pub use snapshot::{
@@ -20,6 +25,7 @@ pub use snapshot::{
     serialize_snapshot, snapshot_hash,
 };
 pub use state::{AccountState, AccountType};
+pub use tx::{SignedTx, TxError, verify_and_route, verify_and_route_batch};
 pub use vm::{EngineConfig, ExecutionEngine, ExecutionResult};
 
 #[cfg(test)]

@@ -22,12 +22,14 @@ pub enum TxKind {
         to: Address,
         value: u64,
         nonce: u64,
+        gas_price: u64,
     },
     ContractDeploy {
         deployer: Address,
         code: Vec<u8>,
         nonce: u64,
         gas_limit: u64,
+        gas_price: u64,
     },
     ContractCall {
         caller: Address,
@@ -36,12 +38,14 @@ pub enum TxKind {
         args_data: Vec<u8>,
         nonce: u64,
         gas_limit: u64,
+        gas_price: u64,
     },
     EvmDeploy {
         deployer: Address,
         code: Vec<u8>,
         nonce: u64,
         gas_limit: u64,
+        gas_price: u64,
     },
     EvmCall {
         caller: Address,
@@ -50,6 +54,7 @@ pub enum TxKind {
         nonce: u64,
         gas_limit: u64,
         value: u64,
+        gas_price: u64,
     },
     AiInfer {
         requester: Address,
@@ -57,11 +62,13 @@ pub enum TxKind {
         input: Vec<u8>,
         nonce: u64,
         max_compute_units: u64,
+        gas_price: u64,
     },
     CreateAgent {
         creator: Address,
         model_id: String,
         nonce: u64,
+        gas_price: u64,
     },
 }
 
@@ -82,6 +89,56 @@ impl TxKind {
         buf.push(prefix);
         buf.extend_from_slice(&payload);
         buf
+    }
+
+    pub fn nonce(&self) -> u64 {
+        match self {
+            TxKind::Transfer { nonce, .. }
+            | TxKind::ContractDeploy { nonce, .. }
+            | TxKind::ContractCall { nonce, .. }
+            | TxKind::EvmDeploy { nonce, .. }
+            | TxKind::EvmCall { nonce, .. }
+            | TxKind::AiInfer { nonce, .. }
+            | TxKind::CreateAgent { nonce, .. } => *nonce,
+        }
+    }
+
+    pub fn gas_price(&self) -> u64 {
+        match self {
+            TxKind::Transfer { gas_price, .. }
+            | TxKind::ContractDeploy { gas_price, .. }
+            | TxKind::ContractCall { gas_price, .. }
+            | TxKind::EvmDeploy { gas_price, .. }
+            | TxKind::EvmCall { gas_price, .. }
+            | TxKind::AiInfer { gas_price, .. }
+            | TxKind::CreateAgent { gas_price, .. } => *gas_price,
+        }
+    }
+
+    pub fn gas_limit(&self) -> u64 {
+        match self {
+            TxKind::Transfer { .. } => 21_000,
+            TxKind::ContractDeploy { gas_limit, .. }
+            | TxKind::ContractCall { gas_limit, .. }
+            | TxKind::EvmDeploy { gas_limit, .. }
+            | TxKind::EvmCall { gas_limit, .. } => *gas_limit,
+            TxKind::AiInfer {
+                max_compute_units, ..
+            } => *max_compute_units,
+            TxKind::CreateAgent { .. } => 53_000,
+        }
+    }
+
+    pub fn sender(&self) -> &Address {
+        match self {
+            TxKind::Transfer { from, .. } => from,
+            TxKind::ContractDeploy { deployer, .. } => deployer,
+            TxKind::ContractCall { caller, .. } => caller,
+            TxKind::EvmDeploy { deployer, .. } => deployer,
+            TxKind::EvmCall { caller, .. } => caller,
+            TxKind::AiInfer { requester, .. } => requester,
+            TxKind::CreateAgent { creator, .. } => creator,
+        }
     }
 
     fn expected_prefix(&self) -> u8 {
@@ -213,6 +270,7 @@ mod tests {
             to: [2u8; 32],
             value: 500,
             nonce: 3,
+            gas_price: 0,
         };
         let encoded = tx.encode();
         assert_eq!(encoded[0], PREFIX_TRANSFER);
@@ -227,6 +285,7 @@ mod tests {
             code: vec![0x00, 0x61, 0x73, 0x6d],
             nonce: 0,
             gas_limit: 1_000_000,
+            gas_price: 0,
         };
         let encoded = tx.encode();
         assert_eq!(encoded[0], PREFIX_DEPLOY);
@@ -243,6 +302,7 @@ mod tests {
             args_data: vec![1, 2, 3],
             nonce: 7,
             gas_limit: 500_000,
+            gas_price: 0,
         };
         let encoded = tx.encode();
         assert_eq!(encoded[0], PREFIX_CALL);
@@ -276,6 +336,7 @@ mod tests {
             to: [2u8; 32],
             value: 100,
             nonce: 0,
+            gas_price: 0,
         };
         let bad = vec![0xFE];
         let (routed, errors) = route_batch(&[good.encode(), bad]);
@@ -292,6 +353,7 @@ mod tests {
             code: vec![0x00],
             nonce: 0,
             gas_limit: 100,
+            gas_price: 0,
         };
         let mut encoded = tx.encode();
         encoded[0] = PREFIX_TRANSFER;
@@ -310,6 +372,7 @@ mod tests {
             args_data: vec![],
             nonce: 0,
             gas_limit: 100_000,
+            gas_price: 0,
         };
         let encoded = tx.encode();
         assert!(route_tx(&encoded).is_ok());
@@ -324,6 +387,7 @@ mod tests {
             args_data: vec![],
             nonce: 0,
             gas_limit: 100_000,
+            gas_price: 0,
         };
         let encoded = tx.encode();
         assert!(matches!(
@@ -341,6 +405,7 @@ mod tests {
             args_data: vec![],
             nonce: 0,
             gas_limit: 100_000,
+            gas_price: 0,
         };
         let encoded = tx.encode();
         assert!(matches!(
@@ -358,6 +423,7 @@ mod tests {
             args_data: vec![],
             nonce: 0,
             gas_limit: 100_000,
+            gas_price: 0,
         };
         let encoded = tx.encode();
         assert!(matches!(
@@ -373,6 +439,7 @@ mod tests {
             to: [2u8; 32],
             value: 500,
             nonce: 3,
+            gas_price: 0,
         };
         let mut encoded = tx.encode();
         encoded.push(0xFF);
@@ -389,6 +456,7 @@ mod tests {
             code: vec![0x60, 0x00, 0x60, 0x00, 0xf3],
             nonce: 0,
             gas_limit: 1_000_000,
+            gas_price: 0,
         };
         let encoded = tx.encode();
         assert_eq!(encoded[0], PREFIX_EVM_DEPLOY);
@@ -405,6 +473,7 @@ mod tests {
             nonce: 1,
             gas_limit: 500_000,
             value: 0,
+            gas_price: 0,
         };
         let encoded = tx.encode();
         assert_eq!(encoded[0], PREFIX_EVM_CALL);
@@ -431,6 +500,7 @@ mod tests {
                 .collect(),
             nonce: 0,
             max_compute_units: 10_000,
+            gas_price: 0,
         };
         let encoded = tx.encode();
         assert_eq!(encoded[0], PREFIX_AI_INFER);
@@ -444,6 +514,7 @@ mod tests {
             creator: [10u8; 32],
             model_id: "sentiment_v1".into(),
             nonce: 0,
+            gas_price: 0,
         };
         let encoded = tx.encode();
         assert_eq!(encoded[0], PREFIX_CREATE_AGENT);
@@ -457,6 +528,7 @@ mod tests {
             creator: [10u8; 32],
             model_id: "".into(),
             nonce: 0,
+            gas_price: 0,
         };
         let encoded = tx.encode();
         assert!(matches!(
@@ -473,6 +545,7 @@ mod tests {
             input: vec![1, 2, 3],
             nonce: 0,
             max_compute_units: 10_000,
+            gas_price: 0,
         };
         let encoded = tx.encode();
         assert!(matches!(

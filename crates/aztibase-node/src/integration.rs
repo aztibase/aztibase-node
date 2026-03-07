@@ -8,8 +8,10 @@ mod tests {
         CommittedBatch, ConsensusConfig, ConsensusEngine, ConsensusInput, ConsensusOutput,
         DagStore, ValidatorSet, build_certificate, sign_finality, verify_certificate,
     };
-    use aztibase_core::{BlsKeypair, hash};
-    use aztibase_execution::{TxKind, compute_contract_address, get_batch_root, load_state};
+    use aztibase_core::{BlsKeypair, Keypair, address_from_pubkey, hash};
+    use aztibase_execution::{
+        SignedTx, TxKind, compute_contract_address, get_batch_root, load_state,
+    };
     use aztibase_storage::StateStore;
     use tokio::sync::mpsc;
 
@@ -29,6 +31,16 @@ mod tests {
         let _ = std::fs::remove_file(lock);
     }
 
+    fn make_sender() -> (Keypair, [u8; 32]) {
+        let kp = Keypair::generate();
+        let addr = address_from_pubkey(kp.public_key().as_bytes());
+        (kp, addr)
+    }
+
+    fn sign(tx: &TxKind, kp: &Keypair) -> Vec<u8> {
+        SignedTx::new(tx.encode(), kp).encode()
+    }
+
     fn make_batch(anchor: [u8; 32], txs: Vec<Vec<u8>>) -> CommittedBatch {
         CommittedBatch {
             anchor_hash: anchor,
@@ -44,9 +56,9 @@ mod tests {
         let path = test_db_path("xfer");
         let store = Arc::new(StateStore::open(path.to_str().unwrap()).unwrap());
         let (_tx, rx) = mpsc::channel(16);
-        let pipeline = ExecutionPipeline::with_storage(store, rx);
+        let mut pipeline = ExecutionPipeline::with_storage(store, rx);
 
-        let alice = [1u8; 32];
+        let (alice_kp, alice) = make_sender();
         let bob = [2u8; 32];
         let anchor = hash(b"batch_xfer_e2e");
 
@@ -56,20 +68,26 @@ mod tests {
         let batch = make_batch(
             anchor,
             vec![
-                TxKind::Transfer {
-                    from: alice,
-                    to: bob,
-                    value: 1200,
-                    nonce: 0,
-                }
-                .encode(),
-                TxKind::Transfer {
-                    from: alice,
-                    to: bob,
-                    value: 800,
-                    nonce: 1,
-                }
-                .encode(),
+                sign(
+                    &TxKind::Transfer {
+                        from: alice,
+                        to: bob,
+                        value: 1200,
+                        nonce: 0,
+                        gas_price: 0,
+                    },
+                    &alice_kp,
+                ),
+                sign(
+                    &TxKind::Transfer {
+                        from: alice,
+                        to: bob,
+                        value: 800,
+                        nonce: 1,
+                        gas_price: 0,
+                    },
+                    &alice_kp,
+                ),
             ],
         );
 
@@ -88,7 +106,6 @@ mod tests {
         drop(shared);
         drop(pipeline);
 
-        // Verify persisted to redb
         let store2 = StateStore::open(path.to_str().unwrap()).unwrap();
         let loaded = load_state(&store2).unwrap();
         assert_eq!(loaded.balance(&alice), 3000);
@@ -107,9 +124,9 @@ mod tests {
         let path = test_db_path("contract");
         let store = Arc::new(StateStore::open(path.to_str().unwrap()).unwrap());
         let (_tx, rx) = mpsc::channel(16);
-        let pipeline = ExecutionPipeline::with_storage(store, rx);
+        let mut pipeline = ExecutionPipeline::with_storage(store, rx);
 
-        let deployer = [1u8; 32];
+        let (deployer_kp, deployer) = make_sender();
 
         let wasm = wat::parse_str(
             r#"
@@ -128,19 +145,19 @@ mod tests {
         )
         .unwrap();
 
-        // Phase 1: Deploy
         let deploy_anchor = hash(b"deploy_batch");
         let deploy_batch = make_batch(
             deploy_anchor,
-            vec![
-                TxKind::ContractDeploy {
+            vec![sign(
+                &TxKind::ContractDeploy {
                     deployer,
                     code: wasm,
                     nonce: 0,
                     gas_limit: 1_000_000,
-                }
-                .encode(),
-            ],
+                    gas_price: 0,
+                },
+                &deployer_kp,
+            )],
         );
 
         let deploy_result = pipeline.execute_batch(&deploy_batch).await.unwrap();
@@ -154,21 +171,21 @@ mod tests {
         let root_after_deploy = state.state_root();
         drop(state);
 
-        // Phase 2: Call
         let call_anchor = hash(b"call_batch");
         let call_batch = make_batch(
             call_anchor,
-            vec![
-                TxKind::ContractCall {
+            vec![sign(
+                &TxKind::ContractCall {
                     caller: deployer,
                     contract: contract_addr,
                     func_name: "init".into(),
                     args_data: vec![],
                     nonce: 1,
                     gas_limit: 1_000_000,
-                }
-                .encode(),
-            ],
+                    gas_price: 0,
+                },
+                &deployer_kp,
+            )],
         );
 
         let call_result = pipeline.execute_batch(&call_batch).await.unwrap();
@@ -192,9 +209,9 @@ mod tests {
         let path = test_db_path("finality");
         let store = Arc::new(StateStore::open(path.to_str().unwrap()).unwrap());
         let (_tx, rx) = mpsc::channel(16);
-        let pipeline = ExecutionPipeline::with_storage(store, rx);
+        let mut pipeline = ExecutionPipeline::with_storage(store, rx);
 
-        let alice = [1u8; 32];
+        let (alice_kp, alice) = make_sender();
         let bob = [2u8; 32];
         let shared = pipeline.shared_state();
         shared.write().await.set_balance(&alice, 10_000);
@@ -202,22 +219,22 @@ mod tests {
         let anchor = hash(b"finality_batch");
         let batch = make_batch(
             anchor,
-            vec![
-                TxKind::Transfer {
+            vec![sign(
+                &TxKind::Transfer {
                     from: alice,
                     to: bob,
                     value: 3000,
                     nonce: 0,
-                }
-                .encode(),
-            ],
+                    gas_price: 0,
+                },
+                &alice_kp,
+            )],
         );
 
         let result = pipeline.execute_batch(&batch).await.unwrap();
         let batch_hash = hash(&anchor);
         let state_root = result.state_root;
 
-        // Generate BLS signatures from 4 validators
         let mut vs = ValidatorSet::new();
         let mut keypairs = Vec::new();
         let mut bls_keys = Vec::new();
@@ -252,36 +269,41 @@ mod tests {
     async fn startup_recovery_end_to_end() {
         let path = test_db_path("recovery");
 
-        let alice = [1u8; 32];
-        let bob = [2u8; 32];
+        let (alice_kp, alice) = make_sender();
+        let (bob_kp, bob) = make_sender();
         let anchor = hash(b"recovery_batch");
         let state_root;
 
-        // Pipeline 1: execute transfers, flush to redb
         {
             let store = Arc::new(StateStore::open(path.to_str().unwrap()).unwrap());
             let (_tx, rx) = mpsc::channel(16);
-            let pipeline = ExecutionPipeline::with_storage(store, rx);
+            let mut pipeline = ExecutionPipeline::with_storage(store, rx);
             let shared = pipeline.shared_state();
             shared.write().await.set_balance(&alice, 10_000);
 
             let batch = make_batch(
                 anchor,
                 vec![
-                    TxKind::Transfer {
-                        from: alice,
-                        to: bob,
-                        value: 4000,
-                        nonce: 0,
-                    }
-                    .encode(),
-                    TxKind::Transfer {
-                        from: alice,
-                        to: bob,
-                        value: 1000,
-                        nonce: 1,
-                    }
-                    .encode(),
+                    sign(
+                        &TxKind::Transfer {
+                            from: alice,
+                            to: bob,
+                            value: 4000,
+                            nonce: 0,
+                            gas_price: 0,
+                        },
+                        &alice_kp,
+                    ),
+                    sign(
+                        &TxKind::Transfer {
+                            from: alice,
+                            to: bob,
+                            value: 1000,
+                            nonce: 1,
+                            gas_price: 0,
+                        },
+                        &alice_kp,
+                    ),
                 ],
             );
 
@@ -289,11 +311,10 @@ mod tests {
             state_root = result.state_root;
         }
 
-        // Pipeline 2: recover state from redb, verify, execute more
         {
             let store = Arc::new(StateStore::open(path.to_str().unwrap()).unwrap());
             let (_tx, rx) = mpsc::channel(16);
-            let pipeline = ExecutionPipeline::with_storage(store, rx);
+            let mut pipeline = ExecutionPipeline::with_storage(store, rx);
 
             let shared = pipeline.shared_state();
             let state = shared.read().await;
@@ -303,19 +324,19 @@ mod tests {
             assert_eq!(state.state_root(), state_root);
             drop(state);
 
-            // Execute additional batch on recovered state
             let anchor2 = hash(b"recovery_batch_2");
             let batch2 = make_batch(
                 anchor2,
-                vec![
-                    TxKind::Transfer {
+                vec![sign(
+                    &TxKind::Transfer {
                         from: bob,
                         to: alice,
                         value: 2000,
                         nonce: 0,
-                    }
-                    .encode(),
-                ],
+                        gas_price: 0,
+                    },
+                    &bob_kp,
+                )],
             );
 
             let result2 = pipeline.execute_batch(&batch2).await.unwrap();
@@ -353,7 +374,6 @@ mod tests {
             max_pending_txs: 4096,
         };
 
-        // Shared genesis blocks with fixed timestamp so all DAGs are identical
         let genesis_ts = 1000u64;
         let genesis_blocks: Vec<DagBlock> = [v1, v2, v3]
             .iter()
@@ -373,7 +393,6 @@ mod tests {
             let mut dag = DagStore::new(store).unwrap();
             db_paths.push(path);
 
-            // Pre-seed DAG with identical genesis blocks
             for g in &genesis_blocks {
                 dag.insert(g.clone()).unwrap();
             }
@@ -401,19 +420,19 @@ mod tests {
         }
         drop(router_tx);
 
-        // Submit a transaction to node 0
+        let (sender_kp, sender) = make_sender();
         let transfer = TxKind::Transfer {
-            from: [1u8; 32],
-            to: [2u8; 32],
+            from: sender,
+            to: [0xBB; 32],
             value: 500,
             nonce: 0,
+            gas_price: 0,
         };
         engine_inputs[0]
-            .send(ConsensusInput::Transaction(transfer.encode()))
+            .send(ConsensusInput::Transaction(sign(&transfer, &sender_kp)))
             .await
             .unwrap();
 
-        // Route vertices and collect committed batches
         let mut committed: Vec<Vec<CommittedBatch>> = vec![Vec::new(), Vec::new(), Vec::new()];
         let deadline = tokio::time::Instant::now() + Duration::from_secs(10);
 
@@ -444,7 +463,6 @@ mod tests {
             }
         }
 
-        // All 3 nodes should have committed at least one batch
         for (i, batches) in committed.iter().enumerate() {
             assert!(
                 !batches.is_empty(),
@@ -452,7 +470,6 @@ mod tests {
             );
         }
 
-        // Verify all nodes committed a batch with the same anchor hash
         let anchor0 = committed[0][0].anchor_hash;
         for (i, batches) in committed.iter().enumerate().skip(1) {
             assert_eq!(
@@ -461,7 +478,6 @@ mod tests {
             );
         }
 
-        // Verify all nodes have the same transaction set
         let txs0 = &committed[0][0].transactions;
         for (i, batches) in committed.iter().enumerate().skip(1) {
             assert_eq!(
@@ -470,30 +486,27 @@ mod tests {
             );
         }
 
-        // Execute the committed batch on 3 independent pipelines
         let mut state_roots = Vec::new();
         for (i, batches) in committed.iter().enumerate() {
             let exec_path = test_db_path(&format!("multinode_exec_{i}"));
             let exec_store = Arc::new(StateStore::open(exec_path.to_str().unwrap()).unwrap());
             let (_tx, rx) = mpsc::channel(16);
-            let pipeline = ExecutionPipeline::with_storage(exec_store, rx);
+            let mut pipeline = ExecutionPipeline::with_storage(exec_store, rx);
             pipeline
                 .shared_state()
                 .write()
                 .await
-                .set_balance(&v1, 10_000);
+                .set_balance(&sender, 10_000);
 
             let result = pipeline.execute_batch(&batches[0]).await.unwrap();
             state_roots.push(result.state_root);
             db_paths.push(exec_path);
         }
 
-        // All state roots must match
         assert_eq!(state_roots[0], state_roots[1], "State root 0 != 1");
         assert_eq!(state_roots[1], state_roots[2], "State root 1 != 2");
         assert_ne!(state_roots[0], [0u8; 32], "State root should not be zero");
 
-        // Cleanup
         drop(engine_inputs);
         for h in handles {
             let _ = h.await;
@@ -510,9 +523,9 @@ mod tests {
         let path = test_db_path("receipts");
         let store = Arc::new(StateStore::open(path.to_str().unwrap()).unwrap());
         let (_tx, rx) = mpsc::channel(16);
-        let pipeline = ExecutionPipeline::with_storage(Arc::clone(&store), rx);
+        let mut pipeline = ExecutionPipeline::with_storage(Arc::clone(&store), rx);
 
-        let alice = [1u8; 32];
+        let (alice_kp, alice) = make_sender();
         let bob = [2u8; 32];
         let shared = pipeline.shared_state();
         shared.write().await.set_balance(&alice, 10_000);
@@ -521,20 +534,26 @@ mod tests {
         let batch = make_batch(
             anchor,
             vec![
-                TxKind::Transfer {
-                    from: alice,
-                    to: bob,
-                    value: 3000,
-                    nonce: 0,
-                }
-                .encode(),
-                TxKind::Transfer {
-                    from: alice,
-                    to: bob,
-                    value: 99_999,
-                    nonce: 1,
-                }
-                .encode(),
+                sign(
+                    &TxKind::Transfer {
+                        from: alice,
+                        to: bob,
+                        value: 3000,
+                        nonce: 0,
+                        gas_price: 0,
+                    },
+                    &alice_kp,
+                ),
+                sign(
+                    &TxKind::Transfer {
+                        from: alice,
+                        to: bob,
+                        value: 99_999,
+                        nonce: 1,
+                        gas_price: 0,
+                    },
+                    &alice_kp,
+                ),
             ],
         );
 
@@ -543,7 +562,6 @@ mod tests {
         assert!(result.receipts[0].success);
         assert!(!result.receipts[1].success);
 
-        // Verify receipts persisted to redb
         let r0 = aztibase_execution::get_receipt(&store, &result.receipts[0].tx_hash)
             .unwrap()
             .expect("receipt 0 should be persisted");

@@ -1,6 +1,6 @@
 use aztibase_storage::{
-    ACCOUNTS_TABLE, BATCH_ROOTS_TABLE, CONTRACT_CODE_TABLE, CONTRACT_STORAGE_TABLE, StateStore,
-    StorageResult, TableDef,
+    ACCOUNTS_TABLE, BATCH_ROOTS_TABLE, CONTRACT_CODE_TABLE, CONTRACT_STORAGE_TABLE, STATE_TABLE,
+    StateStore, StorageResult, TableDef,
 };
 
 use crate::state::{AccountState, AccountType};
@@ -170,6 +170,23 @@ pub fn store_batch_root(
     store.put(BATCH_ROOTS_TABLE, anchor_hash, state_root)
 }
 
+const BASE_FEE_KEY: &[u8] = b"base_fee";
+
+/// Store the current base fee value.
+pub fn store_base_fee(store: &StateStore, base_fee: u64) -> StorageResult<()> {
+    store.put(STATE_TABLE, BASE_FEE_KEY, &base_fee.to_le_bytes())
+}
+
+/// Load the persisted base fee, returning `None` if not set.
+pub fn load_base_fee(store: &StateStore) -> StorageResult<Option<u64>> {
+    match store.get(STATE_TABLE, BASE_FEE_KEY)? {
+        Some(bytes) if bytes.len() == 8 => Ok(Some(u64::from_le_bytes(
+            bytes.as_slice().try_into().unwrap(),
+        ))),
+        _ => Ok(None),
+    }
+}
+
 /// Retrieve the state root for a committed batch by anchor hash.
 pub fn get_batch_root(
     store: &StateStore,
@@ -307,6 +324,22 @@ mod tests {
         let loaded = load_state(&store).unwrap();
         assert_eq!(loaded.account_count(), 0);
         assert_eq!(loaded.state_root(), [0u8; 32]);
+
+        cleanup(&path);
+    }
+
+    #[test]
+    fn base_fee_store_and_load() {
+        let path = test_db_path();
+        let store = StateStore::open(path.to_str().unwrap()).unwrap();
+
+        assert_eq!(load_base_fee(&store).unwrap(), None);
+
+        store_base_fee(&store, 42).unwrap();
+        assert_eq!(load_base_fee(&store).unwrap(), Some(42));
+
+        store_base_fee(&store, 1000).unwrap();
+        assert_eq!(load_base_fee(&store).unwrap(), Some(1000));
 
         cleanup(&path);
     }

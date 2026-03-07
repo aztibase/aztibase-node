@@ -202,6 +202,7 @@ async fn main() -> Result<()> {
         mempool_tx,
         exec_pipeline.shared_batch_count(),
         Some(exec_store),
+        exec_pipeline.shared_base_fee(),
     );
 
     if config.rpc.enabled {
@@ -262,8 +263,9 @@ async fn main() -> Result<()> {
         }
     });
 
-    // Shared state for sync protocol
+    // Shared state for sync protocol + mempool gas price validation
     let shared_state = exec_pipeline.shared_state();
+    let shared_base_fee = exec_pipeline.shared_base_fee();
 
     // Spawn execution pipeline
     let pipeline_handle = tokio::spawn(async move {
@@ -413,10 +415,13 @@ async fn main() -> Result<()> {
                                     }
                                 }
                             }
-                        } else if topic == TOPIC_TRANSACTIONS
-                            && mempool.insert(data.clone())
-                        {
-                            let _ = consensus_tx.send(ConsensusInput::Transaction(data)).await;
+                        } else if topic == TOPIC_TRANSACTIONS {
+                            let state_guard = shared_state.read().await;
+                            let min_gp = shared_base_fee.load(std::sync::atomic::Ordering::Relaxed);
+                            if mempool.insert_checked(data.clone(), |addr| state_guard.nonce(addr), min_gp) {
+                                drop(state_guard);
+                                let _ = consensus_tx.send(ConsensusInput::Transaction(data)).await;
+                            }
                         }
                     }
                 }
@@ -450,7 +455,10 @@ async fn main() -> Result<()> {
                 }
             }
             Some(raw_tx) = mempool_rx.recv() => {
-                if mempool.insert(raw_tx.clone()) {
+                let state_guard = shared_state.read().await;
+                let min_gp = shared_base_fee.load(std::sync::atomic::Ordering::Relaxed);
+                if mempool.insert_checked(raw_tx.clone(), |addr| state_guard.nonce(addr), min_gp) {
+                    drop(state_guard);
                     let _ = consensus_tx.send(ConsensusInput::Transaction(raw_tx)).await;
                 }
             }

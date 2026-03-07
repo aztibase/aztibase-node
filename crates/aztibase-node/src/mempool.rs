@@ -2,8 +2,11 @@ use std::cmp::Reverse;
 use std::collections::{BTreeMap, HashMap, HashSet};
 
 use aztibase_core::hash;
+use aztibase_execution::{SignedTx, routing::route_tx};
 
 type TxHash = [u8; 32];
+
+const MAX_NONCE_GAP: u64 = 16;
 
 /// Priority key for BTreeMap ordering: highest priority first, then by hash for determinism.
 type PriorityKey = (Reverse<u64>, TxHash);
@@ -74,11 +77,31 @@ impl Mempool {
     }
 
     /// Insert a transaction with default priority derived from the tx prefix byte.
-    /// Transfer (0x01) = 1, contracts/EVM (0x02-0x05) use gas_limit heuristic,
-    /// AI infer (0x06) = 1. For simplicity, uses the prefix byte as base priority.
     pub fn insert(&mut self, tx: Vec<u8>) -> bool {
         let priority = extract_priority(&tx);
         self.insert_with_priority(tx, priority)
+    }
+
+    /// Insert a signed envelope with nonce and gas price validation.
+    /// `nonce_lookup` returns the current on-chain nonce for a given address.
+    /// Rejects stale nonces (tx.nonce < current), far-future nonces (gap > 16),
+    /// and transactions below `min_gas_price`.
+    pub fn insert_checked<F>(&mut self, tx: Vec<u8>, nonce_lookup: F, min_gas_price: u64) -> bool
+    where
+        F: Fn(&[u8; 32]) -> u64,
+    {
+        let (sender, tx_nonce, gas_price) = match decode_sender_nonce_gas(&tx) {
+            Some(t) => t,
+            None => return false,
+        };
+        if gas_price < min_gas_price {
+            return false;
+        }
+        let current = nonce_lookup(&sender);
+        if tx_nonce < current || tx_nonce > current + MAX_NONCE_GAP {
+            return false;
+        }
+        self.insert(tx)
     }
 
     /// Remove a transaction by hash.
@@ -148,17 +171,29 @@ impl Mempool {
     }
 }
 
+/// Decode a signed envelope to extract (sender_address, nonce, gas_price).
+fn decode_sender_nonce_gas(raw: &[u8]) -> Option<([u8; 32], u64, u64)> {
+    let signed = SignedTx::decode(raw).ok()?;
+    let tx = route_tx(&signed.payload).ok()?;
+    Some((signed.sender_address(), tx.nonce(), tx.gas_price()))
+}
+
 /// Extract priority from raw transaction bytes.
-/// Uses the TxKind prefix byte as a simple heuristic:
-/// higher prefix = more complex operation = higher priority.
-/// Future: parse gas_price or fee field from the payload.
+/// For signed envelopes (magic 0xAA), parse the inner payload prefix.
+/// Falls back to first byte for raw payloads.
 fn extract_priority(tx: &[u8]) -> u64 {
-    tx.first().copied().unwrap_or(0) as u64
+    if let Ok(signed) = SignedTx::decode(tx) {
+        signed.payload.first().copied().unwrap_or(0) as u64
+    } else {
+        tx.first().copied().unwrap_or(0) as u64
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use aztibase_core::{Keypair, address_from_pubkey};
+    use aztibase_execution::{SignedTx, TxKind};
 
     #[test]
     fn insert_and_retrieve() {
@@ -373,5 +408,97 @@ mod tests {
         let batch = pool.peek_batch(2, 1024);
         assert_eq!(batch[0], ai_infer); // priority 6
         assert_eq!(batch[1], transfer); // priority 1
+    }
+
+    // ── Nonce validation tests ──────────────────────────────────
+
+    fn make_signed_transfer(kp: &Keypair, nonce: u64) -> Vec<u8> {
+        let sender = address_from_pubkey(kp.public_key().as_bytes());
+        let tx = TxKind::Transfer {
+            from: sender,
+            to: [2u8; 32],
+            value: 100,
+            nonce,
+            gas_price: 0,
+        };
+        SignedTx::new(tx.encode(), kp).encode()
+    }
+
+    #[test]
+    fn insert_checked_accepts_matching_nonce() {
+        let mut pool = Mempool::new(100);
+        let kp = Keypair::generate();
+        let tx = make_signed_transfer(&kp, 0);
+        assert!(pool.insert_checked(tx, |_| 0, 0));
+    }
+
+    #[test]
+    fn insert_checked_accepts_future_within_gap() {
+        let mut pool = Mempool::new(100);
+        let kp = Keypair::generate();
+        let tx = make_signed_transfer(&kp, 16);
+        assert!(pool.insert_checked(tx, |_| 0, 0));
+    }
+
+    #[test]
+    fn insert_checked_rejects_stale_nonce() {
+        let mut pool = Mempool::new(100);
+        let kp = Keypair::generate();
+        let tx = make_signed_transfer(&kp, 3);
+        assert!(!pool.insert_checked(tx, |_| 5, 0));
+    }
+
+    #[test]
+    fn insert_checked_rejects_far_future_nonce() {
+        let mut pool = Mempool::new(100);
+        let kp = Keypair::generate();
+        let tx = make_signed_transfer(&kp, 17);
+        assert!(!pool.insert_checked(tx, |_| 0, 0));
+    }
+
+    #[test]
+    fn insert_checked_rejects_malformed() {
+        let mut pool = Mempool::new(100);
+        assert!(!pool.insert_checked(vec![0xFF, 0x00], |_| 0, 0));
+    }
+
+    #[test]
+    fn insert_checked_rejects_below_base_fee() {
+        let mut pool = Mempool::new(100);
+        let kp = Keypair::generate();
+        // gas_price=0 < min_gas_price=1, should be rejected
+        let tx = make_signed_transfer(&kp, 0);
+        assert!(!pool.insert_checked(tx, |_| 0, 1));
+    }
+
+    #[test]
+    fn insert_checked_accepts_at_base_fee() {
+        let mut pool = Mempool::new(100);
+        let kp = Keypair::generate();
+        let sender = address_from_pubkey(kp.public_key().as_bytes());
+        let tx = TxKind::Transfer {
+            from: sender,
+            to: [2u8; 32],
+            value: 100,
+            nonce: 0,
+            gas_price: 5,
+        };
+        let signed = SignedTx::new(tx.encode(), &kp).encode();
+        assert!(pool.insert_checked(signed, |_| 0, 5));
+    }
+
+    #[test]
+    fn signed_envelope_gets_inner_priority() {
+        let kp = Keypair::generate();
+        let sender = address_from_pubkey(kp.public_key().as_bytes());
+        let transfer = TxKind::Transfer {
+            from: sender,
+            to: [2u8; 32],
+            value: 100,
+            nonce: 0,
+            gas_price: 0,
+        };
+        let signed = SignedTx::new(transfer.encode(), &kp).encode();
+        assert_eq!(extract_priority(&signed), 1);
     }
 }

@@ -13,6 +13,7 @@ Every non-obvious technical decision is recorded here. Each ADR is immutable onc
 | ADR-003 | Workspace monorepo with 8 crates | 2026-03-05 | ACCEPTED | blockchain-architect |
 | ADR-004 | Use blst crate for BLS12-381 (C dependency exception) | 2026-03-06 | ACCEPTED | blockchain-architect + security-engineer |
 | ADR-005 | Use axum for JSON-RPC server | 2026-03-06 | ACCEPTED | node-engineer |
+| ADR-006 | Post-execution fee collection (not pre-execution escrow) | 2026-03-07 | ACCEPTED | smart-contract-engineer |
 
 ---
 
@@ -153,6 +154,34 @@ Use axum with a hand-rolled JSON-RPC 2.0 dispatch layer. No dependency on a JSON
 - WebSocket subscriptions (e.g., newBlock events) require additional work when needed (M4+)
 - Batch JSON-RPC requests (array of requests) not supported — add if needed
 - No built-in OpenRPC/spec generation — acceptable for testnet
+
+---
+
+## ADR-006: Post-execution fee collection (not pre-execution escrow)
+
+**Date:** 2026-03-07
+**Status:** ACCEPTED
+**Decided By:** smart-contract-engineer
+**Git Ref:** pending
+
+### Context
+Sprint 011 introduces gas fees. Two approaches were considered:
+- **Pre-execution escrow**: Deduct `gas_limit * gas_price` before execution, refund unused gas after. Prevents underfunded execution but complicates Block-STM parallel execution (requires per-tx balance locking).
+- **Post-execution collection**: Execute first, then deduct `gas_used * gas_price` from sender balance. Simpler but allows transactions to execute even if sender can't fully cover fees.
+
+### Decision
+Use post-execution fee collection (`collect_fees()` in pipeline.rs) for Sprint 011. The pre-execution escrow utilities (`escrow_fee()`, `refund_unused()` in fee.rs) are implemented but not wired into the pipeline yet.
+
+### Rationale
+- Block-STM parallel execution modifies balances during execution — pre-execution escrow would require coordinating the escrow lock with Block-STM's MVMemory, adding significant complexity
+- Post-execution is simpler to implement and test
+- Pre-mainnet: zero-fee transactions (gas_price=0) are common in testing, making escrow overhead unnecessary
+- The `escrow_fee` / `refund_unused` pattern is ready to wire in when the fee model matures
+
+### Consequences
+- SEC-FEE-002: Senders with insufficient balance can still transact (fee capped at available balance via `saturating_sub`)
+- Must wire pre-execution escrow before mainnet to prevent fee-free execution abuse
+- `collect_fees()` iterates routed txs linearly, matching to receipts by index — assumes 1:1 correspondence
 
 ---
 

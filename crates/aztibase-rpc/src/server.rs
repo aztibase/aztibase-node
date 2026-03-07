@@ -74,6 +74,7 @@ pub struct RpcState {
     pub tx_sender: mpsc::Sender<Vec<u8>>,
     pub batch_count: Arc<std::sync::atomic::AtomicU64>,
     pub receipt_store: Option<Arc<StateStore>>,
+    pub base_fee: Arc<std::sync::atomic::AtomicU64>,
 }
 
 impl Clone for RpcState {
@@ -83,6 +84,7 @@ impl Clone for RpcState {
             tx_sender: self.tx_sender.clone(),
             batch_count: Arc::clone(&self.batch_count),
             receipt_store: self.receipt_store.clone(),
+            base_fee: Arc::clone(&self.base_fee),
         }
     }
 }
@@ -99,6 +101,7 @@ impl RpcServer {
         tx_sender: mpsc::Sender<Vec<u8>>,
         batch_count: Arc<std::sync::atomic::AtomicU64>,
         receipt_store: Option<Arc<StateStore>>,
+        base_fee: Arc<std::sync::atomic::AtomicU64>,
     ) -> Self {
         Self {
             state: RpcState {
@@ -106,6 +109,7 @@ impl RpcServer {
                 tx_sender,
                 batch_count,
                 receipt_store,
+                base_fee,
             },
         }
     }
@@ -170,6 +174,8 @@ async fn dispatch(state: &RpcState, req: &JsonRpcRequest) -> JsonRpcResponse {
         "aztb_getStateRoot" => handle_get_state_root(state, req).await,
         "aztb_getTransactionReceipt" => handle_get_transaction_receipt(state, req).await,
         "aztb_getAccountType" => handle_get_account_type(state, req).await,
+        "aztb_gasPrice" => handle_gas_price(state, req).await,
+        "aztb_estimateGas" => handle_estimate_gas(state, req).await,
         _ => JsonRpcResponse::error(
             req.id.clone(),
             METHOD_NOT_FOUND,
@@ -251,7 +257,7 @@ async fn handle_send_transaction(state: &RpcState, req: &JsonRpcRequest) -> Json
         }
     };
 
-    if let Err(e) = aztibase_execution::route_tx(&raw) {
+    if let Err(e) = aztibase_execution::verify_and_route(&raw) {
         return JsonRpcResponse::error(req.id.clone(), INVALID_PARAMS, format!("invalid tx: {e}"));
     }
 
@@ -362,6 +368,25 @@ async fn handle_get_transaction_receipt(state: &RpcState, req: &JsonRpcRequest) 
     }
 }
 
+async fn handle_gas_price(state: &RpcState, req: &JsonRpcRequest) -> JsonRpcResponse {
+    let base_fee = state.base_fee.load(std::sync::atomic::Ordering::Relaxed);
+    JsonRpcResponse::success(req.id.clone(), serde_json::json!(format!("0x{base_fee:x}")))
+}
+
+async fn handle_estimate_gas(_state: &RpcState, req: &JsonRpcRequest) -> JsonRpcResponse {
+    let prefix = req
+        .params
+        .get(0)
+        .and_then(|v| v.as_str())
+        .and_then(|s| {
+            let s = s.strip_prefix("0x").unwrap_or(s);
+            u8::from_str_radix(s, 16).ok()
+        })
+        .unwrap_or(0x01);
+    let estimate = aztibase_execution::BaseFeeCalculator::estimate_gas(prefix);
+    JsonRpcResponse::success(req.id.clone(), serde_json::json!(format!("0x{estimate:x}")))
+}
+
 // ── Tests ───────────────────────────────────────────────────────────
 
 #[cfg(test)]
@@ -378,6 +403,7 @@ mod tests {
             tx_sender: tx,
             batch_count: Arc::new(std::sync::atomic::AtomicU64::new(0)),
             receipt_store: None,
+            base_fee: Arc::new(std::sync::atomic::AtomicU64::new(1)),
         };
         (state, rx)
     }
@@ -395,6 +421,7 @@ mod tests {
             tx_sender: tx,
             batch_count: Arc::new(std::sync::atomic::AtomicU64::new(42)),
             receipt_store: None,
+            base_fee: Arc::new(std::sync::atomic::AtomicU64::new(1)),
         };
         (state, rx)
     }
@@ -524,14 +551,17 @@ mod tests {
     #[tokio::test]
     async fn send_transaction_valid() {
         let (state, _rx) = test_state();
+        let kp = aztibase_core::Keypair::generate();
+        let sender = aztibase_core::address_from_pubkey(kp.public_key().as_bytes());
         let tx = aztibase_execution::TxKind::Transfer {
-            from: [1u8; 32],
+            from: sender,
             to: [2u8; 32],
             value: 100,
             nonce: 0,
+            gas_price: 0,
         };
-        let encoded = tx.encode();
-        let tx_hex = hex::encode(&encoded);
+        let signed = aztibase_execution::SignedTx::new(tx.encode(), &kp);
+        let tx_hex = hex::encode(signed.encode());
         let body = format!(
             r#"{{"jsonrpc":"2.0","method":"aztb_sendTransaction","params":["0x{tx_hex}"],"id":1}}"#
         );
@@ -617,6 +647,7 @@ mod tests {
             tx_sender: tx,
             batch_count: Arc::new(std::sync::atomic::AtomicU64::new(0)),
             receipt_store: Some(store),
+            base_fee: Arc::new(std::sync::atomic::AtomicU64::new(1)),
         };
         (state, rx, path)
     }
@@ -691,5 +722,29 @@ mod tests {
         );
         let resp = rpc_call(&state, &body).await;
         assert_eq!(resp["result"], "Contract");
+    }
+
+    #[tokio::test]
+    async fn gas_price_returns_base_fee() {
+        let (state, _rx) = test_state();
+        let body = r#"{"jsonrpc":"2.0","method":"aztb_gasPrice","params":[],"id":1}"#;
+        let resp = rpc_call(&state, body).await;
+        assert_eq!(resp["result"], "0x1");
+    }
+
+    #[tokio::test]
+    async fn estimate_gas_transfer() {
+        let (state, _rx) = test_state();
+        let body = r#"{"jsonrpc":"2.0","method":"aztb_estimateGas","params":["0x01"],"id":1}"#;
+        let resp = rpc_call(&state, body).await;
+        assert_eq!(resp["result"], "0x5208"); // 21000
+    }
+
+    #[tokio::test]
+    async fn estimate_gas_create_agent() {
+        let (state, _rx) = test_state();
+        let body = r#"{"jsonrpc":"2.0","method":"aztb_estimateGas","params":["0x07"],"id":1}"#;
+        let resp = rpc_call(&state, body).await;
+        assert_eq!(resp["result"], "0xcf08"); // 53000
     }
 }

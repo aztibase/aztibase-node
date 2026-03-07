@@ -54,6 +54,17 @@ impl PublicKey {
     pub fn as_bytes(&self) -> &[u8; 32] {
         self.0.as_bytes()
     }
+
+    /// Reconstruct from raw bytes. Returns `None` if the bytes are not a valid
+    /// Ed25519 curve point.
+    pub fn from_bytes(bytes: &[u8; 32]) -> Option<Self> {
+        VerifyingKey::from_bytes(bytes).ok().map(Self)
+    }
+}
+
+/// Derive a 32-byte address from an Ed25519 public key via BLAKE3.
+pub fn address_from_pubkey(pubkey: &[u8; 32]) -> [u8; 32] {
+    hash(pubkey)
 }
 
 /// Abstraction over cryptographic operations.

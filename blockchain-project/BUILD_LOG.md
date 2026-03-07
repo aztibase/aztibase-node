@@ -21,6 +21,106 @@ Entries are prepended (newest first).
 
 ## Entries
 
+### 2026-03-07 -- smart-contract-engineer + node-engineer -- aztibase-execution, aztibase-node, aztibase-rpc
+**Task:** Sprint 012 Phase 2: Persistent Base Fee + Validation Hardening (Tasks 5-8)
+**Sprint:** Sprint 012, Phase 2
+**Git Ref:** pending
+**Files Changed:**
+- crates/aztibase-execution/src/persist.rs (store_base_fee, load_base_fee using STATE_TABLE)
+- crates/aztibase-execution/src/lib.rs (re-export store_base_fee, load_base_fee)
+- crates/aztibase-node/src/pipeline.rs (BaseFeeCalculator + Arc<AtomicU64> fields, load on startup, update+persist after batch, nonce validation Phase 0, execute_batch takes &mut self, +4 tests)
+- crates/aztibase-node/src/mempool.rs (insert_checked gains min_gas_price param, decode_sender_nonce_gas extracts gas_price, +2 tests)
+- crates/aztibase-node/src/main.rs (shared_base_fee passed to RpcServer::new and insert_checked calls)
+- crates/aztibase-rpc/src/server.rs (RpcState.base_fee: Arc<AtomicU64>, RpcServer::new 5th param, handle_gas_price reads live value)
+- crates/aztibase-node/src/integration.rs (mut pipeline bindings for &mut self execute_batch)
+**Review Notes:**
+- SEC-FEE-003 CLOSED: BaseFeeCalculator persists to redb, loads on startup, drives real gas prices
+- SEC-SIG-002 CLOSED: Pipeline validates nonces at execution time (Phase 0 nonce validation)
+- Mempool rejects transactions below current base fee
+- 7 new tests (persist: 1, mempool: 2, pipeline: 4); 365 total passing
+- cargo clippy: zero warnings; cargo fmt: clean
+**Security Flags:** SEC-FEE-003 CLOSED, SEC-SIG-002 CLOSED
+
+### 2026-03-07 -- smart-contract-engineer -- aztibase-node
+**Task:** Sprint 012 Phase 1: Pre-Execution Fee Escrow (Tasks 1-4)
+**Sprint:** Sprint 012, Phase 1
+**Git Ref:** pending
+**Files Changed:**
+- crates/aztibase-node/src/pipeline.rs (escrow_fee/refund_unused wired into execute_batch, collect_fees removed, total_fees_burned in PipelineResult, compute_tx_hash helper, +5 tests)
+**Review Notes:**
+- SEC-FEE-002 CLOSED: Pre-execution escrow prevents underfunded execution
+- Escrow sequential before Block-STM, refund sequential after
+- Failed escrow: generates failure receipt, increments nonce, skips execution
+- 5 new tests; 358 total passing at Phase 1 close
+- cargo clippy: zero warnings; cargo fmt: clean
+**Security Flags:** SEC-FEE-002 CLOSED
+
+### 2026-03-07 -- security-engineer + project-lead -- all crates
+**Task:** Sprint 011 Phase 4: Security Review + Documentation (Tasks 13-15)
+**Sprint:** Sprint 011, Phase 4
+**Git Ref:** pending
+**Files Changed:**
+- blockchain-project/sprints/SPRINT-011.md (all 15 tasks marked DONE, security findings table, retrospective)
+- blockchain-project/BUILD_LOG.md (entries for all 4 phases)
+- blockchain-project/STATUS.md (sprint 011 complete, 353 tests)
+- blockchain-project/DECISIONS.md (ADR-006: post-execution fee collection)
+- CHANGELOG.md (signatures, nonces, fees entries)
+**Review Notes:**
+- Security review: 0 ELEVATED, 2 MEDIUM (documented), 6 LOW
+- SEC-SIG-002: batch-level nonce conflicts mitigated by mempool dedup
+- SEC-FEE-002: post-execution fees don't prevent underfunded execution — escrow_fee exists but not wired
+- cargo clippy: zero warnings; cargo fmt: clean; 353 tests passing
+- Sprint 011 fully complete: 15/15 tasks, 4/4 phases
+**Security Flags:** 2 MEDIUM documented (SEC-SIG-002, SEC-FEE-002), 0 ELEVATED
+
+### 2026-03-07 -- smart-contract-engineer -- aztibase-execution, aztibase-rpc
+**Task:** Sprint 011 Phase 3: Fee Market Basics (Tasks 9-12)
+**Sprint:** Sprint 011, Phase 3
+**Git Ref:** pending
+**Files Changed:**
+- crates/aztibase-execution/src/routing.rs (gas_price: u64 field on all 7 TxKind variants, gas_price()/gas_limit() accessors)
+- crates/aztibase-execution/src/fee.rs (NEW: BaseFeeCalculator, escrow_fee, refund_unused, FeeEscrow, +14 tests)
+- crates/aztibase-execution/src/lib.rs (pub mod fee, re-exports)
+- crates/aztibase-node/src/pipeline.rs (collect_fees() post-execution, nonce-ordered sort, +2 tests)
+- crates/aztibase-rpc/src/server.rs (aztb_gasPrice, aztb_estimateGas methods, +3 tests)
+- All test files updated with gas_price: 0 (~50+ construction sites)
+**Review Notes:**
+- EIP-1559-style base fee: target 15M gas/batch, min 1, max 1B, denominator 8
+- Fee collection is post-execution via saturating arithmetic — safe but doesn't prevent underfunded execution
+- escrow_fee/refund_unused ready for pre-execution wiring in Sprint 012
+- 353 total tests (19 new in Phase 3), zero clippy warnings
+**Security Flags:** SEC-FEE-002 (MEDIUM): post-execution fees — documented for Sprint 012
+
+### 2026-03-07 -- node-engineer -- aztibase-node
+**Task:** Sprint 011 Phase 2: Nonce Enforcement + Address Derivation (Tasks 5-8)
+**Sprint:** Sprint 011, Phase 2
+**Git Ref:** pending
+**Files Changed:**
+- crates/aztibase-node/src/mempool.rs (insert_checked(), decode_sender_nonce(), MAX_NONCE_GAP=16, +6 tests)
+- crates/aztibase-node/src/main.rs (gossip + RPC paths use insert_checked with state nonce lookup)
+- crates/aztibase-node/src/pipeline.rs (nonce-ordered sort: sort_by sender then nonce)
+**Review Notes:**
+- Nonce validation at mempool without sig verification — pragmatic tradeoff (forged envelopes fail at pipeline)
+- MAX_NONCE_GAP=16 prevents memory exhaustion from far-future nonces
+- Nonce ordering in pipeline ensures same-sender txs execute in correct sequence
+**Security Flags:** SEC-NONCE-002 (LOW): mempool skips sig verification
+
+### 2026-03-07 -- smart-contract-engineer -- aztibase-execution, aztibase-node
+**Task:** Sprint 011 Phase 1: Signed Transaction Envelope (Tasks 1-4)
+**Sprint:** Sprint 011, Phase 1
+**Git Ref:** pending
+**Files Changed:**
+- crates/aztibase-execution/src/tx.rs (NEW: SignedTx type, encode/decode, verify, sender_address, verify_and_route, verify_and_route_batch, +11 tests)
+- crates/aztibase-execution/src/lib.rs (pub mod tx, re-exports SignedTx, TxError, verify_and_route, verify_and_route_batch)
+- crates/aztibase-node/src/pipeline.rs (verify_and_route_batch integration, +2 tests)
+- crates/aztibase-node/src/integration.rs (all e2e tests updated to use signed envelopes)
+**Review Notes:**
+- Wire format: [0xAA][payload_len:u32 LE][payload][pubkey:32][sig:64], max 1 MiB
+- Ed25519 via ed25519-dalek with strict verification — no malleability risk
+- Sender address = BLAKE3(pubkey), cross-checked against TxKind.from field
+- Pipeline rejects unsigned txs and sender mismatches
+**Security Flags:** SEC-SIG-001 (LOW): Ed25519 strict verification confirmed safe
+
 ### 2026-03-07 -- security-engineer + project-lead -- all crates
 **Task:** Sprint 010 Phase 4: Security Review + Documentation (Tasks 13-15)
 **Sprint:** Sprint 010, Phase 4

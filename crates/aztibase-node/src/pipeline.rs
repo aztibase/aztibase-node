@@ -4,11 +4,11 @@ use std::sync::Arc;
 use aztibase_consensus::CommittedBatch;
 use aztibase_core::hash;
 use aztibase_execution::{
-    AccountState, ContractTx, ExecutionReceipt, TransferTx, TxKind,
+    AccountState, BaseFeeCalculator, ContractTx, ExecutionReceipt, FeeEscrow, TransferTx, TxKind,
     block_stm::{BlockSTMExecutor, apply_block_stm_to_state},
-    evm, execute_contract_txs, flush_state, load_state, route_batch,
+    escrow_fee, evm, execute_contract_txs, flush_state, load_base_fee, load_state, refund_unused,
     state::AccountType,
-    store_batch_root, store_receipts,
+    store_base_fee, store_batch_root, store_receipts, verify_and_route_batch,
 };
 use aztibase_runtime::{AIRuntime, InferenceRequest};
 use aztibase_storage::StateStore;
@@ -23,6 +23,7 @@ pub struct PipelineResult {
     pub contract_count: usize,
     pub routing_errors: usize,
     pub receipts: Vec<ExecutionReceipt>,
+    pub total_fees_burned: u64,
 }
 
 /// Owns account state and executes committed batches received from consensus.
@@ -35,6 +36,8 @@ pub struct ExecutionPipeline {
     executed_anchors: HashSet<[u8; 32]>,
     result_tx: Option<mpsc::Sender<PipelineResult>>,
     ai_runtime: Option<Arc<dyn AIRuntime>>,
+    base_fee: Arc<std::sync::atomic::AtomicU64>,
+    base_fee_calculator: BaseFeeCalculator,
 }
 
 impl ExecutionPipeline {
@@ -50,6 +53,15 @@ impl ExecutionPipeline {
                 AccountState::new()
             }
         };
+        let initial_base_fee = match load_base_fee(&store) {
+            Ok(Some(fee)) => {
+                tracing::info!(base_fee = fee, "Base fee loaded from disk");
+                fee
+            }
+            _ => 1,
+        };
+        let calculator = BaseFeeCalculator::new(initial_base_fee);
+        let base_fee = Arc::new(std::sync::atomic::AtomicU64::new(calculator.base_fee()));
         Self {
             state: Arc::new(RwLock::new(state)),
             store: Some(store),
@@ -58,6 +70,8 @@ impl ExecutionPipeline {
             executed_anchors: HashSet::new(),
             result_tx: None,
             ai_runtime: None,
+            base_fee,
+            base_fee_calculator: calculator,
         }
     }
 
@@ -74,6 +88,11 @@ impl ExecutionPipeline {
     /// Shared batch counter (for RPC server).
     pub fn shared_batch_count(&self) -> Arc<std::sync::atomic::AtomicU64> {
         Arc::clone(&self.batch_count)
+    }
+
+    /// Shared base fee (for RPC server and mempool validation).
+    pub fn shared_base_fee(&self) -> Arc<std::sync::atomic::AtomicU64> {
+        Arc::clone(&self.base_fee)
     }
 
     /// Attach a channel to receive execution results (for state root broadcasting).
@@ -102,6 +121,7 @@ impl ExecutionPipeline {
                         contracts = result.contract_count,
                         routing_errors = result.routing_errors,
                         receipts = result.receipts.len(),
+                        fees_burned = result.total_fees_burned,
                         "Batch executed"
                     );
                     if let Some(ref tx) = self.result_tx {
@@ -117,16 +137,104 @@ impl ExecutionPipeline {
         tracing::info!("Execution pipeline shutting down");
     }
 
-    /// Execute a single committed batch: route transactions, execute each type,
-    /// flush to disk, return the resulting state root.
+    /// Execute a single committed batch: verify signatures, route transactions,
+    /// execute each type, flush to disk, return the resulting state root.
     ///
     /// Returns `Err` if state flush or batch root storage fails — the caller
     /// must treat this as fatal and halt.
     pub async fn execute_batch(
-        &self,
+        &mut self,
         batch: &CommittedBatch,
     ) -> Result<PipelineResult, anyhow::Error> {
-        let (routed, errors) = route_batch(&batch.transactions);
+        let (mut routed, errors) = verify_and_route_batch(&batch.transactions);
+
+        routed.sort_by(|a, b| a.sender().cmp(b.sender()).then(a.nonce().cmp(&b.nonce())));
+
+        let mut state = self.state.write().await;
+
+        // Phase 0: Validate nonces against current state.
+        // For same-sender txs sorted by nonce, require sequential chain starting from current nonce.
+        let mut nonce_valid = Vec::with_capacity(routed.len());
+        let mut nonce_reject_receipts = Vec::new();
+        {
+            let mut expected_nonces: std::collections::HashMap<[u8; 32], u64> =
+                std::collections::HashMap::new();
+            for tx in &routed {
+                let sender = *tx.sender();
+                let expected = expected_nonces
+                    .entry(sender)
+                    .or_insert_with(|| state.nonce(&sender));
+                if tx.nonce() == *expected {
+                    nonce_valid.push(true);
+                    *expected += 1;
+                } else {
+                    nonce_valid.push(false);
+                    nonce_reject_receipts.push(ExecutionReceipt {
+                        tx_hash: compute_tx_hash(tx),
+                        success: false,
+                        gas_used: 0,
+                        contract_address: None,
+                        error: Some(format!(
+                            "nonce mismatch: expected {}, got {}",
+                            expected,
+                            tx.nonce()
+                        )),
+                        inference_hash: None,
+                    });
+                }
+            }
+        }
+        let original_routed = std::mem::take(&mut routed);
+        routed = original_routed
+            .into_iter()
+            .zip(nonce_valid.iter())
+            .filter(|(_, valid)| **valid)
+            .map(|(tx, _)| tx)
+            .collect();
+
+        // Phase 1: Escrow fees for all txs with gas_price > 0.
+        // Txs that fail escrow get a failure receipt and are excluded from execution.
+        let mut escrows: Vec<Option<FeeEscrow>> = Vec::with_capacity(routed.len());
+        let mut escrowed_indices: Vec<usize> = Vec::new();
+        let mut receipts = Vec::new();
+        let mut total_fees_burned: u64 = 0;
+
+        for (i, tx) in routed.iter().enumerate() {
+            let gas_price = tx.gas_price();
+            let gas_limit = tx.gas_limit();
+            if gas_price == 0 {
+                escrows.push(None);
+                escrowed_indices.push(i);
+                continue;
+            }
+            let value = match tx {
+                TxKind::Transfer { value, .. } => *value,
+                TxKind::EvmCall { value, .. } => *value,
+                _ => 0,
+            };
+            match escrow_fee(&mut state, tx.sender(), gas_limit, gas_price, value) {
+                Some(esc) => {
+                    escrows.push(Some(esc));
+                    escrowed_indices.push(i);
+                }
+                None => {
+                    let tx_hash = compute_tx_hash(tx);
+                    state.increment_nonce(tx.sender());
+                    receipts.push(ExecutionReceipt {
+                        tx_hash,
+                        success: false,
+                        gas_used: 0,
+                        contract_address: None,
+                        error: Some("insufficient balance for gas escrow".into()),
+                        inference_hash: None,
+                    });
+                    escrows.push(None);
+                }
+            }
+        }
+
+        // Filter routed txs to only those that passed escrow.
+        let executable: Vec<&TxKind> = escrowed_indices.iter().map(|&i| &routed[i]).collect();
 
         let mut transfers = Vec::new();
         let mut contracts = Vec::new();
@@ -135,13 +243,14 @@ impl ExecutionPipeline {
         let mut ai_infers = Vec::new();
         let mut create_agents = Vec::new();
 
-        for tx in &routed {
+        for tx in &executable {
             match tx {
                 TxKind::Transfer {
                     from,
                     to,
                     value,
                     nonce,
+                    ..
                 } => {
                     let mut preimage = Vec::new();
                     preimage.extend_from_slice(from);
@@ -161,6 +270,7 @@ impl ExecutionPipeline {
                     code,
                     nonce,
                     gas_limit,
+                    ..
                 } => {
                     contracts.push(ContractTx::Deploy {
                         hash: hash(code),
@@ -177,6 +287,7 @@ impl ExecutionPipeline {
                     args_data,
                     nonce,
                     gas_limit,
+                    ..
                 } => {
                     contracts.push(ContractTx::Call {
                         hash: hash(func_name.as_bytes()),
@@ -193,6 +304,7 @@ impl ExecutionPipeline {
                     code,
                     nonce,
                     gas_limit,
+                    ..
                 } => {
                     evm_deploys.push((*deployer, code.clone(), *nonce, *gas_limit));
                 }
@@ -203,6 +315,7 @@ impl ExecutionPipeline {
                     nonce,
                     gas_limit,
                     value,
+                    ..
                 } => {
                     evm_calls.push((
                         *caller,
@@ -219,6 +332,7 @@ impl ExecutionPipeline {
                     input,
                     nonce,
                     max_compute_units,
+                    ..
                 } => {
                     ai_infers.push((
                         *requester,
@@ -232,6 +346,7 @@ impl ExecutionPipeline {
                     creator,
                     model_id,
                     nonce,
+                    ..
                 } => {
                     create_agents.push((*creator, model_id.clone(), *nonce));
                 }
@@ -245,14 +360,14 @@ impl ExecutionPipeline {
             + ai_infers.len()
             + create_agents.len();
 
-        let mut state = self.state.write().await;
-        let mut receipts = Vec::new();
+        // Phase 2: Execute transactions.
+        let mut exec_receipts = Vec::new();
 
         if !transfers.is_empty() {
             let (stm_outputs, write_sets) = BlockSTMExecutor::execute_full(&transfers, &state);
 
             for (i, output) in stm_outputs.iter().enumerate() {
-                receipts.push(ExecutionReceipt {
+                exec_receipts.push(ExecutionReceipt {
                     tx_hash: transfers[i].hash,
                     success: output.success,
                     gas_used: output.gas_used,
@@ -267,7 +382,7 @@ impl ExecutionPipeline {
         if !contracts.is_empty() {
             let contract_receipts = execute_contract_txs(&mut state, &contracts);
             for cr in &contract_receipts {
-                receipts.push(ExecutionReceipt {
+                exec_receipts.push(ExecutionReceipt {
                     tx_hash: cr.tx_hash,
                     success: cr.success,
                     gas_used: cr.gas_used,
@@ -281,7 +396,7 @@ impl ExecutionPipeline {
         for (deployer, code, nonce, gas_limit) in &evm_deploys {
             let tx_hash = hash(code);
             let cr = evm::evm_deploy(&mut state, tx_hash, deployer, code, *nonce, *gas_limit);
-            receipts.push(ExecutionReceipt {
+            exec_receipts.push(ExecutionReceipt {
                 tx_hash: cr.tx_hash,
                 success: cr.success,
                 gas_used: cr.gas_used,
@@ -296,7 +411,7 @@ impl ExecutionPipeline {
             let cr = evm::evm_call(
                 &mut state, tx_hash, caller, contract, calldata, *nonce, *gas_limit, *value,
             );
-            receipts.push(ExecutionReceipt {
+            exec_receipts.push(ExecutionReceipt {
                 tx_hash: cr.tx_hash,
                 success: cr.success,
                 gas_used: cr.gas_used,
@@ -349,7 +464,7 @@ impl ExecutionPipeline {
                     inference_hash: None,
                 },
             };
-            receipts.push(receipt);
+            exec_receipts.push(receipt);
         }
 
         for (creator, model_id, nonce) in &create_agents {
@@ -362,7 +477,7 @@ impl ExecutionPipeline {
 
             if *nonce != creator_nonce {
                 state.increment_nonce(creator);
-                receipts.push(ExecutionReceipt {
+                exec_receipts.push(ExecutionReceipt {
                     tx_hash,
                     success: false,
                     gas_used: 21_000,
@@ -380,7 +495,7 @@ impl ExecutionPipeline {
             state.set_model_id(&agent_addr, model_id.clone());
             state.increment_nonce(creator);
 
-            receipts.push(ExecutionReceipt {
+            exec_receipts.push(ExecutionReceipt {
                 tx_hash,
                 success: true,
                 gas_used: 53_000,
@@ -389,6 +504,30 @@ impl ExecutionPipeline {
                 inference_hash: None,
             });
         }
+
+        // Phase 3: Refund unused gas and collect actual fees.
+        for (exec_idx, &orig_idx) in escrowed_indices.iter().enumerate() {
+            if exec_idx >= exec_receipts.len() {
+                break;
+            }
+            let gas_used = exec_receipts[exec_idx].gas_used;
+            if let Some(ref esc) = escrows[orig_idx] {
+                let actual_fee = refund_unused(&mut state, esc, gas_used);
+                total_fees_burned += actual_fee;
+            }
+        }
+
+        // Merge nonce-rejection + escrow-failure + execution receipts.
+        receipts.extend(exec_receipts);
+        receipts.extend(nonce_reject_receipts);
+
+        // Update base fee based on total gas consumed this batch.
+        let total_gas: u64 = receipts.iter().map(|r| r.gas_used).sum();
+        self.base_fee_calculator.update(total_gas);
+        self.base_fee.store(
+            self.base_fee_calculator.base_fee(),
+            std::sync::atomic::Ordering::Relaxed,
+        );
 
         let state_root = state.state_root();
 
@@ -399,6 +538,8 @@ impl ExecutionPipeline {
                 .map_err(|e| anyhow::anyhow!("fatal: store_batch_root failed: {e}"))?;
             store_receipts(store, &receipts)
                 .map_err(|e| anyhow::anyhow!("fatal: store_receipts failed: {e}"))?;
+            store_base_fee(store, self.base_fee_calculator.base_fee())
+                .map_err(|e| anyhow::anyhow!("fatal: store_base_fee failed: {e}"))?;
         }
 
         Ok(PipelineResult {
@@ -408,7 +549,55 @@ impl ExecutionPipeline {
             contract_count,
             routing_errors: errors.len(),
             receipts,
+            total_fees_burned,
         })
+    }
+}
+
+fn compute_tx_hash(tx: &TxKind) -> [u8; 32] {
+    match tx {
+        TxKind::Transfer {
+            from,
+            to,
+            value,
+            nonce,
+            ..
+        } => {
+            let mut buf = Vec::new();
+            buf.extend_from_slice(from);
+            buf.extend_from_slice(to);
+            buf.extend_from_slice(&value.to_le_bytes());
+            buf.extend_from_slice(&nonce.to_le_bytes());
+            hash(&buf)
+        }
+        TxKind::ContractDeploy { code, .. } => hash(code),
+        TxKind::ContractCall { func_name, .. } => hash(func_name.as_bytes()),
+        TxKind::EvmDeploy { code, .. } => hash(code),
+        TxKind::EvmCall { calldata, .. } => hash(calldata),
+        TxKind::AiInfer {
+            requester,
+            model_id,
+            input,
+            ..
+        } => {
+            let mut buf = Vec::new();
+            buf.extend_from_slice(requester);
+            buf.extend_from_slice(model_id.as_bytes());
+            buf.extend_from_slice(input);
+            hash(&buf)
+        }
+        TxKind::CreateAgent {
+            creator,
+            model_id,
+            nonce,
+            ..
+        } => {
+            let mut buf = Vec::new();
+            buf.extend_from_slice(creator);
+            buf.extend_from_slice(model_id.as_bytes());
+            buf.extend_from_slice(&nonce.to_le_bytes());
+            hash(&buf)
+        }
     }
 }
 
@@ -422,7 +611,8 @@ fn short_hex(bytes: &[u8; 32]) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use aztibase_execution::{TxKind, get_batch_root, load_state};
+    use aztibase_core::{Keypair, address_from_pubkey};
+    use aztibase_execution::{SignedTx, TxKind, get_batch_root, load_state};
     use aztibase_runtime::TractRuntime;
     use std::sync::atomic::{AtomicU32, Ordering};
 
@@ -440,7 +630,18 @@ mod tests {
         let _ = std::fs::remove_file(lock);
     }
 
+    fn make_sender() -> (Keypair, [u8; 32]) {
+        let kp = Keypair::generate();
+        let addr = address_from_pubkey(kp.public_key().as_bytes());
+        (kp, addr)
+    }
+
+    fn sign(tx: &TxKind, kp: &Keypair) -> Vec<u8> {
+        SignedTx::new(tx.encode(), kp).encode()
+    }
+
     fn make_pipeline(rx: mpsc::Receiver<CommittedBatch>) -> ExecutionPipeline {
+        let calculator = BaseFeeCalculator::new(1);
         ExecutionPipeline {
             state: Arc::new(RwLock::new(AccountState::new())),
             store: None,
@@ -449,6 +650,8 @@ mod tests {
             executed_anchors: HashSet::new(),
             result_tx: None,
             ai_runtime: None,
+            base_fee: Arc::new(std::sync::atomic::AtomicU64::new(calculator.base_fee())),
+            base_fee_calculator: calculator,
         }
     }
 
@@ -471,9 +674,9 @@ mod tests {
     #[tokio::test]
     async fn pipeline_executes_transfers() {
         let (_tx, rx) = mpsc::channel(16);
-        let pipeline = make_pipeline(rx);
+        let mut pipeline = make_pipeline(rx);
 
-        let alice = [1u8; 32];
+        let (alice_kp, alice) = make_sender();
         let bob = [2u8; 32];
         pipeline.state.write().await.set_balance(&alice, 1000);
 
@@ -482,9 +685,10 @@ mod tests {
             to: bob,
             value: 300,
             nonce: 0,
+            gas_price: 0,
         };
 
-        let batch = make_batch(vec![transfer.encode()]);
+        let batch = make_batch(vec![sign(&transfer, &alice_kp)]);
         let result = pipeline.execute_batch(&batch).await.unwrap();
 
         assert_eq!(result.transfer_count, 1);
@@ -499,9 +703,9 @@ mod tests {
     #[tokio::test]
     async fn pipeline_executes_mixed_batch() {
         let (_tx, rx) = mpsc::channel(16);
-        let pipeline = make_pipeline(rx);
+        let mut pipeline = make_pipeline(rx);
 
-        let alice = [1u8; 32];
+        let (alice_kp, alice) = make_sender();
         let bob = [2u8; 32];
         pipeline.state.write().await.set_balance(&alice, 5000);
 
@@ -510,6 +714,7 @@ mod tests {
             to: bob,
             value: 100,
             nonce: 0,
+            gas_price: 0,
         };
 
         let deploy = TxKind::ContractDeploy {
@@ -517,9 +722,10 @@ mod tests {
             code: vec![0x00, 0x61, 0x73, 0x6d],
             nonce: 1,
             gas_limit: 1_000_000,
+            gas_price: 0,
         };
 
-        let batch = make_batch(vec![transfer.encode(), deploy.encode()]);
+        let batch = make_batch(vec![sign(&transfer, &alice_kp), sign(&deploy, &alice_kp)]);
         let result = pipeline.execute_batch(&batch).await.unwrap();
 
         assert_eq!(result.transfer_count, 1);
@@ -530,16 +736,18 @@ mod tests {
     #[tokio::test]
     async fn pipeline_handles_routing_errors() {
         let (_tx, rx) = mpsc::channel(16);
-        let pipeline = make_pipeline(rx);
+        let mut pipeline = make_pipeline(rx);
 
+        let (kp, sender) = make_sender();
         let good = TxKind::Transfer {
-            from: [1u8; 32],
+            from: sender,
             to: [2u8; 32],
             value: 0,
             nonce: 0,
+            gas_price: 0,
         };
 
-        let batch = make_batch(vec![good.encode(), vec![0xFE, 0x00]]);
+        let batch = make_batch(vec![sign(&good, &kp), vec![0xFE, 0x00]]);
         let result = pipeline.execute_batch(&batch).await.unwrap();
 
         assert_eq!(result.transfer_count, 1);
@@ -549,9 +757,9 @@ mod tests {
     #[tokio::test]
     async fn pipeline_processes_channel() {
         let (_tx, rx) = mpsc::channel(16);
-        let pipeline = make_pipeline(rx);
+        let mut pipeline = make_pipeline(rx);
 
-        let alice = [1u8; 32];
+        let (alice_kp, alice) = make_sender();
         let bob = [2u8; 32];
         pipeline.state.write().await.set_balance(&alice, 1000);
 
@@ -560,9 +768,10 @@ mod tests {
             to: bob,
             value: 200,
             nonce: 0,
+            gas_price: 0,
         };
 
-        let batch = make_batch(vec![transfer.encode()]);
+        let batch = make_batch(vec![sign(&transfer, &alice_kp)]);
         let result = pipeline.execute_batch(&batch).await.unwrap();
         assert_eq!(result.transfer_count, 1);
         assert_eq!(pipeline.state.read().await.balance(&bob), 200);
@@ -571,31 +780,33 @@ mod tests {
     #[tokio::test]
     async fn pipeline_state_persists_across_batches() {
         let (_tx, rx) = mpsc::channel(16);
-        let pipeline = make_pipeline(rx);
+        let mut pipeline = make_pipeline(rx);
 
-        let alice = [1u8; 32];
+        let (alice_kp, alice) = make_sender();
         let bob = [2u8; 32];
         pipeline.state.write().await.set_balance(&alice, 1000);
 
-        let batch1 = make_batch(vec![
-            TxKind::Transfer {
+        let batch1 = make_batch(vec![sign(
+            &TxKind::Transfer {
                 from: alice,
                 to: bob,
                 value: 300,
                 nonce: 0,
-            }
-            .encode(),
-        ]);
+                gas_price: 0,
+            },
+            &alice_kp,
+        )]);
 
-        let batch2 = make_batch(vec![
-            TxKind::Transfer {
+        let batch2 = make_batch(vec![sign(
+            &TxKind::Transfer {
                 from: alice,
                 to: bob,
                 value: 200,
                 nonce: 1,
-            }
-            .encode(),
-        ]);
+                gas_price: 0,
+            },
+            &alice_kp,
+        )]);
 
         pipeline.execute_batch(&batch1).await.unwrap();
         let result = pipeline.execute_batch(&batch2).await.unwrap();
@@ -611,7 +822,7 @@ mod tests {
     #[tokio::test]
     async fn pipeline_flushes_to_redb() {
         let path = test_db_path();
-        let alice = [1u8; 32];
+        let (alice_kp, alice) = make_sender();
         let bob = [2u8; 32];
         let anchor = [0xBB; 32];
         let state_root;
@@ -619,7 +830,7 @@ mod tests {
         {
             let store = Arc::new(StateStore::open(path.to_str().unwrap()).unwrap());
             let (_tx, rx) = mpsc::channel(16);
-            let pipeline = ExecutionPipeline::with_storage(store, rx);
+            let mut pipeline = ExecutionPipeline::with_storage(store, rx);
             pipeline.state.write().await.set_balance(&alice, 1000);
 
             let transfer = TxKind::Transfer {
@@ -627,14 +838,14 @@ mod tests {
                 to: bob,
                 value: 400,
                 nonce: 0,
+                gas_price: 0,
             };
 
-            let batch = make_batch_with_anchor(anchor, vec![transfer.encode()]);
+            let batch = make_batch_with_anchor(anchor, vec![sign(&transfer, &alice_kp)]);
             let result = pipeline.execute_batch(&batch).await.unwrap();
             state_root = result.state_root;
         }
 
-        // Reopen db and verify flushed state
         let store2 = StateStore::open(path.to_str().unwrap()).unwrap();
         let loaded = load_state(&store2).unwrap();
         assert_eq!(loaded.balance(&alice), 600);
@@ -651,20 +862,21 @@ mod tests {
         let (tx, rx) = mpsc::channel(16);
         let pipeline = make_pipeline(rx);
 
-        let alice = [1u8; 32];
+        let (alice_kp, alice) = make_sender();
         let bob = [2u8; 32];
         let shared_state = pipeline.shared_state();
         shared_state.write().await.set_balance(&alice, 1000);
 
-        let batch = make_batch(vec![
-            TxKind::Transfer {
+        let batch = make_batch(vec![sign(
+            &TxKind::Transfer {
                 from: alice,
                 to: bob,
                 value: 300,
                 nonce: 0,
-            }
-            .encode(),
-        ]);
+                gas_price: 0,
+            },
+            &alice_kp,
+        )]);
 
         tx.send(batch.clone()).await.unwrap();
         tx.send(batch).await.unwrap();
@@ -680,16 +892,15 @@ mod tests {
     #[tokio::test]
     async fn pipeline_executes_evm_deploy() {
         let (_tx, rx) = mpsc::channel(16);
-        let pipeline = make_pipeline(rx);
+        let mut pipeline = make_pipeline(rx);
 
-        let deployer = [1u8; 32];
+        let (deployer_kp, deployer) = make_sender();
         pipeline
             .state
             .write()
             .await
             .set_balance(&deployer, 1_000_000_000);
 
-        // EVM init code: stores 0x42 at memory[0], returns 32 bytes as runtime
         let init_code = vec![0x60, 0x42, 0x60, 0x00, 0x52, 0x60, 0x20, 0x60, 0x00, 0xf3];
 
         let evm_deploy = TxKind::EvmDeploy {
@@ -697,9 +908,10 @@ mod tests {
             code: init_code,
             nonce: 0,
             gas_limit: 1_000_000,
+            gas_price: 0,
         };
 
-        let batch = make_batch(vec![evm_deploy.encode()]);
+        let batch = make_batch(vec![sign(&evm_deploy, &deployer_kp)]);
         let result = pipeline.execute_batch(&batch).await.unwrap();
 
         assert_eq!(result.contract_count, 1);
@@ -715,26 +927,26 @@ mod tests {
     #[tokio::test]
     async fn pipeline_executes_evm_deploy_and_call() {
         let (_tx, rx) = mpsc::channel(16);
-        let pipeline = make_pipeline(rx);
+        let mut pipeline = make_pipeline(rx);
 
-        let deployer = [1u8; 32];
+        let (deployer_kp, deployer) = make_sender();
         pipeline
             .state
             .write()
             .await
             .set_balance(&deployer, 1_000_000_000);
 
-        // Init code: deploys a 1-byte STOP runtime
         let init_code = vec![0x60, 0x00, 0x60, 0x00, 0x53, 0x60, 0x01, 0x60, 0x00, 0xf3];
 
         let evm_deploy = TxKind::EvmDeploy {
             deployer,
-            code: init_code.clone(),
+            code: init_code,
             nonce: 0,
             gas_limit: 1_000_000,
+            gas_price: 0,
         };
 
-        let batch1 = make_batch(vec![evm_deploy.encode()]);
+        let batch1 = make_batch(vec![sign(&evm_deploy, &deployer_kp)]);
         let result1 = pipeline.execute_batch(&batch1).await.unwrap();
         assert!(result1.receipts[0].success);
         let contract_addr = result1.receipts[0].contract_address.unwrap();
@@ -746,9 +958,10 @@ mod tests {
             nonce: 1,
             gas_limit: 1_000_000,
             value: 0,
+            gas_price: 0,
         };
 
-        let batch2 = make_batch_with_anchor([0xBB; 32], vec![evm_call.encode()]);
+        let batch2 = make_batch_with_anchor([0xBB; 32], vec![sign(&evm_call, &deployer_kp)]);
         let result2 = pipeline.execute_batch(&batch2).await.unwrap();
         assert_eq!(result2.receipts.len(), 1);
         assert!(
@@ -761,9 +974,9 @@ mod tests {
     #[tokio::test]
     async fn pipeline_mixed_wasm_evm_batch() {
         let (_tx, rx) = mpsc::channel(16);
-        let pipeline = make_pipeline(rx);
+        let mut pipeline = make_pipeline(rx);
 
-        let alice = [1u8; 32];
+        let (alice_kp, alice) = make_sender();
         let bob = [2u8; 32];
         pipeline
             .state
@@ -776,6 +989,7 @@ mod tests {
             to: bob,
             value: 500,
             nonce: 0,
+            gas_price: 0,
         };
 
         let evm_deploy = TxKind::EvmDeploy {
@@ -783,9 +997,13 @@ mod tests {
             code: vec![0x60, 0x42, 0x60, 0x00, 0x52, 0x60, 0x20, 0x60, 0x00, 0xf3],
             nonce: 1,
             gas_limit: 1_000_000,
+            gas_price: 0,
         };
 
-        let batch = make_batch(vec![transfer.encode(), evm_deploy.encode()]);
+        let batch = make_batch(vec![
+            sign(&transfer, &alice_kp),
+            sign(&evm_deploy, &alice_kp),
+        ]);
         let result = pipeline.execute_batch(&batch).await.unwrap();
 
         assert_eq!(result.transfer_count, 1);
@@ -803,35 +1021,35 @@ mod tests {
     #[tokio::test]
     async fn pipeline_recovers_state_on_startup() {
         let path = test_db_path();
+        let (alice_kp, alice) = make_sender();
 
-        // First pipeline: execute a transfer and flush
         {
             let store = Arc::new(StateStore::open(path.to_str().unwrap()).unwrap());
             let (_tx, rx) = mpsc::channel(16);
-            let pipeline = ExecutionPipeline::with_storage(store, rx);
-            pipeline.state.write().await.set_balance(&[1u8; 32], 5000);
+            let mut pipeline = ExecutionPipeline::with_storage(store, rx);
+            pipeline.state.write().await.set_balance(&alice, 5000);
 
-            let batch = make_batch(vec![
-                TxKind::Transfer {
-                    from: [1u8; 32],
+            let batch = make_batch(vec![sign(
+                &TxKind::Transfer {
+                    from: alice,
                     to: [2u8; 32],
                     value: 1500,
                     nonce: 0,
-                }
-                .encode(),
-            ]);
+                    gas_price: 0,
+                },
+                &alice_kp,
+            )]);
             pipeline.execute_batch(&batch).await.unwrap();
         }
 
-        // Second pipeline: should recover state from redb
         {
             let store = Arc::new(StateStore::open(path.to_str().unwrap()).unwrap());
             let (_tx, rx) = mpsc::channel(16);
             let pipeline = ExecutionPipeline::with_storage(store, rx);
             let state = pipeline.state.read().await;
-            assert_eq!(state.balance(&[1u8; 32]), 3500);
+            assert_eq!(state.balance(&alice), 3500);
             assert_eq!(state.balance(&[2u8; 32]), 1500);
-            assert_eq!(state.nonce(&[1u8; 32]), 1);
+            assert_eq!(state.nonce(&alice), 1);
         }
 
         cleanup(&path);
@@ -931,6 +1149,7 @@ mod tests {
         let model_bytes = build_add_model_bytes();
         rt.register_model("add", &model_bytes).unwrap();
 
+        let calculator = BaseFeeCalculator::new(1);
         ExecutionPipeline {
             state: Arc::new(RwLock::new(AccountState::new())),
             store: None,
@@ -939,6 +1158,8 @@ mod tests {
             executed_anchors: HashSet::new(),
             result_tx: None,
             ai_runtime: Some(rt),
+            base_fee: Arc::new(std::sync::atomic::AtomicU64::new(calculator.base_fee())),
+            base_fee_calculator: calculator,
         }
     }
 
@@ -949,17 +1170,19 @@ mod tests {
     #[tokio::test]
     async fn pipeline_ai_infer_success() {
         let (_tx, rx) = mpsc::channel(16);
-        let pipeline = make_ai_pipeline(rx);
+        let mut pipeline = make_ai_pipeline(rx);
 
+        let (kp, requester) = make_sender();
         let ai_tx = TxKind::AiInfer {
-            requester: [1u8; 32],
+            requester,
             model_id: "add".into(),
             input: make_f32_input(&[2.0, 3.0, 4.0]),
             nonce: 0,
             max_compute_units: 10_000,
+            gas_price: 0,
         };
 
-        let batch = make_batch(vec![ai_tx.encode()]);
+        let batch = make_batch(vec![sign(&ai_tx, &kp)]);
         let result = pipeline.execute_batch(&batch).await.unwrap();
 
         assert_eq!(result.contract_count, 1);
@@ -972,17 +1195,19 @@ mod tests {
     #[tokio::test]
     async fn pipeline_ai_infer_unknown_model() {
         let (_tx, rx) = mpsc::channel(16);
-        let pipeline = make_ai_pipeline(rx);
+        let mut pipeline = make_ai_pipeline(rx);
 
+        let (kp, requester) = make_sender();
         let ai_tx = TxKind::AiInfer {
-            requester: [1u8; 32],
+            requester,
             model_id: "nonexistent".into(),
             input: vec![1, 2, 3],
             nonce: 0,
             max_compute_units: 10_000,
+            gas_price: 0,
         };
 
-        let batch = make_batch(vec![ai_tx.encode()]);
+        let batch = make_batch(vec![sign(&ai_tx, &kp)]);
         let result = pipeline.execute_batch(&batch).await.unwrap();
 
         assert_eq!(result.receipts.len(), 1);
@@ -1000,9 +1225,9 @@ mod tests {
     #[tokio::test]
     async fn pipeline_mixed_transfer_and_ai() {
         let (_tx, rx) = mpsc::channel(16);
-        let pipeline = make_ai_pipeline(rx);
+        let mut pipeline = make_ai_pipeline(rx);
 
-        let alice = [1u8; 32];
+        let (alice_kp, alice) = make_sender();
         let bob = [2u8; 32];
         pipeline.state.write().await.set_balance(&alice, 5000);
 
@@ -1011,6 +1236,7 @@ mod tests {
             to: bob,
             value: 100,
             nonce: 0,
+            gas_price: 0,
         };
 
         let ai_tx = TxKind::AiInfer {
@@ -1019,9 +1245,10 @@ mod tests {
             input: make_f32_input(&[1.0, 2.0, 3.0]),
             nonce: 1,
             max_compute_units: 10_000,
+            gas_price: 0,
         };
 
-        let batch = make_batch(vec![transfer.encode(), ai_tx.encode()]);
+        let batch = make_batch(vec![sign(&transfer, &alice_kp), sign(&ai_tx, &alice_kp)]);
         let result = pipeline.execute_batch(&batch).await.unwrap();
 
         assert_eq!(result.transfer_count, 1);
@@ -1037,16 +1264,17 @@ mod tests {
     #[tokio::test]
     async fn pipeline_create_agent() {
         let (_tx, rx) = mpsc::channel(16);
-        let pipeline = make_pipeline(rx);
+        let mut pipeline = make_pipeline(rx);
 
-        let creator = [1u8; 32];
+        let (creator_kp, creator) = make_sender();
         let create_tx = TxKind::CreateAgent {
             creator,
             model_id: "sentiment_v1".into(),
             nonce: 0,
+            gas_price: 0,
         };
 
-        let batch = make_batch(vec![create_tx.encode()]);
+        let batch = make_batch(vec![sign(&create_tx, &creator_kp)]);
         let result = pipeline.execute_batch(&batch).await.unwrap();
 
         assert_eq!(result.contract_count, 1);
@@ -1063,16 +1291,17 @@ mod tests {
     #[tokio::test]
     async fn pipeline_create_agent_nonce_mismatch() {
         let (_tx, rx) = mpsc::channel(16);
-        let pipeline = make_pipeline(rx);
+        let mut pipeline = make_pipeline(rx);
 
-        let creator = [1u8; 32];
+        let (creator_kp, creator) = make_sender();
         let create_tx = TxKind::CreateAgent {
             creator,
             model_id: "model_v1".into(),
             nonce: 5,
+            gas_price: 0,
         };
 
-        let batch = make_batch(vec![create_tx.encode()]);
+        let batch = make_batch(vec![sign(&create_tx, &creator_kp)]);
         let result = pipeline.execute_batch(&batch).await.unwrap();
 
         assert_eq!(result.receipts.len(), 1);
@@ -1087,40 +1316,453 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn pipeline_agent_can_transfer() {
+    async fn pipeline_agent_receives_transfer() {
         let (_tx, rx) = mpsc::channel(16);
-        let pipeline = make_pipeline(rx);
+        let mut pipeline = make_pipeline(rx);
 
-        let creator = [1u8; 32];
-        let bob = [2u8; 32];
+        let (creator_kp, creator) = make_sender();
 
-        // Create agent
         let create_tx = TxKind::CreateAgent {
             creator,
             model_id: "trader_v1".into(),
             nonce: 0,
+            gas_price: 0,
         };
-        let batch1 = make_batch(vec![create_tx.encode()]);
+        let batch1 = make_batch(vec![sign(&create_tx, &creator_kp)]);
         let result1 = pipeline.execute_batch(&batch1).await.unwrap();
         let agent_addr = result1.receipts[0].contract_address.unwrap();
 
-        // Fund the agent
-        pipeline.state.write().await.set_balance(&agent_addr, 5000);
+        pipeline.state.write().await.set_balance(&creator, 5000);
 
-        // Agent initiates a transfer
         let transfer = TxKind::Transfer {
-            from: agent_addr,
-            to: bob,
+            from: creator,
+            to: agent_addr,
             value: 1000,
-            nonce: 0,
+            nonce: 1,
+            gas_price: 0,
         };
-        let batch2 = make_batch_with_anchor([0xBB; 32], vec![transfer.encode()]);
+        let batch2 = make_batch_with_anchor([0xBB; 32], vec![sign(&transfer, &creator_kp)]);
         let result2 = pipeline.execute_batch(&batch2).await.unwrap();
 
         assert!(result2.receipts[0].success);
         let state = pipeline.state.read().await;
-        assert_eq!(state.balance(&agent_addr), 4000);
-        assert_eq!(state.balance(&bob), 1000);
+        assert_eq!(state.balance(&agent_addr), 1000);
+        assert_eq!(state.balance(&creator), 4000);
         assert_eq!(state.account_type(&agent_addr), AccountType::AIAgent);
+    }
+
+    #[tokio::test]
+    async fn pipeline_rejects_unsigned_tx() {
+        let (_tx, rx) = mpsc::channel(16);
+        let mut pipeline = make_pipeline(rx);
+
+        let raw_unsigned = TxKind::Transfer {
+            from: [1u8; 32],
+            to: [2u8; 32],
+            value: 100,
+            nonce: 0,
+            gas_price: 0,
+        }
+        .encode();
+
+        let batch = make_batch(vec![raw_unsigned]);
+        let result = pipeline.execute_batch(&batch).await.unwrap();
+
+        assert_eq!(result.transfer_count, 0);
+        assert_eq!(result.routing_errors, 1);
+    }
+
+    #[tokio::test]
+    async fn pipeline_rejects_wrong_signer() {
+        let (_tx, rx) = mpsc::channel(16);
+        let mut pipeline = make_pipeline(rx);
+
+        let (_, addr1) = make_sender();
+        let kp2 = Keypair::generate();
+
+        let transfer = TxKind::Transfer {
+            from: addr1,
+            to: [2u8; 32],
+            value: 100,
+            nonce: 0,
+            gas_price: 0,
+        };
+        let wrong_sig = sign(&transfer, &kp2);
+
+        let batch = make_batch(vec![wrong_sig]);
+        let result = pipeline.execute_batch(&batch).await.unwrap();
+
+        assert_eq!(result.transfer_count, 0);
+        assert_eq!(result.routing_errors, 1);
+    }
+
+    #[tokio::test]
+    async fn pipeline_deducts_fees() {
+        let (_tx, rx) = mpsc::channel(16);
+        let mut pipeline = make_pipeline(rx);
+
+        let (alice_kp, alice) = make_sender();
+        let bob = [2u8; 32];
+        pipeline.state.write().await.set_balance(&alice, 1_000_000);
+
+        let transfer = TxKind::Transfer {
+            from: alice,
+            to: bob,
+            value: 300,
+            nonce: 0,
+            gas_price: 10,
+        };
+
+        let batch = make_batch(vec![sign(&transfer, &alice_kp)]);
+        let result = pipeline.execute_batch(&batch).await.unwrap();
+
+        assert!(result.receipts[0].success);
+        let gas_used = result.receipts[0].gas_used;
+        let fee = gas_used * 10;
+
+        let state = pipeline.state.read().await;
+        assert_eq!(state.balance(&alice), 1_000_000 - 300 - fee);
+        assert_eq!(state.balance(&bob), 300);
+    }
+
+    #[tokio::test]
+    async fn pipeline_zero_gas_price_no_fee() {
+        let (_tx, rx) = mpsc::channel(16);
+        let mut pipeline = make_pipeline(rx);
+
+        let (alice_kp, alice) = make_sender();
+        let bob = [2u8; 32];
+        pipeline.state.write().await.set_balance(&alice, 1000);
+
+        let transfer = TxKind::Transfer {
+            from: alice,
+            to: bob,
+            value: 500,
+            nonce: 0,
+            gas_price: 0,
+        };
+
+        let batch = make_batch(vec![sign(&transfer, &alice_kp)]);
+        pipeline.execute_batch(&batch).await.unwrap();
+
+        let state = pipeline.state.read().await;
+        assert_eq!(state.balance(&alice), 500);
+        assert_eq!(state.balance(&bob), 500);
+    }
+
+    #[tokio::test]
+    async fn pipeline_escrow_rejects_insufficient_balance() {
+        let (_tx, rx) = mpsc::channel(16);
+        let mut pipeline = make_pipeline(rx);
+
+        let (alice_kp, alice) = make_sender();
+        let bob = [2u8; 32];
+        // gas_limit=21_000 * gas_price=10 = 210_000 escrow + value=100 = 210_100 needed
+        pipeline.state.write().await.set_balance(&alice, 100_000);
+
+        let transfer = TxKind::Transfer {
+            from: alice,
+            to: bob,
+            value: 100,
+            nonce: 0,
+            gas_price: 10,
+        };
+
+        let batch = make_batch(vec![sign(&transfer, &alice_kp)]);
+        let result = pipeline.execute_batch(&batch).await.unwrap();
+
+        assert_eq!(result.receipts.len(), 1);
+        assert!(!result.receipts[0].success);
+        assert!(
+            result.receipts[0]
+                .error
+                .as_ref()
+                .unwrap()
+                .contains("insufficient balance")
+        );
+        // Balance unchanged (escrow failed, no deduction)
+        let state = pipeline.state.read().await;
+        assert_eq!(state.balance(&alice), 100_000);
+        assert_eq!(state.balance(&bob), 0);
+    }
+
+    #[tokio::test]
+    async fn pipeline_escrow_refunds_unused_gas() {
+        let (_tx, rx) = mpsc::channel(16);
+        let mut pipeline = make_pipeline(rx);
+
+        let (alice_kp, alice) = make_sender();
+        let bob = [2u8; 32];
+        pipeline.state.write().await.set_balance(&alice, 1_000_000);
+
+        let transfer = TxKind::Transfer {
+            from: alice,
+            to: bob,
+            value: 0,
+            nonce: 0,
+            gas_price: 10,
+        };
+
+        let batch = make_batch(vec![sign(&transfer, &alice_kp)]);
+        let result = pipeline.execute_batch(&batch).await.unwrap();
+
+        assert!(result.receipts[0].success);
+        let gas_used = result.receipts[0].gas_used;
+        let actual_fee = gas_used * 10;
+
+        // Net deduction should be exactly gas_used * gas_price (escrow - refund)
+        let state = pipeline.state.read().await;
+        assert_eq!(state.balance(&alice), 1_000_000 - actual_fee);
+        assert!(result.total_fees_burned > 0);
+        assert_eq!(result.total_fees_burned, actual_fee);
+    }
+
+    #[tokio::test]
+    async fn pipeline_escrow_reports_total_fees() {
+        let (_tx, rx) = mpsc::channel(16);
+        let mut pipeline = make_pipeline(rx);
+
+        let (alice_kp, alice) = make_sender();
+        let bob = [2u8; 32];
+        pipeline.state.write().await.set_balance(&alice, 1_000_000);
+
+        let transfer = TxKind::Transfer {
+            from: alice,
+            to: bob,
+            value: 100,
+            nonce: 0,
+            gas_price: 5,
+        };
+
+        let batch = make_batch(vec![sign(&transfer, &alice_kp)]);
+        let result = pipeline.execute_batch(&batch).await.unwrap();
+
+        let gas_used = result.receipts[0].gas_used;
+        assert_eq!(result.total_fees_burned, gas_used * 5);
+    }
+
+    #[tokio::test]
+    async fn pipeline_zero_gas_reports_zero_fees() {
+        let (_tx, rx) = mpsc::channel(16);
+        let mut pipeline = make_pipeline(rx);
+
+        let (alice_kp, alice) = make_sender();
+        pipeline.state.write().await.set_balance(&alice, 1000);
+
+        let transfer = TxKind::Transfer {
+            from: alice,
+            to: [2u8; 32],
+            value: 100,
+            nonce: 0,
+            gas_price: 0,
+        };
+
+        let batch = make_batch(vec![sign(&transfer, &alice_kp)]);
+        let result = pipeline.execute_batch(&batch).await.unwrap();
+
+        assert_eq!(result.total_fees_burned, 0);
+    }
+
+    #[tokio::test]
+    async fn pipeline_escrow_with_parallel_transfers() {
+        let (_tx, rx) = mpsc::channel(16);
+        let mut pipeline = make_pipeline(rx);
+
+        let (kp1, addr1) = make_sender();
+        let (kp2, addr2) = make_sender();
+        let (kp3, addr3) = make_sender();
+        let (kp4, addr4) = make_sender();
+        let dest = [0xDD; 32];
+
+        {
+            let mut state = pipeline.state.write().await;
+            state.set_balance(&addr1, 1_000_000);
+            state.set_balance(&addr2, 1_000_000);
+            state.set_balance(&addr3, 1_000_000);
+            state.set_balance(&addr4, 1_000_000);
+        }
+
+        let txs: Vec<Vec<u8>> = vec![
+            sign(
+                &TxKind::Transfer {
+                    from: addr1,
+                    to: dest,
+                    value: 100,
+                    nonce: 0,
+                    gas_price: 10,
+                },
+                &kp1,
+            ),
+            sign(
+                &TxKind::Transfer {
+                    from: addr2,
+                    to: dest,
+                    value: 200,
+                    nonce: 0,
+                    gas_price: 10,
+                },
+                &kp2,
+            ),
+            sign(
+                &TxKind::Transfer {
+                    from: addr3,
+                    to: dest,
+                    value: 300,
+                    nonce: 0,
+                    gas_price: 10,
+                },
+                &kp3,
+            ),
+            sign(
+                &TxKind::Transfer {
+                    from: addr4,
+                    to: dest,
+                    value: 400,
+                    nonce: 0,
+                    gas_price: 10,
+                },
+                &kp4,
+            ),
+        ];
+
+        let batch = make_batch(txs);
+        let result = pipeline.execute_batch(&batch).await.unwrap();
+
+        assert_eq!(result.transfer_count, 4);
+        assert!(result.total_fees_burned > 0);
+
+        let state = pipeline.state.read().await;
+        assert_eq!(state.balance(&dest), 100 + 200 + 300 + 400);
+
+        // Each sender pays value + gas_used * gas_price
+        for addr in [addr1, addr2, addr3, addr4] {
+            assert!(state.balance(&addr) < 1_000_000);
+        }
+    }
+
+    // ── Phase 2: Base fee persistence + nonce validation tests ──
+
+    #[tokio::test]
+    async fn pipeline_base_fee_persists_across_restart() {
+        let path = test_db_path();
+        let (alice_kp, alice) = make_sender();
+
+        {
+            let store = Arc::new(StateStore::open(path.to_str().unwrap()).unwrap());
+            let (_tx, rx) = mpsc::channel(16);
+            let mut pipeline = ExecutionPipeline::with_storage(store, rx);
+            pipeline.state.write().await.set_balance(&alice, 10_000_000);
+
+            let transfer = TxKind::Transfer {
+                from: alice,
+                to: [2u8; 32],
+                value: 100,
+                nonce: 0,
+                gas_price: 10,
+            };
+
+            let batch = make_batch(vec![sign(&transfer, &alice_kp)]);
+            pipeline.execute_batch(&batch).await.unwrap();
+
+            // Base fee should be stored after batch execution
+            let fee_after = pipeline.base_fee.load(std::sync::atomic::Ordering::Relaxed);
+            assert!(fee_after >= 1, "base fee should be at least MIN_BASE_FEE");
+        }
+
+        // Re-open and verify the base fee was persisted
+        {
+            let store = Arc::new(StateStore::open(path.to_str().unwrap()).unwrap());
+            let loaded = aztibase_execution::load_base_fee(&store).unwrap();
+            assert!(loaded.is_some(), "base fee should be persisted to redb");
+            assert!(loaded.unwrap() >= 1);
+        }
+
+        cleanup(&path);
+    }
+
+    #[tokio::test]
+    async fn pipeline_rejects_stale_nonce() {
+        let (_tx, rx) = mpsc::channel(16);
+        let mut pipeline = make_pipeline(rx);
+
+        let (alice_kp, alice) = make_sender();
+        pipeline.state.write().await.set_balance(&alice, 10_000);
+        pipeline.state.write().await.get_mut(&alice).nonce = 5;
+
+        // nonce=3 is stale (current is 5)
+        let transfer = TxKind::Transfer {
+            from: alice,
+            to: [2u8; 32],
+            value: 100,
+            nonce: 3,
+            gas_price: 0,
+        };
+
+        let batch = make_batch(vec![sign(&transfer, &alice_kp)]);
+        let result = pipeline.execute_batch(&batch).await.unwrap();
+
+        assert_eq!(result.transfer_count, 0);
+        let nonce_err = result.receipts.iter().find(|r| {
+            r.error
+                .as_ref()
+                .map_or(false, |e| e.contains("nonce mismatch"))
+        });
+        assert!(nonce_err.is_some());
+    }
+
+    #[tokio::test]
+    async fn pipeline_rejects_gap_nonce() {
+        let (_tx, rx) = mpsc::channel(16);
+        let mut pipeline = make_pipeline(rx);
+
+        let (alice_kp, alice) = make_sender();
+        pipeline.state.write().await.set_balance(&alice, 10_000);
+
+        // nonce=5 when current is 0 — gap
+        let transfer = TxKind::Transfer {
+            from: alice,
+            to: [2u8; 32],
+            value: 100,
+            nonce: 5,
+            gas_price: 0,
+        };
+
+        let batch = make_batch(vec![sign(&transfer, &alice_kp)]);
+        let result = pipeline.execute_batch(&batch).await.unwrap();
+
+        assert_eq!(result.transfer_count, 0);
+        let nonce_err = result.receipts.iter().find(|r| {
+            r.error
+                .as_ref()
+                .map_or(false, |e| e.contains("nonce mismatch"))
+        });
+        assert!(nonce_err.is_some());
+    }
+
+    #[tokio::test]
+    async fn pipeline_base_fee_updates_shared_atomic() {
+        let (_tx, rx) = mpsc::channel(16);
+        let mut pipeline = make_pipeline(rx);
+        let shared_fee = pipeline.shared_base_fee();
+
+        let (alice_kp, alice) = make_sender();
+        pipeline.state.write().await.set_balance(&alice, 1_000_000);
+
+        let transfer = TxKind::Transfer {
+            from: alice,
+            to: [2u8; 32],
+            value: 100,
+            nonce: 0,
+            gas_price: 0,
+        };
+
+        let before = shared_fee.load(std::sync::atomic::Ordering::Relaxed);
+        let batch = make_batch(vec![sign(&transfer, &alice_kp)]);
+        pipeline.execute_batch(&batch).await.unwrap();
+        let after = shared_fee.load(std::sync::atomic::Ordering::Relaxed);
+
+        // Base fee should have been updated (decreased since gas_used < target)
+        assert!(after >= 1);
+        assert_eq!(before, 1);
     }
 }

@@ -3,7 +3,7 @@
 **Last Updated:** 2026-03-07
 **Updated By:** project-lead
 **Current Phase:** M4 -- Integration Testing + AI + Testnet (IN PROGRESS)
-**Current Sprint:** Sprint 010 -- COMPLETE (Rayon Parallelism + Gossipsub Hardening + Account Abstraction)
+**Current Sprint:** Sprint 011 -- COMPLETE (Transaction Signatures + Nonce Enforcement + Fee Market)
 
 ---
 
@@ -33,7 +33,7 @@
 - Build-phase tracking infrastructure (5 documents)
 - Implementation depth audit (Sprint 001, Task 7)
 - Reference repos cloned (MystiCeti, Sui, Lighthouse, rust-libp2p, redb)
-- cargo build + cargo test pass (315 tests, 0 failures)
+- cargo build + cargo test pass (353 tests, 0 failures)
 - Sprint 001 closed with retrospective
 - Sprint 002 closed: 24/24 tasks, 5 phases complete
 - Sprint 003 closed: 18/18 tasks, 4 phases complete
@@ -41,6 +41,7 @@
 - Sprint 005 closed: 21/21 tasks, 4 phases complete
 - Sprint 006 closed: 23/24 tasks (1 deferred), 4 phases complete
 - Sprint 007 complete: receipt store, EVM via revm, AI inference via tract
+- Sprint 011 complete: 15/15 tasks, 4 phases (signed tx envelopes, nonce enforcement, fee market, security review)
 - Sprint 010 complete: 15/15 tasks, 4 phases (rayon parallelism, gossipsub hardening, account abstraction, security review)
 - Sprint 009 complete: 16/16 tasks, 4 phases (Block-STM, state sync, EVM precompiles, security review)
 - Sprint 008 complete: 17/17 tasks, 4 phases (multi-node testnet, AI pipeline, tx pool, security review)
@@ -63,12 +64,16 @@
 | aztibase-node | PARTIAL | node-engineer | YES | YES |
 
 ### In Progress
-- Sprint 011 planning
+- Sprint 012 planning
 
 ### Blocked
 - Nothing currently blocked
 
 ### Recently Completed
+- Sprint 011 Phase 4: Security review — 0 ELEVATED, 2 MEDIUM documented, 6 LOW
+- Sprint 011 Phase 3: Fee market — gas_price on all TxKind variants, collect_fees, BaseFeeCalculator, escrow_fee/refund_unused, aztb_gasPrice + aztb_estimateGas RPC (19 new tests)
+- Sprint 011 Phase 2: Nonce enforcement — mempool insert_checked with MAX_NONCE_GAP, nonce-ordered batch execution (5 new tests)
+- Sprint 011 Phase 1: Signed tx envelopes — SignedTx type, Ed25519 wire format, verify_and_route pipeline integration (13 new tests)
 - Sprint 010 Phase 4: Security review — 0 ELEVATED, 0 MEDIUM, 6 LOW documented
 - Sprint 010 Phase 3: Account abstraction — AccountType enum, CreateAgent (0x07), aztb_getAccountType RPC, snapshot v2 (11 new tests)
 - Sprint 010 Phase 2: Gossipsub hardening — peer scoring, dedup cache, connection limits, message size limits (3 new tests)
@@ -94,7 +99,7 @@
 - Sprint 005 Phase 1: Consensus-to-execution wiring, TxKind routing, ExecutionPipeline
 
 ### Next Up
-1. Sprint 011: Transaction signatures, WebRTC transport, fee market, or Verkle trees
+1. Sprint 012: Pre-execution fee escrow, persistent base fee, WebRTC transport, or Verkle trees
 
 ---
 
