@@ -9,6 +9,7 @@ const PREFIX_CALL: u8 = 0x03;
 const PREFIX_EVM_DEPLOY: u8 = 0x04;
 const PREFIX_EVM_CALL: u8 = 0x05;
 const PREFIX_AI_INFER: u8 = 0x06;
+const PREFIX_CREATE_AGENT: u8 = 0x07;
 
 /// Maximum encoded transaction size (1 MB). Rejects oversized payloads before
 /// deserialization to prevent memory-bomb attacks via bincode length prefixes.
@@ -57,6 +58,11 @@ pub enum TxKind {
         nonce: u64,
         max_compute_units: u64,
     },
+    CreateAgent {
+        creator: Address,
+        model_id: String,
+        nonce: u64,
+    },
 }
 
 impl TxKind {
@@ -69,6 +75,7 @@ impl TxKind {
             TxKind::EvmDeploy { .. } => PREFIX_EVM_DEPLOY,
             TxKind::EvmCall { .. } => PREFIX_EVM_CALL,
             TxKind::AiInfer { .. } => PREFIX_AI_INFER,
+            TxKind::CreateAgent { .. } => PREFIX_CREATE_AGENT,
         };
         let payload = bincode::serialize(self).expect("TxKind serialization cannot fail");
         let mut buf = Vec::with_capacity(1 + payload.len());
@@ -85,6 +92,7 @@ impl TxKind {
             TxKind::EvmDeploy { .. } => PREFIX_EVM_DEPLOY,
             TxKind::EvmCall { .. } => PREFIX_EVM_CALL,
             TxKind::AiInfer { .. } => PREFIX_AI_INFER,
+            TxKind::CreateAgent { .. } => PREFIX_CREATE_AGENT,
         }
     }
 }
@@ -150,7 +158,7 @@ pub fn route_tx(raw: &[u8]) -> Result<TxKind, RoutingError> {
     let (&prefix, body) = raw.split_first().ok_or(RoutingError::EmptyPayload)?;
     match prefix {
         PREFIX_TRANSFER | PREFIX_DEPLOY | PREFIX_CALL | PREFIX_EVM_DEPLOY | PREFIX_EVM_CALL
-        | PREFIX_AI_INFER => {}
+        | PREFIX_AI_INFER | PREFIX_CREATE_AGENT => {}
         other => return Err(RoutingError::UnknownPrefix(other)),
     }
     let decoded: TxKind = bincode_options()
@@ -169,6 +177,11 @@ pub fn route_tx(raw: &[u8]) -> Result<TxKind, RoutingError> {
         return Err(RoutingError::InvalidFuncName(func_name.clone()));
     }
     if let TxKind::AiInfer { ref model_id, .. } = decoded
+        && !is_valid_func_name(model_id)
+    {
+        return Err(RoutingError::InvalidFuncName(model_id.clone()));
+    }
+    if let TxKind::CreateAgent { ref model_id, .. } = decoded
         && !is_valid_func_name(model_id)
     {
         return Err(RoutingError::InvalidFuncName(model_id.clone()));
@@ -423,6 +436,33 @@ mod tests {
         assert_eq!(encoded[0], PREFIX_AI_INFER);
         let decoded = route_tx(&encoded).unwrap();
         assert_eq!(decoded, tx);
+    }
+
+    #[test]
+    fn create_agent_roundtrip() {
+        let tx = TxKind::CreateAgent {
+            creator: [10u8; 32],
+            model_id: "sentiment_v1".into(),
+            nonce: 0,
+        };
+        let encoded = tx.encode();
+        assert_eq!(encoded[0], PREFIX_CREATE_AGENT);
+        let decoded = route_tx(&encoded).unwrap();
+        assert_eq!(decoded, tx);
+    }
+
+    #[test]
+    fn create_agent_empty_model_rejected() {
+        let tx = TxKind::CreateAgent {
+            creator: [10u8; 32],
+            model_id: "".into(),
+            nonce: 0,
+        };
+        let encoded = tx.encode();
+        assert!(matches!(
+            route_tx(&encoded),
+            Err(RoutingError::InvalidFuncName(_))
+        ));
     }
 
     #[test]

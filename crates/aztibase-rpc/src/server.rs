@@ -169,6 +169,7 @@ async fn dispatch(state: &RpcState, req: &JsonRpcRequest) -> JsonRpcResponse {
         "aztb_blockNumber" => handle_block_number(state, req).await,
         "aztb_getStateRoot" => handle_get_state_root(state, req).await,
         "aztb_getTransactionReceipt" => handle_get_transaction_receipt(state, req).await,
+        "aztb_getAccountType" => handle_get_account_type(state, req).await,
         _ => JsonRpcResponse::error(
             req.id.clone(),
             METHOD_NOT_FOUND,
@@ -282,6 +283,16 @@ async fn handle_get_state_root(state: &RpcState, req: &JsonRpcRequest) -> JsonRp
         req.id.clone(),
         serde_json::json!(format!("0x{}", hex::encode(root))),
     )
+}
+
+async fn handle_get_account_type(state: &RpcState, req: &JsonRpcRequest) -> JsonRpcResponse {
+    let address = match parse_address(&req.params) {
+        Ok(a) => a,
+        Err(e) => return JsonRpcResponse::error(req.id.clone(), INVALID_PARAMS, e),
+    };
+    let accounts = state.accounts.read().await;
+    let account_type = accounts.account_type(&address);
+    JsonRpcResponse::success(req.id.clone(), serde_json::json!(account_type.as_str()))
 }
 
 async fn handle_get_transaction_receipt(state: &RpcState, req: &JsonRpcRequest) -> JsonRpcResponse {
@@ -658,5 +669,27 @@ mod tests {
         let resp = rpc_call(&state, &body).await;
         assert_eq!(resp["error"]["code"], INVALID_PARAMS);
         cleanup(&path);
+    }
+
+    #[tokio::test]
+    async fn get_account_type_eoa() {
+        let (state, _rx) = test_state();
+        let addr_hex = hex::encode([0x01u8; 32]);
+        let body = format!(
+            r#"{{"jsonrpc":"2.0","method":"aztb_getAccountType","params":["0x{addr_hex}"],"id":1}}"#
+        );
+        let resp = rpc_call(&state, &body).await;
+        assert_eq!(resp["result"], "EOA");
+    }
+
+    #[tokio::test]
+    async fn get_account_type_contract() {
+        let (state, _rx) = test_state_with_accounts();
+        let addr_hex = hex::encode([0x01u8; 32]);
+        let body = format!(
+            r#"{{"jsonrpc":"2.0","method":"aztb_getAccountType","params":["0x{addr_hex}"],"id":1}}"#
+        );
+        let resp = rpc_call(&state, &body).await;
+        assert_eq!(resp["result"], "Contract");
     }
 }

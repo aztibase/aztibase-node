@@ -19,7 +19,7 @@ pub use snapshot::{
     SnapshotError, StateSnapshot, apply_snapshot, create_snapshot, deserialize_snapshot,
     serialize_snapshot, snapshot_hash,
 };
-pub use state::AccountState;
+pub use state::{AccountState, AccountType};
 pub use vm::{EngineConfig, ExecutionEngine, ExecutionResult};
 
 #[cfg(test)]

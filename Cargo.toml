@@ -87,6 +87,9 @@ axum = "0.8"
 # Async utilities
 futures = "0.3"
 
+# Parallelism
+rayon = "1.10"
+
 # Misc
 bytes = "1"
 hex = "0.4"

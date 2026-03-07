@@ -18,6 +18,24 @@ mod tests {
     }
 
     #[test]
+    fn gossipsub_config_values() {
+        let config = gossip::gossipsub_config().unwrap();
+        assert_eq!(
+            config.duplicate_cache_time(),
+            std::time::Duration::from_secs(gossip::DUPLICATE_CACHE_SECS)
+        );
+        assert_eq!(config.max_transmit_size(), gossip::MAX_TRANSMIT_SIZE);
+        assert_eq!(
+            config.max_messages_per_rpc(),
+            Some(gossip::MAX_MESSAGES_PER_RPC)
+        );
+        assert_eq!(
+            config.heartbeat_interval(),
+            std::time::Duration::from_millis(gossip::HEARTBEAT_MS)
+        );
+    }
+
+    #[test]
     fn aztibase_topics_count() {
         let topics = gossip::aztibase_topics();
         assert_eq!(topics.len(), 6);
@@ -38,8 +56,24 @@ mod tests {
         let _behaviour = discovery::kademlia_behaviour(peer_id);
     }
 
+    #[test]
+    fn peer_score_params_valid() {
+        let params = gossip::peer_score_params();
+        assert!(params.validate().is_ok());
+        assert_eq!(params.topics.len(), gossip::ALL_TOPICS.len());
+    }
+
+    #[test]
+    fn peer_score_thresholds_valid() {
+        let thresholds = gossip::peer_score_thresholds();
+        assert!(thresholds.validate().is_ok());
+        assert!(thresholds.gossip_threshold < 0.0);
+        assert!(thresholds.publish_threshold <= thresholds.gossip_threshold);
+        assert!(thresholds.graylist_threshold <= thresholds.publish_threshold);
+    }
+
     #[tokio::test]
-    async fn transport_creates() {
+    async fn transport_creates_with_signed_messages() {
         let config = TransportConfig::default();
         let transport = Libp2pTransport::new(config);
         assert!(transport.is_ok());

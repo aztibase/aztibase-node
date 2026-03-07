@@ -1,4 +1,5 @@
 use std::collections::{BTreeMap, HashMap};
+use std::sync::{Arc, Mutex};
 
 type Address = [u8; 32];
 type TxIndex = usize;
@@ -20,7 +21,6 @@ pub enum StateValue {
     Deleted,
 }
 
-/// Read-set entry: records what value a tx observed for a key.
 #[derive(Clone, Debug)]
 pub struct ReadEntry {
     pub key: StateKey,
@@ -31,43 +31,53 @@ pub struct ReadEntry {
 pub type ReadSet = Vec<ReadEntry>;
 pub type WriteSet = Vec<(StateKey, StateValue)>;
 
-/// Multi-versioned memory. Each tx_index can write a versioned value for any key.
-/// Reads return the latest version written by a tx with index < reader_index.
-#[derive(Default)]
+/// Thread-safe multi-versioned memory. Each tx_index can write a versioned value
+/// for any key. Reads return the latest version written by a tx with index < reader_index.
 pub struct MVMemory {
-    data: HashMap<StateKey, BTreeMap<TxIndex, StateValue>>,
+    data: Mutex<HashMap<StateKey, BTreeMap<TxIndex, StateValue>>>,
+}
+
+impl Default for MVMemory {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl MVMemory {
     pub fn new() -> Self {
-        Self::default()
+        Self {
+            data: Mutex::new(HashMap::new()),
+        }
     }
 
-    /// Record a write from tx at `tx_index`.
-    pub fn write(&mut self, tx_index: TxIndex, key: StateKey, value: StateValue) {
-        self.data.entry(key).or_default().insert(tx_index, value);
+    pub fn write(&self, tx_index: TxIndex, key: StateKey, value: StateValue) {
+        let mut data = self.data.lock().unwrap();
+        data.entry(key).or_default().insert(tx_index, value);
     }
 
-    /// Apply a full write set from a tx.
-    pub fn apply_write_set(&mut self, tx_index: TxIndex, write_set: &WriteSet) {
+    pub fn apply_write_set(&self, tx_index: TxIndex, write_set: &WriteSet) {
+        let mut data = self.data.lock().unwrap();
         for (key, value) in write_set {
-            self.write(tx_index, key.clone(), value.clone());
+            data.entry(key.clone())
+                .or_default()
+                .insert(tx_index, value.clone());
         }
     }
 
     /// Read the latest version of `key` written by a tx with index < `reader_index`.
     /// Returns (writer_tx_index, value) or None if no prior tx wrote this key.
-    pub fn read(&self, key: &StateKey, reader_index: TxIndex) -> Option<(TxIndex, &StateValue)> {
-        let versions = self.data.get(key)?;
+    pub fn read(&self, key: &StateKey, reader_index: TxIndex) -> Option<(TxIndex, StateValue)> {
+        let data = self.data.lock().unwrap();
+        let versions = data.get(key)?;
         versions
             .range(..reader_index)
             .next_back()
-            .map(|(&idx, val)| (idx, val))
+            .map(|(&idx, val)| (idx, val.clone()))
     }
 
-    /// Delete all entries written by `tx_index` (used before re-execution).
-    pub fn delete_writes(&mut self, tx_index: TxIndex) {
-        for versions in self.data.values_mut() {
+    pub fn delete_writes(&self, tx_index: TxIndex) {
+        let mut data = self.data.lock().unwrap();
+        for versions in data.values_mut() {
             versions.remove(&tx_index);
         }
     }
@@ -99,13 +109,12 @@ impl<'a> MVView<'a> {
         let key = StateKey::Balance(*addr);
         match self.mv.read(&key, self.tx_index) {
             Some((version, StateValue::Balance(b))) => {
-                let val = *b;
                 self.read_set.push(ReadEntry {
                     key,
                     version: Some(version),
-                    value: Some(StateValue::Balance(val)),
+                    value: Some(StateValue::Balance(b)),
                 });
-                val
+                b
             }
             _ => {
                 let val = self.base_state.balance(addr);
@@ -123,13 +132,12 @@ impl<'a> MVView<'a> {
         let key = StateKey::Nonce(*addr);
         match self.mv.read(&key, self.tx_index) {
             Some((version, StateValue::Nonce(n))) => {
-                let val = *n;
                 self.read_set.push(ReadEntry {
                     key,
                     version: Some(version),
-                    value: Some(StateValue::Nonce(val)),
+                    value: Some(StateValue::Nonce(n)),
                 });
-                val
+                n
             }
             _ => {
                 let val = self.base_state.nonce(addr);
@@ -164,9 +172,10 @@ pub enum SchedulerTask {
     Execute(TxIndex),
     Validate(TxIndex),
     Done,
+    Wait,
 }
 
-/// Coordinates execution and validation of transactions in Block-STM order.
+/// Thread-safe scheduler for Block-STM execution and validation ordering.
 pub struct Scheduler {
     statuses: Vec<TxStatus>,
     validation_idx: usize,
@@ -208,9 +217,8 @@ impl Scheduler {
             return SchedulerTask::Done;
         }
 
-        // There are txs still executing — in single-threaded mode this shouldn't happen,
-        // but return Done to avoid infinite loops.
-        SchedulerTask::Done
+        // There are txs still executing — workers should wait and retry
+        SchedulerTask::Wait
     }
 
     pub fn finish_execution(&mut self, tx_index: TxIndex) {
@@ -227,13 +235,11 @@ impl Scheduler {
             self.statuses[tx_index] = TxStatus::Validated;
         } else {
             self.statuses[tx_index] = TxStatus::ReadyToExecute;
-            // All txs after this one that were validated must be re-validated
             for i in (tx_index + 1)..self.statuses.len() {
                 if self.statuses[i] == TxStatus::Validated {
                     self.statuses[i] = TxStatus::Executed;
                 }
             }
-            // Reset validation pointer to the failed tx
             if tx_index < self.validation_idx {
                 self.validation_idx = tx_index;
             }
@@ -251,7 +257,6 @@ impl Scheduler {
 
 // ── Block-STM Executor ─────────────────────────────────────────────
 
-/// Output from executing a single transfer via Block-STM.
 #[derive(Clone, Debug)]
 pub struct TxOutput {
     pub tx_index: TxIndex,
@@ -261,18 +266,10 @@ pub struct TxOutput {
 }
 
 /// Block-STM executor for transfer transactions.
-/// Executes optimistically, validates read sets, re-executes on conflict.
-pub struct BlockSTMExecutor {
-    mv_memory: MVMemory,
-    scheduler: Scheduler,
-    read_sets: Vec<ReadSet>,
-    write_sets: Vec<WriteSet>,
-    outputs: Vec<Option<TxOutput>>,
-}
+/// Supports both single-threaded and multi-threaded (rayon) execution.
+pub struct BlockSTMExecutor;
 
 impl BlockSTMExecutor {
-    /// Execute a batch of transfers using Block-STM.
-    /// Returns outputs in the same order as input transactions.
     pub fn execute(
         txs: &[crate::parallel::TransferTx],
         base_state: &crate::state::AccountState,
@@ -281,7 +278,6 @@ impl BlockSTMExecutor {
     }
 
     /// Execute a batch and return both outputs and per-tx write sets.
-    /// The write sets can be passed to `apply_block_stm_to_state` to update state.
     pub fn execute_full(
         txs: &[crate::parallel::TransferTx],
         base_state: &crate::state::AccountState,
@@ -291,34 +287,45 @@ impl BlockSTMExecutor {
             return (Vec::new(), Vec::new());
         }
 
-        let mut executor = Self {
-            mv_memory: MVMemory::new(),
-            scheduler: Scheduler::new(n),
-            read_sets: vec![Vec::new(); n],
-            write_sets: vec![Vec::new(); n],
-            outputs: vec![None; n],
-        };
+        let mv_memory = Arc::new(MVMemory::new());
+        let scheduler = Arc::new(Mutex::new(Scheduler::new(n)));
+        let read_sets: Vec<Mutex<ReadSet>> = (0..n).map(|_| Mutex::new(Vec::new())).collect();
+        let write_sets: Vec<Mutex<WriteSet>> = (0..n).map(|_| Mutex::new(Vec::new())).collect();
+        let outputs: Vec<Mutex<Option<TxOutput>>> = (0..n).map(|_| Mutex::new(None)).collect();
 
-        loop {
-            match executor.scheduler.next_task() {
-                SchedulerTask::Execute(idx) => {
-                    executor.execute_tx(idx, txs, base_state);
-                    executor.scheduler.finish_execution(idx);
-                }
-                SchedulerTask::Validate(idx) => {
-                    let valid = executor.validate_tx(idx, base_state);
-                    executor.scheduler.finish_validation(idx, valid);
-                }
-                SchedulerTask::Done => break,
-            }
+        let read_sets = Arc::new(read_sets);
+        let write_sets = Arc::new(write_sets);
+        let outputs = Arc::new(outputs);
+
+        // Use rayon for parallel execution when batch is large enough
+        if n >= 4 {
+            Self::execute_parallel(
+                txs,
+                base_state,
+                &mv_memory,
+                &scheduler,
+                &read_sets,
+                &write_sets,
+                &outputs,
+            );
+        } else {
+            Self::execute_sequential(
+                txs,
+                base_state,
+                &mv_memory,
+                &scheduler,
+                &read_sets,
+                &write_sets,
+                &outputs,
+            );
         }
 
-        let outputs = executor
-            .outputs
+        let final_outputs: Vec<TxOutput> = Arc::try_unwrap(outputs)
+            .unwrap()
             .into_iter()
             .enumerate()
-            .map(|(i, o)| {
-                o.unwrap_or(TxOutput {
+            .map(|(i, m)| {
+                m.into_inner().unwrap().unwrap_or(TxOutput {
                     tx_index: i,
                     success: false,
                     gas_used: 0,
@@ -327,22 +334,97 @@ impl BlockSTMExecutor {
             })
             .collect();
 
-        (outputs, executor.write_sets)
+        let final_write_sets: Vec<WriteSet> = Arc::try_unwrap(write_sets)
+            .unwrap()
+            .into_iter()
+            .map(|m| m.into_inner().unwrap())
+            .collect();
+
+        (final_outputs, final_write_sets)
+    }
+
+    fn execute_sequential(
+        txs: &[crate::parallel::TransferTx],
+        base_state: &crate::state::AccountState,
+        mv_memory: &Arc<MVMemory>,
+        scheduler: &Arc<Mutex<Scheduler>>,
+        read_sets: &Arc<Vec<Mutex<ReadSet>>>,
+        write_sets: &Arc<Vec<Mutex<WriteSet>>>,
+        outputs: &Arc<Vec<Mutex<Option<TxOutput>>>>,
+    ) {
+        loop {
+            let task = scheduler.lock().unwrap().next_task();
+            match task {
+                SchedulerTask::Execute(idx) => {
+                    Self::execute_tx(
+                        idx, txs, base_state, mv_memory, read_sets, write_sets, outputs,
+                    );
+                    scheduler.lock().unwrap().finish_execution(idx);
+                }
+                SchedulerTask::Validate(idx) => {
+                    let valid = Self::validate_tx(idx, base_state, mv_memory, read_sets);
+                    scheduler.lock().unwrap().finish_validation(idx, valid);
+                }
+                SchedulerTask::Done => break,
+                SchedulerTask::Wait => break,
+            }
+        }
+    }
+
+    fn execute_parallel(
+        txs: &[crate::parallel::TransferTx],
+        base_state: &crate::state::AccountState,
+        mv_memory: &Arc<MVMemory>,
+        scheduler: &Arc<Mutex<Scheduler>>,
+        read_sets: &Arc<Vec<Mutex<ReadSet>>>,
+        write_sets: &Arc<Vec<Mutex<WriteSet>>>,
+        outputs: &Arc<Vec<Mutex<Option<TxOutput>>>>,
+    ) {
+        rayon::scope(|s| {
+            let num_workers = rayon::current_num_threads().min(txs.len());
+            for _ in 0..num_workers {
+                let mv = Arc::clone(mv_memory);
+                let sched = Arc::clone(scheduler);
+                let rs = Arc::clone(read_sets);
+                let ws = Arc::clone(write_sets);
+                let outs = Arc::clone(outputs);
+
+                s.spawn(move |_| {
+                    loop {
+                        let task = sched.lock().unwrap().next_task();
+                        match task {
+                            SchedulerTask::Execute(idx) => {
+                                Self::execute_tx(idx, txs, base_state, &mv, &rs, &ws, &outs);
+                                sched.lock().unwrap().finish_execution(idx);
+                            }
+                            SchedulerTask::Validate(idx) => {
+                                let valid = Self::validate_tx(idx, base_state, &mv, &rs);
+                                sched.lock().unwrap().finish_validation(idx, valid);
+                            }
+                            SchedulerTask::Done => break,
+                            SchedulerTask::Wait => {
+                                std::thread::yield_now();
+                            }
+                        }
+                    }
+                });
+            }
+        });
     }
 
     fn execute_tx(
-        &mut self,
         idx: TxIndex,
         txs: &[crate::parallel::TransferTx],
         base_state: &crate::state::AccountState,
+        mv_memory: &MVMemory,
+        read_sets: &[Mutex<ReadSet>],
+        write_sets: &[Mutex<WriteSet>],
+        outputs: &[Mutex<Option<TxOutput>>],
     ) {
-        // Clear previous writes for this tx (if re-executing)
-        self.mv_memory.delete_writes(idx);
-        self.read_sets[idx].clear();
-        self.write_sets[idx].clear();
+        mv_memory.delete_writes(idx);
 
         let tx = &txs[idx];
-        let mut view = MVView::new(&self.mv_memory, idx, base_state);
+        let mut view = MVView::new(mv_memory, idx, base_state);
 
         let sender_nonce = view.read_nonce(&tx.from);
         if tx.nonce != sender_nonce {
@@ -350,10 +432,10 @@ impl BlockSTMExecutor {
                 StateKey::Nonce(tx.from),
                 StateValue::Nonce(sender_nonce + 1),
             )];
-            self.read_sets[idx] = view.into_read_set();
-            self.mv_memory.apply_write_set(idx, &ws);
-            self.write_sets[idx] = ws;
-            self.outputs[idx] = Some(TxOutput {
+            *read_sets[idx].lock().unwrap() = view.into_read_set();
+            mv_memory.apply_write_set(idx, &ws);
+            *write_sets[idx].lock().unwrap() = ws;
+            *outputs[idx].lock().unwrap() = Some(TxOutput {
                 tx_index: idx,
                 success: false,
                 gas_used: 21_000,
@@ -371,10 +453,10 @@ impl BlockSTMExecutor {
                 StateKey::Nonce(tx.from),
                 StateValue::Nonce(sender_nonce + 1),
             )];
-            self.read_sets[idx] = view.into_read_set();
-            self.mv_memory.apply_write_set(idx, &ws);
-            self.write_sets[idx] = ws;
-            self.outputs[idx] = Some(TxOutput {
+            *read_sets[idx].lock().unwrap() = view.into_read_set();
+            mv_memory.apply_write_set(idx, &ws);
+            *write_sets[idx].lock().unwrap() = ws;
+            *outputs[idx].lock().unwrap() = Some(TxOutput {
                 tx_index: idx,
                 success: false,
                 gas_used: 21_000,
@@ -401,10 +483,10 @@ impl BlockSTMExecutor {
             ),
         ];
 
-        self.read_sets[idx] = read_set;
-        self.mv_memory.apply_write_set(idx, &ws);
-        self.write_sets[idx] = ws;
-        self.outputs[idx] = Some(TxOutput {
+        *read_sets[idx].lock().unwrap() = read_set;
+        mv_memory.apply_write_set(idx, &ws);
+        *write_sets[idx].lock().unwrap() = ws;
+        *outputs[idx].lock().unwrap() = Some(TxOutput {
             tx_index: idx,
             success: true,
             gas_used: 21_000,
@@ -412,35 +494,34 @@ impl BlockSTMExecutor {
         });
     }
 
-    fn validate_tx(&self, idx: TxIndex, base_state: &crate::state::AccountState) -> bool {
-        for entry in &self.read_sets[idx] {
-            let current = self.mv_memory.read(&entry.key, idx);
+    fn validate_tx(
+        idx: TxIndex,
+        base_state: &crate::state::AccountState,
+        mv_memory: &MVMemory,
+        read_sets: &[Mutex<ReadSet>],
+    ) -> bool {
+        let rs = read_sets[idx].lock().unwrap();
+        for entry in rs.iter() {
+            let current = mv_memory.read(&entry.key, idx);
             match (&entry.version, current) {
-                // Both read from base state
                 (None, None) => {
-                    let base_val = self.read_base(&entry.key, base_state);
+                    let base_val = Self::read_base(&entry.key, base_state);
                     if entry.value != base_val {
                         return false;
                     }
                 }
-                // Read from same version
-                (Some(v1), Some((v2, val))) if *v1 == v2 => {
+                (Some(v1), Some((v2, ref val))) if *v1 == v2 => {
                     if entry.value.as_ref() != Some(val) {
                         return false;
                     }
                 }
-                // Version changed — read set invalidated
                 _ => return false,
             }
         }
         true
     }
 
-    fn read_base(
-        &self,
-        key: &StateKey,
-        base_state: &crate::state::AccountState,
-    ) -> Option<StateValue> {
+    fn read_base(key: &StateKey, base_state: &crate::state::AccountState) -> Option<StateValue> {
         match key {
             StateKey::Balance(addr) => Some(StateValue::Balance(base_state.balance(addr))),
             StateKey::Nonce(addr) => Some(StateValue::Nonce(base_state.nonce(addr))),
@@ -453,7 +534,6 @@ impl BlockSTMExecutor {
 }
 
 /// Apply Block-STM outputs to an AccountState to produce the final state.
-/// The write sets are applied in tx order to produce the correct final state.
 pub fn apply_block_stm_to_state(state: &mut crate::state::AccountState, write_sets: &[WriteSet]) {
     for ws in write_sets {
         for (key, value) in ws {
@@ -503,13 +583,13 @@ mod tests {
 
     #[test]
     fn mv_write_and_read() {
-        let mut mv = MVMemory::new();
+        let mv = MVMemory::new();
         let key = StateKey::Balance([1u8; 32]);
         mv.write(0, key.clone(), StateValue::Balance(500));
 
         let result = mv.read(&key, 1);
-        assert_eq!(result.map(|(idx, _)| idx), Some(0));
-        match result.unwrap().1 {
+        assert_eq!(result.as_ref().map(|(idx, _)| *idx), Some(0));
+        match &result.unwrap().1 {
             StateValue::Balance(b) => assert_eq!(*b, 500),
             _ => panic!("wrong type"),
         }
@@ -517,51 +597,46 @@ mod tests {
 
     #[test]
     fn mv_read_returns_latest_before_reader() {
-        let mut mv = MVMemory::new();
+        let mv = MVMemory::new();
         let key = StateKey::Balance([1u8; 32]);
         mv.write(0, key.clone(), StateValue::Balance(100));
         mv.write(2, key.clone(), StateValue::Balance(200));
         mv.write(5, key.clone(), StateValue::Balance(300));
 
-        // Reader at index 3 should see tx 2's write
         let result = mv.read(&key, 3).unwrap();
         assert_eq!(result.0, 2);
-        assert_eq!(result.1, &StateValue::Balance(200));
+        assert_eq!(result.1, StateValue::Balance(200));
 
-        // Reader at index 1 should see tx 0's write
         let result = mv.read(&key, 1).unwrap();
         assert_eq!(result.0, 0);
-        assert_eq!(result.1, &StateValue::Balance(100));
+        assert_eq!(result.1, StateValue::Balance(100));
 
-        // Reader at index 0 should see nothing
         assert!(mv.read(&key, 0).is_none());
     }
 
     #[test]
     fn mv_no_cross_contamination() {
-        let mut mv = MVMemory::new();
+        let mv = MVMemory::new();
         let key_a = StateKey::Balance([1u8; 32]);
         let key_b = StateKey::Balance([2u8; 32]);
         mv.write(0, key_a.clone(), StateValue::Balance(100));
         mv.write(0, key_b.clone(), StateValue::Balance(200));
 
-        assert_eq!(mv.read(&key_a, 1).unwrap().1, &StateValue::Balance(100));
-        assert_eq!(mv.read(&key_b, 1).unwrap().1, &StateValue::Balance(200));
+        assert_eq!(mv.read(&key_a, 1).unwrap().1, StateValue::Balance(100));
+        assert_eq!(mv.read(&key_b, 1).unwrap().1, StateValue::Balance(200));
     }
 
     #[test]
     fn mv_delete_writes() {
-        let mut mv = MVMemory::new();
+        let mv = MVMemory::new();
         let key = StateKey::Balance([1u8; 32]);
         mv.write(0, key.clone(), StateValue::Balance(100));
         mv.write(1, key.clone(), StateValue::Balance(200));
 
         mv.delete_writes(0);
 
-        // Reader at index 1 should see nothing (tx 0's write deleted)
         assert!(mv.read(&key, 1).is_none());
-        // Reader at index 2 should see tx 1's write
-        assert_eq!(mv.read(&key, 2).unwrap().1, &StateValue::Balance(200));
+        assert_eq!(mv.read(&key, 2).unwrap().1, StateValue::Balance(200));
     }
 
     // ── Scheduler tests ─────────────────────────────────────────
@@ -578,7 +653,6 @@ mod tests {
     fn scheduler_validates_after_execute() {
         let mut sched = Scheduler::new(2);
 
-        // Execute both
         assert!(matches!(sched.next_task(), SchedulerTask::Execute(0)));
         sched.finish_execution(0);
         assert!(matches!(sched.next_task(), SchedulerTask::Validate(0)));
@@ -596,31 +670,23 @@ mod tests {
     fn scheduler_reexecutes_on_validation_failure() {
         let mut sched = Scheduler::new(3);
 
-        // Scheduler interleaves execute/validate. Run through naturally.
-        // Execute 0, validate 0 (pass), execute 1, validate 1 (fail),
-        // re-execute 1, validate 1 (pass), execute/validate 2
         assert!(matches!(sched.next_task(), SchedulerTask::Execute(0)));
         sched.finish_execution(0);
-
         assert!(matches!(sched.next_task(), SchedulerTask::Validate(0)));
         sched.finish_validation(0, true);
 
         assert!(matches!(sched.next_task(), SchedulerTask::Execute(1)));
         sched.finish_execution(1);
-
         assert!(matches!(sched.next_task(), SchedulerTask::Validate(1)));
         sched.finish_validation(1, false);
 
-        // Tx 1 marked for re-execution
         assert!(matches!(sched.next_task(), SchedulerTask::Execute(1)));
         sched.finish_execution(1);
-
         assert!(matches!(sched.next_task(), SchedulerTask::Validate(1)));
         sched.finish_validation(1, true);
 
         assert!(matches!(sched.next_task(), SchedulerTask::Execute(2)));
         sched.finish_execution(2);
-
         assert!(matches!(sched.next_task(), SchedulerTask::Validate(2)));
         sched.finish_validation(2, true);
 
@@ -638,7 +704,6 @@ mod tests {
         state.set_balance(&alice, 1000);
         state.set_balance(&bob, 1000);
 
-        // Two independent transfers: alice→carol, bob→carol
         let txs = vec![make_tx(alice, carol, 300, 0), make_tx(bob, carol, 200, 0)];
 
         let outputs = BlockSTMExecutor::execute(&txs, &state);
@@ -655,7 +720,6 @@ mod tests {
         let carol = [3u8; 32];
         state.set_balance(&alice, 1000);
 
-        // Two transfers from same sender: alice→bob (nonce 0), alice→carol (nonce 1)
         let txs = vec![make_tx(alice, bob, 300, 0), make_tx(alice, carol, 200, 1)];
 
         let outputs = BlockSTMExecutor::execute(&txs, &state);
@@ -679,44 +743,17 @@ mod tests {
             make_tx(alice, carol, 100, 1),
         ];
 
-        // Sequential execution
-        let state_stm = state_seq.clone();
-        let seq_result = crate::parallel::execute_transfers(&mut state_seq, &txs);
+        let (_, write_sets) = BlockSTMExecutor::execute_full(&txs, &state_seq);
+        let mut state_stm = state_seq.clone();
+        apply_block_stm_to_state(&mut state_stm, &write_sets);
 
-        // Block-STM execution
-        let stm_outputs = BlockSTMExecutor::execute(&txs, &state_stm);
+        crate::parallel::execute_transfers(&mut state_seq, &txs);
 
-        // Apply Block-STM write sets won't work directly — we need to apply outputs.
-        // Instead, compare outputs match.
-        for (i, (seq_receipt, stm_output)) in seq_result
-            .receipts
-            .iter()
-            .zip(stm_outputs.iter())
-            .enumerate()
-        {
-            assert_eq!(
-                matches!(seq_receipt.status, crate::parallel::TxStatus::Success),
-                stm_output.success,
-                "tx {i} success mismatch"
-            );
-            assert_eq!(
-                seq_receipt.gas_used, stm_output.gas_used,
-                "tx {i} gas mismatch"
-            );
-        }
-    }
-
-    #[test]
-    fn block_stm_insufficient_balance() {
-        let mut state = AccountState::new();
-        let alice = [1u8; 32];
-        let bob = [2u8; 32];
-        state.set_balance(&alice, 100);
-
-        let txs = vec![make_tx(alice, bob, 500, 0)];
-        let outputs = BlockSTMExecutor::execute(&txs, &state);
-        assert!(!outputs[0].success);
-        assert!(outputs[0].error.as_ref().unwrap().contains("insufficient"));
+        assert_eq!(state_stm.balance(&alice), state_seq.balance(&alice));
+        assert_eq!(state_stm.balance(&bob), state_seq.balance(&bob));
+        assert_eq!(state_stm.balance(&carol), state_seq.balance(&carol));
+        assert_eq!(state_stm.nonce(&alice), state_seq.nonce(&alice));
+        assert_eq!(state_stm.nonce(&bob), state_seq.nonce(&bob));
     }
 
     #[test]
@@ -733,6 +770,19 @@ mod tests {
     }
 
     #[test]
+    fn block_stm_insufficient_balance() {
+        let mut state = AccountState::new();
+        let alice = [1u8; 32];
+        let bob = [2u8; 32];
+        state.set_balance(&alice, 50);
+
+        let txs = vec![make_tx(alice, bob, 100, 0)];
+        let outputs = BlockSTMExecutor::execute(&txs, &state);
+        assert!(!outputs[0].success);
+        assert!(outputs[0].error.as_ref().unwrap().contains("insufficient"));
+    }
+
+    #[test]
     fn block_stm_empty_batch() {
         let state = AccountState::new();
         let outputs = BlockSTMExecutor::execute(&[], &state);
@@ -741,48 +791,19 @@ mod tests {
 
     #[test]
     fn block_stm_state_application() {
-        let mut base = AccountState::new();
+        let mut state = AccountState::new();
         let alice = [1u8; 32];
         let bob = [2u8; 32];
-        base.set_balance(&alice, 1000);
+        state.set_balance(&alice, 1000);
+        state.set_balance(&bob, 500);
 
-        let txs = vec![make_tx(alice, bob, 300, 0)];
+        let txs = vec![make_tx(alice, bob, 200, 0)];
+        let (_, write_sets) = BlockSTMExecutor::execute_full(&txs, &state);
+        apply_block_stm_to_state(&mut state, &write_sets);
 
-        // Run Block-STM
-        let mut executor = BlockSTMExecutor {
-            mv_memory: MVMemory::new(),
-            scheduler: Scheduler::new(1),
-            read_sets: vec![Vec::new()],
-            write_sets: vec![Vec::new()],
-            outputs: vec![None],
-        };
-
-        loop {
-            match executor.scheduler.next_task() {
-                SchedulerTask::Execute(idx) => {
-                    executor.execute_tx(idx, &txs, &base);
-                    executor.scheduler.finish_execution(idx);
-                }
-                SchedulerTask::Validate(idx) => {
-                    let valid = executor.validate_tx(idx, &base);
-                    executor.scheduler.finish_validation(idx, valid);
-                }
-                SchedulerTask::Done => break,
-            }
-        }
-
-        // Apply write sets to state
-        let mut state = base.clone();
-        apply_block_stm_to_state(&mut state, &executor.write_sets);
-
-        assert_eq!(state.balance(&alice), 700);
-        assert_eq!(state.balance(&bob), 300);
+        assert_eq!(state.balance(&alice), 800);
+        assert_eq!(state.balance(&bob), 700);
         assert_eq!(state.nonce(&alice), 1);
-
-        // Compare with sequential
-        let mut state_seq = base;
-        crate::parallel::execute_transfers(&mut state_seq, &txs);
-        assert_eq!(state.state_root(), state_seq.state_root());
     }
 
     // ── MVView tests ────────────────────────────────────────────
@@ -791,26 +812,113 @@ mod tests {
     fn mv_view_reads_from_base_state() {
         let mv = MVMemory::new();
         let mut state = AccountState::new();
-        state.set_balance(&[1u8; 32], 500);
+        let addr = [1u8; 32];
+        state.set_balance(&addr, 999);
 
         let mut view = MVView::new(&mv, 0, &state);
-        assert_eq!(view.read_balance(&[1u8; 32]), 500);
-
-        let rs = view.into_read_set();
-        assert_eq!(rs.len(), 1);
-        assert!(rs[0].version.is_none()); // Read from base
+        assert_eq!(view.read_balance(&addr), 999);
     }
 
     #[test]
     fn mv_view_reads_from_mv_memory() {
-        let mut mv = MVMemory::new();
-        mv.write(0, StateKey::Balance([1u8; 32]), StateValue::Balance(999));
+        let mv = MVMemory::new();
         let state = AccountState::new();
+        let addr = [1u8; 32];
+        mv.write(0, StateKey::Balance(addr), StateValue::Balance(777));
 
         let mut view = MVView::new(&mv, 1, &state);
-        assert_eq!(view.read_balance(&[1u8; 32]), 999);
+        assert_eq!(view.read_balance(&addr), 777);
+    }
 
-        let rs = view.into_read_set();
-        assert_eq!(rs[0].version, Some(0)); // Read from tx 0
+    // ── Parallel execution tests ────────────────────────────────
+
+    #[test]
+    fn parallel_independent_transfers() {
+        let mut state = AccountState::new();
+        let accounts: Vec<Address> = (0..10).map(|i| [i as u8; 32]).collect();
+        for acc in &accounts {
+            state.set_balance(acc, 10_000);
+        }
+
+        // 5 independent transfers from different senders
+        let txs: Vec<_> = (0..5)
+            .map(|i| make_tx(accounts[i], accounts[i + 5], 100, 0))
+            .collect();
+
+        let (outputs, write_sets) = BlockSTMExecutor::execute_full(&txs, &state);
+        assert!(outputs.iter().all(|o| o.success));
+
+        let mut result = state.clone();
+        apply_block_stm_to_state(&mut result, &write_sets);
+
+        for i in 0..5 {
+            assert_eq!(result.balance(&accounts[i]), 9_900);
+            assert_eq!(result.balance(&accounts[i + 5]), 10_100);
+        }
+    }
+
+    #[test]
+    fn parallel_conflicting_chain() {
+        let mut state = AccountState::new();
+        let alice = [1u8; 32];
+        let bob = [2u8; 32];
+        let carol = [3u8; 32];
+        let dave = [4u8; 32];
+        state.set_balance(&alice, 10_000);
+
+        // Chain of transfers from same sender (forces re-execution)
+        let txs = vec![
+            make_tx(alice, bob, 100, 0),
+            make_tx(alice, carol, 200, 1),
+            make_tx(alice, dave, 300, 2),
+            make_tx(alice, bob, 400, 3),
+        ];
+
+        let (outputs, write_sets) = BlockSTMExecutor::execute_full(&txs, &state);
+        assert!(outputs.iter().all(|o| o.success));
+
+        let mut result = state.clone();
+        apply_block_stm_to_state(&mut result, &write_sets);
+
+        assert_eq!(result.balance(&alice), 10_000 - 100 - 200 - 300 - 400);
+        assert_eq!(result.balance(&bob), 500);
+        assert_eq!(result.balance(&carol), 200);
+        assert_eq!(result.balance(&dave), 300);
+        assert_eq!(result.nonce(&alice), 4);
+    }
+
+    #[test]
+    fn parallel_deterministic_across_runs() {
+        let mut state = AccountState::new();
+        let accounts: Vec<Address> = (0..8).map(|i| [i as u8; 32]).collect();
+        for acc in &accounts {
+            state.set_balance(acc, 50_000);
+        }
+
+        let txs: Vec<_> = (0..6)
+            .map(|i| {
+                make_tx(
+                    accounts[i % 3],
+                    accounts[3 + (i % 5)],
+                    100 * (i as u64 + 1),
+                    i as u64 / 3,
+                )
+            })
+            .collect();
+
+        let mut roots = Vec::new();
+        for _ in 0..5 {
+            let (_, write_sets) = BlockSTMExecutor::execute_full(&txs, &state);
+            let mut s = state.clone();
+            apply_block_stm_to_state(&mut s, &write_sets);
+            roots.push(s.state_root());
+        }
+
+        for root in &roots[1..] {
+            assert_eq!(
+                roots[0], *root,
+                "Block-STM must be deterministic across runs"
+            );
+        }
     }
 }

@@ -3,7 +3,7 @@
 **Last Updated:** 2026-03-07
 **Updated By:** project-lead
 **Current Phase:** M4 -- Integration Testing + AI + Testnet (IN PROGRESS)
-**Current Sprint:** Sprint 009 -- COMPLETE (Parallel Execution + State Sync + EVM Precompiles)
+**Current Sprint:** Sprint 010 -- COMPLETE (Rayon Parallelism + Gossipsub Hardening + Account Abstraction)
 
 ---
 
@@ -33,7 +33,7 @@
 - Build-phase tracking infrastructure (5 documents)
 - Implementation depth audit (Sprint 001, Task 7)
 - Reference repos cloned (MystiCeti, Sui, Lighthouse, rust-libp2p, redb)
-- cargo build + cargo test pass (298 tests, 0 failures)
+- cargo build + cargo test pass (315 tests, 0 failures)
 - Sprint 001 closed with retrospective
 - Sprint 002 closed: 24/24 tasks, 5 phases complete
 - Sprint 003 closed: 18/18 tasks, 4 phases complete
@@ -41,6 +41,7 @@
 - Sprint 005 closed: 21/21 tasks, 4 phases complete
 - Sprint 006 closed: 23/24 tasks (1 deferred), 4 phases complete
 - Sprint 007 complete: receipt store, EVM via revm, AI inference via tract
+- Sprint 010 complete: 15/15 tasks, 4 phases (rayon parallelism, gossipsub hardening, account abstraction, security review)
 - Sprint 009 complete: 16/16 tasks, 4 phases (Block-STM, state sync, EVM precompiles, security review)
 - Sprint 008 complete: 17/17 tasks, 4 phases (multi-node testnet, AI pipeline, tx pool, security review)
   - Phase 1: multi-node testnet (wire format, vertex routing, state broadcast, convergence test)
@@ -62,12 +63,16 @@
 | aztibase-node | PARTIAL | node-engineer | YES | YES |
 
 ### In Progress
-- Sprint 010 planning
+- Sprint 011 planning
 
 ### Blocked
 - Nothing currently blocked
 
 ### Recently Completed
+- Sprint 010 Phase 4: Security review — 0 ELEVATED, 0 MEDIUM, 6 LOW documented
+- Sprint 010 Phase 3: Account abstraction — AccountType enum, CreateAgent (0x07), aztb_getAccountType RPC, snapshot v2 (11 new tests)
+- Sprint 010 Phase 2: Gossipsub hardening — peer scoring, dedup cache, connection limits, message size limits (3 new tests)
+- Sprint 010 Phase 1: Rayon-parallel Block-STM — thread-safe MVMemory, Arc scheduler, rayon::scope workers (3 new tests)
 - Sprint 009 Phase 4: Security review — 2 ELEVATED fixed (SEC-SYNC-001/002), 8 MEDIUM, 5 LOW, cargo-audit clean (3 new tests)
 - Sprint 009 Phase 3: EVM precompiles — ecrecover, SHA-256, RIPEMD-160, identity, modexp via revm built-in pure-Rust impls (12 new tests)
 - Sprint 009 Phase 2: State sync protocol — StateSnapshot, SyncMessage (request/response), SnapshotAssembler, bootstrap from peer, main loop wiring (19 new tests)
@@ -89,7 +94,7 @@
 - Sprint 005 Phase 1: Consensus-to-execution wiring, TxKind routing, ExecutionPipeline
 
 ### Next Up
-1. Sprint 010: Rayon parallelism, WebRTC transport, AI compute marketplace stubs, bn128 precompiles
+1. Sprint 011: Transaction signatures, WebRTC transport, fee market, or Verkle trees
 
 ---
 

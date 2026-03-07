@@ -8,11 +8,25 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 ## [M4] -- Integration Testing + AI + Testnet (IN PROGRESS)
 
 ### Security
+- Sprint 010 security review: 0 ELEVATED, 0 MEDIUM, 6 LOW documented (SEC-STM-001/002, SEC-GS-001, SEC-AA-001/002/003) (2026-03-07)
 - SEC-SYNC-001 FIXED: `SnapshotAssembler::new()` now validates `total_chunks` (max 64) to prevent OOM DoS (2026-03-07)
 - SEC-SYNC-002 FIXED: `add_chunk()` validates chunk data size (max CHUNK_SIZE + 1024) to prevent memory exhaustion (2026-03-07)
 - Sprint 009 security review: 2 ELEVATED fixed, 8 MEDIUM (2 fixed, 6 documented), 5 LOW documented (2026-03-07)
 
 ### Added
+- Account abstraction: `AccountType` enum (EOA, Contract, AIAgent) with state-level type tracking (2026-03-07)
+- `TxKind::CreateAgent` (0x07): creates AI agent accounts with model_id binding (2026-03-07)
+- `aztb_getAccountType` RPC method: query account type by address (2026-03-07)
+- Auto-promotion: `set_code()` promotes EOA → Contract automatically (2026-03-07)
+- State root now includes account_type discriminant + model_id hash for integrity (2026-03-07)
+- Snapshot format v2: includes account_type and model_id fields (backward-incompatible with v1) (2026-03-07)
+- Persistence format extended with account_type + model_id (backward-compatible read of v1 records) (2026-03-07)
+- Gossipsub protocol hardening: duplicate cache 2min, max transmit 2MiB, heartbeat 500ms, max 100 msgs/RPC (2026-03-07)
+- Gossipsub peer scoring: per-topic scoring for all 6 topics, behaviour penalties, IP colocation penalty (2026-03-07)
+- Connection limits: max 50 established connections, max 2 per peer, warnings on denied connections (2026-03-07)
+- Block-STM parallel execution via rayon: thread-safe MVMemory, Arc-wrapped scheduler, rayon::scope worker pool (2026-03-07)
+- Parallel threshold: batches >= 4 txs execute in parallel, smaller batches sequential (2026-03-07)
+- SchedulerTask::Wait variant for multi-threaded worker coordination (2026-03-07)
 - EVM precompiles: ecrecover (0x01), SHA-256 (0x02), RIPEMD-160 (0x03), identity (0x04), modexp (0x05) via revm built-in pure-Rust implementations (2026-03-07)
 - Precompile verification: 12 tests confirm all 5 precompiles work through deployed-contract STATICCALL path (2026-03-07)
 - bn128/KZG precompiles excluded (feature-gated C deps) — deferred to Sprint 010 (2026-03-07)

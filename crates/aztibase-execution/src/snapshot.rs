@@ -1,9 +1,9 @@
 use serde::{Deserialize, Serialize};
 
-use crate::state::AccountState;
+use crate::state::{AccountState, AccountType};
 use aztibase_core::hash;
 
-const SNAPSHOT_VERSION: u8 = 1;
+const SNAPSHOT_VERSION: u8 = 2;
 const MAX_SNAPSHOT_SIZE: usize = 64 * 1024 * 1024; // 64 MiB
 
 type Address = [u8; 32];
@@ -15,6 +15,8 @@ struct AccountEntry {
     nonce: u64,
     code: Vec<u8>,
     storage: Vec<(Vec<u8>, Vec<u8>)>,
+    account_type: u8,
+    model_id: Option<String>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -52,6 +54,8 @@ pub fn create_snapshot(state: &AccountState, batch_index: u64) -> StateSnapshot 
                 .iter()
                 .map(|(k, v)| (k.clone(), v.clone()))
                 .collect(),
+            account_type: acct.account_type.discriminant(),
+            model_id: acct.model_id.clone(),
         })
         .collect();
 
@@ -93,6 +97,13 @@ pub fn apply_snapshot(snapshot: &StateSnapshot) -> Result<AccountState, Snapshot
         if !entry.code.is_empty() {
             acct.code = entry.code.clone();
         }
+        acct.account_type = match entry.account_type {
+            0 => AccountType::EOA,
+            1 => AccountType::Contract,
+            2 => AccountType::AIAgent,
+            _ => AccountType::EOA,
+        };
+        acct.model_id = entry.model_id.clone();
         for (k, v) in &entry.storage {
             acct.storage.insert(k.clone(), v.clone());
         }

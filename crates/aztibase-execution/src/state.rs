@@ -4,12 +4,40 @@ use aztibase_core::hash;
 
 type Address = [u8; 32];
 
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub enum AccountType {
+    #[default]
+    EOA,
+    Contract,
+    AIAgent,
+}
+
+impl AccountType {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            AccountType::EOA => "EOA",
+            AccountType::Contract => "Contract",
+            AccountType::AIAgent => "AIAgent",
+        }
+    }
+
+    pub fn discriminant(&self) -> u8 {
+        match self {
+            AccountType::EOA => 0,
+            AccountType::Contract => 1,
+            AccountType::AIAgent => 2,
+        }
+    }
+}
+
 #[derive(Clone, Debug, Default)]
 pub struct Account {
     pub balance: u64,
     pub nonce: u64,
     pub code: Vec<u8>,
     pub storage: BTreeMap<Vec<u8>, Vec<u8>>,
+    pub account_type: AccountType,
+    pub model_id: Option<String>,
 }
 
 /// In-memory account state store. Provides get/set operations on accounts
@@ -53,7 +81,31 @@ impl AccountState {
     }
 
     pub fn set_code(&mut self, address: &Address, code: Vec<u8>) {
-        self.get_mut(address).code = code;
+        let acct = self.get_mut(address);
+        acct.code = code;
+        if acct.account_type == AccountType::EOA {
+            acct.account_type = AccountType::Contract;
+        }
+    }
+
+    pub fn account_type(&self, address: &Address) -> AccountType {
+        self.accounts
+            .get(address)
+            .map_or(AccountType::EOA, |a| a.account_type.clone())
+    }
+
+    pub fn set_account_type(&mut self, address: &Address, account_type: AccountType) {
+        self.get_mut(address).account_type = account_type;
+    }
+
+    pub fn model_id(&self, address: &Address) -> Option<&str> {
+        self.accounts
+            .get(address)
+            .and_then(|a| a.model_id.as_deref())
+    }
+
+    pub fn set_model_id(&mut self, address: &Address, model_id: String) {
+        self.get_mut(address).model_id = Some(model_id);
     }
 
     pub fn code(&self, address: &Address) -> Option<&[u8]> {
@@ -94,7 +146,11 @@ impl AccountState {
                 buf.extend_from_slice(addr);
                 buf.extend_from_slice(&acct.balance.to_le_bytes());
                 buf.extend_from_slice(&acct.nonce.to_le_bytes());
+                buf.push(acct.account_type.discriminant());
                 buf.extend_from_slice(&hash(&acct.code));
+                if let Some(ref mid) = acct.model_id {
+                    buf.extend_from_slice(&hash(mid.as_bytes()));
+                }
                 for (k, v) in &acct.storage {
                     buf.extend_from_slice(&hash(k));
                     buf.extend_from_slice(&hash(v));
@@ -204,5 +260,43 @@ mod tests {
     fn empty_state_root() {
         let state = AccountState::new();
         assert_eq!(state.state_root(), [0u8; 32]);
+    }
+
+    #[test]
+    fn default_account_type_is_eoa() {
+        let state = AccountState::new();
+        assert_eq!(state.account_type(&[1u8; 32]), AccountType::EOA);
+    }
+
+    #[test]
+    fn set_code_promotes_to_contract() {
+        let mut state = AccountState::new();
+        let addr = [1u8; 32];
+        state.set_code(&addr, vec![0x00, 0x61]);
+        assert_eq!(state.account_type(&addr), AccountType::Contract);
+    }
+
+    #[test]
+    fn ai_agent_account_type_roundtrip() {
+        let mut state = AccountState::new();
+        let addr = [2u8; 32];
+        state.set_account_type(&addr, AccountType::AIAgent);
+        state.set_model_id(&addr, "sentiment_v1".into());
+        assert_eq!(state.account_type(&addr), AccountType::AIAgent);
+        assert_eq!(state.model_id(&addr), Some("sentiment_v1"));
+    }
+
+    #[test]
+    fn account_type_affects_state_root() {
+        let mut s1 = AccountState::new();
+        let mut s2 = AccountState::new();
+        let addr = [3u8; 32];
+
+        s1.set_balance(&addr, 100);
+        s2.set_balance(&addr, 100);
+        assert_eq!(s1.state_root(), s2.state_root());
+
+        s2.set_account_type(&addr, AccountType::AIAgent);
+        assert_ne!(s1.state_root(), s2.state_root());
     }
 }

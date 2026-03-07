@@ -6,8 +6,9 @@ use aztibase_core::hash;
 use aztibase_execution::{
     AccountState, ContractTx, ExecutionReceipt, TransferTx, TxKind,
     block_stm::{BlockSTMExecutor, apply_block_stm_to_state},
-    evm, execute_contract_txs, flush_state, load_state, route_batch, store_batch_root,
-    store_receipts,
+    evm, execute_contract_txs, flush_state, load_state, route_batch,
+    state::AccountType,
+    store_batch_root, store_receipts,
 };
 use aztibase_runtime::{AIRuntime, InferenceRequest};
 use aztibase_storage::StateStore;
@@ -132,6 +133,7 @@ impl ExecutionPipeline {
         let mut evm_deploys = Vec::new();
         let mut evm_calls = Vec::new();
         let mut ai_infers = Vec::new();
+        let mut create_agents = Vec::new();
 
         for tx in &routed {
             match tx {
@@ -226,12 +228,22 @@ impl ExecutionPipeline {
                         *max_compute_units,
                     ));
                 }
+                TxKind::CreateAgent {
+                    creator,
+                    model_id,
+                    nonce,
+                } => {
+                    create_agents.push((*creator, model_id.clone(), *nonce));
+                }
             }
         }
 
         let transfer_count = transfers.len();
-        let contract_count =
-            contracts.len() + evm_deploys.len() + evm_calls.len() + ai_infers.len();
+        let contract_count = contracts.len()
+            + evm_deploys.len()
+            + evm_calls.len()
+            + ai_infers.len()
+            + create_agents.len();
 
         let mut state = self.state.write().await;
         let mut receipts = Vec::new();
@@ -338,6 +350,44 @@ impl ExecutionPipeline {
                 },
             };
             receipts.push(receipt);
+        }
+
+        for (creator, model_id, nonce) in &create_agents {
+            let creator_nonce = state.nonce(creator);
+            let mut preimage = Vec::new();
+            preimage.extend_from_slice(creator);
+            preimage.extend_from_slice(model_id.as_bytes());
+            preimage.extend_from_slice(&nonce.to_le_bytes());
+            let tx_hash = hash(&preimage);
+
+            if *nonce != creator_nonce {
+                state.increment_nonce(creator);
+                receipts.push(ExecutionReceipt {
+                    tx_hash,
+                    success: false,
+                    gas_used: 21_000,
+                    contract_address: None,
+                    error: Some(format!(
+                        "nonce mismatch: expected {creator_nonce}, got {nonce}"
+                    )),
+                    inference_hash: None,
+                });
+                continue;
+            }
+
+            let agent_addr = aztibase_execution::compute_contract_address(creator, *nonce);
+            state.set_account_type(&agent_addr, AccountType::AIAgent);
+            state.set_model_id(&agent_addr, model_id.clone());
+            state.increment_nonce(creator);
+
+            receipts.push(ExecutionReceipt {
+                tx_hash,
+                success: true,
+                gas_used: 53_000,
+                contract_address: Some(agent_addr),
+                error: None,
+                inference_hash: None,
+            });
         }
 
         let state_root = state.state_root();
@@ -982,5 +1032,95 @@ mod tests {
         assert!(result.receipts[1].success);
         assert!(result.receipts[1].inference_hash.is_some());
         assert_eq!(pipeline.state.read().await.balance(&bob), 100);
+    }
+
+    #[tokio::test]
+    async fn pipeline_create_agent() {
+        let (_tx, rx) = mpsc::channel(16);
+        let pipeline = make_pipeline(rx);
+
+        let creator = [1u8; 32];
+        let create_tx = TxKind::CreateAgent {
+            creator,
+            model_id: "sentiment_v1".into(),
+            nonce: 0,
+        };
+
+        let batch = make_batch(vec![create_tx.encode()]);
+        let result = pipeline.execute_batch(&batch).await.unwrap();
+
+        assert_eq!(result.contract_count, 1);
+        assert_eq!(result.receipts.len(), 1);
+        assert!(result.receipts[0].success);
+        let agent_addr = result.receipts[0].contract_address.unwrap();
+
+        let state = pipeline.state.read().await;
+        assert_eq!(state.account_type(&agent_addr), AccountType::AIAgent);
+        assert_eq!(state.model_id(&agent_addr), Some("sentiment_v1"));
+        assert_eq!(state.nonce(&creator), 1);
+    }
+
+    #[tokio::test]
+    async fn pipeline_create_agent_nonce_mismatch() {
+        let (_tx, rx) = mpsc::channel(16);
+        let pipeline = make_pipeline(rx);
+
+        let creator = [1u8; 32];
+        let create_tx = TxKind::CreateAgent {
+            creator,
+            model_id: "model_v1".into(),
+            nonce: 5,
+        };
+
+        let batch = make_batch(vec![create_tx.encode()]);
+        let result = pipeline.execute_batch(&batch).await.unwrap();
+
+        assert_eq!(result.receipts.len(), 1);
+        assert!(!result.receipts[0].success);
+        assert!(
+            result.receipts[0]
+                .error
+                .as_ref()
+                .unwrap()
+                .contains("nonce mismatch")
+        );
+    }
+
+    #[tokio::test]
+    async fn pipeline_agent_can_transfer() {
+        let (_tx, rx) = mpsc::channel(16);
+        let pipeline = make_pipeline(rx);
+
+        let creator = [1u8; 32];
+        let bob = [2u8; 32];
+
+        // Create agent
+        let create_tx = TxKind::CreateAgent {
+            creator,
+            model_id: "trader_v1".into(),
+            nonce: 0,
+        };
+        let batch1 = make_batch(vec![create_tx.encode()]);
+        let result1 = pipeline.execute_batch(&batch1).await.unwrap();
+        let agent_addr = result1.receipts[0].contract_address.unwrap();
+
+        // Fund the agent
+        pipeline.state.write().await.set_balance(&agent_addr, 5000);
+
+        // Agent initiates a transfer
+        let transfer = TxKind::Transfer {
+            from: agent_addr,
+            to: bob,
+            value: 1000,
+            nonce: 0,
+        };
+        let batch2 = make_batch_with_anchor([0xBB; 32], vec![transfer.encode()]);
+        let result2 = pipeline.execute_batch(&batch2).await.unwrap();
+
+        assert!(result2.receipts[0].success);
+        let state = pipeline.state.read().await;
+        assert_eq!(state.balance(&agent_addr), 4000);
+        assert_eq!(state.balance(&bob), 1000);
+        assert_eq!(state.account_type(&agent_addr), AccountType::AIAgent);
     }
 }

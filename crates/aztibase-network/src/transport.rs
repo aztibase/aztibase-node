@@ -4,10 +4,13 @@ use std::time::Duration;
 use anyhow::{Context, Result};
 use futures::StreamExt;
 use libp2p::swarm::SwarmEvent;
-use libp2p::{Multiaddr, PeerId, Swarm, gossipsub, mdns};
+use libp2p::{Multiaddr, PeerId, Swarm, connection_limits, gossipsub, mdns};
+use tracing::warn;
 
 use crate::behaviour::{AztibaseBehaviour, AztibaseBehaviourEvent};
 use crate::{discovery, gossip};
+
+pub const MAX_ESTABLISHED_CONNECTIONS: u32 = 50;
 
 pub struct TransportConfig {
     pub idle_timeout_secs: u64,
@@ -55,19 +58,27 @@ impl Libp2pTransport {
 
                 let gs_config = gossip::gossipsub_config()
                     .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
-                let gs = gossipsub::Behaviour::new(
+                let mut gs = gossipsub::Behaviour::new(
                     gossipsub::MessageAuthenticity::Signed(key.clone()),
                     gs_config,
                 )
                 .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
 
+                gs.with_peer_score(gossip::peer_score_params(), gossip::peer_score_thresholds())
+                    .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
+
                 let kademlia = discovery::kademlia_behaviour(peer_id);
                 let mdns = discovery::mdns_behaviour(peer_id)?;
+
+                let conn_limits = connection_limits::ConnectionLimits::default()
+                    .with_max_established(Some(MAX_ESTABLISHED_CONNECTIONS))
+                    .with_max_established_per_peer(Some(2));
 
                 Ok(AztibaseBehaviour {
                     gossipsub: gs,
                     kademlia,
                     mdns,
+                    connection_limits: connection_limits::Behaviour::new(conn_limits),
                 })
             })
             .context("Failed to configure behaviour")?
@@ -180,6 +191,12 @@ impl Libp2pTransport {
                             .gossipsub
                             .remove_explicit_peer(&peer_id);
                     }
+                }
+                SwarmEvent::IncomingConnectionError { error, .. } => {
+                    warn!("Incoming connection denied: {error}");
+                }
+                SwarmEvent::OutgoingConnectionError { error, .. } => {
+                    warn!("Outgoing connection denied: {error}");
                 }
                 SwarmEvent::NewListenAddr { address, .. } => {
                     return NetworkEvent::Listening(address);

@@ -3,24 +3,75 @@ use aztibase_storage::{
     StorageResult, TableDef,
 };
 
-use crate::state::AccountState;
+use crate::state::{AccountState, AccountType};
 
 type Address = [u8; 32];
 
-fn serialize_account_record(balance: u64, nonce: u64) -> Vec<u8> {
-    let mut buf = Vec::with_capacity(16);
+fn serialize_account_record(
+    balance: u64,
+    nonce: u64,
+    account_type: &AccountType,
+    model_id: &Option<String>,
+) -> Vec<u8> {
+    let mut buf = Vec::with_capacity(32);
     buf.extend_from_slice(&balance.to_le_bytes());
     buf.extend_from_slice(&nonce.to_le_bytes());
+    buf.push(account_type.discriminant());
+    match model_id {
+        Some(mid) => {
+            let mid_bytes = mid.as_bytes();
+            buf.extend_from_slice(&(mid_bytes.len() as u16).to_le_bytes());
+            buf.extend_from_slice(mid_bytes);
+        }
+        None => {
+            buf.extend_from_slice(&0u16.to_le_bytes());
+        }
+    }
     buf
 }
 
-fn deserialize_account_record(data: &[u8]) -> Option<(u64, u64)> {
+struct AccountRecord {
+    balance: u64,
+    nonce: u64,
+    account_type: AccountType,
+    model_id: Option<String>,
+}
+
+fn deserialize_account_record(data: &[u8]) -> Option<AccountRecord> {
     if data.len() < 16 {
         return None;
     }
     let balance = u64::from_le_bytes(data[..8].try_into().ok()?);
     let nonce = u64::from_le_bytes(data[8..16].try_into().ok()?);
-    Some((balance, nonce))
+
+    let account_type = if data.len() > 16 {
+        match data[16] {
+            0 => AccountType::EOA,
+            1 => AccountType::Contract,
+            2 => AccountType::AIAgent,
+            _ => AccountType::EOA,
+        }
+    } else {
+        AccountType::EOA
+    };
+
+    let model_id = if data.len() > 19 {
+        let mid_len = u16::from_le_bytes(data[17..19].try_into().ok()?) as usize;
+        if mid_len > 0 && data.len() >= 19 + mid_len {
+            Some(String::from_utf8_lossy(&data[19..19 + mid_len]).into_owned())
+        } else {
+            None
+        }
+    } else {
+        None
+    };
+
+    Some(AccountRecord {
+        balance,
+        nonce,
+        account_type,
+        model_id,
+    })
 }
 
 fn storage_key(address: &Address, key: &[u8]) -> Vec<u8> {
@@ -36,7 +87,12 @@ pub fn flush_state(store: &StateStore, state: &AccountState) -> StorageResult<()
     let mut owned: Vec<(TableDef, Vec<u8>, Vec<u8>)> = Vec::new();
 
     for (address, account) in state.iter_accounts() {
-        let record = serialize_account_record(account.balance, account.nonce);
+        let record = serialize_account_record(
+            account.balance,
+            account.nonce,
+            &account.account_type,
+            &account.model_id,
+        );
         owned.push((ACCOUNTS_TABLE, address.to_vec(), record));
 
         if !account.code.is_empty() {
@@ -66,15 +122,17 @@ pub fn load_state(store: &StateStore) -> StorageResult<AccountState> {
             Ok(a) => a,
             Err(_) => continue,
         };
-        let (balance, nonce) = match deserialize_account_record(record_bytes) {
+        let record = match deserialize_account_record(record_bytes) {
             Some(r) => r,
             None => continue,
         };
 
-        if balance > 0 || nonce > 0 {
-            state.set_balance(&address, balance);
+        if record.balance > 0 || record.nonce > 0 || record.account_type != AccountType::EOA {
+            state.set_balance(&address, record.balance);
             let acct = state.get_mut(&address);
-            acct.nonce = nonce;
+            acct.nonce = record.nonce;
+            acct.account_type = record.account_type;
+            acct.model_id = record.model_id;
         }
     }
 

@@ -827,6 +827,7 @@ dependencies = [
  "aztibase-storage",
  "bincode",
  "bytes",
+ "rayon",
  "revm",
  "serde",
  "thiserror 2.0.18",

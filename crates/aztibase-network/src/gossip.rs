@@ -20,6 +20,11 @@ pub const ALL_TOPICS: &[&str] = &[
     TOPIC_VALIDATOR_ANNOUNCE,
 ];
 
+pub const MAX_TRANSMIT_SIZE: usize = 2 * 1024 * 1024; // 2 MiB
+pub const MAX_MESSAGES_PER_RPC: usize = 100;
+pub const HEARTBEAT_MS: u64 = 500;
+pub const DUPLICATE_CACHE_SECS: u64 = 120; // 2 minutes
+
 pub fn aztibase_topics() -> Vec<gossipsub::IdentTopic> {
     ALL_TOPICS
         .iter()
@@ -35,12 +40,57 @@ pub fn gossipsub_config() -> Result<gossipsub::Config, String> {
     };
 
     gossipsub::ConfigBuilder::default()
-        .heartbeat_interval(Duration::from_secs(1))
+        .heartbeat_interval(Duration::from_millis(HEARTBEAT_MS))
         .validation_mode(gossipsub::ValidationMode::Strict)
         .mesh_n(8)
         .mesh_n_low(6)
         .mesh_n_high(12)
         .message_id_fn(message_id_fn)
+        .duplicate_cache_time(Duration::from_secs(DUPLICATE_CACHE_SECS))
+        .max_transmit_size(MAX_TRANSMIT_SIZE)
+        .max_messages_per_rpc(Some(MAX_MESSAGES_PER_RPC))
         .build()
         .map_err(|e| format!("{e}"))
+}
+
+pub fn peer_score_params() -> gossipsub::PeerScoreParams {
+    let topic_params = gossipsub::TopicScoreParams {
+        topic_weight: 1.0,
+        time_in_mesh_weight: 0.5,
+        time_in_mesh_quantum: Duration::from_secs(1),
+        time_in_mesh_cap: 3600.0,
+        first_message_deliveries_weight: 1.0,
+        first_message_deliveries_decay: 0.5,
+        first_message_deliveries_cap: 2000.0,
+        mesh_message_deliveries_weight: -1.0,
+        mesh_message_deliveries_decay: 0.5,
+        mesh_message_deliveries_cap: 100.0,
+        mesh_message_deliveries_threshold: 20.0,
+        mesh_message_deliveries_window: Duration::from_millis(10),
+        mesh_message_deliveries_activation: Duration::from_secs(5),
+        mesh_failure_penalty_weight: -1.0,
+        mesh_failure_penalty_decay: 0.5,
+        invalid_message_deliveries_weight: -10.0,
+        invalid_message_deliveries_decay: 0.3,
+    };
+
+    let mut params = gossipsub::PeerScoreParams::default();
+    for topic_str in ALL_TOPICS {
+        let topic = gossipsub::IdentTopic::new(*topic_str);
+        params.topics.insert(topic.hash(), topic_params.clone());
+    }
+    params.behaviour_penalty_weight = -10.0;
+    params.behaviour_penalty_threshold = 1.0;
+    params.behaviour_penalty_decay = 0.9;
+    params
+}
+
+pub fn peer_score_thresholds() -> gossipsub::PeerScoreThresholds {
+    gossipsub::PeerScoreThresholds {
+        gossip_threshold: -10.0,
+        publish_threshold: -50.0,
+        graylist_threshold: -80.0,
+        accept_px_threshold: 10.0,
+        opportunistic_graft_threshold: 20.0,
+    }
 }

@@ -21,6 +21,77 @@ Entries are prepended (newest first).
 
 ## Entries
 
+### 2026-03-07 -- security-engineer + project-lead -- all crates
+**Task:** Sprint 010 Phase 4: Security Review + Documentation (Tasks 13-15)
+**Sprint:** Sprint 010, Phase 4
+**Git Ref:** pending
+**Files Changed:**
+- blockchain-project/sprints/SPRINT-010.md (security findings table, retrospective, all tasks marked DONE)
+- blockchain-project/BUILD_LOG.md (entries for all 4 phases)
+- blockchain-project/STATUS.md (sprint 010 complete, 315 tests, next up: sprint 011)
+- CHANGELOG.md (account abstraction, gossipsub hardening, Block-STM entries)
+**Review Notes:**
+- Security review: 0 ELEVATED, 0 MEDIUM, 6 LOW (all documented)
+- SEC-STM-001/002: busy-wait and single-lock contention (LOW, acceptable for current batch sizes)
+- SEC-GS-001: peer scoring weights are defaults, need live tuning (LOW)
+- SEC-AA-001/002/003: no fee mechanism, no signatures, silent unknown discriminant (LOW, pre-existing)
+- cargo clippy: zero warnings; cargo fmt: clean; 315 tests passing
+- Sprint 010 fully complete: 15/15 tasks, 4/4 phases
+**Security Flags:** None (6 LOW documented)
+
+### 2026-03-07 -- blockchain-architect -- aztibase-execution, aztibase-node, aztibase-rpc
+**Task:** Sprint 010 Phase 3: Account Abstraction Foundations (Tasks 9-12)
+**Sprint:** Sprint 010, Phase 3
+**Git Ref:** pending
+**Files Changed:**
+- crates/aztibase-execution/src/state.rs (AccountType enum: EOA/Contract/AIAgent, account_type + model_id fields on Account, set_code auto-promotes EOA→Contract, state_root includes type discriminant + model_id, +4 tests)
+- crates/aztibase-execution/src/routing.rs (TxKind::CreateAgent 0x07, model_id validation, +2 tests)
+- crates/aztibase-execution/src/persist.rs (extended account record: account_type byte + model_id, backward-compatible deserialization)
+- crates/aztibase-execution/src/snapshot.rs (SNAPSHOT_VERSION 1→2, AccountEntry adds account_type + model_id, apply_snapshot restores types)
+- crates/aztibase-execution/src/lib.rs (re-export AccountType)
+- crates/aztibase-node/src/pipeline.rs (CreateAgent routing + execution: compute agent address, set AIAgent type + model_id, +3 tests)
+- crates/aztibase-rpc/src/server.rs (aztb_getAccountType method, +2 tests)
+**Review Notes:**
+- AccountType uses derive(Default) with #[default] on EOA (clippy-clean)
+- Snapshot format v2 required because state_root now includes account_type discriminant
+- Persistence backward-compatible: old 16-byte records default to EOA
+- Agent addresses computed via compute_contract_address(creator, nonce) — same as contracts
+- 315 total tests (11 new), zero clippy warnings, clean fmt
+**Security Flags:** None
+
+### 2026-03-07 -- p2p-network-engineer -- aztibase-network
+**Task:** Sprint 010 Phase 2: Gossipsub Protocol Hardening (Tasks 5-8)
+**Sprint:** Sprint 010, Phase 2
+**Git Ref:** pending
+**Files Changed:**
+- crates/aztibase-network/src/gossip.rs (hardened config: duplicate_cache_time 2min, max_transmit_size 2MiB, heartbeat 500ms, max_messages_per_rpc 100; peer_score_params() + peer_score_thresholds() functions)
+- crates/aztibase-network/src/behaviour.rs (added connection_limits::Behaviour to AztibaseBehaviour)
+- crates/aztibase-network/src/transport.rs (apply peer scoring, connection limits max 50 total / 2 per peer, log warnings on denied connections)
+- crates/aztibase-network/src/lib.rs (+3 tests: gossipsub_config_values, peer_score_params_valid, peer_score_thresholds_valid)
+**Review Notes:**
+- Message signing already in place (MessageAuthenticity::Signed) + ValidationMode::Strict
+- Peer scoring: per-topic params for all 6 topics, behaviour penalties, IP colocation
+- Connection limits via libp2p-connection-limits (already transitive dep, no new deps)
+- 304 total tests (3 new network tests), zero clippy warnings, clean fmt
+**Security Flags:** None
+
+### 2026-03-07 -- smart-contract-engineer -- aztibase-execution
+**Task:** Sprint 010 Phase 1: Rayon-Parallel Block-STM (Tasks 1-4)
+**Sprint:** Sprint 010, Phase 1
+**Git Ref:** pending
+**Files Changed:**
+- Cargo.toml (added `rayon = "1.10"` to workspace deps)
+- crates/aztibase-execution/Cargo.toml (added `rayon = { workspace = true }`)
+- crates/aztibase-execution/src/block_stm.rs (full rewrite: thread-safe MVMemory with Mutex, Arc-wrapped scheduler, rayon::scope parallel execution, SchedulerTask::Wait variant, execute_parallel/execute_sequential split, +3 parallel tests)
+**Review Notes:**
+- MVMemory.data wrapped in Mutex<HashMap>, read() returns cloned StateValue
+- Per-tx arrays: Vec<Mutex<ReadSet/WriteSet/Option<TxOutput>>>
+- Parallel threshold: batches >= 4 txs use rayon, smaller use sequential
+- 3 new tests: parallel_independent_transfers, parallel_conflicting_chain, parallel_deterministic_across_runs
+- All 16 original Block-STM tests preserved and passing (301 total tests)
+- cargo clippy: zero warnings; cargo fmt: clean
+**Security Flags:** None
+
 ### 2026-03-07 -- security-engineer + project-lead -- aztibase-node
 **Task:** Sprint 009 Phase 4: Security Review + Documentation (Tasks 14-16)
 **Sprint:** Sprint 009, Phase 4
