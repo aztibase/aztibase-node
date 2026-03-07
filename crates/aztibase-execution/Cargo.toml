@@ -21,3 +21,8 @@ rayon = { workspace = true }
 
 [dev-dependencies]
 wat = "1"
+criterion = { workspace = true }
+
+[[bench]]
+name = "execution_bench"
+harness = false

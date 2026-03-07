@@ -3,7 +3,7 @@
 **Last Updated:** 2026-03-07
 **Updated By:** project-lead
 **Current Phase:** M4 -- Integration Testing + AI + Testnet (IN PROGRESS)
-**Current Sprint:** Sprint 013 -- COMPLETE (Genesis-Driven Consensus Bootstrap + BLS Validator Keys)
+**Current Sprint:** Sprint 014 -- COMPLETE (Consensus Resilience, Benchmarking, Verkle Foundations)
 
 ---
 
@@ -33,7 +33,7 @@
 - Build-phase tracking infrastructure (5 documents)
 - Implementation depth audit (Sprint 001, Task 7)
 - Reference repos cloned (MystiCeti, Sui, Lighthouse, rust-libp2p, redb)
-- cargo build + cargo test pass (~385 tests, 0 failures; 1 pre-existing flaky: parallel_conflicting_chain)
+- cargo build + cargo test pass (397 tests, 0 failures; 1 pre-existing flaky: parallel_conflicting_chain)
 - Sprint 001 closed with retrospective
 - Sprint 002 closed: 24/24 tasks, 5 phases complete
 - Sprint 003 closed: 18/18 tasks, 4 phases complete
@@ -41,6 +41,7 @@
 - Sprint 005 closed: 21/21 tasks, 4 phases complete
 - Sprint 006 closed: 23/24 tasks (1 deferred), 4 phases complete
 - Sprint 007 complete: receipt store, EVM via revm, AI inference via tract
+- Sprint 014 complete: 15/15 tasks, 4 phases (consensus resilience, criterion benchmarks, Verkle tree foundations, security review)
 - Sprint 013 complete: 15/15 tasks, 4 phases (genesis-driven validator bootstrap, BLS keys in genesis, testnet integration, security review)
 - Sprint 012 complete: 15/15 tasks, 4 phases (fee escrow, persistent base fee, genesis config, CLI wallet, security review)
 - Sprint 011 complete: 15/15 tasks, 4 phases (signed tx envelopes, nonce enforcement, fee market, security review)
@@ -66,12 +67,15 @@
 | aztibase-node | PARTIAL | node-engineer | YES | YES |
 
 ### In Progress
-- Sprint 014 planning
+- Sprint 015 planning
 
 ### Blocked
 - Nothing currently blocked
 
 ### Recently Completed
+- Sprint 014 Phase 3: Verkle tree foundations — StateCommitment trait, MerkleCommitment, VerkleTree prototype, VerkleCommitment (8 new tests)
+- Sprint 014 Phase 2: Performance benchmarking — criterion harness (6 benchmarks), ConsensusMetrics with atomic counters (1 new test)
+- Sprint 014 Phase 1: Consensus resilience — equivocation detection, vertex buffering, byzantine + crash recovery integration tests (5 new tests)
 - Sprint 013 Phase 3: End-to-end testnet integration — multi-node genesis bootstrap, finality cert integration, local-testnet.sh rewrite, config consolidation (3 new tests)
 - Sprint 013 Phase 2: BLS keys in genesis — BLS keypair generation, ValidatorSet carries BLS pubkeys, build/verify_certificate_from_set (5 new tests)
 - Sprint 013 Phase 1: Genesis-driven validator bootstrap — validators from genesis config, validator identity from key file, per-node TOML configs (5 new tests)
@@ -107,7 +111,7 @@
 - Sprint 005 Phase 1: Consensus-to-execution wiring, TxKind routing, ExecutionPipeline
 
 ### Next Up
-1. Sprint 014: WebRTC transport, Verkle tree foundations, or light client protocol
+1. Sprint 015: Wire --metrics to node binary, WebRTC transport, light client protocol, or benchmark baselines
 
 ---
 

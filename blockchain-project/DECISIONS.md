@@ -14,6 +14,7 @@ Every non-obvious technical decision is recorded here. Each ADR is immutable onc
 | ADR-004 | Use blst crate for BLS12-381 (C dependency exception) | 2026-03-06 | ACCEPTED | blockchain-architect + security-engineer |
 | ADR-005 | Use axum for JSON-RPC server | 2026-03-06 | ACCEPTED | node-engineer |
 | ADR-006 | Post-execution fee collection (not pre-execution escrow) | 2026-03-07 | ACCEPTED | smart-contract-engineer |
+| ADR-007 | StateCommitment trait with enum-based proofs | 2026-03-07 | ACCEPTED | blockchain-architect |
 
 ---
 
@@ -182,6 +183,35 @@ Use post-execution fee collection (`collect_fees()` in pipeline.rs) for Sprint 0
 - SEC-FEE-002: Senders with insufficient balance can still transact (fee capped at available balance via `saturating_sub`)
 - Must wire pre-execution escrow before mainnet to prevent fee-free execution abuse
 - `collect_fees()` iterates routed txs linearly, matching to receipts by index — assumes 1:1 correspondence
+
+---
+
+## ADR-007: StateCommitment trait with enum-based proofs
+
+**Date:** 2026-03-07
+**Status:** ACCEPTED
+**Decided By:** blockchain-architect
+**Git Ref:** pending (Sprint 014)
+
+### Context
+The execution layer needs to support both binary Merkle trees (current) and Verkle trees (target). Two proof representation approaches were considered:
+- **Trait object proofs**: `Box<dyn Proof>` — flexible but requires downcasting and loses type information
+- **Enum-based proofs**: `StateProof::Merkle(MerkleProof) | StateProof::Verkle(VerkleProof)` — closed set, pattern matching, zero allocation
+
+### Decision
+Use a `StateCommitment` trait with an enum-based `StateProof` type. The trait defines `commit()`, `prove()`, and `verify()` methods. `MerkleCommitment` and `VerkleCommitment` are concrete implementations.
+
+### Rationale
+- Closed enum is exhaustive — compiler catches missing cases when new proof types are added
+- No heap allocation for proof dispatch (enum is stack-sized)
+- `StateProof` can derive Clone, Debug, PartialEq — trait objects cannot
+- Only two proof types exist (Merkle, Verkle) — extensibility is not a concern
+- Verification code can pattern-match on proof variant for type-safe handling
+
+### Consequences
+- Adding a third commitment scheme requires modifying the `StateProof` enum (acceptable — unlikely to happen)
+- Both backends must be in scope wherever `StateProof` is matched (compile-time guarantee, not runtime overhead)
+- The trait allows runtime backend selection (e.g., config-driven Merkle vs Verkle)
 
 ---
 

@@ -8,6 +8,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 ## [M4] -- Integration Testing + AI + Testnet (IN PROGRESS)
 
 ### Security
+- Sprint 014 security review: 0 ELEVATED, 0 MEDIUM, 4 LOW, 1 INFO (SEC-EQUI-001, SEC-BUF-001, SEC-VERKLE-001/002, SEC-METRICS-001) (2026-03-07)
 - Sprint 012 security review: 0 ELEVATED, 0 MEDIUM, 4 LOW (SEC-KEY-001/002, SEC-FEE-004, SEC-BASE-001) (2026-03-07)
 - SEC-FEE-002 CLOSED: Pre-execution fee escrow prevents underfunded execution (2026-03-07)
 - SEC-FEE-003 CLOSED: BaseFeeCalculator persists to redb, loads on startup, drives real gas prices (2026-03-07)
@@ -22,6 +23,18 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 - Sprint 009 security review: 2 ELEVATED fixed, 8 MEDIUM (2 fixed, 6 documented), 5 LOW documented (2026-03-07)
 
 ### Added
+- Equivocation detection in consensus engine: tracks `(round, author)` pairs, rejects conflicting vertices (2026-03-07)
+- Vertex buffering for missing parents: bounded buffer (MAX=64) with drain-on-arrival (2026-03-07)
+- Byzantine fault injection integration test: 4-validator network with 1 equivocating validator (2026-03-07)
+- Validator crash recovery integration test: 3/4 honest validators continue committing (2026-03-07)
+- Criterion benchmark harness: consensus (vertex creation, DAG insert, commit eval) + execution (state root, transfers, latency) (2026-03-07)
+- `ConsensusMetrics` struct with atomic counters for vertices, commits, equivocations, latency (2026-03-07)
+- `StateCommitment` trait in aztibase-core: pluggable commitment backends with `commit()`, `prove()`, `verify()` (2026-03-07)
+- `StateProof` enum: `Merkle(MerkleProof)` and `Verkle(VerkleProof)` variants (2026-03-07)
+- `MerkleCommitment` implementing `StateCommitment`: sibling-path proofs with verify-by-reconstruction (2026-03-07)
+- `VerkleTree` prototype: width-256 inner nodes, BLAKE3 placeholder commitments, insert/prove/verify (2026-03-07)
+- `VerkleCommitment` implementing `StateCommitment`: Verkle tree wrapped as pluggable backend (2026-03-07)
+- ADR-007: StateCommitment trait with enum-based proofs (2026-03-07)
 - Genesis-driven validator bootstrap: `ValidatorSet` built from `GenesisConfig` instead of hardcoded placeholders (2026-03-07)
 - `--validator-key <path>` CLI arg: node identity from Ed25519 key file with genesis validation (2026-03-07)
 - BLS keypair generation in genesis: Ed25519 + BLS12-381 keypairs per validator (2026-03-07)

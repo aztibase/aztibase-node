@@ -21,6 +21,57 @@ Entries are prepended (newest first).
 
 ## Entries
 
+### 2026-03-07 -- security-engineer -- all crates
+**Task:** Sprint 014 Phase 4: Security Review + Documentation (Tasks 13-15)
+**Sprint:** Sprint 014, Phase 4
+**Git Ref:** pending
+**Files Changed:**
+- blockchain-project/sprints/SPRINT-014.md (all 15 tasks marked DONE, security findings, retrospective)
+- blockchain-project/BUILD_LOG.md (entries for all 4 phases)
+- blockchain-project/STATUS.md (M4 progress, test count, benchmark note)
+- blockchain-project/DECISIONS.md (ADR-007: StateCommitment trait)
+- CHANGELOG.md (Sprint 014 entries)
+**Review Notes:** Security review: 0 ELEVATED, 0 MEDIUM, 4 LOW, 1 INFO. 397 tests passing, zero clippy warnings.
+**Security Flags:** SEC-EQUI-001 (LOW), SEC-BUF-001 (LOW), SEC-VERKLE-001 (LOW), SEC-VERKLE-002 (LOW), SEC-METRICS-001 (INFO)
+
+### 2026-03-07 -- blockchain-architect -- aztibase-core, aztibase-execution
+**Task:** Sprint 014 Phase 3: Verkle Tree Foundations (Tasks 9-12)
+**Sprint:** Sprint 014, Phase 3
+**Git Ref:** pending
+**Files Changed:**
+- crates/aztibase-core/src/commitment.rs (NEW: StateCommitment trait, StateProof enum, MerkleProof, VerkleProof)
+- crates/aztibase-core/src/lib.rs (added commitment module export)
+- crates/aztibase-execution/src/state.rs (MerkleCommitment impl, prove/verify, 3 new tests)
+- crates/aztibase-execution/src/verkle.rs (NEW: VerkleTree, VerkleCommitment, 5 tests)
+- crates/aztibase-execution/src/lib.rs (added verkle module, exports)
+**Review Notes:** StateCommitment trait with enum-based proofs (ADR-007). Verkle uses BLAKE3 placeholder — real IPA/KZG deferred. 8 new tests.
+**Security Flags:** None
+
+### 2026-03-07 -- consensus-engineer -- aztibase-consensus, aztibase-execution
+**Task:** Sprint 014 Phase 2: Performance Benchmarking Framework (Tasks 5-8)
+**Sprint:** Sprint 014, Phase 2
+**Git Ref:** pending
+**Files Changed:**
+- Cargo.toml (workspace: criterion dev-dependency)
+- crates/aztibase-consensus/Cargo.toml (criterion dev-dep, [[bench]] section)
+- crates/aztibase-consensus/benches/consensus_bench.rs (NEW: 3 benchmarks)
+- crates/aztibase-execution/Cargo.toml (criterion dev-dep, [[bench]] section)
+- crates/aztibase-execution/benches/execution_bench.rs (NEW: 3 benchmark groups)
+- crates/aztibase-consensus/src/engine.rs (ConsensusMetrics, MetricsSnapshot)
+- crates/aztibase-consensus/src/lib.rs (metrics exports)
+**Review Notes:** Criterion benchmarks for vertex creation, DAG insertion, commit evaluation, state root, transfer execution, single transfer latency. ConsensusMetrics with atomic counters. 1 new test.
+**Security Flags:** None
+
+### 2026-03-07 -- consensus-engineer + node-engineer -- aztibase-consensus, aztibase-node
+**Task:** Sprint 014 Phase 1: Consensus Resilience + Fault Injection (Tasks 1-4)
+**Sprint:** Sprint 014, Phase 1
+**Git Ref:** pending
+**Files Changed:**
+- crates/aztibase-consensus/src/engine.rs (equivocation detection, vertex buffering, seen_authors map, buffered vec, prune logic)
+- crates/aztibase-node/src/integration.rs (byzantine_equivocation_detected, validator_crash_and_recovery tests)
+**Review Notes:** Equivocation detection tracks (round, author) → hash with PRUNE_DEPTH=20. Vertex buffer bounded at MAX_BUFFERED=64. 4 new tests (2 integration, 2 unit).
+**Security Flags:** None
+
 ### 2026-03-07 -- security-engineer + project-lead -- all crates
 **Task:** Sprint 013 Phase 4: Security Review + Documentation (Tasks 13-15)
 **Sprint:** Sprint 013, Phase 4

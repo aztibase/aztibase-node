@@ -10,6 +10,7 @@ pub mod routing;
 pub mod snapshot;
 pub mod state;
 pub mod tx;
+pub mod verkle;
 pub mod vm;
 
 pub use contract::{ContractReceipt, ContractTx, compute_contract_address, execute_contract_txs};
@@ -24,8 +25,9 @@ pub use snapshot::{
     SnapshotError, StateSnapshot, apply_snapshot, create_snapshot, deserialize_snapshot,
     serialize_snapshot, snapshot_hash,
 };
-pub use state::{AccountState, AccountType};
+pub use state::{AccountState, AccountType, MerkleCommitment};
 pub use tx::{SignedTx, TxError, verify_and_route, verify_and_route_batch};
+pub use verkle::{VerkleCommitment, VerkleTree};
 pub use vm::{EngineConfig, ExecutionEngine, ExecutionResult};
 
 #[cfg(test)]

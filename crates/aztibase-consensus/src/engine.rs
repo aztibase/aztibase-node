@@ -1,5 +1,7 @@
-use std::collections::{HashMap, HashSet};
-use std::time::Duration;
+use std::collections::{HashMap, HashSet, VecDeque};
+use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering as AtomicOrdering};
+use std::time::{Duration, Instant};
 
 use anyhow::{Context, Result};
 use tokio::sync::mpsc;
@@ -13,6 +15,43 @@ use crate::dag::DagBlock;
 use crate::dag_store::DagStore;
 use crate::validator::ValidatorSet;
 use crate::wire;
+
+const MAX_BUFFERED_VERTICES: usize = 64;
+const EQUIVOCATION_PRUNE_DEPTH: u64 = 20;
+
+/// Lightweight consensus metrics, updated atomically by the engine.
+#[derive(Debug, Default)]
+pub struct ConsensusMetrics {
+    pub vertices_proposed: AtomicU64,
+    pub vertices_received: AtomicU64,
+    pub commits: AtomicU64,
+    pub rounds_advanced: AtomicU64,
+    pub equivocations: AtomicU64,
+    pub last_commit_latency_us: AtomicU64,
+}
+
+impl ConsensusMetrics {
+    pub fn snapshot(&self) -> MetricsSnapshot {
+        MetricsSnapshot {
+            vertices_proposed: self.vertices_proposed.load(AtomicOrdering::Relaxed),
+            vertices_received: self.vertices_received.load(AtomicOrdering::Relaxed),
+            commits: self.commits.load(AtomicOrdering::Relaxed),
+            rounds_advanced: self.rounds_advanced.load(AtomicOrdering::Relaxed),
+            equivocations: self.equivocations.load(AtomicOrdering::Relaxed),
+            last_commit_latency_us: self.last_commit_latency_us.load(AtomicOrdering::Relaxed),
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct MetricsSnapshot {
+    pub vertices_proposed: u64,
+    pub vertices_received: u64,
+    pub commits: u64,
+    pub rounds_advanced: u64,
+    pub equivocations: u64,
+    pub last_commit_latency_us: u64,
+}
 
 #[derive(Clone, Debug)]
 pub struct ConsensusConfig {
@@ -132,6 +171,12 @@ pub struct StateRootAnnounce {
     pub validator: aztibase_core::ValidatorId,
 }
 
+/// A decoded vertex waiting for its parents to arrive.
+struct BufferedVertex {
+    block: DagBlock,
+    missing_parents: Vec<BlockHash>,
+}
+
 pub struct ConsensusEngine {
     config: ConsensusConfig,
     identity: ValidatorId,
@@ -142,6 +187,11 @@ pub struct ConsensusEngine {
     vrf_seed: [u8; 32],
     inbox: mpsc::Receiver<ConsensusInput>,
     outbox: mpsc::Sender<ConsensusOutput>,
+    seen_authors: HashMap<(u64, ValidatorId), BlockHash>,
+    buffered: VecDeque<BufferedVertex>,
+    equivocations_detected: u64,
+    metrics: Arc<ConsensusMetrics>,
+    round_start: Instant,
 }
 
 impl ConsensusEngine {
@@ -163,7 +213,16 @@ impl ConsensusEngine {
             vrf_seed: [0u8; 32],
             inbox,
             outbox,
+            seen_authors: HashMap::new(),
+            buffered: VecDeque::new(),
+            equivocations_detected: 0,
+            metrics: Arc::new(ConsensusMetrics::default()),
+            round_start: Instant::now(),
         }
+    }
+
+    pub fn metrics(&self) -> Arc<ConsensusMetrics> {
+        Arc::clone(&self.metrics)
     }
 
     /// Run the consensus loop. Advances rounds on a timer, processes incoming
@@ -232,8 +291,13 @@ impl ConsensusEngine {
         let round = self.state.current_round;
         debug!(round, "Advancing round");
 
+        self.round_start = Instant::now();
         self.propose_vertex()?;
         self.evaluate_commits()?;
+        self.prune_equivocation_tracker();
+        self.metrics
+            .rounds_advanced
+            .fetch_add(1, AtomicOrdering::Relaxed);
 
         self.state.current_round += 1;
         Ok(())
@@ -270,12 +334,16 @@ impl ConsensusEngine {
         let hash = block.hash;
         let encoded = wire::encode_vertex(&block).context("Failed to encode vertex")?;
 
+        self.seen_authors.insert((round, self.identity), hash);
         self.dag
             .insert(block)
             .context("Failed to insert own vertex")?;
         self.state.record_vertex(round, hash);
 
         debug!(round, hash = %short_hex(&hash), "Proposed vertex");
+        self.metrics
+            .vertices_proposed
+            .fetch_add(1, AtomicOrdering::Relaxed);
 
         let _ = self
             .outbox
@@ -313,17 +381,71 @@ impl ConsensusEngine {
             return Ok(());
         }
 
+        if self.is_equivocation(&block) {
+            return Ok(());
+        }
+
+        self.metrics
+            .vertices_received
+            .fetch_add(1, AtomicOrdering::Relaxed);
+        self.try_insert_vertex(block)
+    }
+
+    fn is_equivocation(&mut self, block: &DagBlock) -> bool {
+        let key = (block.round, block.author);
+        if let Some(&existing) = self.seen_authors.get(&key)
+            && existing != block.hash
+        {
+            self.equivocations_detected += 1;
+            self.metrics
+                .equivocations
+                .fetch_add(1, AtomicOrdering::Relaxed);
+            warn!(
+                round = block.round,
+                author = %short_hex(&block.author),
+                existing = %short_hex(&existing),
+                duplicate = %short_hex(&block.hash),
+                total = self.equivocations_detected,
+                "Equivocation detected — dropping vertex"
+            );
+            return true;
+        }
+        self.seen_authors.insert(key, block.hash);
+        false
+    }
+
+    fn try_insert_vertex(&mut self, block: DagBlock) -> Result<()> {
         let round = block.round;
         let hash = block.hash;
+
+        let missing: Vec<BlockHash> = block
+            .parents
+            .iter()
+            .filter(|p| !self.dag.contains(p))
+            .copied()
+            .collect();
+
+        if !missing.is_empty() && !block.is_genesis() {
+            if self.buffered.len() < MAX_BUFFERED_VERTICES {
+                debug!(
+                    round,
+                    hash = %short_hex(&hash),
+                    missing_count = missing.len(),
+                    "Buffered vertex with missing parents"
+                );
+                self.buffered.push_back(BufferedVertex {
+                    block,
+                    missing_parents: missing,
+                });
+            }
+            return Ok(());
+        }
 
         match self.dag.insert(block) {
             Ok(()) => {
                 self.state.record_vertex(round, hash);
-                debug!(
-                    round,
-                    hash = %short_hex(&hash),
-                    "Accepted vertex from peer"
-                );
+                debug!(round, hash = %short_hex(&hash), "Accepted vertex from peer");
+                self.drain_buffered();
             }
             Err(e) => {
                 debug!(error = %e, "Rejected vertex");
@@ -358,7 +480,12 @@ impl ConsensusEngine {
             let status = rule.try_direct_commit(wave);
             match status {
                 LeaderStatus::Commit(hash) => {
+                    let latency = self.round_start.elapsed();
                     info!(wave, hash = %short_hex(&hash), "Block committed (direct)");
+                    self.metrics.commits.fetch_add(1, AtomicOrdering::Relaxed);
+                    self.metrics
+                        .last_commit_latency_us
+                        .store(latency.as_micros() as u64, AtomicOrdering::Relaxed);
                     self.state.record_commit(hash);
                     self.state.last_committed_wave = Some(wave);
                     self.state.prune_before(wave * wave_len);
@@ -393,6 +520,51 @@ impl ConsensusEngine {
         }
 
         Ok(())
+    }
+
+    pub fn equivocations_detected(&self) -> u64 {
+        self.equivocations_detected
+    }
+
+    pub fn buffered_count(&self) -> usize {
+        self.buffered.len()
+    }
+
+    fn drain_buffered(&mut self) {
+        let mut made_progress = true;
+        while made_progress {
+            made_progress = false;
+            let mut remaining = VecDeque::new();
+            while let Some(mut entry) = self.buffered.pop_front() {
+                entry.missing_parents.retain(|p| !self.dag.contains(p));
+
+                if entry.missing_parents.is_empty() {
+                    let round = entry.block.round;
+                    let hash = entry.block.hash;
+                    match self.dag.insert(entry.block) {
+                        Ok(()) => {
+                            self.state.record_vertex(round, hash);
+                            debug!(round, hash = %short_hex(&hash), "Inserted buffered vertex");
+                            made_progress = true;
+                        }
+                        Err(e) => {
+                            debug!(error = %e, "Buffered vertex rejected on insert");
+                        }
+                    }
+                } else {
+                    remaining.push_back(entry);
+                }
+            }
+            self.buffered = remaining;
+        }
+    }
+
+    fn prune_equivocation_tracker(&mut self) {
+        let cutoff = self
+            .state
+            .current_round
+            .saturating_sub(EQUIVOCATION_PRUNE_DEPTH);
+        self.seen_authors.retain(|&(round, _), _| round >= cutoff);
     }
 
     fn drain_pending_txs(&mut self) -> Vec<u8> {
@@ -681,6 +853,62 @@ mod tests {
         assert_eq!(state.tracked_rounds(), count_after_first);
     }
 
+    #[tokio::test]
+    async fn equivocation_detection_unit() {
+        let (mut engine, _in_tx, _out_rx, path) = make_test_engine();
+        engine.insert_genesis().unwrap();
+
+        let genesis_hashes: Vec<BlockHash> = engine.state.vertices_at_round(0).to_vec();
+
+        // First vertex from v2 at round 1
+        let block_a =
+            DagBlock::new(1, [2u8; 32], genesis_hashes.clone(), vec![1], now_ms()).unwrap();
+        let data_a = crate::wire::encode_vertex(&block_a).unwrap();
+        engine.handle_received_vertex(&data_a).unwrap();
+        assert_eq!(engine.state.vertices_at_round(1).len(), 1);
+        assert_eq!(engine.equivocations_detected(), 0);
+
+        // Second, different vertex from v2 at round 1 (equivocation)
+        let block_b = DagBlock::new(1, [2u8; 32], genesis_hashes, vec![2], now_ms()).unwrap();
+        let data_b = crate::wire::encode_vertex(&block_b).unwrap();
+        engine.handle_received_vertex(&data_b).unwrap();
+        assert_eq!(engine.state.vertices_at_round(1).len(), 1); // not added
+        assert_eq!(engine.equivocations_detected(), 1);
+
+        cleanup(&path);
+    }
+
+    #[tokio::test]
+    async fn buffered_vertex_insertion() {
+        let (mut engine, _in_tx, _out_rx, path) = make_test_engine();
+        engine.insert_genesis().unwrap();
+
+        let genesis_hashes: Vec<BlockHash> = engine.state.vertices_at_round(0).to_vec();
+
+        // Create a round-1 vertex from v2
+        let block_r1 =
+            DagBlock::new(1, [2u8; 32], genesis_hashes.clone(), vec![], now_ms()).unwrap();
+        let r1_hash = block_r1.hash;
+
+        // Create a round-2 vertex from v3 that references block_r1
+        let block_r2 = DagBlock::new(2, [3u8; 32], vec![r1_hash], vec![], now_ms()).unwrap();
+        let data_r2 = crate::wire::encode_vertex(&block_r2).unwrap();
+
+        // Insert r2 first — parent r1 is missing, so it gets buffered
+        engine.handle_received_vertex(&data_r2).unwrap();
+        assert_eq!(engine.state.vertices_at_round(2).len(), 0);
+        assert_eq!(engine.buffered_count(), 1);
+
+        // Now insert r1 — this should trigger drain_buffered and insert r2
+        let data_r1 = crate::wire::encode_vertex(&block_r1).unwrap();
+        engine.handle_received_vertex(&data_r1).unwrap();
+        assert_eq!(engine.state.vertices_at_round(1).len(), 1);
+        assert_eq!(engine.state.vertices_at_round(2).len(), 1);
+        assert_eq!(engine.buffered_count(), 0);
+
+        cleanup(&path);
+    }
+
     #[test]
     fn pending_txs_cap_enforced() {
         let path = test_db_path();
@@ -702,6 +930,31 @@ mod tests {
                 .unwrap();
         }
         assert_eq!(engine.pending_txs.len(), 3);
+        cleanup(&path);
+    }
+
+    #[tokio::test]
+    async fn metrics_counter_increments() {
+        let (mut engine, _in_tx, _out_rx, path) = make_test_engine();
+        let metrics = engine.metrics();
+        engine.insert_genesis().unwrap();
+
+        let snap_before = metrics.snapshot();
+        assert_eq!(snap_before.vertices_proposed, 0);
+        assert_eq!(snap_before.vertices_received, 0);
+
+        engine.state.current_round = 1;
+        engine.propose_vertex().unwrap();
+        let snap_after = metrics.snapshot();
+        assert_eq!(snap_after.vertices_proposed, 1);
+
+        let genesis_hashes: Vec<BlockHash> = engine.state.vertices_at_round(0).to_vec();
+        let block = DagBlock::new(1, [2u8; 32], genesis_hashes, vec![], now_ms()).unwrap();
+        let data = crate::wire::encode_vertex(&block).unwrap();
+        engine.handle_received_vertex(&data).unwrap();
+        let snap_recv = metrics.snapshot();
+        assert_eq!(snap_recv.vertices_received, 1);
+
         cleanup(&path);
     }
 }

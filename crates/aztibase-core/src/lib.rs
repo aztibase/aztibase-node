@@ -1,9 +1,11 @@
 pub mod bls;
+pub mod commitment;
 pub mod crypto;
 pub mod error;
 pub mod types;
 
 pub use bls::*;
+pub use commitment::*;
 pub use crypto::*;
 pub use error::*;
 pub use types::*;

@@ -12,8 +12,8 @@ pub use commit::{CommitConfig, CommitRule, LeaderStatus};
 pub use dag::{DagBlock, DagError};
 pub use dag_store::{DagStore, DagStoreError, DagStoreResult};
 pub use engine::{
-    ConsensusConfig, ConsensusEngine, ConsensusInput, ConsensusOutput, RoundState,
-    StateRootAnnounce,
+    ConsensusConfig, ConsensusEngine, ConsensusInput, ConsensusMetrics, ConsensusOutput,
+    MetricsSnapshot, RoundState, StateRootAnnounce,
 };
 pub use finality::{
     FinalityCertificate, build_certificate, build_certificate_from_set, sign_finality,

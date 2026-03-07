@@ -16,3 +16,10 @@ tracing = { workspace = true }
 thiserror = { workspace = true }
 rand = { workspace = true }
 anyhow = { workspace = true }
+
+[dev-dependencies]
+criterion = { workspace = true }
+
+[[bench]]
+name = "consensus_bench"
+harness = false

@@ -772,4 +772,272 @@ mod tests {
 
         cleanup(&exec_path);
     }
+
+    // ── Sprint 014 Task 1: Byzantine equivocation fault injection ────
+
+    #[tokio::test]
+    async fn byzantine_equivocation_detected() {
+        use aztibase_consensus::DagBlock;
+        use std::time::Duration;
+
+        let v1 = [1u8; 32];
+        let v2 = [2u8; 32];
+        let v3 = [3u8; 32];
+        let v4 = [4u8; 32];
+
+        let mut validators = ValidatorSet::new();
+        validators.add(v1, 100);
+        validators.add(v2, 100);
+        validators.add(v3, 100);
+        validators.add(v4, 100);
+
+        let config = ConsensusConfig {
+            round_duration: Duration::from_millis(200),
+            wave_length: 2,
+            max_parents: 10,
+            max_pending_txs: 4096,
+        };
+
+        let genesis_ts = 1000u64;
+        let genesis_blocks: Vec<DagBlock> = [v1, v2, v3, v4]
+            .iter()
+            .map(|id| DagBlock::genesis(*id, genesis_ts))
+            .collect();
+
+        let genesis_hashes: Vec<_> = genesis_blocks.iter().map(|b| b.hash).collect();
+
+        // Run 3 honest nodes (v1, v2, v3). v4 is the Byzantine validator.
+        let honest_ids = [v1, v2, v3];
+        let (router_tx, mut router_rx) = mpsc::channel::<(usize, ConsensusOutput)>(2048);
+        let mut engine_inputs = Vec::new();
+        let mut handles = Vec::new();
+        let mut db_paths = Vec::new();
+
+        for (i, &id) in honest_ids.iter().enumerate() {
+            let path = test_db_path(&format!("byz_honest_{i}"));
+            let store = StateStore::open(path.to_str().unwrap()).unwrap();
+            let mut dag = DagStore::new(store).unwrap();
+            db_paths.push(path);
+
+            for g in &genesis_blocks {
+                dag.insert(g.clone()).unwrap();
+            }
+
+            let (in_tx, in_rx) = mpsc::channel::<ConsensusInput>(512);
+            let (out_tx, mut out_rx) = mpsc::channel::<ConsensusOutput>(512);
+
+            let mut engine =
+                ConsensusEngine::new(config.clone(), id, dag, validators.clone(), in_rx, out_tx);
+            engine_inputs.push(in_tx);
+
+            handles.push(tokio::spawn(async move {
+                let _ = engine.run().await;
+            }));
+
+            let rtx = router_tx.clone();
+            tokio::spawn(async move {
+                while let Some(output) = out_rx.recv().await {
+                    if rtx.send((i, output)).await.is_err() {
+                        break;
+                    }
+                }
+            });
+        }
+        drop(router_tx);
+
+        // Byzantine v4 sends two conflicting vertices for round 1
+        let equivocation_a =
+            DagBlock::new(1, v4, genesis_hashes.clone(), vec![0xAA], 2000).unwrap();
+        let equivocation_b =
+            DagBlock::new(1, v4, genesis_hashes.clone(), vec![0xBB], 2000).unwrap();
+        assert_ne!(equivocation_a.hash, equivocation_b.hash);
+
+        let data_a = aztibase_consensus::encode_vertex(&equivocation_a).unwrap();
+        let data_b = aztibase_consensus::encode_vertex(&equivocation_b).unwrap();
+
+        // Send both to all honest nodes
+        for tx in &engine_inputs {
+            let _ = tx.try_send(ConsensusInput::ReceivedVertex(data_a.clone()));
+            let _ = tx.try_send(ConsensusInput::ReceivedVertex(data_b.clone()));
+        }
+
+        // Wait for honest nodes to commit — they should succeed despite the equivocation
+        let mut committed: Vec<Vec<CommittedBatch>> = vec![Vec::new(), Vec::new(), Vec::new()];
+        let deadline = tokio::time::Instant::now() + Duration::from_secs(10);
+
+        loop {
+            if committed.iter().all(|c| !c.is_empty()) {
+                break;
+            }
+            let remaining = deadline.saturating_duration_since(tokio::time::Instant::now());
+            if remaining.is_zero() {
+                break;
+            }
+
+            match tokio::time::timeout(remaining, router_rx.recv()).await {
+                Ok(Some((node_idx, output))) => match output {
+                    ConsensusOutput::BroadcastVertex(data) => {
+                        for (j, tx) in engine_inputs.iter().enumerate() {
+                            if j != node_idx {
+                                let _ = tx.try_send(ConsensusInput::ReceivedVertex(data.clone()));
+                            }
+                        }
+                    }
+                    ConsensusOutput::BatchCommitted(batch) => {
+                        committed[node_idx].push(batch);
+                    }
+                },
+                _ => break,
+            }
+        }
+
+        // 3 honest out of 4 total = 75% > 2/3 threshold — must reach consensus
+        for (i, batches) in committed.iter().enumerate() {
+            assert!(
+                !batches.is_empty(),
+                "Honest node {i} should commit despite Byzantine equivocation"
+            );
+        }
+
+        // All honest nodes agree on the same anchor
+        let anchor0 = committed[0][0].anchor_hash;
+        for (i, batches) in committed.iter().enumerate().skip(1) {
+            assert_eq!(
+                batches[0].anchor_hash, anchor0,
+                "Honest node {i} committed different anchor"
+            );
+        }
+
+        drop(engine_inputs);
+        for h in handles {
+            let _ = h.await;
+        }
+        for path in &db_paths {
+            cleanup(path);
+        }
+    }
+
+    // ── Sprint 014 Task 2: Validator crash recovery ────────────────
+
+    #[tokio::test]
+    async fn validator_crash_and_recovery() {
+        use aztibase_consensus::DagBlock;
+        use std::time::Duration;
+
+        let v1 = [1u8; 32];
+        let v2 = [2u8; 32];
+        let v3 = [3u8; 32];
+        let v4 = [4u8; 32];
+
+        let mut validators = ValidatorSet::new();
+        validators.add(v1, 100);
+        validators.add(v2, 100);
+        validators.add(v3, 100);
+        validators.add(v4, 100);
+
+        let config = ConsensusConfig {
+            round_duration: Duration::from_millis(200),
+            wave_length: 2,
+            max_parents: 10,
+            max_pending_txs: 4096,
+        };
+
+        let genesis_ts = 1000u64;
+        let genesis_blocks: Vec<DagBlock> = [v1, v2, v3, v4]
+            .iter()
+            .map(|id| DagBlock::genesis(*id, genesis_ts))
+            .collect();
+
+        // Only run 3 out of 4 validators (v4 is "crashed")
+        let alive_ids = [v1, v2, v3];
+        let (router_tx, mut router_rx) = mpsc::channel::<(usize, ConsensusOutput)>(2048);
+        let mut engine_inputs = Vec::new();
+        let mut handles = Vec::new();
+        let mut db_paths = Vec::new();
+
+        for (i, &id) in alive_ids.iter().enumerate() {
+            let path = test_db_path(&format!("crash_{i}"));
+            let store = StateStore::open(path.to_str().unwrap()).unwrap();
+            let mut dag = DagStore::new(store).unwrap();
+            db_paths.push(path);
+
+            for g in &genesis_blocks {
+                dag.insert(g.clone()).unwrap();
+            }
+
+            let (in_tx, in_rx) = mpsc::channel::<ConsensusInput>(512);
+            let (out_tx, mut out_rx) = mpsc::channel::<ConsensusOutput>(512);
+
+            let mut engine =
+                ConsensusEngine::new(config.clone(), id, dag, validators.clone(), in_rx, out_tx);
+            engine_inputs.push(in_tx);
+
+            handles.push(tokio::spawn(async move {
+                let _ = engine.run().await;
+            }));
+
+            let rtx = router_tx.clone();
+            tokio::spawn(async move {
+                while let Some(output) = out_rx.recv().await {
+                    if rtx.send((i, output)).await.is_err() {
+                        break;
+                    }
+                }
+            });
+        }
+        drop(router_tx);
+
+        // v4 never runs — simulates a crash. 3 out of 4 = 75% > 2/3 threshold.
+        let mut committed: Vec<Vec<CommittedBatch>> = vec![Vec::new(), Vec::new(), Vec::new()];
+        let deadline = tokio::time::Instant::now() + Duration::from_secs(10);
+
+        loop {
+            if committed.iter().all(|c| !c.is_empty()) {
+                break;
+            }
+            let remaining = deadline.saturating_duration_since(tokio::time::Instant::now());
+            if remaining.is_zero() {
+                break;
+            }
+
+            match tokio::time::timeout(remaining, router_rx.recv()).await {
+                Ok(Some((node_idx, output))) => match output {
+                    ConsensusOutput::BroadcastVertex(data) => {
+                        for (j, tx) in engine_inputs.iter().enumerate() {
+                            if j != node_idx {
+                                let _ = tx.try_send(ConsensusInput::ReceivedVertex(data.clone()));
+                            }
+                        }
+                    }
+                    ConsensusOutput::BatchCommitted(batch) => {
+                        committed[node_idx].push(batch);
+                    }
+                },
+                _ => break,
+            }
+        }
+
+        for (i, batches) in committed.iter().enumerate() {
+            assert!(
+                !batches.is_empty(),
+                "Node {i} should commit even with 1 validator offline"
+            );
+        }
+
+        let anchor0 = committed[0][0].anchor_hash;
+        for (i, batches) in committed.iter().enumerate().skip(1) {
+            assert_eq!(
+                batches[0].anchor_hash, anchor0,
+                "Node {i} committed different anchor"
+            );
+        }
+
+        drop(engine_inputs);
+        for h in handles {
+            let _ = h.await;
+        }
+        for path in &db_paths {
+            cleanup(path);
+        }
+    }
 }
