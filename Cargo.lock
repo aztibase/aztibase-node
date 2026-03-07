@@ -322,6 +322,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "argon2"
+version = "0.5.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3c3610892ee6e0cbce8ae2700349fcf8f98adb0dbfbee85aec3c9179d29cc072"
+dependencies = [
+ "base64ct",
+ "blake2",
+ "cpufeatures",
+ "password-hash",
+]
+
+[[package]]
 name = "ark-bls12-381"
 version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -860,6 +872,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "aztibase-core",
+ "bincode",
  "bytes",
  "futures",
  "libp2p",
@@ -876,6 +889,7 @@ name = "aztibase-node"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "argon2",
  "aztibase-consensus",
  "aztibase-core",
  "aztibase-execution",
@@ -884,10 +898,14 @@ dependencies = [
  "aztibase-runtime",
  "aztibase-storage",
  "bincode",
+ "bip39",
+ "blake3",
+ "chacha20poly1305",
  "clap",
  "directories",
  "hex",
  "prost 0.11.9",
+ "rand 0.8.5",
  "serde",
  "serde_json",
  "tokio",
@@ -896,6 +914,7 @@ dependencies = [
  "tracing-subscriber 0.3.22",
  "tract-onnx",
  "wat",
+ "zeroize",
 ]
 
 [[package]]
@@ -994,6 +1013,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b1f45e9417d87227c7a56d22e471c6206462cba514c7590c09aff4cf6d1ddcad"
 dependencies = [
  "serde",
+]
+
+[[package]]
+name = "bip39"
+version = "2.2.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "90dbd31c98227229239363921e60fcf5e558e43ec69094d46fc4996f08d1d5bc"
+dependencies = [
+ "bitcoin_hashes",
+ "serde",
+ "unicode-normalization",
 ]
 
 [[package]]
@@ -4474,6 +4504,17 @@ dependencies = [
  "redox_syscall 0.5.18",
  "smallvec",
  "windows-link",
+]
+
+[[package]]
+name = "password-hash"
+version = "0.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "346f04948ba92c43e8469c1ee6736c7563d71012b17d40745260fe106aac2166"
+dependencies = [
+ "base64ct",
+ "rand_core 0.6.4",
+ "subtle",
 ]
 
 [[package]]

@@ -1,6 +1,8 @@
+pub mod light;
 pub mod store;
 pub mod verkle;
 
+pub use light::{CachedProof, LightFinalityCert, LightHeader, LightStore, LocalWalletState};
 pub use redb::TableDefinition;
 pub use store::{
     ACCOUNTS_TABLE, BATCH_ROOTS_TABLE, BLOCKS_TABLE, CONTRACT_CODE_TABLE, CONTRACT_STORAGE_TABLE,

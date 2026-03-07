@@ -2,8 +2,8 @@
 
 **Last Updated:** 2026-03-07
 **Updated By:** project-lead
-**Current Phase:** M4 -- Integration Testing + AI + Testnet (IN PROGRESS)
-**Current Sprint:** Sprint 016 -- COMPLETE (Transaction Anomaly Scoring, Cross-VM Bridge, PoUW Foundations)
+**Current Phase:** M5 -- Light/Browser Nodes + Wallet (IN PROGRESS)
+**Current Sprint:** Sprint 017 -- COMPLETE (Wallet Hardening, Light Node Storage & Header Sync)
 
 ---
 
@@ -15,8 +15,8 @@
 | M1 | Core primitives (data types, crypto, basic structs) | DONE | 2026-03-05 | 2026-03-05 |
 | M2 | P2P networking + basic consensus | DONE | 2026-03-05 | 2026-03-06 |
 | M3 | Execution layer (WASM VM, state management) | DONE | 2026-03-06 | 2026-03-06 |
-| M4 | Integration testing + basic AI + testnet | IN PROGRESS | 2026-03-06 | -- |
-| M5 | Light/browser nodes + wallet | NOT STARTED | -- | -- |
+| M4 | Integration testing + basic AI + testnet | DONE | 2026-03-06 | 2026-03-07 |
+| M5 | Light/browser nodes + wallet | IN PROGRESS | 2026-03-07 | -- |
 | M6 | AI compute market + PoUW | NOT STARTED | -- | -- |
 | M7 | Security audit + hardening | NOT STARTED | -- | -- |
 | M8 | Public testnet | NOT STARTED | -- | -- |
@@ -33,7 +33,7 @@
 - Build-phase tracking infrastructure (5 documents)
 - Implementation depth audit (Sprint 001, Task 7)
 - Reference repos cloned (MystiCeti, Sui, Lighthouse, rust-libp2p, redb)
-- cargo build + cargo test pass (425 tests, 0 failures)
+- cargo build + cargo test pass (446 tests, 0 failures)
 - Sprint 001 closed with retrospective
 - Sprint 002 closed: 24/24 tasks, 5 phases complete
 - Sprint 003 closed: 18/18 tasks, 4 phases complete
@@ -41,6 +41,7 @@
 - Sprint 005 closed: 21/21 tasks, 4 phases complete
 - Sprint 006 closed: 23/24 tasks (1 deferred), 4 phases complete
 - Sprint 007 complete: receipt store, EVM via revm, AI inference via tract
+- Sprint 017 complete: 16/16 tasks, 4 phases (wallet hardening BIP-39/Argon2id, light node storage, header sync protocol, security review)
 - Sprint 016 complete: 16/16 tasks, 4 phases (anomaly scoring, cross-VM bridge, PoUW type foundations, security review)
 - Sprint 015 complete: 15/15 tasks, 4 phases (metrics telemetry, light client proofs, WebRTC transport scaffold, Block-STM race fix, security review)
 - Sprint 014 complete: 15/15 tasks, 4 phases (consensus resilience, criterion benchmarks, Verkle tree foundations, security review)
@@ -69,12 +70,16 @@
 | aztibase-node | PARTIAL | node-engineer | YES | YES |
 
 ### In Progress
-- Sprint 017 planning
+- Sprint 018 planning
 
 ### Blocked
 - Nothing currently blocked
 
 ### Recently Completed
+- Sprint 017 Phase 4: Security review — 0 ELEVATED, 0 MEDIUM, 3 LOW (SEC-WALLET-001, SEC-LIGHT-001, SEC-SYNC-003); clippy/fmt/test clean; 446 tests
+- Sprint 017 Phase 3: Light node header sync — LightSyncMessage (4 variants), LightSyncProtocol state machine, verify_header_chain, --light CLI flag (10 new tests)
+- Sprint 017 Phase 2: Light node storage — LightStore (redb, 5 tables), header/cert/proof/wallet CRUD, batch insert, proof eviction (6 new tests)
+- Sprint 017 Phase 1: Wallet hardening — BIP-39 mnemonic (24/12-word), BLAKE3 key derivation, Argon2id + ChaCha20-Poly1305 encrypted keyfiles, zeroize (5 new tests)
 - Sprint 016 Phase 4: Security review — 0 ELEVATED, 1 MEDIUM (cross-VM reentrancy), 4 LOW, 1 INFO; M4 completion assessment done
 - Sprint 016 Phase 3: PoUW type foundations — InferenceTask, InferenceAttestation, PoUWScore trait + StubPoUWScore (8 new tests)
 - Sprint 016 Phase 2: Cross-VM bridge — CrossVmCall, wasm_to_evm, evm_to_wasm, depth limit 4 (6 new tests)
@@ -121,7 +126,7 @@
 - Sprint 005 Phase 1: Consensus-to-execution wiring, TxKind routing, ExecutionPipeline
 
 ### Next Up
-1. Sprint 017: TBD (candidate areas: M5 light/browser nodes, full Verkle trees, wallet UI, Docker deployment)
+1. Sprint 018: TBD (candidate areas: browser WASM light node, full Verkle IPA/KZG, mobile SDK, Docker deployment)
 
 ---
 

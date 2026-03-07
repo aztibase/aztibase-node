@@ -77,6 +77,10 @@ struct Cli {
     /// Enable metrics HTTP endpoint at GET /metrics on the RPC address
     #[arg(long)]
     metrics: bool,
+
+    /// Run as a light node (header sync only, no execution or vertex proposal)
+    #[arg(long)]
+    light: bool,
 }
 
 #[derive(clap::Subcommand, Debug)]
@@ -107,11 +111,29 @@ enum WalletAction {
         /// Output key file path
         #[arg(long, default_value = "wallet.json")]
         output: PathBuf,
+        /// Generate with BIP-39 mnemonic and Argon2id-encrypted keyfile
+        #[arg(long)]
+        mnemonic: bool,
+        /// Passphrase for keyfile encryption (required with --mnemonic)
+        #[arg(long)]
+        passphrase: Option<String>,
+    },
+    /// Recover keypair from BIP-39 mnemonic phrase
+    Recover {
+        /// The BIP-39 mnemonic phrase (12 or 24 words)
+        #[arg(long)]
+        phrase: String,
+        /// Output key file path
+        #[arg(long, default_value = "recovered.json")]
+        output: PathBuf,
     },
     /// Show address and public key from a key file
     Show {
         /// Path to key file
         keyfile: PathBuf,
+        /// Passphrase to decrypt an encrypted keyfile
+        #[arg(long)]
+        passphrase: Option<String>,
     },
     /// Sign and encode a transfer transaction
     Transfer {
@@ -188,11 +210,47 @@ async fn main() -> Result<()> {
         }
         Some(Command::Wallet { action }) => {
             match action {
-                WalletAction::Generate { output } => {
-                    wallet::generate_key(&output)?;
+                WalletAction::Generate {
+                    output,
+                    mnemonic,
+                    passphrase,
+                } => {
+                    if mnemonic {
+                        let pass = passphrase.unwrap_or_else(|| {
+                            eprintln!("Enter passphrase for keyfile encryption:");
+                            let mut buf = String::new();
+                            std::io::stdin().read_line(&mut buf).unwrap();
+                            buf.trim().to_string()
+                        });
+                        let phrase = wallet::generate_key_with_mnemonic(&output, &pass)?;
+                        println!("\nBACKUP YOUR MNEMONIC (24 words):");
+                        println!("{phrase}");
+                        println!("\nStore this safely. It is the ONLY way to recover your key.");
+                    } else {
+                        wallet::generate_key(&output)?;
+                    }
                 }
-                WalletAction::Show { keyfile } => {
-                    wallet::show_key(&keyfile)?;
+                WalletAction::Recover { phrase, output } => {
+                    let kp = wallet::recover_from_mnemonic(&phrase)?;
+                    let addr = aztibase_core::address_from_pubkey(kp.public_key().as_bytes());
+                    wallet::generate_key(&output)?;
+                    println!("Recovered address: {}", genesis::hex_encode(&addr));
+                }
+                WalletAction::Show {
+                    keyfile,
+                    passphrase,
+                } => {
+                    if let Some(pass) = passphrase {
+                        let kp = wallet::load_encrypted_keyfile(&keyfile, &pass)?;
+                        let addr = aztibase_core::address_from_pubkey(kp.public_key().as_bytes());
+                        println!("Address: {}", genesis::hex_encode(&addr));
+                        println!(
+                            "Public key: {}",
+                            genesis::hex_encode(kp.public_key().as_bytes())
+                        );
+                    } else {
+                        wallet::show_key(&keyfile)?;
+                    }
                 }
                 WalletAction::Transfer {
                     from,
@@ -215,6 +273,10 @@ async fn main() -> Result<()> {
     let config = cli.apply_overrides(config);
 
     init_logging(&config.log.level)?;
+
+    if cli.light {
+        return run_light_node(&config).await;
+    }
 
     tracing::info!(validator = cli.validator_index, "Starting Aztibase node");
     tracing::info!(data_dir = %config.data_dir.display());
@@ -714,6 +776,44 @@ async fn main() -> Result<()> {
     Ok(())
 }
 
+async fn run_light_node(config: &NodeConfig) -> Result<()> {
+    use aztibase_network::LightSyncProtocol;
+    use aztibase_storage::LightStore;
+
+    tracing::info!("Starting Aztibase LIGHT node");
+    tracing::info!(data_dir = %config.data_dir.display());
+
+    std::fs::create_dir_all(&config.data_dir)
+        .with_context(|| format!("Failed to create data dir: {}", config.data_dir.display()))?;
+
+    let light_db_path = config.data_dir.join("light.redb");
+    let light_store =
+        LightStore::open(&light_db_path).context("Failed to open light client database")?;
+
+    let last_round = light_store.latest_header_round()?.unwrap_or(0);
+    let _sync_proto = LightSyncProtocol::new(last_round);
+
+    tracing::info!(
+        last_synced_round = last_round,
+        db_path = %light_db_path.display(),
+        "Light node initialized (header sync only, no execution)"
+    );
+
+    let shutdown = Arc::new(Notify::new());
+    let shutdown_clone = shutdown.clone();
+
+    tokio::spawn(async move {
+        if let Ok(()) = tokio::signal::ctrl_c().await {
+            tracing::info!("Shutdown signal received");
+            shutdown_clone.notify_one();
+        }
+    });
+
+    shutdown.notified().await;
+    tracing::info!("Light node shut down");
+    Ok(())
+}
+
 fn init_logging(level: &str) -> Result<()> {
     let directive = format!("aztibase={level}");
     let filter = EnvFilter::from_default_env()
@@ -748,6 +848,7 @@ mod tests {
             validator_count: 1,
             genesis: None,
             metrics: false,
+            light: false,
         };
         let config = cli.apply_overrides(NodeConfig::default());
         assert_eq!(config.data_dir, PathBuf::from("/tmp/test"));
@@ -767,6 +868,7 @@ mod tests {
             validator_count: 1,
             genesis: None,
             metrics: false,
+            light: false,
         };
         let config = cli.apply_overrides(NodeConfig::default());
         assert_eq!(config.network.listen_addresses.len(), 1);
@@ -851,6 +953,7 @@ mod tests {
             validator_count: 1,
             genesis: Some(PathBuf::from("/cli/genesis.toml")),
             metrics: false,
+            light: false,
         };
         let result = cli.apply_overrides(config);
 

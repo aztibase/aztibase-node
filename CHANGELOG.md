@@ -5,7 +5,37 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ---
 
-## [M4] -- Integration Testing + AI + Testnet (IN PROGRESS)
+## [M5] -- Light/Browser Nodes + Wallet (IN PROGRESS)
+
+### Added
+- BIP-39 mnemonic wallet: `generate_mnemonic()` (24-word), `recover_from_mnemonic()` (12/24-word), BLAKE3 domain-separated key derivation `m/44'/aztb'/0'/0/0` (2026-03-07)
+- Argon2id encrypted keyfiles: `encrypt_keyfile()` / `decrypt_keyfile()` with ChaCha20-Poly1305 AEAD, 256MB memory cost, 3 iterations (2026-03-07)
+- `EncryptedKeyFile` JSON format: salt, nonce, Argon2id params, ciphertext — passphrase-protected secret key storage (2026-03-07)
+- `--mnemonic` flag on `aztibase wallet generate`: produces 24-word seed + encrypted keyfile (2026-03-07)
+- `aztibase wallet recover`: restores keypair from 12/24-word mnemonic phrase (2026-03-07)
+- `--passphrase` flag on `aztibase wallet show`: decrypts encrypted keyfiles for display (2026-03-07)
+- `LightStore` in `aztibase-storage/src/light.rs`: dedicated redb instance with 5 tables (headers, finality_certs, proof_cache, wallet_state, peer_cache) (2026-03-07)
+- Light node header CRUD: `store_header()`, `get_header()`, `latest_header_round()`, `store_headers_batch()` with u64-keyed rounds (2026-03-07)
+- Light node finality cert CRUD: `store_finality_cert()`, `get_finality_cert()`, `latest_finality_round()` (2026-03-07)
+- Proof cache with TTL eviction: `cache_proof()`, `get_cached_proof()`, `evict_stale_proofs(max_age_rounds)` (2026-03-07)
+- Local wallet state storage: `store_wallet_state()`, `get_wallet_state()` keyed by address (2026-03-07)
+- `LightSyncMessage` enum: `RequestHeaders`, `ResponseHeaders`, `RequestProof`, `ResponseProof` with version-tagged bincode encoding (2026-03-07)
+- `LightSyncProtocol` state machine: tracks `last_synced_round` / `target_round`, generates batched sync requests (max 100 headers) (2026-03-07)
+- `verify_header_chain()`: validates sequential rounds, finality cert anchor, BLS quorum >= 2/3, non-empty signatures (2026-03-07)
+- `--light` CLI flag: starts node in light mode (LightStore, header sync only, no execution/consensus) (2026-03-07)
+
+### Security
+- Sprint 017 security review: 0 ELEVATED, 0 MEDIUM, 3 LOW (2026-03-07)
+  - SEC-WALLET-001 (LOW): Mnemonic displayed to stdout — user responsibility to secure; zeroize applied to seed bytes
+  - SEC-LIGHT-001 (LOW): Light node trusts BLS quorum — by design, documented trust assumption
+  - SEC-SYNC-003 (LOW): Header sync from single peer — future: multi-peer cross-validation
+
+### Testing
+- 446 tests total (21 new): wallet mnemonic roundtrip, 12-word recovery, encrypt/decrypt roundtrip, wrong passphrase rejection, mnemonic+encrypted keyfile e2e, light store open, header CRUD, batch insert, finality cert CRUD, proof cache + eviction, wallet state CRUD, message serde roundtrip, version mismatch, request cap, valid header chain, gap rejection, cert outside batch, insufficient quorum, empty signature, sync protocol state machine, proof request/response (2026-03-07)
+
+---
+
+## [M4] -- Integration Testing + AI + Testnet (COMPLETE)
 
 ### Security
 - Sprint 016 security review: 0 ELEVATED, 1 MEDIUM (SEC-BRIDGE-003: cross-VM reentrancy), 4 LOW, 1 INFO (2026-03-07)

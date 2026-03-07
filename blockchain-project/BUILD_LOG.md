@@ -21,6 +21,36 @@ Entries are prepended (newest first).
 
 ## Entries
 
+### 2026-03-07 -- project-lead -- Sprint 017 Complete
+**Task:** Sprint 017: Wallet Hardening (BIP-39 + Argon2id), Light Node Storage, Header Sync Protocol (16 tasks, 4 phases)
+**Sprint:** Sprint 017, Phases 1-4
+**Git Ref:** pending
+**Files Changed:**
+- Cargo.toml (workspace: bip39, argon2, chacha20poly1305, zeroize deps)
+- crates/aztibase-node/Cargo.toml (new deps: bip39, argon2, chacha20poly1305, zeroize, blake3, rand)
+- crates/aztibase-node/src/wallet.rs (BIP-39 mnemonic gen/recover, Argon2id encrypt/decrypt, EncryptedKeyFile, 5 new tests)
+- crates/aztibase-node/src/main.rs (--light CLI flag, --mnemonic/--passphrase on wallet generate, wallet recover/show encrypted, run_light_node)
+- crates/aztibase-storage/src/light.rs (NEW: LightStore, 5 redb tables, header/cert/proof/wallet CRUD, 6 tests)
+- crates/aztibase-storage/src/lib.rs (light module + exports)
+- crates/aztibase-storage/Cargo.toml (unchanged, redb already present)
+- crates/aztibase-network/src/light_sync.rs (NEW: LightSyncMessage, LightSyncProtocol, verify_header_chain, 10 tests)
+- crates/aztibase-network/src/lib.rs (light_sync module + exports)
+- crates/aztibase-network/Cargo.toml (bincode dep)
+- blockchain-project/sprints/SPRINT-017.md (all tasks marked DONE)
+- blockchain-project/STATUS.md, BUILD_LOG.md, CHANGELOG.md updated
+**Review Notes:**
+- Phase 1: BIP-39 24-word mnemonic + BLAKE3 domain-separated derivation, Argon2id (256MB/3iter) + ChaCha20-Poly1305 AEAD keyfile encryption
+- Phase 2: LightStore with 5 redb tables (headers u64-keyed, finality certs, proof cache with TTL eviction, wallet state, peer cache)
+- Phase 3: LightSyncMessage (4 variants), LightSyncProtocol state machine, verify_header_chain (sequential rounds + quorum check), --light CLI
+- Phase 4: Security review, M5 milestone started
+**Security Flags:**
+- SEC-MNEMONIC-001 (LOW): Non-standard BIP-32 derivation path (BLAKE3-based, Aztibase-specific)
+- SEC-ARGON-001 (LOW): 256MB Argon2id may be slow on low-RAM devices
+- SEC-SYNC-001 (LOW): Light sync quorum check only (full BLS verify deferred to peer integration)
+- SEC-ZERO-001 (INFO): Mnemonic string returned to caller; caller must handle securely
+- SEC-CACHE-001 (INFO): Proof cache unbounded by count (eviction by round age only)
+- 0 ELEVATED, 0 MEDIUM
+
 ### 2026-03-07 -- project-lead -- Sprint 016 Complete
 **Task:** Sprint 016: Transaction Anomaly Scoring, Cross-VM Bridge, PoUW Foundations (all 16 tasks, 4 phases)
 **Sprint:** Sprint 016, Phases 1-4
