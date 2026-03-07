@@ -73,6 +73,10 @@ struct Cli {
     /// Path to genesis.toml for initial state
     #[arg(long)]
     genesis: Option<PathBuf>,
+
+    /// Enable metrics HTTP endpoint at GET /metrics on the RPC address
+    #[arg(long)]
+    metrics: bool,
 }
 
 #[derive(clap::Subcommand, Debug)]
@@ -148,6 +152,9 @@ impl Cli {
         }
         if let Some(ref p) = self.validator_key {
             cfg.validator_key = Some(p.clone());
+        }
+        if self.metrics {
+            cfg.metrics.enabled = true;
         }
         cfg
     }
@@ -290,6 +297,7 @@ async fn main() -> Result<()> {
         consensus_rx,
         output_tx,
     );
+    let consensus_metrics = engine.metrics();
     tracing::info!("Consensus engine initialized");
 
     // Mempool
@@ -380,15 +388,24 @@ async fn main() -> Result<()> {
         drop(state_guard);
     }
 
+    // Metrics (shared JSON value, updated on each batch result)
+    let node_metrics: Arc<tokio::sync::RwLock<serde_json::Value>> =
+        Arc::new(tokio::sync::RwLock::new(serde_json::json!({})));
+
     // RPC server
     let (mempool_tx, mut mempool_rx) = tokio::sync::mpsc::channel::<Vec<u8>>(4096);
-    let rpc_server = RpcServer::new(
+    let mut rpc_server = RpcServer::new(
         exec_pipeline.shared_state(),
         mempool_tx,
         exec_pipeline.shared_batch_count(),
         Some(exec_store),
         exec_pipeline.shared_base_fee(),
     );
+
+    if config.metrics.enabled || cli.metrics {
+        rpc_server = rpc_server.with_metrics(Arc::clone(&node_metrics));
+        tracing::info!("Metrics endpoint enabled at GET /metrics");
+    }
 
     if config.rpc.enabled {
         let rpc_addr: std::net::SocketAddr = config
@@ -660,6 +677,27 @@ async fn main() -> Result<()> {
                 {
                     tracing::debug!(error = %e, "Failed to publish state root");
                 }
+
+                // Update metrics snapshot
+                let snap = consensus_metrics.snapshot();
+                let base_fee_val = shared_base_fee.load(std::sync::atomic::Ordering::Relaxed);
+                let mut m = node_metrics.write().await;
+                *m = serde_json::json!({
+                    "consensus": {
+                        "vertices_proposed": snap.vertices_proposed,
+                        "vertices_received": snap.vertices_received,
+                        "commits": snap.commits,
+                        "rounds_advanced": snap.rounds_advanced,
+                        "equivocations": snap.equivocations,
+                        "last_commit_latency_us": snap.last_commit_latency_us,
+                    },
+                    "execution": {
+                        "batch_count": batch_index,
+                        "base_fee": base_fee_val,
+                        "state_root": format!("0x{}", hex::encode(result.state_root)),
+                    }
+                });
+                drop(m);
             }
             _ = shutdown.notified() => {
                 break;
@@ -709,6 +747,7 @@ mod tests {
             validator_index: 1,
             validator_count: 1,
             genesis: None,
+            metrics: false,
         };
         let config = cli.apply_overrides(NodeConfig::default());
         assert_eq!(config.data_dir, PathBuf::from("/tmp/test"));
@@ -727,6 +766,7 @@ mod tests {
             validator_index: 1,
             validator_count: 1,
             genesis: None,
+            metrics: false,
         };
         let config = cli.apply_overrides(NodeConfig::default());
         assert_eq!(config.network.listen_addresses.len(), 1);
@@ -810,6 +850,7 @@ mod tests {
             validator_index: 1,
             validator_count: 1,
             genesis: Some(PathBuf::from("/cli/genesis.toml")),
+            metrics: false,
         };
         let result = cli.apply_overrides(config);
 

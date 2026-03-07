@@ -1,11 +1,12 @@
 use crate::crypto::Hash;
 
 /// A state proof that can be verified against a commitment root.
-/// Supports both binary Merkle proofs and Verkle proofs.
+/// Supports binary Merkle proofs, Verkle proofs, and light client proofs.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum StateProof {
     Merkle(MerkleProof),
     Verkle(VerkleProof),
+    LightClient(LightClientProof),
 }
 
 /// Binary Merkle proof: sibling hashes along the path from leaf to root.
@@ -28,6 +29,20 @@ pub enum Side {
 pub struct VerkleProof {
     pub leaf_hash: Hash,
     pub path_commitments: Vec<Hash>,
+}
+
+/// Light client proof: carries the state root, committed height, and a
+/// serialized finality certificate so that a light client can verify
+/// canonical state without replaying execution.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct LightClientProof {
+    pub state_root: Hash,
+    pub committed_height: u64,
+    /// BLS aggregate signature bitmap + aggregate sig, serialized.
+    /// Kept as opaque bytes so aztibase-core doesn't depend on consensus types.
+    pub finality_certificate: Vec<u8>,
+    /// The inner state proof (Merkle or Verkle) for a specific leaf.
+    pub inner_proof: Box<StateProof>,
 }
 
 /// Trait for pluggable state commitment schemes.

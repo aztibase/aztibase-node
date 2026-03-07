@@ -21,6 +21,38 @@ Entries are prepended (newest first).
 
 ## Entries
 
+### 2026-03-07 -- project-lead -- Sprint 015 Complete
+**Task:** Sprint 015: Metrics Telemetry, Light Client Foundations, WebRTC Transport (all 15 tasks, 4 phases)
+**Sprint:** Sprint 015, Phases 1-4
+**Git Ref:** pending
+**Files Changed:**
+- crates/aztibase-node/src/config.rs (MetricsConfig, stun_servers in NetworkConfig)
+- crates/aztibase-node/src/main.rs (--metrics CLI flag, consensus metrics wiring, JSON update loop)
+- crates/aztibase-node/Cargo.toml (hex dependency)
+- crates/aztibase-rpc/src/server.rs (GET /metrics endpoint, node_metrics in RpcState, 2 new tests)
+- crates/aztibase-core/src/commitment.rs (LightClientProof struct, StateProof::LightClient variant)
+- crates/aztibase-execution/src/light_client.rs (NEW: build/verify light client proofs, 4 tests)
+- crates/aztibase-execution/src/snapshot.rs (height + finality_certificate fields, snapshot_header_hash, 3 tests)
+- crates/aztibase-execution/src/lib.rs (light_client module, new exports)
+- crates/aztibase-execution/benches/execution_bench.rs (Merkle/Verkle proof verification benchmarks)
+- crates/aztibase-consensus/benches/consensus_bench.rs (BLS cert verification benchmark at 21/100 validators)
+- crates/aztibase-network/Cargo.toml (webrtc feature gate, libp2p-webrtc dependency)
+- crates/aztibase-network/src/lib.rs (webrtc module, conditional exports)
+- crates/aztibase-network/src/webrtc.rs (NEW: WebRtcTransport, WebRtcConfig, STUN config, 4 tests)
+- crates/aztibase-execution/src/block_stm.rs (Block-STM validation race fix — prior-tx check in finish_validation)
+- blockchain-project/sprints/SPRINT-015.md (all tasks marked DONE)
+- blockchain-project/STATUS.md, BUILD_LOG.md, CHANGELOG.md, DECISIONS.md updated
+**Review Notes:**
+- Phase 1: Metrics via Arc<RwLock<serde_json::Value>> to avoid cross-crate coupling
+- Phase 2: LightClientProof wraps inner Merkle/Verkle proof + finality cert; snapshot backward compat via #[serde(default)]
+- Phase 3: libp2p-webrtc 0.9.0-alpha.1 is pure Rust (webrtc-rs), satisfies ADR-001
+- Block-STM fix: parallel validators could mark tx as Validated while prior tx was re-executing; now checks all prior txs are Validated before accepting
+**Security Flags:**
+- SEC-METRIC-001 (LOW): Metrics snapshot eventually consistent
+- SEC-WEBRTC-001 (LOW): STUN server URL format not validated
+- SEC-LC-001 (LOW): Finality certificate structural validation deferred to M5
+- 0 ELEVATED, 0 MEDIUM
+
 ### 2026-03-07 -- security-engineer -- all crates
 **Task:** Sprint 014 Phase 4: Security Review + Documentation (Tasks 13-15)
 **Sprint:** Sprint 014, Phase 4

@@ -1,6 +1,10 @@
-use criterion::{Criterion, criterion_group, criterion_main};
+use criterion::{BenchmarkId, Criterion, criterion_group, criterion_main};
 
-use aztibase_consensus::{CommitConfig, CommitRule, DagBlock, DagStore, ValidatorSet};
+use aztibase_consensus::{
+    CommitConfig, CommitRule, DagBlock, DagStore, ValidatorSet, build_certificate_from_set,
+    sign_finality, verify_certificate_from_set,
+};
+use aztibase_core::{BlsKeypair, hash};
 use aztibase_storage::StateStore;
 use std::sync::atomic::{AtomicU32, Ordering};
 
@@ -116,10 +120,52 @@ fn bench_commit_evaluation(c: &mut Criterion) {
     });
 }
 
+fn bench_bls_cert_verification(c: &mut Criterion) {
+    let mut group = c.benchmark_group("bls_cert_verification");
+    for n_validators in [21, 100] {
+        group.bench_with_input(
+            BenchmarkId::from_parameter(n_validators),
+            &n_validators,
+            |b, &n| {
+                let mut vs = ValidatorSet::new();
+                let mut keypairs = Vec::with_capacity(n);
+                for i in 0..n {
+                    let kp = BlsKeypair::generate();
+                    let mut addr = [0u8; 32];
+                    addr[..8].copy_from_slice(&(i as u64).to_le_bytes());
+                    vs.add_with_bls(addr, 100, Some(kp.public_key().clone()));
+                    keypairs.push(kp);
+                }
+
+                let batch_hash = hash(b"bench_batch");
+                let state_root = hash(b"bench_state");
+
+                let quorum = vs.quorum_count();
+                let signers: Vec<_> = keypairs[..quorum]
+                    .iter()
+                    .map(|kp| {
+                        let sig = sign_finality(kp, &batch_hash, &state_root);
+                        (kp.public_key().clone(), sig)
+                    })
+                    .collect();
+
+                let cert =
+                    build_certificate_from_set(batch_hash, state_root, &signers, &vs).unwrap();
+
+                b.iter(|| {
+                    verify_certificate_from_set(&cert, &vs);
+                });
+            },
+        );
+    }
+    group.finish();
+}
+
 criterion_group!(
     benches,
     bench_vertex_creation,
     bench_dag_insertion,
     bench_commit_evaluation,
+    bench_bls_cert_verification,
 );
 criterion_main!(benches);

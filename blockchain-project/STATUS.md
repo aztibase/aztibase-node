@@ -3,7 +3,7 @@
 **Last Updated:** 2026-03-07
 **Updated By:** project-lead
 **Current Phase:** M4 -- Integration Testing + AI + Testnet (IN PROGRESS)
-**Current Sprint:** Sprint 014 -- COMPLETE (Consensus Resilience, Benchmarking, Verkle Foundations)
+**Current Sprint:** Sprint 015 -- COMPLETE (Metrics Telemetry, Light Client Foundations, WebRTC Transport)
 
 ---
 
@@ -33,7 +33,7 @@
 - Build-phase tracking infrastructure (5 documents)
 - Implementation depth audit (Sprint 001, Task 7)
 - Reference repos cloned (MystiCeti, Sui, Lighthouse, rust-libp2p, redb)
-- cargo build + cargo test pass (397 tests, 0 failures; 1 pre-existing flaky: parallel_conflicting_chain)
+- cargo build + cargo test pass (410 tests, 0 failures)
 - Sprint 001 closed with retrospective
 - Sprint 002 closed: 24/24 tasks, 5 phases complete
 - Sprint 003 closed: 18/18 tasks, 4 phases complete
@@ -41,6 +41,7 @@
 - Sprint 005 closed: 21/21 tasks, 4 phases complete
 - Sprint 006 closed: 23/24 tasks (1 deferred), 4 phases complete
 - Sprint 007 complete: receipt store, EVM via revm, AI inference via tract
+- Sprint 015 complete: 15/15 tasks, 4 phases (metrics telemetry, light client proofs, WebRTC transport scaffold, Block-STM race fix, security review)
 - Sprint 014 complete: 15/15 tasks, 4 phases (consensus resilience, criterion benchmarks, Verkle tree foundations, security review)
 - Sprint 013 complete: 15/15 tasks, 4 phases (genesis-driven validator bootstrap, BLS keys in genesis, testnet integration, security review)
 - Sprint 012 complete: 15/15 tasks, 4 phases (fee escrow, persistent base fee, genesis config, CLI wallet, security review)
@@ -67,12 +68,16 @@
 | aztibase-node | PARTIAL | node-engineer | YES | YES |
 
 ### In Progress
-- Sprint 015 planning
+- Sprint 016 planning
 
 ### Blocked
 - Nothing currently blocked
 
 ### Recently Completed
+- Sprint 015 Phase 4: Security review — 0 ELEVATED, 0 MEDIUM, 3 LOW; Block-STM parallel validation race fixed; clippy/fmt clean
+- Sprint 015 Phase 3: WebRTC transport scaffold — libp2p-webrtc feature gate, WebRtcTransport struct, STUN config, 4 new tests
+- Sprint 015 Phase 2: Light client proofs — LightClientProof variant, verify_light_client_proof, snapshot height + finality_certificate, Merkle/Verkle/BLS benchmarks (7 new tests)
+- Sprint 015 Phase 1: Metrics wiring — MetricsConfig, --metrics CLI flag, GET /metrics HTTP endpoint, consensus+execution JSON counters (2 new tests)
 - Sprint 014 Phase 3: Verkle tree foundations — StateCommitment trait, MerkleCommitment, VerkleTree prototype, VerkleCommitment (8 new tests)
 - Sprint 014 Phase 2: Performance benchmarking — criterion harness (6 benchmarks), ConsensusMetrics with atomic counters (1 new test)
 - Sprint 014 Phase 1: Consensus resilience — equivocation detection, vertex buffering, byzantine + crash recovery integration tests (5 new tests)
@@ -111,7 +116,7 @@
 - Sprint 005 Phase 1: Consensus-to-execution wiring, TxKind routing, ExecutionPipeline
 
 ### Next Up
-1. Sprint 015: Wire --metrics to node binary, WebRTC transport, light client protocol, or benchmark baselines
+1. Sprint 016: TBD (candidate areas: full WebRTC swarm integration, light client sync protocol, AI compute market, PoUW consensus)
 
 ---
 
@@ -126,6 +131,7 @@
 | Transitive dep advisories (ring, wasmtime ×4, tracing-subscriber, lru, bincode) | LOW | security-engineer | DOCUMENTED |
 | Mempool seen set memory growth (SEC-MEM-001) | MEDIUM | node-engineer | FIXED (bounded to max_size×10) |
 | AI model paths from config (SEC-AI-001) | MEDIUM | ai-integration-engineer | FIXED (path traversal blocked) |
+| Block-STM parallel validation race | MEDIUM | smart-contract-engineer | FIXED (prior-tx check in finish_validation) |
 | BLS rogue-key attack without PoP | MEDIUM | consensus-engineer | DOCUMENTED (ADR-004) |
 
 ---

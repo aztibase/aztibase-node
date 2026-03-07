@@ -13,6 +13,13 @@ pub struct NodeConfig {
     pub rpc: RpcConfig,
     pub log: LogConfig,
     pub ai: AiConfig,
+    pub metrics: MetricsConfig,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(default)]
+pub struct MetricsConfig {
+    pub enabled: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -21,6 +28,7 @@ pub struct NetworkConfig {
     pub listen_addresses: Vec<String>,
     pub boot_nodes: Vec<String>,
     pub idle_timeout_secs: u64,
+    pub stun_servers: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -59,6 +67,7 @@ impl Default for NodeConfig {
             rpc: RpcConfig::default(),
             log: LogConfig::default(),
             ai: AiConfig::default(),
+            metrics: MetricsConfig::default(),
         }
     }
 }
@@ -72,6 +81,10 @@ impl Default for NetworkConfig {
             ],
             boot_nodes: Vec::new(),
             idle_timeout_secs: 60,
+            stun_servers: vec![
+                "stun:stun.l.google.com:19302".into(),
+                "stun:stun1.l.google.com:19302".into(),
+            ],
         }
     }
 }

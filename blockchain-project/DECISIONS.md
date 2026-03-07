@@ -15,6 +15,7 @@ Every non-obvious technical decision is recorded here. Each ADR is immutable onc
 | ADR-005 | Use axum for JSON-RPC server | 2026-03-06 | ACCEPTED | node-engineer |
 | ADR-006 | Post-execution fee collection (not pre-execution escrow) | 2026-03-07 | ACCEPTED | smart-contract-engineer |
 | ADR-007 | StateCommitment trait with enum-based proofs | 2026-03-07 | ACCEPTED | blockchain-architect |
+| ADR-008 | Metrics via opaque JSON to avoid cross-crate coupling | 2026-03-07 | ACCEPTED | node-engineer |
 
 ---
 
@@ -212,6 +213,36 @@ Use a `StateCommitment` trait with an enum-based `StateProof` type. The trait de
 - Adding a third commitment scheme requires modifying the `StateProof` enum (acceptable — unlikely to happen)
 - Both backends must be in scope wherever `StateProof` is matched (compile-time guarantee, not runtime overhead)
 - The trait allows runtime backend selection (e.g., config-driven Merkle vs Verkle)
+
+---
+
+## ADR-008: Metrics via opaque JSON to avoid cross-crate coupling
+
+**Date:** 2026-03-07
+**Status:** ACCEPTED
+**Decided By:** node-engineer
+**Git Ref:** pending (Sprint 015)
+
+### Context
+The node binary needs to expose consensus and execution metrics via an HTTP endpoint served by the RPC crate. However, `aztibase-rpc` must not depend on `aztibase-consensus` (would create a dependency cycle through `aztibase-node`). Three approaches were considered:
+- **Shared metrics crate**: New `aztibase-metrics` crate that both consensus and RPC depend on
+- **Trait-based metrics**: Define a `MetricsProvider` trait in a shared location
+- **Opaque JSON**: Pass metrics as `Arc<RwLock<serde_json::Value>>` from node binary to RPC server
+
+### Decision
+Use `Arc<RwLock<serde_json::Value>>` as an opaque metrics container. The node binary (which has access to both consensus and RPC) updates the JSON periodically. The RPC server serves it at `GET /metrics` without understanding its structure.
+
+### Rationale
+- Zero new crates — avoids workspace bloat for a single use case
+- No cross-crate coupling — RPC sees only `serde_json::Value`
+- Extensible — any new metrics can be added to the JSON without changing RPC code
+- `serde_json` is already a workspace dependency
+- Trade-off: no compile-time schema enforcement (acceptable for telemetry)
+
+### Consequences
+- Metrics JSON is eventually consistent — readers may see partially-updated snapshots
+- No compile-time type safety on metric names (mitigated by tests)
+- If structured metrics are needed later (e.g., Prometheus format), this can be refactored without changing the RPC interface
 
 ---
 

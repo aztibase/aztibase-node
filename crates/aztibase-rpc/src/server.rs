@@ -4,7 +4,10 @@ use std::sync::Arc;
 use axum::extract::{DefaultBodyLimit, State};
 use axum::http::StatusCode;
 use axum::response::IntoResponse;
-use axum::{Json, Router, routing::post};
+use axum::{
+    Json, Router,
+    routing::{get, post},
+};
 use serde::{Deserialize, Serialize};
 use tokio::sync::{RwLock, mpsc};
 use tracing::{debug, info};
@@ -75,6 +78,7 @@ pub struct RpcState {
     pub batch_count: Arc<std::sync::atomic::AtomicU64>,
     pub receipt_store: Option<Arc<StateStore>>,
     pub base_fee: Arc<std::sync::atomic::AtomicU64>,
+    pub node_metrics: Option<Arc<RwLock<serde_json::Value>>>,
 }
 
 impl Clone for RpcState {
@@ -85,6 +89,7 @@ impl Clone for RpcState {
             batch_count: Arc::clone(&self.batch_count),
             receipt_store: self.receipt_store.clone(),
             base_fee: Arc::clone(&self.base_fee),
+            node_metrics: self.node_metrics.clone(),
         }
     }
 }
@@ -110,13 +115,22 @@ impl RpcServer {
                 batch_count,
                 receipt_store,
                 base_fee,
+                node_metrics: None,
             },
         }
     }
 
+    pub fn with_metrics(mut self, metrics: Arc<RwLock<serde_json::Value>>) -> Self {
+        self.state.node_metrics = Some(metrics);
+        self
+    }
+
     pub fn router(&self) -> Router {
-        Router::new()
-            .route("/", post(handle_rpc))
+        let mut router = Router::new().route("/", post(handle_rpc));
+        if self.state.node_metrics.is_some() {
+            router = router.route("/metrics", get(handle_metrics));
+        }
+        router
             .layer(DefaultBodyLimit::max(1_048_576))
             .with_state(self.state.clone())
     }
@@ -387,6 +401,21 @@ async fn handle_estimate_gas(_state: &RpcState, req: &JsonRpcRequest) -> JsonRpc
     JsonRpcResponse::success(req.id.clone(), serde_json::json!(format!("0x{estimate:x}")))
 }
 
+// ── Metrics Endpoint ────────────────────────────────────────────────
+
+async fn handle_metrics(State(state): State<RpcState>) -> impl IntoResponse {
+    match &state.node_metrics {
+        Some(metrics) => {
+            let data = metrics.read().await;
+            (StatusCode::OK, Json(data.clone()))
+        }
+        None => (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(serde_json::json!({"error": "metrics not enabled"})),
+        ),
+    }
+}
+
 // ── Tests ───────────────────────────────────────────────────────────
 
 #[cfg(test)]
@@ -404,6 +433,7 @@ mod tests {
             batch_count: Arc::new(std::sync::atomic::AtomicU64::new(0)),
             receipt_store: None,
             base_fee: Arc::new(std::sync::atomic::AtomicU64::new(1)),
+            node_metrics: None,
         };
         (state, rx)
     }
@@ -422,6 +452,7 @@ mod tests {
             batch_count: Arc::new(std::sync::atomic::AtomicU64::new(42)),
             receipt_store: None,
             base_fee: Arc::new(std::sync::atomic::AtomicU64::new(1)),
+            node_metrics: None,
         };
         (state, rx)
     }
@@ -648,6 +679,7 @@ mod tests {
             batch_count: Arc::new(std::sync::atomic::AtomicU64::new(0)),
             receipt_store: Some(store),
             base_fee: Arc::new(std::sync::atomic::AtomicU64::new(1)),
+            node_metrics: None,
         };
         (state, rx, path)
     }
@@ -746,5 +778,56 @@ mod tests {
         let body = r#"{"jsonrpc":"2.0","method":"aztb_estimateGas","params":["0x07"],"id":1}"#;
         let resp = rpc_call(&state, body).await;
         assert_eq!(resp["result"], "0xcf08"); // 53000
+    }
+
+    // ── Metrics endpoint tests ──────────────────────────────────────
+
+    async fn metrics_call(state: &RpcState) -> (StatusCode, serde_json::Value) {
+        let router = Router::new()
+            .route("/metrics", get(handle_metrics))
+            .with_state(state.clone());
+
+        let request = Request::builder()
+            .method("GET")
+            .uri("/metrics")
+            .body(Body::empty())
+            .unwrap();
+
+        let response = router.oneshot(request).await.unwrap();
+        let status = response.status();
+        let bytes = axum::body::to_bytes(response.into_body(), 1_048_576)
+            .await
+            .unwrap();
+        let json: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        (status, json)
+    }
+
+    #[tokio::test]
+    async fn metrics_endpoint_returns_data() {
+        let (mut state, _rx) = test_state();
+        let metrics = Arc::new(RwLock::new(serde_json::json!({
+            "consensus": {
+                "vertices_proposed": 10,
+                "commits": 3
+            },
+            "execution": {
+                "batch_count": 5,
+                "base_fee": 1
+            }
+        })));
+        state.node_metrics = Some(metrics);
+
+        let (status, json) = metrics_call(&state).await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(json["consensus"]["vertices_proposed"], 10);
+        assert_eq!(json["execution"]["batch_count"], 5);
+    }
+
+    #[tokio::test]
+    async fn metrics_endpoint_disabled_returns_503() {
+        let (state, _rx) = test_state();
+        let (status, json) = metrics_call(&state).await;
+        assert_eq!(status, StatusCode::SERVICE_UNAVAILABLE);
+        assert!(json["error"].as_str().unwrap().contains("not enabled"));
     }
 }

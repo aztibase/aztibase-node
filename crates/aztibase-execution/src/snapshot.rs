@@ -24,6 +24,11 @@ pub struct StateSnapshot {
     version: u8,
     pub batch_index: u64,
     pub state_root: [u8; 32],
+    /// Committed block height at which this snapshot was taken.
+    pub height: u64,
+    /// Serialized finality certificate proving this snapshot is canonical.
+    #[serde(default)]
+    pub finality_certificate: Vec<u8>,
     accounts: Vec<AccountEntry>,
 }
 
@@ -42,6 +47,15 @@ pub enum SnapshotError {
 }
 
 pub fn create_snapshot(state: &AccountState, batch_index: u64) -> StateSnapshot {
+    create_snapshot_with_finality(state, batch_index, batch_index, vec![])
+}
+
+pub fn create_snapshot_with_finality(
+    state: &AccountState,
+    batch_index: u64,
+    height: u64,
+    finality_certificate: Vec<u8>,
+) -> StateSnapshot {
     let accounts = state
         .iter_accounts()
         .map(|(addr, acct)| AccountEntry {
@@ -63,8 +77,19 @@ pub fn create_snapshot(state: &AccountState, batch_index: u64) -> StateSnapshot 
         version: SNAPSHOT_VERSION,
         batch_index,
         state_root: state.state_root(),
+        height,
+        finality_certificate,
         accounts,
     }
+}
+
+/// Compact header hash for snapshot identification.
+pub fn snapshot_header_hash(snapshot: &StateSnapshot) -> [u8; 32] {
+    let mut data = Vec::new();
+    data.extend_from_slice(&snapshot.batch_index.to_le_bytes());
+    data.extend_from_slice(&snapshot.height.to_le_bytes());
+    data.extend_from_slice(&snapshot.state_root);
+    hash(&data)
 }
 
 pub fn serialize_snapshot(snapshot: &StateSnapshot) -> Result<Vec<u8>, SnapshotError> {
@@ -224,5 +249,38 @@ mod tests {
         let bytes = bincode::serialize(&snap).unwrap();
         let err = deserialize_snapshot(&bytes).unwrap_err();
         assert!(matches!(err, SnapshotError::UnsupportedVersion(99)));
+    }
+
+    #[test]
+    fn snapshot_with_finality_roundtrip() {
+        let state = sample_state();
+        let cert = vec![0xDE, 0xAD, 0xBE, 0xEF];
+        let snap = create_snapshot_with_finality(&state, 10, 42, cert.clone());
+        assert_eq!(snap.height, 42);
+        assert_eq!(snap.finality_certificate, cert);
+
+        let bytes = serialize_snapshot(&snap).unwrap();
+        let restored = deserialize_snapshot(&bytes).unwrap();
+        assert_eq!(restored.height, 42);
+        assert_eq!(restored.finality_certificate, cert);
+        assert_eq!(restored.batch_index, 10);
+    }
+
+    #[test]
+    fn snapshot_header_hash_deterministic() {
+        let state = sample_state();
+        let snap = create_snapshot(&state, 5);
+        let h1 = snapshot_header_hash(&snap);
+        let h2 = snapshot_header_hash(&snap);
+        assert_eq!(h1, h2);
+        assert_ne!(h1, [0u8; 32]);
+    }
+
+    #[test]
+    fn snapshot_header_hash_varies_by_height() {
+        let state = sample_state();
+        let s1 = create_snapshot_with_finality(&state, 5, 10, vec![]);
+        let s2 = create_snapshot_with_finality(&state, 5, 20, vec![]);
+        assert_ne!(snapshot_header_hash(&s1), snapshot_header_hash(&s2));
     }
 }

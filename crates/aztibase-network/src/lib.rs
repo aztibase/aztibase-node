@@ -2,10 +2,14 @@ pub mod behaviour;
 pub mod discovery;
 pub mod gossip;
 pub mod transport;
+#[cfg(feature = "webrtc")]
+pub mod webrtc;
 
 pub use gossip::{TOPIC_CONSENSUS, TOPIC_STATE_SYNC, TOPIC_TRANSACTIONS};
 pub use libp2p::Multiaddr;
 pub use transport::{Libp2pTransport, NetworkEvent, TransportConfig};
+#[cfg(feature = "webrtc")]
+pub use webrtc::{WebRtcConfig, WebRtcTransport};
 
 #[cfg(test)]
 mod tests {

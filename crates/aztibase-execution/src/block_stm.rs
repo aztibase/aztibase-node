@@ -232,7 +232,15 @@ impl Scheduler {
             return;
         }
         if valid {
-            self.statuses[tx_index] = TxStatus::Validated;
+            let all_prior_valid = (0..tx_index).all(|j| self.statuses[j] == TxStatus::Validated);
+            if all_prior_valid {
+                self.statuses[tx_index] = TxStatus::Validated;
+            } else {
+                self.statuses[tx_index] = TxStatus::Executed;
+                if tx_index < self.validation_idx {
+                    self.validation_idx = tx_index;
+                }
+            }
         } else {
             self.statuses[tx_index] = TxStatus::ReadyToExecute;
             for i in (tx_index + 1)..self.statuses.len() {

@@ -8,6 +8,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 ## [M4] -- Integration Testing + AI + Testnet (IN PROGRESS)
 
 ### Security
+- Sprint 015 security review: 0 ELEVATED, 0 MEDIUM, 3 LOW (SEC-METRIC-001, SEC-WEBRTC-001, SEC-LC-001) (2026-03-07)
+- Block-STM parallel validation race FIXED: `finish_validation()` now checks all prior txs are Validated before accepting (2026-03-07)
 - Sprint 014 security review: 0 ELEVATED, 0 MEDIUM, 4 LOW, 1 INFO (SEC-EQUI-001, SEC-BUF-001, SEC-VERKLE-001/002, SEC-METRICS-001) (2026-03-07)
 - Sprint 012 security review: 0 ELEVATED, 0 MEDIUM, 4 LOW (SEC-KEY-001/002, SEC-FEE-004, SEC-BASE-001) (2026-03-07)
 - SEC-FEE-002 CLOSED: Pre-execution fee escrow prevents underfunded execution (2026-03-07)
@@ -23,6 +25,15 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 - Sprint 009 security review: 2 ELEVATED fixed, 8 MEDIUM (2 fixed, 6 documented), 5 LOW documented (2026-03-07)
 
 ### Added
+- `GET /metrics` HTTP endpoint with consensus + execution JSON counters, gated by `--metrics` CLI flag (2026-03-07)
+- `MetricsConfig` in `NodeConfig` for metrics endpoint configuration (2026-03-07)
+- `LightClientProof` variant in `StateProof`: wraps inner proof + state root + height + finality certificate (2026-03-07)
+- `verify_light_client_proof()`: validates inner Merkle/Verkle proof, rejects empty certs and nested proofs (2026-03-07)
+- `StateSnapshot` gains `height` and `finality_certificate` fields for canonical verification (2026-03-07)
+- `snapshot_header_hash()` for compact snapshot identification (2026-03-07)
+- Criterion benchmarks: Merkle/Verkle proof verification (100/1k/10k leaves), BLS cert verification (21/100 validators) (2026-03-07)
+- WebRTC transport scaffold: `WebRtcTransport`, `WebRtcConfig`, STUN server config, feature-gated `webrtc` (2026-03-07)
+- `stun_servers` field in `NetworkConfig` with Google STUN defaults (2026-03-07)
 - Equivocation detection in consensus engine: tracks `(round, author)` pairs, rejects conflicting vertices (2026-03-07)
 - Vertex buffering for missing parents: bounded buffer (MAX=64) with drain-on-arrival (2026-03-07)
 - Byzantine fault injection integration test: 4-validator network with 1 equivocating validator (2026-03-07)

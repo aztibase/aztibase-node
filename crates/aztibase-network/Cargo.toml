@@ -5,10 +5,15 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 
+[features]
+default = []
+webrtc = ["libp2p-webrtc"]
+
 [dependencies]
 aztibase-core = { workspace = true }
 tokio = { workspace = true }
 libp2p = { workspace = true }
+libp2p-webrtc = { version = "0.9.0-alpha.1", features = ["tokio"], optional = true }
 tracing = { workspace = true }
 thiserror = { workspace = true }
 serde = { workspace = true }
