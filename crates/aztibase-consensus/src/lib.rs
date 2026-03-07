@@ -15,7 +15,10 @@ pub use engine::{
     ConsensusConfig, ConsensusEngine, ConsensusInput, ConsensusOutput, RoundState,
     StateRootAnnounce,
 };
-pub use finality::{FinalityCertificate, build_certificate, sign_finality, verify_certificate};
+pub use finality::{
+    FinalityCertificate, build_certificate, build_certificate_from_set, sign_finality,
+    verify_certificate, verify_certificate_from_set,
+};
 pub use ordering::{CommittedBatch, extract_committed_batch};
 pub use validator::{ValidatorInfo, ValidatorSet};
 pub use wire::{WireError, decode_vertex, encode_vertex};

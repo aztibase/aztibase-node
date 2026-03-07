@@ -15,6 +15,8 @@ pub fn generate_key(output_path: &Path) -> Result<()> {
         public_key: hex_encode(kp.public_key().as_bytes()),
         secret_key: hex_encode(&kp.secret_bytes()),
         address: hex_encode(&addr),
+        bls_public_key: None,
+        bls_secret_key: None,
     };
 
     if let Some(parent) = output_path.parent() {

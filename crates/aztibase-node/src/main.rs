@@ -58,11 +58,15 @@ struct Cli {
     #[arg(long, global = true)]
     log_level: Option<String>,
 
-    /// Validator index for testing (1-255). Each node needs a unique index.
+    /// Path to validator key file (JSON). Determines this node's identity.
+    #[arg(long)]
+    validator_key: Option<PathBuf>,
+
+    /// Validator index for testing (1-255). Fallback when no --validator-key.
     #[arg(long, default_value = "1")]
     validator_index: u8,
 
-    /// Total number of validators in the test network
+    /// Total number of validators in the test network (fallback without genesis)
     #[arg(long, default_value = "1")]
     validator_count: u8,
 
@@ -139,6 +143,12 @@ impl Cli {
         if let Some(ref level) = self.log_level {
             cfg.log.level = level.clone();
         }
+        if let Some(ref p) = self.genesis {
+            cfg.genesis_path = Some(p.clone());
+        }
+        if let Some(ref p) = self.validator_key {
+            cfg.validator_key = Some(p.clone());
+        }
         cfg
     }
 }
@@ -159,11 +169,13 @@ async fn main() -> Result<()> {
                 .as_millis() as u64;
             let generated = genesis::generate_genesis(validators, funded, timestamp);
             genesis::write_genesis(&generated, &output)?;
+            genesis::write_node_configs(&generated, &output)?;
             println!(
-                "Genesis written to {} ({} validators, {} funded accounts)",
+                "Genesis written to {} ({} validators, {} funded accounts, {} node configs)",
                 output.display(),
                 validators,
-                funded
+                funded,
+                validators
             );
             return Ok(());
         }
@@ -208,13 +220,63 @@ async fn main() -> Result<()> {
     let store = StateStore::open(storage_path_str).context("Failed to open storage")?;
     tracing::info!(path = %storage_path.display(), "Storage initialized");
 
-    // Consensus
+    // Load genesis config (CLI flag > config file > none)
+    let genesis_path = cli.genesis.as_ref().or(config.genesis_path.as_ref());
+    let genesis_config = genesis_path.map(|p| genesis::load_genesis(p)).transpose()?;
+
+    // Load validator key file (CLI flag > config file > none)
+    let key_path = cli.validator_key.as_ref().or(config.validator_key.as_ref());
+    let validator_keypair = key_path.map(|p| genesis::load_keyfile(p)).transpose()?;
+
+    // Consensus: build validator set from genesis or fallback to hardcoded
     let dag = DagStore::new(store).context("Failed to initialize DAG store")?;
-    let identity = [cli.validator_index; 32];
-    let mut validators = ValidatorSet::new();
-    for i in 1..=cli.validator_count {
-        validators.add([i; 32], 100);
-    }
+    let (identity, validators) = if let Some(ref gen_cfg) = genesis_config {
+        let mut vs = ValidatorSet::new();
+        for entry in &gen_cfg.validators {
+            if let Some(addr) = genesis::hex_decode(&entry.address)
+                .and_then(|b| <[u8; 32]>::try_from(b.as_slice()).ok())
+            {
+                let bls_pk = entry
+                    .bls_public_key
+                    .as_ref()
+                    .and_then(|hex| genesis::hex_decode(hex))
+                    .and_then(|bytes| <[u8; 48]>::try_from(bytes.as_slice()).ok())
+                    .and_then(aztibase_core::BlsPublicKey::from_bytes);
+                vs.add_with_bls(addr, entry.stake, bls_pk);
+            }
+        }
+        let id = if let Some((_, key_addr)) = &validator_keypair {
+            if !vs.contains(key_addr) {
+                anyhow::bail!(
+                    "Validator key address {} not found in genesis validators",
+                    genesis::hex_encode(key_addr)
+                );
+            }
+            tracing::info!(
+                address = %genesis::hex_encode(key_addr),
+                "Validator identity from key file"
+            );
+            *key_addr
+        } else {
+            let idx = (cli.validator_index as usize).saturating_sub(1);
+            gen_cfg
+                .validators
+                .get(idx)
+                .and_then(|e| {
+                    genesis::hex_decode(&e.address)
+                        .and_then(|b| <[u8; 32]>::try_from(b.as_slice()).ok())
+                })
+                .unwrap_or([cli.validator_index; 32])
+        };
+        tracing::info!(validators = vs.len(), "Validator set loaded from genesis");
+        (id, vs)
+    } else {
+        let mut vs = ValidatorSet::new();
+        for i in 1..=cli.validator_count {
+            vs.add([i; 32], 100);
+        }
+        ([cli.validator_index; 32], vs)
+    };
 
     let consensus_config = ConsensusConfig::default();
     let (consensus_tx, consensus_rx) = tokio::sync::mpsc::channel::<ConsensusInput>(256);
@@ -303,12 +365,11 @@ async fn main() -> Result<()> {
     exec_pipeline.set_ai_runtime(ai_runtime);
     tracing::info!("Execution pipeline initialized (AI runtime: tract)");
 
-    if let Some(ref genesis_path) = cli.genesis {
-        let gen_config = genesis::load_genesis(genesis_path)?;
+    if let Some(ref gen_cfg) = genesis_config {
         let shared = exec_pipeline.shared_state();
         let mut state_guard = shared.write().await;
         if state_guard.account_count() == 0 {
-            genesis::apply_genesis(&gen_config, &mut state_guard);
+            genesis::apply_genesis(gen_cfg, &mut state_guard);
             tracing::info!(
                 accounts = state_guard.account_count(),
                 "Genesis state applied"
@@ -644,6 +705,7 @@ mod tests {
             listen: vec![],
             rpc_addr: None,
             log_level: None,
+            validator_key: None,
             validator_index: 1,
             validator_count: 1,
             genesis: None,
@@ -661,6 +723,7 @@ mod tests {
             listen: vec!["/ip4/127.0.0.1/tcp/9999".into()],
             rpc_addr: None,
             log_level: None,
+            validator_key: None,
             validator_index: 1,
             validator_count: 1,
             genesis: None,
@@ -700,5 +763,84 @@ mod tests {
         let store = StateStore::open(db_path.to_str().unwrap());
         assert!(store.is_ok());
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn validator_key_matches_genesis() {
+        let dir = std::env::temp_dir().join(format!("aztibase_vkey_test_{}", std::process::id()));
+        let generated = genesis::generate_genesis(3, 1, 1000);
+        genesis::write_genesis(&generated, &dir).unwrap();
+
+        // Load the first validator's key file
+        let (hex_addr, _, _) = &generated.validator_keys[0];
+        let key_path = dir.join("keys").join(format!("{hex_addr}.json"));
+        let (_, loaded_addr) = genesis::load_keyfile(&key_path).unwrap();
+
+        // Build validator set from genesis
+        let mut vs = ValidatorSet::new();
+        for entry in &generated.config.validators {
+            if let Some(addr) = genesis::hex_decode(&entry.address)
+                .and_then(|b| <[u8; 32]>::try_from(b.as_slice()).ok())
+            {
+                vs.add(addr, entry.stake);
+            }
+        }
+
+        // Loaded key address must be in the validator set
+        assert!(vs.contains(&loaded_addr));
+        assert_eq!(vs.get(&loaded_addr), Some(1_000_000));
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn config_override_precedence() {
+        let mut config = NodeConfig::default();
+        config.genesis_path = Some(PathBuf::from("/config/genesis.toml"));
+        config.validator_key = Some(PathBuf::from("/config/key.json"));
+
+        let cli = Cli {
+            command: None,
+            config: None,
+            data_dir: None,
+            listen: vec![],
+            rpc_addr: None,
+            log_level: None,
+            validator_key: Some(PathBuf::from("/cli/key.json")),
+            validator_index: 1,
+            validator_count: 1,
+            genesis: Some(PathBuf::from("/cli/genesis.toml")),
+        };
+        let result = cli.apply_overrides(config);
+
+        // CLI flags override config file values
+        assert_eq!(
+            result.genesis_path,
+            Some(PathBuf::from("/cli/genesis.toml"))
+        );
+        assert_eq!(result.validator_key, Some(PathBuf::from("/cli/key.json")));
+    }
+
+    #[test]
+    fn validators_loaded_from_genesis() {
+        let generated = genesis::generate_genesis(3, 1, 1000);
+        let cfg = &generated.config;
+        let mut vs = ValidatorSet::new();
+        for entry in &cfg.validators {
+            if let Some(addr) = genesis::hex_decode(&entry.address)
+                .and_then(|b| <[u8; 32]>::try_from(b.as_slice()).ok())
+            {
+                vs.add(addr, entry.stake);
+            }
+        }
+        assert_eq!(vs.len(), 3);
+        assert_eq!(vs.total_stake(), 3_000_000);
+
+        // Verify each genesis validator is in the set with correct stake
+        for entry in &cfg.validators {
+            let addr_bytes = genesis::hex_decode(&entry.address).unwrap();
+            let addr: [u8; 32] = addr_bytes.as_slice().try_into().unwrap();
+            assert_eq!(vs.get(&addr), Some(entry.stake));
+        }
     }
 }

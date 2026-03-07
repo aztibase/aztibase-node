@@ -131,6 +131,29 @@ pub fn verify_certificate(
     verify_aggregate(&signer_keys, &msg, &cert.aggregate_signature)
 }
 
+/// Build a finality certificate pulling BLS public keys from the ValidatorSet.
+/// This is the preferred API when BLS keys are stored in genesis.
+pub fn build_certificate_from_set(
+    batch_hash: BlockHash,
+    state_root: [u8; 32],
+    signers: &[(BlsPublicKey, BlsSignature)],
+    validator_set: &ValidatorSet,
+) -> Option<FinalityCertificate> {
+    let ordered = validator_set.bls_keys_ordered();
+    let bls_keys: Vec<BlsPublicKey> = ordered.into_iter().map(|(_, k)| k).collect();
+    build_certificate(batch_hash, state_root, &bls_keys, signers, validator_set)
+}
+
+/// Verify a finality certificate pulling BLS public keys from the ValidatorSet.
+pub fn verify_certificate_from_set(
+    cert: &FinalityCertificate,
+    validator_set: &ValidatorSet,
+) -> bool {
+    let ordered = validator_set.bls_keys_ordered();
+    let bls_keys: Vec<BlsPublicKey> = ordered.into_iter().map(|(_, k)| k).collect();
+    verify_certificate(cert, &bls_keys, validator_set)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -315,6 +338,32 @@ mod tests {
 
         let cert = build_certificate(batch_hash, state_root, &bls_keys, &signers, &vs);
         assert!(cert.is_none());
+    }
+
+    #[test]
+    fn finality_cert_with_genesis_bls() {
+        let mut vs = ValidatorSet::new();
+        let mut keypairs = Vec::new();
+
+        for i in 0..4u8 {
+            let kp = BlsKeypair::generate();
+            vs.add_with_bls([i + 1; 32], 100, Some(kp.public_key().clone()));
+            keypairs.push(kp);
+        }
+
+        let batch_hash = hash(b"genesis_bls_batch");
+        let state_root = hash(b"genesis_bls_state");
+
+        let signers: Vec<(BlsPublicKey, BlsSignature)> = keypairs[..3]
+            .iter()
+            .map(|kp| {
+                let sig = sign_finality(kp, &batch_hash, &state_root);
+                (kp.public_key().clone(), sig)
+            })
+            .collect();
+
+        let cert = build_certificate_from_set(batch_hash, state_root, &signers, &vs).unwrap();
+        assert!(verify_certificate_from_set(&cert, &vs));
     }
 
     #[test]

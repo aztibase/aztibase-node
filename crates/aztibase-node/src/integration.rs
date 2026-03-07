@@ -576,4 +576,200 @@ mod tests {
 
         cleanup(&path);
     }
+
+    // ── Sprint 013: Engine with genesis validators ──────────────────
+
+    #[tokio::test]
+    async fn engine_with_genesis_validators() {
+        use aztibase_consensus::DagBlock;
+        use std::time::Duration;
+
+        use crate::genesis;
+
+        let generated = genesis::generate_genesis(3, 0, 1000);
+
+        let mut validators = ValidatorSet::new();
+        let mut validator_ids: Vec<[u8; 32]> = Vec::new();
+        for entry in &generated.config.validators {
+            if let Some(addr) = genesis::hex_decode(&entry.address)
+                .and_then(|b| <[u8; 32]>::try_from(b.as_slice()).ok())
+            {
+                let bls_pk = entry
+                    .bls_public_key
+                    .as_ref()
+                    .and_then(|hex| genesis::hex_decode(hex))
+                    .and_then(|bytes| <[u8; 48]>::try_from(bytes.as_slice()).ok())
+                    .and_then(aztibase_core::BlsPublicKey::from_bytes);
+                validators.add_with_bls(addr, entry.stake, bls_pk);
+                validator_ids.push(addr);
+            }
+        }
+        assert_eq!(validators.len(), 3);
+
+        let config = ConsensusConfig {
+            round_duration: Duration::from_millis(200),
+            wave_length: 2,
+            max_parents: 10,
+            max_pending_txs: 4096,
+        };
+
+        let genesis_ts = generated.config.timestamp;
+        let genesis_blocks: Vec<DagBlock> = validator_ids
+            .iter()
+            .map(|id| DagBlock::genesis(*id, genesis_ts))
+            .collect();
+
+        let (router_tx, mut router_rx) = mpsc::channel::<(usize, ConsensusOutput)>(1024);
+        let mut engine_inputs = Vec::new();
+        let mut handles = Vec::new();
+        let mut db_paths = Vec::new();
+
+        for (i, &id) in validator_ids.iter().enumerate() {
+            let path = test_db_path(&format!("genesis_engine_{i}"));
+            let store = StateStore::open(path.to_str().unwrap()).unwrap();
+            let mut dag = DagStore::new(store).unwrap();
+            db_paths.push(path);
+
+            for g in &genesis_blocks {
+                dag.insert(g.clone()).unwrap();
+            }
+
+            let (in_tx, in_rx) = mpsc::channel::<ConsensusInput>(512);
+            let (out_tx, mut out_rx) = mpsc::channel::<ConsensusOutput>(512);
+
+            let mut engine =
+                ConsensusEngine::new(config.clone(), id, dag, validators.clone(), in_rx, out_tx);
+            engine_inputs.push(in_tx);
+
+            handles.push(tokio::spawn(async move {
+                let _ = engine.run().await;
+            }));
+
+            let rtx = router_tx.clone();
+            tokio::spawn(async move {
+                while let Some(output) = out_rx.recv().await {
+                    if rtx.send((i, output)).await.is_err() {
+                        break;
+                    }
+                }
+            });
+        }
+        drop(router_tx);
+
+        let mut committed = false;
+        let deadline = tokio::time::Instant::now() + Duration::from_secs(10);
+
+        loop {
+            let remaining = deadline.saturating_duration_since(tokio::time::Instant::now());
+            if remaining.is_zero() {
+                break;
+            }
+
+            match tokio::time::timeout(remaining, router_rx.recv()).await {
+                Ok(Some((node_idx, output))) => match output {
+                    ConsensusOutput::BroadcastVertex(data) => {
+                        for (j, tx) in engine_inputs.iter().enumerate() {
+                            if j != node_idx {
+                                let _ = tx.try_send(ConsensusInput::ReceivedVertex(data.clone()));
+                            }
+                        }
+                    }
+                    ConsensusOutput::BatchCommitted(_) => {
+                        committed = true;
+                        break;
+                    }
+                },
+                _ => break,
+            }
+        }
+
+        assert!(
+            committed,
+            "Genesis-derived validators should reach consensus"
+        );
+
+        drop(engine_inputs);
+        for h in handles {
+            let _ = h.await;
+        }
+        for path in &db_paths {
+            cleanup(path);
+        }
+    }
+
+    // ── Sprint 013: Finality certificate with genesis BLS ────────────
+
+    #[tokio::test]
+    async fn integration_finality_cert() {
+        use crate::genesis;
+        use aztibase_consensus::{
+            build_certificate_from_set, sign_finality, verify_certificate_from_set,
+        };
+
+        let generated = genesis::generate_genesis(4, 1, 2000);
+
+        // Build ValidatorSet with BLS keys from genesis
+        let mut validators = ValidatorSet::new();
+        for entry in &generated.config.validators {
+            if let Some(addr) = genesis::hex_decode(&entry.address)
+                .and_then(|b| <[u8; 32]>::try_from(b.as_slice()).ok())
+            {
+                let bls_pk = entry
+                    .bls_public_key
+                    .as_ref()
+                    .and_then(|hex| genesis::hex_decode(hex))
+                    .and_then(|bytes| <[u8; 48]>::try_from(bytes.as_slice()).ok())
+                    .and_then(aztibase_core::BlsPublicKey::from_bytes);
+                validators.add_with_bls(addr, entry.stake, bls_pk);
+            }
+        }
+
+        // Execute a batch
+        let (alice_kp, alice) = make_sender();
+        let bob = [0xBB; 32];
+        let exec_path = test_db_path("finality_genesis");
+        let exec_store = Arc::new(StateStore::open(exec_path.to_str().unwrap()).unwrap());
+        let (_tx, rx) = mpsc::channel(16);
+        let mut pipeline = ExecutionPipeline::with_storage(exec_store, rx);
+        pipeline
+            .shared_state()
+            .write()
+            .await
+            .set_balance(&alice, 10_000);
+
+        let anchor = hash(b"finality_genesis_batch");
+        let batch = make_batch(
+            anchor,
+            vec![sign(
+                &TxKind::Transfer {
+                    from: alice,
+                    to: bob,
+                    value: 3000,
+                    nonce: 0,
+                    gas_price: 0,
+                },
+                &alice_kp,
+            )],
+        );
+        let result = pipeline.execute_batch(&batch).await.unwrap();
+        let batch_hash = hash(&anchor);
+        let state_root = result.state_root;
+
+        // Sign finality with 3 of 4 genesis BLS keypairs (quorum)
+        let signers: Vec<_> = generated.validator_keys[..3]
+            .iter()
+            .map(|(_, _, bls_kp)| {
+                let sig = sign_finality(bls_kp, &batch_hash, &state_root);
+                (bls_kp.public_key().clone(), sig)
+            })
+            .collect();
+
+        let cert = build_certificate_from_set(batch_hash, state_root, &signers, &validators)
+            .expect("Should build cert with genesis BLS keys");
+        assert!(verify_certificate_from_set(&cert, &validators));
+        assert_eq!(cert.batch_hash, batch_hash);
+        assert_eq!(cert.state_root, state_root);
+
+        cleanup(&exec_path);
+    }
 }

@@ -3,7 +3,7 @@
 **Last Updated:** 2026-03-07
 **Updated By:** project-lead
 **Current Phase:** M4 -- Integration Testing + AI + Testnet (IN PROGRESS)
-**Current Sprint:** Sprint 012 -- COMPLETE (Fee Hardening + Testnet Tooling)
+**Current Sprint:** Sprint 013 -- COMPLETE (Genesis-Driven Consensus Bootstrap + BLS Validator Keys)
 
 ---
 
@@ -33,7 +33,7 @@
 - Build-phase tracking infrastructure (5 documents)
 - Implementation depth audit (Sprint 001, Task 7)
 - Reference repos cloned (MystiCeti, Sui, Lighthouse, rust-libp2p, redb)
-- cargo build + cargo test pass (372 tests, 0 failures)
+- cargo build + cargo test pass (~385 tests, 0 failures; 1 pre-existing flaky: parallel_conflicting_chain)
 - Sprint 001 closed with retrospective
 - Sprint 002 closed: 24/24 tasks, 5 phases complete
 - Sprint 003 closed: 18/18 tasks, 4 phases complete
@@ -41,6 +41,7 @@
 - Sprint 005 closed: 21/21 tasks, 4 phases complete
 - Sprint 006 closed: 23/24 tasks (1 deferred), 4 phases complete
 - Sprint 007 complete: receipt store, EVM via revm, AI inference via tract
+- Sprint 013 complete: 15/15 tasks, 4 phases (genesis-driven validator bootstrap, BLS keys in genesis, testnet integration, security review)
 - Sprint 012 complete: 15/15 tasks, 4 phases (fee escrow, persistent base fee, genesis config, CLI wallet, security review)
 - Sprint 011 complete: 15/15 tasks, 4 phases (signed tx envelopes, nonce enforcement, fee market, security review)
 - Sprint 010 complete: 15/15 tasks, 4 phases (rayon parallelism, gossipsub hardening, account abstraction, security review)
@@ -65,12 +66,15 @@
 | aztibase-node | PARTIAL | node-engineer | YES | YES |
 
 ### In Progress
-- Sprint 013 planning
+- Sprint 014 planning
 
 ### Blocked
 - Nothing currently blocked
 
 ### Recently Completed
+- Sprint 013 Phase 3: End-to-end testnet integration — multi-node genesis bootstrap, finality cert integration, local-testnet.sh rewrite, config consolidation (3 new tests)
+- Sprint 013 Phase 2: BLS keys in genesis — BLS keypair generation, ValidatorSet carries BLS pubkeys, build/verify_certificate_from_set (5 new tests)
+- Sprint 013 Phase 1: Genesis-driven validator bootstrap — validators from genesis config, validator identity from key file, per-node TOML configs (5 new tests)
 - Sprint 012 Phase 3: Genesis config + CLI wallet — GenesisConfig TOML, generate_genesis, write_genesis, wallet generate/show/transfer, --genesis flag (7 new tests)
 - Sprint 012 Phase 2: Persistent base fee + validation hardening — persistent BaseFeeCalculator, pipeline nonce validation, mempool gas price floor (7 new tests)
 - Sprint 012 Phase 1: Pre-execution fee escrow — escrow_fee wired, collect_fees removed, refund_unused, PipelineResult.total_fees_burned (5 new tests)
@@ -103,7 +107,7 @@
 - Sprint 005 Phase 1: Consensus-to-execution wiring, TxKind routing, ExecutionPipeline
 
 ### Next Up
-1. Sprint 013: WebRTC transport, Verkle tree foundations, or validator key management (BLS in genesis)
+1. Sprint 014: WebRTC transport, Verkle tree foundations, or light client protocol
 
 ---
 

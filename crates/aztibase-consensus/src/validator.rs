@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use aztibase_core::{ValidatorId, hash};
+use aztibase_core::{BlsPublicKey, ValidatorId, hash};
 use serde::{Deserialize, Serialize};
 
 /// A single validator's record.
@@ -10,6 +10,15 @@ pub struct ValidatorInfo {
     pub id: ValidatorId,
     /// Stake in the smallest token unit.
     pub stake: u64,
+    /// Optional BLS public key for finality signatures.
+    #[serde(skip)]
+    pub bls_pubkey: Option<BlsPublicKey>,
+}
+
+#[derive(Clone, Debug)]
+struct ValidatorRecord {
+    stake: u64,
+    bls_pubkey: Option<BlsPublicKey>,
 }
 
 /// Manages the active validator set with stake-weighted operations.
@@ -19,7 +28,7 @@ pub struct ValidatorInfo {
 /// leader selection.
 #[derive(Clone, Debug, Default)]
 pub struct ValidatorSet {
-    validators: HashMap<ValidatorId, u64>,
+    validators: HashMap<ValidatorId, ValidatorRecord>,
     total_stake: u64,
 }
 
@@ -32,21 +41,32 @@ impl ValidatorSet {
     /// Add a validator or update their stake.
     /// Returns the previous stake if the validator was already present.
     pub fn add(&mut self, id: ValidatorId, stake: u64) -> Option<u64> {
-        let old = self.validators.insert(id, stake);
-        if let Some(old_stake) = old {
-            // Updating: subtract old, add new.
-            self.total_stake = self.total_stake - old_stake + stake;
+        self.add_with_bls(id, stake, None)
+    }
+
+    /// Add a validator with an optional BLS public key.
+    pub fn add_with_bls(
+        &mut self,
+        id: ValidatorId,
+        stake: u64,
+        bls_pubkey: Option<BlsPublicKey>,
+    ) -> Option<u64> {
+        let old = self
+            .validators
+            .insert(id, ValidatorRecord { stake, bls_pubkey });
+        if let Some(old_rec) = &old {
+            self.total_stake = self.total_stake - old_rec.stake + stake;
         } else {
             self.total_stake += stake;
         }
-        old
+        old.map(|r| r.stake)
     }
 
     /// Remove a validator. Returns their stake if they existed.
     pub fn remove(&mut self, id: &ValidatorId) -> Option<u64> {
-        if let Some(stake) = self.validators.remove(id) {
-            self.total_stake -= stake;
-            Some(stake)
+        if let Some(rec) = self.validators.remove(id) {
+            self.total_stake -= rec.stake;
+            Some(rec.stake)
         } else {
             None
         }
@@ -54,7 +74,24 @@ impl ValidatorSet {
 
     /// Look up a validator's stake. Returns `None` if not in the set.
     pub fn get(&self, id: &ValidatorId) -> Option<u64> {
-        self.validators.get(id).copied()
+        self.validators.get(id).map(|r| r.stake)
+    }
+
+    /// Look up a validator's BLS public key.
+    pub fn bls_key(&self, id: &ValidatorId) -> Option<&BlsPublicKey> {
+        self.validators.get(id).and_then(|r| r.bls_pubkey.as_ref())
+    }
+
+    /// Get ordered BLS public keys for all validators that have one.
+    /// Sorted by validator ID for deterministic ordering.
+    pub fn bls_keys_ordered(&self) -> Vec<(ValidatorId, BlsPublicKey)> {
+        let mut pairs: Vec<_> = self
+            .validators
+            .iter()
+            .filter_map(|(id, rec)| rec.bls_pubkey.as_ref().map(|k| (*id, k.clone())))
+            .collect();
+        pairs.sort_by_key(|(id, _)| *id);
+        pairs
     }
 
     /// Check if a validator is in the set.
@@ -82,7 +119,7 @@ impl ValidatorSet {
     pub fn has_supermajority(&self, voter_ids: &[ValidatorId]) -> bool {
         let voting_stake: u64 = voter_ids
             .iter()
-            .filter_map(|id| self.validators.get(id))
+            .filter_map(|id| self.validators.get(id).map(|r| r.stake))
             .sum();
         // >2/3 means voting_stake * 3 > total_stake * 2
         voting_stake * 3 > self.total_stake * 2
@@ -99,7 +136,7 @@ impl ValidatorSet {
         let mut sorted: Vec<(ValidatorId, u64)> = self
             .validators
             .iter()
-            .map(|(id, stake)| (*id, *stake))
+            .map(|(id, rec)| (*id, rec.stake))
             .collect();
         sorted.sort_by_key(|(id, _)| *id);
 
@@ -144,7 +181,7 @@ impl ValidatorSet {
         let mut sorted: Vec<(ValidatorId, u64)> = self
             .validators
             .iter()
-            .map(|(id, stake)| (*id, *stake))
+            .map(|(id, rec)| (*id, rec.stake))
             .collect();
         sorted.sort_by_key(|(id, _)| *id);
 
@@ -161,7 +198,45 @@ impl ValidatorSet {
     }
 
     /// Iterate over all validators as (id, stake) pairs.
-    pub fn iter(&self) -> impl Iterator<Item = (&ValidatorId, &u64)> {
-        self.validators.iter()
+    pub fn iter(&self) -> impl Iterator<Item = (&ValidatorId, u64)> + '_ {
+        self.validators.iter().map(|(id, rec)| (id, rec.stake))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use aztibase_core::BlsKeypair;
+
+    #[test]
+    fn validator_set_with_bls_keys() {
+        let mut vs = ValidatorSet::new();
+        let bls1 = BlsKeypair::generate();
+        let bls2 = BlsKeypair::generate();
+
+        vs.add_with_bls([1u8; 32], 100, Some(bls1.public_key().clone()));
+        vs.add_with_bls([2u8; 32], 200, Some(bls2.public_key().clone()));
+        vs.add([3u8; 32], 100);
+
+        assert_eq!(vs.len(), 3);
+        assert_eq!(vs.bls_key(&[1u8; 32]), Some(bls1.public_key()));
+        assert_eq!(vs.bls_key(&[2u8; 32]), Some(bls2.public_key()));
+        assert!(vs.bls_key(&[3u8; 32]).is_none());
+    }
+
+    #[test]
+    fn bls_keys_ordering() {
+        let mut vs = ValidatorSet::new();
+        let bls_a = BlsKeypair::generate();
+        let bls_b = BlsKeypair::generate();
+
+        // Insert in reverse order
+        vs.add_with_bls([2u8; 32], 100, Some(bls_b.public_key().clone()));
+        vs.add_with_bls([1u8; 32], 100, Some(bls_a.public_key().clone()));
+
+        let ordered = vs.bls_keys_ordered();
+        assert_eq!(ordered.len(), 2);
+        assert_eq!(ordered[0].0, [1u8; 32]);
+        assert_eq!(ordered[1].0, [2u8; 32]);
     }
 }

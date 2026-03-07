@@ -7,6 +7,8 @@ use serde::{Deserialize, Serialize};
 #[serde(default)]
 pub struct NodeConfig {
     pub data_dir: PathBuf,
+    pub genesis_path: Option<PathBuf>,
+    pub validator_key: Option<PathBuf>,
     pub network: NetworkConfig,
     pub rpc: RpcConfig,
     pub log: LogConfig,
@@ -51,6 +53,8 @@ impl Default for NodeConfig {
     fn default() -> Self {
         Self {
             data_dir: default_data_dir(),
+            genesis_path: None,
+            validator_key: None,
             network: NetworkConfig::default(),
             rpc: RpcConfig::default(),
             log: LogConfig::default(),

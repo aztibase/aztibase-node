@@ -39,6 +39,22 @@ impl BlsKeypair {
     pub fn proof_of_possession(&self) -> &BlsSignature {
         &self.proof_of_possession
     }
+
+    pub fn secret_bytes(&self) -> [u8; 32] {
+        self.secret.to_bytes()
+    }
+
+    pub fn from_secret_bytes(bytes: &[u8; 32]) -> Option<Self> {
+        let secret = SecretKey::from_bytes(bytes).ok()?;
+        let pk = secret.sk_to_pk();
+        let pk_bytes = pk.to_bytes();
+        let pop = secret.sign(&pk_bytes, DST_POP, &[]);
+        Some(Self {
+            secret,
+            public: BlsPublicKey(pk_bytes),
+            proof_of_possession: BlsSignature(pop.to_bytes()),
+        })
+    }
 }
 
 /// Verify a proof-of-possession: the validator signed their own public key
