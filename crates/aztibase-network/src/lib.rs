@@ -7,11 +7,13 @@ pub mod transport;
 pub mod webrtc;
 
 pub use gossip::{TOPIC_CONSENSUS, TOPIC_STATE_SYNC, TOPIC_TRANSACTIONS};
-pub use libp2p::Multiaddr;
+pub use libp2p::{Multiaddr, PeerId};
 pub use light_sync::{
-    LightSyncMessage, LightSyncProtocol, MAX_HEADERS_PER_REQUEST, SyncFinalityCert, SyncHeader,
-    build_header_request, build_header_response, build_proof_request, build_proof_response,
-    decode_light_sync, encode_light_sync, verify_header_chain,
+    LIGHT_SYNC_PROTOCOL, LightSyncCodec, LightSyncMessage, LightSyncProtocol, LightSyncRequest,
+    LightSyncResponse, MAX_HEADERS_PER_REQUEST, SyncFinalityCert, SyncHeader, build_header_request,
+    build_header_response, build_proof_request, build_proof_response, decode_light_sync,
+    decode_request, decode_response, encode_light_sync, encode_request, encode_response,
+    verify_header_chain,
 };
 pub use transport::{Libp2pTransport, NetworkEvent, TransportConfig};
 #[cfg(feature = "webrtc")]

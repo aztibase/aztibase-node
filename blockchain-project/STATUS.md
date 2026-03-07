@@ -3,7 +3,7 @@
 **Last Updated:** 2026-03-07
 **Updated By:** project-lead
 **Current Phase:** M5 -- Light/Browser Nodes + Wallet (IN PROGRESS)
-**Current Sprint:** Sprint 017 -- COMPLETE (Wallet Hardening, Light Node Storage & Header Sync)
+**Current Sprint:** Sprint 018 -- COMPLETE (Light Node P2P Integration & Wallet Transfers)
 
 ---
 
@@ -33,7 +33,7 @@
 - Build-phase tracking infrastructure (5 documents)
 - Implementation depth audit (Sprint 001, Task 7)
 - Reference repos cloned (MystiCeti, Sui, Lighthouse, rust-libp2p, redb)
-- cargo build + cargo test pass (446 tests, 0 failures)
+- cargo build + cargo test pass (456 tests, 0 failures)
 - Sprint 001 closed with retrospective
 - Sprint 002 closed: 24/24 tasks, 5 phases complete
 - Sprint 003 closed: 18/18 tasks, 4 phases complete
@@ -41,6 +41,7 @@
 - Sprint 005 closed: 21/21 tasks, 4 phases complete
 - Sprint 006 closed: 23/24 tasks (1 deferred), 4 phases complete
 - Sprint 007 complete: receipt store, EVM via revm, AI inference via tract
+- Sprint 018 complete: 16/16 tasks, 4 phases (light sync P2P handler, sync loop with peer scoring, wallet transfer broadcast, security review)
 - Sprint 017 complete: 16/16 tasks, 4 phases (wallet hardening BIP-39/Argon2id, light node storage, header sync protocol, security review)
 - Sprint 016 complete: 16/16 tasks, 4 phases (anomaly scoring, cross-VM bridge, PoUW type foundations, security review)
 - Sprint 015 complete: 15/15 tasks, 4 phases (metrics telemetry, light client proofs, WebRTC transport scaffold, Block-STM race fix, security review)
@@ -70,12 +71,16 @@
 | aztibase-node | PARTIAL | node-engineer | YES | YES |
 
 ### In Progress
-- Sprint 018 planning
+- Sprint 019 planning
 
 ### Blocked
 - Nothing currently blocked
 
 ### Recently Completed
+- Sprint 018 Phase 4: Security review — 0 ELEVATED, 0 MEDIUM, 2 LOW (SEC-P2P-001, SEC-RPC-001); clippy/fmt/test clean; 456 tests
+- Sprint 018 Phase 3: Wallet transfer broadcast — sign_transfer_encrypted, broadcast_transaction via reqwest, --passphrase/--rpc CLI flags (3 new tests)
+- Sprint 018 Phase 2: Light node sync loop — async P2P sync, peer scoring (failure/latency), header chain verify + LightStore persist (3 new tests)
+- Sprint 018 Phase 1: Light sync P2P handler — /aztibase/light-sync/1 request-response protocol, LightSyncCodec (bincode framing, 1MB max), full-node handler (4 new tests)
 - Sprint 017 Phase 4: Security review — 0 ELEVATED, 0 MEDIUM, 3 LOW (SEC-WALLET-001, SEC-LIGHT-001, SEC-SYNC-003); clippy/fmt/test clean; 446 tests
 - Sprint 017 Phase 3: Light node header sync — LightSyncMessage (4 variants), LightSyncProtocol state machine, verify_header_chain, --light CLI flag (10 new tests)
 - Sprint 017 Phase 2: Light node storage — LightStore (redb, 5 tables), header/cert/proof/wallet CRUD, batch insert, proof eviction (6 new tests)
@@ -126,7 +131,7 @@
 - Sprint 005 Phase 1: Consensus-to-execution wiring, TxKind routing, ExecutionPipeline
 
 ### Next Up
-1. Sprint 018: TBD (candidate areas: browser WASM light node, full Verkle IPA/KZG, mobile SDK, Docker deployment)
+1. Sprint 019: TBD (candidate areas: browser WASM light node, full Verkle IPA/KZG, Docker deployment, HD wallet derivation)
 
 ---
 

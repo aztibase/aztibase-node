@@ -21,4 +21,5 @@ bincode = { workspace = true }
 prost = { workspace = true }
 bytes = { workspace = true }
 anyhow = { workspace = true }
+async-trait = { workspace = true }
 futures = { workspace = true }

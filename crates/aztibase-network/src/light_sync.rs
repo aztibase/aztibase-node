@@ -1,7 +1,123 @@
+use std::io;
+
+use async_trait::async_trait;
+use futures::prelude::*;
+use libp2p::StreamProtocol;
+use libp2p::request_response;
 use serde::{Deserialize, Serialize};
 
 const LIGHT_SYNC_VERSION: u8 = 1;
 pub const MAX_HEADERS_PER_REQUEST: u64 = 100;
+const MAX_FRAME_SIZE: usize = 1_048_576; // 1 MB
+
+pub const LIGHT_SYNC_PROTOCOL: StreamProtocol = StreamProtocol::new("/aztibase/light-sync/1");
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LightSyncRequest(pub Vec<u8>);
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LightSyncResponse(pub Vec<u8>);
+
+#[derive(Debug, Clone, Default)]
+pub struct LightSyncCodec;
+
+#[async_trait]
+impl request_response::Codec for LightSyncCodec {
+    type Protocol = StreamProtocol;
+    type Request = LightSyncRequest;
+    type Response = LightSyncResponse;
+
+    async fn read_request<T>(
+        &mut self,
+        _protocol: &Self::Protocol,
+        io: &mut T,
+    ) -> io::Result<Self::Request>
+    where
+        T: AsyncRead + Unpin + Send,
+    {
+        read_frame(io).await.map(LightSyncRequest)
+    }
+
+    async fn read_response<T>(
+        &mut self,
+        _protocol: &Self::Protocol,
+        io: &mut T,
+    ) -> io::Result<Self::Response>
+    where
+        T: AsyncRead + Unpin + Send,
+    {
+        read_frame(io).await.map(LightSyncResponse)
+    }
+
+    async fn write_request<T>(
+        &mut self,
+        _protocol: &Self::Protocol,
+        io: &mut T,
+        req: Self::Request,
+    ) -> io::Result<()>
+    where
+        T: AsyncWrite + Unpin + Send,
+    {
+        write_frame(io, &req.0).await
+    }
+
+    async fn write_response<T>(
+        &mut self,
+        _protocol: &Self::Protocol,
+        io: &mut T,
+        res: Self::Response,
+    ) -> io::Result<()>
+    where
+        T: AsyncWrite + Unpin + Send,
+    {
+        write_frame(io, &res.0).await
+    }
+}
+
+async fn read_frame<T: AsyncRead + Unpin + Send>(io: &mut T) -> io::Result<Vec<u8>> {
+    let mut len_buf = [0u8; 4];
+    io.read_exact(&mut len_buf).await?;
+    let len = u32::from_be_bytes(len_buf) as usize;
+    if len > MAX_FRAME_SIZE {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!("frame too large: {len} > {MAX_FRAME_SIZE}"),
+        ));
+    }
+    let mut buf = vec![0u8; len];
+    io.read_exact(&mut buf).await?;
+    Ok(buf)
+}
+
+async fn write_frame<T: AsyncWrite + Unpin + Send>(io: &mut T, data: &[u8]) -> io::Result<()> {
+    if data.len() > MAX_FRAME_SIZE {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            "frame too large",
+        ));
+    }
+    let len = (data.len() as u32).to_be_bytes();
+    io.write_all(&len).await?;
+    io.write_all(data).await?;
+    io.flush().await?;
+    Ok(())
+}
+
+pub fn encode_request(msg: &LightSyncMessage) -> Result<LightSyncRequest, String> {
+    encode_light_sync(msg).map(LightSyncRequest)
+}
+
+pub fn decode_request(req: &LightSyncRequest) -> Result<LightSyncMessage, String> {
+    decode_light_sync(&req.0)
+}
+
+pub fn encode_response(msg: &LightSyncMessage) -> Result<LightSyncResponse, String> {
+    encode_light_sync(msg).map(LightSyncResponse)
+}
+
+pub fn decode_response(resp: &LightSyncResponse) -> Result<LightSyncMessage, String> {
+    decode_light_sync(&resp.0)
+}
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum LightSyncMessage {
@@ -351,6 +467,63 @@ mod tests {
         assert_eq!(proto.last_synced_round(), 50);
         assert!(!proto.needs_sync());
         assert!(proto.next_request().is_none());
+    }
+
+    #[test]
+    fn codec_encode_decode_request() {
+        let msg = build_header_request(5, 20);
+        let req = encode_request(&msg).unwrap();
+        let decoded = decode_request(&req).unwrap();
+        match decoded {
+            LightSyncMessage::RequestHeaders {
+                from_round, count, ..
+            } => {
+                assert_eq!(from_round, 5);
+                assert_eq!(count, 20);
+            }
+            _ => panic!("expected RequestHeaders"),
+        }
+    }
+
+    #[test]
+    fn codec_encode_decode_response() {
+        let headers = make_headers(1, 3);
+        let cert = make_cert(2, 4, 3);
+        let msg = build_header_response(headers, Some(cert));
+        let resp = encode_response(&msg).unwrap();
+        let decoded = decode_response(&resp).unwrap();
+        match decoded {
+            LightSyncMessage::ResponseHeaders {
+                headers,
+                finality_cert,
+                ..
+            } => {
+                assert_eq!(headers.len(), 3);
+                assert!(finality_cert.is_some());
+            }
+            _ => panic!("expected ResponseHeaders"),
+        }
+    }
+
+    #[tokio::test]
+    async fn frame_roundtrip() {
+        let data = vec![1u8, 2, 3, 4, 5];
+        let mut buf = Vec::new();
+        write_frame(&mut buf, &data).await.unwrap();
+        let mut cursor = futures::io::Cursor::new(buf);
+        let result = read_frame(&mut cursor).await.unwrap();
+        assert_eq!(result, data);
+    }
+
+    #[tokio::test]
+    async fn oversized_frame_rejected() {
+        let len = (MAX_FRAME_SIZE as u32 + 1).to_be_bytes();
+        let mut buf = Vec::new();
+        buf.extend_from_slice(&len);
+        buf.extend(vec![0u8; 16]);
+        let mut cursor = futures::io::Cursor::new(buf);
+        let err = read_frame(&mut cursor).await.unwrap_err();
+        assert_eq!(err.kind(), std::io::ErrorKind::InvalidData);
     }
 
     #[test]

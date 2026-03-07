@@ -3,11 +3,13 @@ use std::time::Duration;
 
 use anyhow::{Context, Result};
 use futures::StreamExt;
+use libp2p::request_response::{self, OutboundRequestId, ProtocolSupport, ResponseChannel};
 use libp2p::swarm::SwarmEvent;
 use libp2p::{Multiaddr, PeerId, Swarm, connection_limits, gossipsub, mdns};
 use tracing::warn;
 
 use crate::behaviour::{AztibaseBehaviour, AztibaseBehaviourEvent};
+use crate::light_sync::{LIGHT_SYNC_PROTOCOL, LightSyncCodec, LightSyncRequest, LightSyncResponse};
 use crate::{discovery, gossip};
 
 pub const MAX_ESTABLISHED_CONNECTIONS: u32 = 50;
@@ -34,6 +36,21 @@ pub enum NetworkEvent {
     PeerConnected(PeerId),
     PeerDisconnected(PeerId),
     Listening(Multiaddr),
+    LightSyncRequest {
+        peer: PeerId,
+        request: LightSyncRequest,
+        channel: ResponseChannel<LightSyncResponse>,
+    },
+    LightSyncResponse {
+        peer: PeerId,
+        request_id: OutboundRequestId,
+        response: LightSyncResponse,
+    },
+    LightSyncOutboundFailure {
+        peer: PeerId,
+        request_id: OutboundRequestId,
+        error: request_response::OutboundFailure,
+    },
 }
 
 pub struct Libp2pTransport {
@@ -74,11 +91,18 @@ impl Libp2pTransport {
                     .with_max_established(Some(MAX_ESTABLISHED_CONNECTIONS))
                     .with_max_established_per_peer(Some(2));
 
+                let light_sync = request_response::Behaviour::with_codec(
+                    LightSyncCodec,
+                    [(LIGHT_SYNC_PROTOCOL, ProtocolSupport::Full)],
+                    request_response::Config::default(),
+                );
+
                 Ok(AztibaseBehaviour {
                     gossipsub: gs,
                     kademlia,
                     mdns,
                     connection_limits: connection_limits::Behaviour::new(conn_limits),
+                    light_sync,
                 })
             })
             .context("Failed to configure behaviour")?
@@ -207,8 +231,71 @@ impl Libp2pTransport {
                 SwarmEvent::ConnectionClosed { peer_id, .. } => {
                     return NetworkEvent::PeerDisconnected(peer_id);
                 }
+                SwarmEvent::Behaviour(AztibaseBehaviourEvent::LightSync(
+                    request_response::Event::Message { peer, message, .. },
+                )) => match message {
+                    request_response::Message::Request {
+                        request, channel, ..
+                    } => {
+                        return NetworkEvent::LightSyncRequest {
+                            peer,
+                            request,
+                            channel,
+                        };
+                    }
+                    request_response::Message::Response {
+                        request_id,
+                        response,
+                    } => {
+                        return NetworkEvent::LightSyncResponse {
+                            peer,
+                            request_id,
+                            response,
+                        };
+                    }
+                },
+                SwarmEvent::Behaviour(AztibaseBehaviourEvent::LightSync(
+                    request_response::Event::OutboundFailure {
+                        peer,
+                        request_id,
+                        error,
+                        ..
+                    },
+                )) => {
+                    return NetworkEvent::LightSyncOutboundFailure {
+                        peer,
+                        request_id,
+                        error,
+                    };
+                }
+                SwarmEvent::Behaviour(AztibaseBehaviourEvent::LightSync(
+                    request_response::Event::ResponseSent { .. },
+                )) => {}
                 _ => {}
             }
         }
+    }
+
+    pub fn send_light_sync_request(
+        &mut self,
+        peer: &PeerId,
+        request: LightSyncRequest,
+    ) -> OutboundRequestId {
+        self.swarm
+            .behaviour_mut()
+            .light_sync
+            .send_request(peer, request)
+    }
+
+    pub fn send_light_sync_response(
+        &mut self,
+        channel: ResponseChannel<LightSyncResponse>,
+        response: LightSyncResponse,
+    ) -> Result<()> {
+        self.swarm
+            .behaviour_mut()
+            .light_sync
+            .send_response(channel, response)
+            .map_err(|_| anyhow::anyhow!("failed to send light sync response"))
     }
 }

@@ -21,7 +21,7 @@ use aztibase_consensus::{
 };
 use aztibase_network::{
     Libp2pTransport, NetworkEvent, TOPIC_CONSENSUS, TOPIC_STATE_SYNC, TOPIC_TRANSACTIONS,
-    TransportConfig,
+    TransportConfig, build_header_response, decode_request, encode_response,
 };
 use aztibase_rpc::RpcServer;
 use aztibase_runtime::TractRuntime;
@@ -135,7 +135,7 @@ enum WalletAction {
         #[arg(long)]
         passphrase: Option<String>,
     },
-    /// Sign and encode a transfer transaction
+    /// Sign and broadcast a transfer transaction
     Transfer {
         /// Path to sender key file
         #[arg(long)]
@@ -152,6 +152,12 @@ enum WalletAction {
         /// Gas price
         #[arg(long, default_value = "1")]
         gas_price: u64,
+        /// Passphrase for encrypted keyfile
+        #[arg(long)]
+        passphrase: Option<String>,
+        /// RPC endpoint to broadcast to (e.g. http://127.0.0.1:9944)
+        #[arg(long)]
+        rpc: Option<String>,
     },
 }
 
@@ -258,10 +264,21 @@ async fn main() -> Result<()> {
                     value,
                     nonce,
                     gas_price,
+                    passphrase,
+                    rpc,
                 } => {
-                    let envelope = wallet::sign_transfer(&from, &to, value, nonce, gas_price)?;
+                    let envelope = if let Some(pass) = passphrase {
+                        wallet::sign_transfer_encrypted(&from, &pass, &to, value, nonce, gas_price)?
+                    } else {
+                        wallet::sign_transfer(&from, &to, value, nonce, gas_price)?
+                    };
                     let hex = genesis::hex_encode(&envelope);
-                    println!("{hex}");
+                    if let Some(rpc_url) = rpc {
+                        let tx_hash = wallet::broadcast_transaction(&rpc_url, &hex).await?;
+                        println!("Broadcast OK. TX hash: {tx_hash}");
+                    } else {
+                        println!("{hex}");
+                    }
                 }
             }
             return Ok(());
@@ -688,6 +705,36 @@ async fn main() -> Result<()> {
                             }
                         }
                     }
+                    NetworkEvent::LightSyncRequest { peer, request, channel } => {
+                        match decode_request(&request) {
+                            Ok(aztibase_network::LightSyncMessage::RequestHeaders { from_round, count, .. }) => {
+                                tracing::debug!(peer = %peer, from = from_round, count, "Light sync: headers requested");
+                                let resp = build_header_response(vec![], None);
+                                if let Ok(encoded) = encode_response(&resp) {
+                                    let _ = transport.send_light_sync_response(channel, encoded);
+                                }
+                            }
+                            Ok(aztibase_network::LightSyncMessage::RequestProof { state_key, at_round, .. }) => {
+                                tracing::debug!(peer = %peer, round = at_round, "Light sync: proof requested");
+                                let resp = aztibase_network::build_proof_response(state_key, vec![], at_round);
+                                if let Ok(encoded) = encode_response(&resp) {
+                                    let _ = transport.send_light_sync_response(channel, encoded);
+                                }
+                            }
+                            Ok(_) => {
+                                tracing::warn!(peer = %peer, "Light sync: unexpected request type");
+                            }
+                            Err(e) => {
+                                tracing::warn!(peer = %peer, error = %e, "Light sync: failed to decode request");
+                            }
+                        }
+                    }
+                    NetworkEvent::LightSyncResponse { peer, response, .. } => {
+                        tracing::debug!(peer = %peer, bytes = response.0.len(), "Light sync: response received");
+                    }
+                    NetworkEvent::LightSyncOutboundFailure { peer, error, .. } => {
+                        tracing::warn!(peer = %peer, error = ?error, "Light sync: outbound failure");
+                    }
                 }
             }
             output = output_rx.recv() => {
@@ -777,8 +824,17 @@ async fn main() -> Result<()> {
 }
 
 async fn run_light_node(config: &NodeConfig) -> Result<()> {
-    use aztibase_network::LightSyncProtocol;
-    use aztibase_storage::LightStore;
+    use std::collections::HashMap;
+    use std::time::{Duration, Instant};
+
+    use aztibase_network::{
+        LightSyncProtocol, PeerId, SyncHeader, decode_response, encode_request, encode_response,
+        verify_header_chain,
+    };
+    use aztibase_storage::{LightFinalityCert, LightHeader, LightStore};
+
+    const SYNC_INTERVAL: Duration = Duration::from_secs(2);
+    const MAX_PEER_FAILURES: u32 = 3;
 
     tracing::info!("Starting Aztibase LIGHT node");
     tracing::info!(data_dir = %config.data_dir.display());
@@ -791,7 +847,7 @@ async fn run_light_node(config: &NodeConfig) -> Result<()> {
         LightStore::open(&light_db_path).context("Failed to open light client database")?;
 
     let last_round = light_store.latest_header_round()?.unwrap_or(0);
-    let _sync_proto = LightSyncProtocol::new(last_round);
+    let mut sync_proto = LightSyncProtocol::new(last_round);
 
     tracing::info!(
         last_synced_round = last_round,
@@ -799,9 +855,25 @@ async fn run_light_node(config: &NodeConfig) -> Result<()> {
         "Light node initialized (header sync only, no execution)"
     );
 
+    let transport_config = TransportConfig {
+        idle_timeout_secs: config.network.idle_timeout_secs,
+    };
+    let mut transport =
+        Libp2pTransport::new(transport_config).context("Failed to create P2P transport")?;
+
+    for addr_str in &config.network.listen_addresses {
+        if let Ok(addr) = addr_str.parse() {
+            let _ = transport.listen_on(addr);
+        }
+    }
+    for boot in &config.network.boot_nodes {
+        if let Ok(addr) = boot.parse() {
+            let _ = transport.dial(addr);
+        }
+    }
+
     let shutdown = Arc::new(Notify::new());
     let shutdown_clone = shutdown.clone();
-
     tokio::spawn(async move {
         if let Ok(()) = tokio::signal::ctrl_c().await {
             tracing::info!("Shutdown signal received");
@@ -809,9 +881,174 @@ async fn run_light_node(config: &NodeConfig) -> Result<()> {
         }
     });
 
-    shutdown.notified().await;
-    tracing::info!("Light node shut down");
-    Ok(())
+    struct PeerScore {
+        failures: u32,
+        last_response: Instant,
+    }
+
+    let mut peer_scores: HashMap<PeerId, PeerScore> = HashMap::new();
+    let mut connected_peers: Vec<PeerId> = Vec::new();
+    let mut sync_timer = tokio::time::interval(SYNC_INTERVAL);
+    let mut pending_request_peer: Option<PeerId> = None;
+
+    fn best_peer(peers: &[PeerId], scores: &HashMap<PeerId, PeerScore>) -> Option<PeerId> {
+        peers
+            .iter()
+            .filter(|p| scores.get(p).is_none_or(|s| s.failures < MAX_PEER_FAILURES))
+            .min_by_key(|p| {
+                scores
+                    .get(p)
+                    .map_or(Duration::MAX, |s| s.last_response.elapsed())
+            })
+            .copied()
+    }
+
+    fn to_light_header(h: &SyncHeader) -> LightHeader {
+        LightHeader {
+            round: h.round,
+            author: h.author,
+            parents: h.parents.clone(),
+            state_root: h.state_root,
+            timestamp: h.timestamp,
+        }
+    }
+
+    loop {
+        tokio::select! {
+            _ = shutdown.notified() => {
+                tracing::info!(
+                    last_round = sync_proto.last_synced_round(),
+                    "Light node shut down"
+                );
+                return Ok(());
+            }
+            _ = sync_timer.tick() => {
+                if !sync_proto.needs_sync() || connected_peers.is_empty() || pending_request_peer.is_some() {
+                    continue;
+                }
+                if let Some(peer) = best_peer(&connected_peers, &peer_scores)
+                    && let Some(req_msg) = sync_proto.next_request()
+                    && let Ok(req) = encode_request(&req_msg)
+                {
+                    transport.send_light_sync_request(&peer, req);
+                    pending_request_peer = Some(peer);
+                    tracing::debug!(
+                        peer = %peer,
+                        from = sync_proto.last_synced_round() + 1,
+                        "Sent header sync request"
+                    );
+                }
+            }
+            event = transport.next_event() => {
+                match event {
+                    NetworkEvent::Listening(addr) => {
+                        tracing::info!(addr = %addr, "Listening");
+                    }
+                    NetworkEvent::PeerConnected(peer) => {
+                        tracing::info!(peer = %peer, "Peer connected");
+                        if !connected_peers.contains(&peer) {
+                            connected_peers.push(peer);
+                        }
+                    }
+                    NetworkEvent::PeerDisconnected(peer) => {
+                        tracing::debug!(peer = %peer, "Peer disconnected");
+                        connected_peers.retain(|p| *p != peer);
+                        if pending_request_peer == Some(peer) {
+                            pending_request_peer = None;
+                        }
+                    }
+                    NetworkEvent::LightSyncResponse { peer, response, .. } => {
+                        pending_request_peer = None;
+                        match decode_response(&response) {
+                            Ok(aztibase_network::LightSyncMessage::ResponseHeaders {
+                                headers,
+                                finality_cert,
+                                ..
+                            }) => {
+                                if headers.is_empty() {
+                                    tracing::debug!(peer = %peer, "Empty response (no new headers)");
+                                    peer_scores.entry(peer).or_insert(PeerScore {
+                                        failures: 0,
+                                        last_response: Instant::now(),
+                                    }).last_response = Instant::now();
+                                    continue;
+                                }
+                                let expected_start = sync_proto.last_synced_round() + 1;
+                                if let Some(ref cert) = finality_cert {
+                                    let sync_cert = aztibase_network::SyncFinalityCert {
+                                        anchor_round: cert.anchor_round,
+                                        batch_hash: cert.batch_hash,
+                                        state_root: cert.state_root,
+                                        aggregate_signature: cert.aggregate_signature.clone(),
+                                        signer_bitmap: cert.signer_bitmap.clone(),
+                                    };
+                                    if let Err(e) = verify_header_chain(&headers, &sync_cert, expected_start) {
+                                        tracing::warn!(peer = %peer, error = %e, "Invalid header chain");
+                                        peer_scores.entry(peer)
+                                            .and_modify(|s| s.failures += 1)
+                                            .or_insert(PeerScore { failures: 1, last_response: Instant::now() });
+                                        continue;
+                                    }
+                                }
+                                let applied = sync_proto.apply_response(&headers);
+                                if applied > 0 {
+                                    let light_headers: Vec<LightHeader> = headers[..applied as usize]
+                                        .iter()
+                                        .map(to_light_header)
+                                        .collect();
+                                    if let Err(e) = light_store.store_headers_batch(&light_headers) {
+                                        tracing::warn!(error = %e, "Failed to persist headers");
+                                    }
+                                    if let Some(ref cert) = finality_cert {
+                                        let lc = LightFinalityCert {
+                                            anchor_round: cert.anchor_round,
+                                            batch_hash: cert.batch_hash,
+                                            state_root: cert.state_root,
+                                            aggregate_signature: cert.aggregate_signature.clone(),
+                                            signer_bitmap: cert.signer_bitmap.clone(),
+                                        };
+                                        let _ = light_store.store_finality_cert(&lc);
+                                    }
+                                    tracing::info!(
+                                        applied,
+                                        synced_round = sync_proto.last_synced_round(),
+                                        "Headers synced"
+                                    );
+                                }
+                                peer_scores.entry(peer).or_insert(PeerScore {
+                                    failures: 0,
+                                    last_response: Instant::now(),
+                                }).last_response = Instant::now();
+                            }
+                            Ok(_) => {
+                                tracing::warn!(peer = %peer, "Unexpected response type");
+                            }
+                            Err(e) => {
+                                tracing::warn!(peer = %peer, error = %e, "Failed to decode response");
+                                peer_scores.entry(peer)
+                                    .and_modify(|s| s.failures += 1)
+                                    .or_insert(PeerScore { failures: 1, last_response: Instant::now() });
+                            }
+                        }
+                    }
+                    NetworkEvent::LightSyncOutboundFailure { peer, error, .. } => {
+                        tracing::warn!(peer = %peer, error = ?error, "Light sync outbound failure");
+                        pending_request_peer = None;
+                        peer_scores.entry(peer)
+                            .and_modify(|s| s.failures += 1)
+                            .or_insert(PeerScore { failures: 1, last_response: Instant::now() });
+                    }
+                    NetworkEvent::LightSyncRequest { channel, .. } => {
+                        let empty = build_header_response(vec![], None);
+                        if let Ok(encoded) = encode_response(&empty) {
+                            let _ = transport.send_light_sync_response(channel, encoded);
+                        }
+                    }
+                    NetworkEvent::Message { .. } => {}
+                }
+            }
+        }
+    }
 }
 
 fn init_logging(level: &str) -> Result<()> {
@@ -986,5 +1223,80 @@ mod tests {
             let addr: [u8; 32] = addr_bytes.as_slice().try_into().unwrap();
             assert_eq!(vs.get(&addr), Some(entry.stake));
         }
+    }
+
+    #[test]
+    fn light_sync_protocol_advances_on_valid_response() {
+        use aztibase_network::{LightSyncProtocol, SyncHeader};
+
+        let mut proto = LightSyncProtocol::new(10);
+        proto.set_target_round(20);
+        assert!(proto.needs_sync());
+
+        let headers: Vec<SyncHeader> = (11..=20)
+            .map(|r| SyncHeader {
+                round: r,
+                author: [r as u8; 32],
+                parents: vec![[0u8; 32]],
+                state_root: [r as u8; 32],
+                timestamp: 1000 + r,
+            })
+            .collect();
+        let applied = proto.apply_response(&headers);
+        assert_eq!(applied, 10);
+        assert_eq!(proto.last_synced_round(), 20);
+        assert!(!proto.needs_sync());
+    }
+
+    #[test]
+    fn light_sync_rejects_gap_in_headers() {
+        use aztibase_network::{LightSyncProtocol, SyncHeader};
+
+        let mut proto = LightSyncProtocol::new(5);
+        proto.set_target_round(10);
+
+        let mut headers: Vec<SyncHeader> = (6..=10)
+            .map(|r| SyncHeader {
+                round: r,
+                author: [r as u8; 32],
+                parents: vec![[0u8; 32]],
+                state_root: [r as u8; 32],
+                timestamp: 1000 + r,
+            })
+            .collect();
+        headers[2].round = 99; // gap
+
+        let applied = proto.apply_response(&headers);
+        assert_eq!(applied, 2); // only rounds 6, 7 accepted before gap
+        assert_eq!(proto.last_synced_round(), 7);
+    }
+
+    #[test]
+    fn light_store_persists_synced_headers() {
+        use aztibase_storage::{LightHeader, LightStore};
+
+        let dir = std::env::temp_dir().join(format!("aztibase_light_sync_{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let store = LightStore::open(&dir.join("light.redb")).unwrap();
+
+        let headers: Vec<LightHeader> = (1..=5)
+            .map(|r| LightHeader {
+                round: r,
+                author: [r as u8; 32],
+                parents: vec![[0u8; 32]],
+                state_root: [r as u8; 32],
+                timestamp: 1000 + r,
+            })
+            .collect();
+        store.store_headers_batch(&headers).unwrap();
+
+        assert_eq!(store.latest_header_round().unwrap(), Some(5));
+        assert_eq!(store.header_count().unwrap(), 5);
+
+        let h3 = store.get_header(3).unwrap().unwrap();
+        assert_eq!(h3.round, 3);
+        assert_eq!(h3.author, [3u8; 32]);
+
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

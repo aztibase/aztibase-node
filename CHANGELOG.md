@@ -23,15 +23,26 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 - `LightSyncProtocol` state machine: tracks `last_synced_round` / `target_round`, generates batched sync requests (max 100 headers) (2026-03-07)
 - `verify_header_chain()`: validates sequential rounds, finality cert anchor, BLS quorum >= 2/3, non-empty signatures (2026-03-07)
 - `--light` CLI flag: starts node in light mode (LightStore, header sync only, no execution/consensus) (2026-03-07)
+- `/aztibase/light-sync/1` request-response protocol: `LightSyncCodec` (bincode framing, 1MB max), full-node header serving (2026-03-07)
+- Light node P2P sync loop: async header sync with peer scoring (failure tracking, latency preference), chain verification, LightStore persistence (2026-03-07)
+- `sign_transfer_encrypted()`: sign transfers from Argon2id-encrypted keyfiles (2026-03-07)
+- `broadcast_transaction()`: submit signed tx to JSON-RPC endpoint via reqwest, returns tx hash (2026-03-07)
+- `--passphrase` flag on `aztibase wallet transfer`: decrypt encrypted keyfile for signing (2026-03-07)
+- `--rpc` flag on `aztibase wallet transfer`: broadcast signed tx to a full node RPC endpoint (2026-03-07)
+- `PeerId` re-exported from `aztibase-network` for cross-crate use (2026-03-07)
 
 ### Security
+- Sprint 018 security review: 0 ELEVATED, 0 MEDIUM, 2 LOW (2026-03-07)
+  - SEC-P2P-001 (LOW): Single-peer sync per cycle; eclipse mitigated by scoring but not multi-peer cross-validation
+  - SEC-RPC-001 (LOW): Wallet broadcast doesn't enforce HTTPS; user responsibility to use secure endpoint
 - Sprint 017 security review: 0 ELEVATED, 0 MEDIUM, 3 LOW (2026-03-07)
   - SEC-WALLET-001 (LOW): Mnemonic displayed to stdout — user responsibility to secure; zeroize applied to seed bytes
   - SEC-LIGHT-001 (LOW): Light node trusts BLS quorum — by design, documented trust assumption
   - SEC-SYNC-003 (LOW): Header sync from single peer — future: multi-peer cross-validation
 
 ### Testing
-- 446 tests total (21 new): wallet mnemonic roundtrip, 12-word recovery, encrypt/decrypt roundtrip, wrong passphrase rejection, mnemonic+encrypted keyfile e2e, light store open, header CRUD, batch insert, finality cert CRUD, proof cache + eviction, wallet state CRUD, message serde roundtrip, version mismatch, request cap, valid header chain, gap rejection, cert outside batch, insufficient quorum, empty signature, sync protocol state machine, proof request/response (2026-03-07)
+- 456 tests total (10 new in Sprint 018): codec encode/decode request, codec encode/decode response, frame roundtrip, oversized frame rejection, light sync protocol advance, gap rejection in sync, light store persistence, sign_transfer_encrypted envelope, broadcast to mock RPC, broadcast RPC error propagation (2026-03-07)
+- 446 tests total (21 new in Sprint 017): wallet mnemonic roundtrip, 12-word recovery, encrypt/decrypt roundtrip, wrong passphrase rejection, mnemonic+encrypted keyfile e2e, light store open, header CRUD, batch insert, finality cert CRUD, proof cache + eviction, wallet state CRUD, message serde roundtrip, version mismatch, request cap, valid header chain, gap rejection, cert outside batch, insufficient quorum, empty signature, sync protocol state machine, proof request/response (2026-03-07)
 
 ---
 

@@ -21,6 +21,32 @@ Entries are prepended (newest first).
 
 ## Entries
 
+### 2026-03-07 -- project-lead -- Sprint 018 Complete
+**Task:** Sprint 018: Light Node P2P Integration & Wallet Transfers (16 tasks, 4 phases)
+**Sprint:** Sprint 018, Phases 1-4
+**Git Ref:** pending
+**Files Changed:**
+- Cargo.toml (workspace: request-response feature, async-trait, reqwest deps)
+- crates/aztibase-network/Cargo.toml (async-trait dep)
+- crates/aztibase-network/src/light_sync.rs (LightSyncCodec, LightSyncRequest/Response, frame read/write, encode/decode helpers, 4 new tests)
+- crates/aztibase-network/src/behaviour.rs (request_response::Behaviour<LightSyncCodec> added)
+- crates/aztibase-network/src/transport.rs (LightSync event handling, send_light_sync_request/response methods)
+- crates/aztibase-network/src/lib.rs (PeerId re-export, new light sync exports)
+- crates/aztibase-node/Cargo.toml (reqwest dep, axum dev-dep)
+- crates/aztibase-node/src/main.rs (run_light_node rewritten: P2P sync loop, peer scoring, header persistence; Transfer CLI: --passphrase/--rpc flags; full-node light sync handler; 3 new tests)
+- crates/aztibase-node/src/wallet.rs (sign_transfer_encrypted, broadcast_transaction via reqwest, 3 new tests)
+- blockchain-project/sprints/SPRINT-018.md (all tasks marked DONE)
+- blockchain-project/STATUS.md, BUILD_LOG.md, CHANGELOG.md updated
+**Review Notes:**
+- Phase 1: /aztibase/light-sync/1 request-response protocol via libp2p, bincode framing with 1MB max, LightSyncCodec
+- Phase 2: Light node sync loop with peer scoring (failure tracking, latency preference), header chain verification + LightStore persistence
+- Phase 3: sign_transfer_encrypted for Argon2id keyfiles, broadcast_transaction via reqwest JSON-RPC, --rpc/--passphrase CLI flags
+- Phase 4: Security review, 456 tests passing, clippy/fmt clean
+**Security Flags:**
+- SEC-P2P-001 (LOW): Single-peer sync per cycle; eclipse mitigated by scoring but not multi-peer cross-validation
+- SEC-RPC-001 (LOW): Wallet broadcast doesn't enforce HTTPS; user responsibility
+- 0 ELEVATED, 0 MEDIUM
+
 ### 2026-03-07 -- project-lead -- Sprint 017 Complete
 **Task:** Sprint 017: Wallet Hardening (BIP-39 + Argon2id), Light Node Storage, Header Sync Protocol (16 tasks, 4 phases)
 **Sprint:** Sprint 017, Phases 1-4

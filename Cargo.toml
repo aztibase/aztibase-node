@@ -63,6 +63,7 @@ libp2p = { version = "0.54", features = [
     "yamux",
     "macros",
     "serde",
+    "request-response",
 ] }
 
 # Storage (redb: pure Rust, no native deps; rocksdb to be added later with LLVM)
@@ -87,6 +88,7 @@ revm = { version = "36", default-features = false, features = ["std"] }
 
 # HTTP / RPC
 axum = "0.8"
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
 
 # Async utilities
 futures = "0.3"
@@ -96,6 +98,9 @@ rayon = "1.10"
 
 # Benchmarking
 criterion = { version = "0.5", features = ["html_reports"] }
+
+# Async utilities
+async-trait = "0.1"
 
 # Misc
 bytes = "1"

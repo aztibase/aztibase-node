@@ -223,6 +223,30 @@ pub fn sign_transfer(
     gas_price: u64,
 ) -> Result<Vec<u8>> {
     let (kp, sender) = load_keyfile(keyfile_path)?;
+    build_signed_transfer(&kp, sender, to_hex, value, nonce, gas_price)
+}
+
+pub fn sign_transfer_encrypted(
+    keyfile_path: &Path,
+    passphrase: &str,
+    to_hex: &str,
+    value: u64,
+    nonce: u64,
+    gas_price: u64,
+) -> Result<Vec<u8>> {
+    let kp = load_encrypted_keyfile(keyfile_path, passphrase)?;
+    let sender = address_from_pubkey(kp.public_key().as_bytes());
+    build_signed_transfer(&kp, sender, to_hex, value, nonce, gas_price)
+}
+
+fn build_signed_transfer(
+    kp: &Keypair,
+    sender: [u8; 32],
+    to_hex: &str,
+    value: u64,
+    nonce: u64,
+    gas_price: u64,
+) -> Result<Vec<u8>> {
     let to_bytes = hex_decode(to_hex).context("Invalid recipient address hex")?;
     let to: [u8; 32] = to_bytes
         .as_slice()
@@ -237,8 +261,54 @@ pub fn sign_transfer(
         gas_price,
     };
 
-    let signed = SignedTx::new(tx.encode(), &kp);
+    let signed = SignedTx::new(tx.encode(), kp);
     Ok(signed.encode())
+}
+
+pub async fn broadcast_transaction(rpc_url: &str, tx_hex: &str) -> Result<String> {
+    let body = serde_json::json!({
+        "jsonrpc": "2.0",
+        "method": "aztb_sendTransaction",
+        "params": [format!("0x{tx_hex}")],
+        "id": 1
+    });
+
+    let client = reqwest::Client::new();
+    let resp = client
+        .post(rpc_url)
+        .header("Content-Type", "application/json")
+        .json(&body)
+        .send()
+        .await
+        .context("Failed to connect to RPC endpoint")?;
+
+    let status = resp.status();
+    let text = resp
+        .text()
+        .await
+        .context("Failed to read RPC response body")?;
+
+    if !status.is_success() {
+        anyhow::bail!("RPC returned HTTP {status}: {text}");
+    }
+
+    let parsed: serde_json::Value = serde_json::from_str(&text).context("Invalid JSON from RPC")?;
+
+    if let Some(err) = parsed.get("error") {
+        let msg = err
+            .get("message")
+            .and_then(|v| v.as_str())
+            .unwrap_or("unknown");
+        anyhow::bail!("RPC error: {msg}");
+    }
+
+    let result = parsed
+        .get("result")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
+
+    Ok(result)
 }
 
 #[cfg(test)]
@@ -349,5 +419,96 @@ mod tests {
         assert!(load_encrypted_keyfile(&keyfile_path, "wrong").is_err());
 
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn sign_transfer_encrypted_produces_valid_envelope() {
+        let dir = std::env::temp_dir().join(format!("aztibase_enc_sign_{}", std::process::id()));
+        let keyfile_path = dir.join("enc.json");
+        let passphrase = "test-pass-42";
+
+        let _phrase = generate_key_with_mnemonic(&keyfile_path, passphrase).unwrap();
+        let kp = load_encrypted_keyfile(&keyfile_path, passphrase).unwrap();
+        let sender = address_from_pubkey(kp.public_key().as_bytes());
+
+        let to = [0xCC; 32];
+        let envelope =
+            sign_transfer_encrypted(&keyfile_path, passphrase, &hex_encode(&to), 1000, 0, 2)
+                .unwrap();
+
+        let routed = verify_and_route(&envelope).unwrap();
+        match routed {
+            TxKind::Transfer {
+                from,
+                to: t,
+                value,
+                nonce,
+                gas_price,
+            } => {
+                assert_eq!(from, sender);
+                assert_eq!(t, to);
+                assert_eq!(value, 1000);
+                assert_eq!(nonce, 0);
+                assert_eq!(gas_price, 2);
+            }
+            _ => panic!("expected Transfer"),
+        }
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[tokio::test]
+    async fn broadcast_to_mock_rpc() {
+        use axum::{Router, routing::post};
+
+        async fn mock_rpc(
+            body: axum::extract::Json<serde_json::Value>,
+        ) -> axum::response::Json<serde_json::Value> {
+            let method = body.get("method").and_then(|v| v.as_str()).unwrap_or("");
+            assert_eq!(method, "aztb_sendTransaction");
+            let tx_hex = body["params"][0].as_str().unwrap();
+            assert!(tx_hex.starts_with("0x"));
+            axum::response::Json(serde_json::json!({
+                "jsonrpc": "2.0",
+                "result": "0xdeadbeef",
+                "id": 1
+            }))
+        }
+
+        let app = Router::new().route("/", post(mock_rpc));
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        tokio::spawn(async move {
+            axum::serve(listener, app).await.unwrap();
+        });
+
+        let url = format!("http://{addr}/");
+        let result = broadcast_transaction(&url, "aabbccdd").await.unwrap();
+        assert_eq!(result, "0xdeadbeef");
+    }
+
+    #[tokio::test]
+    async fn broadcast_rpc_error_propagates() {
+        use axum::{Router, routing::post};
+
+        async fn mock_error() -> axum::response::Json<serde_json::Value> {
+            axum::response::Json(serde_json::json!({
+                "jsonrpc": "2.0",
+                "error": {"code": -32000, "message": "mempool full"},
+                "id": 1
+            }))
+        }
+
+        let app = Router::new().route("/", post(mock_error));
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        tokio::spawn(async move {
+            axum::serve(listener, app).await.unwrap();
+        });
+
+        let url = format!("http://{addr}/");
+        let result = broadcast_transaction(&url, "aabbccdd").await;
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("mempool full"));
     }
 }
