@@ -3,7 +3,7 @@
 **Last Updated:** 2026-03-07
 **Updated By:** project-lead
 **Current Phase:** M4 -- Integration Testing + AI + Testnet (IN PROGRESS)
-**Current Sprint:** Sprint 015 -- COMPLETE (Metrics Telemetry, Light Client Foundations, WebRTC Transport)
+**Current Sprint:** Sprint 016 -- IN PROGRESS (Transaction Anomaly Scoring, Cross-VM Bridge, PoUW Foundations)
 
 ---
 
@@ -68,7 +68,7 @@
 | aztibase-node | PARTIAL | node-engineer | YES | YES |
 
 ### In Progress
-- Sprint 016 planning
+- Sprint 016 Phase 1: Transaction anomaly scoring
 
 ### Blocked
 - Nothing currently blocked
@@ -116,7 +116,9 @@
 - Sprint 005 Phase 1: Consensus-to-execution wiring, TxKind routing, ExecutionPipeline
 
 ### Next Up
-1. Sprint 016: TBD (candidate areas: full WebRTC swarm integration, light client sync protocol, AI compute market, PoUW consensus)
+1. Sprint 016 Phase 2: Cross-VM bridge (WASM-EVM interop)
+2. Sprint 016 Phase 3: PoUW type foundations
+3. Sprint 016 Phase 4: Security review + M4 completion assessment
 
 ---
 
