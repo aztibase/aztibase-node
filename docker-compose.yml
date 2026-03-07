@@ -1,0 +1,83 @@
+services:
+  validator1:
+    build: .
+    container_name: aztibase-validator1
+    command:
+      - "--config"
+      - "/data/node1.toml"
+      - "--genesis"
+      - "/data/genesis.toml"
+      - "--validator-key"
+      - "/data/keys/validator1.json"
+      - "--rpc-addr"
+      - "0.0.0.0:9944"
+      - "--metrics"
+    volumes:
+      - ./data/node1:/data
+      - ./data/genesis:/data/genesis
+    ports:
+      - "9944:9944"
+      - "9000:9000"
+    networks:
+      - aztibase-net
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:9944/ -d '{\"jsonrpc\":\"2.0\",\"method\":\"aztb_blockNumber\",\"id\":1}' || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  validator2:
+    build: .
+    container_name: aztibase-validator2
+    command:
+      - "--config"
+      - "/data/node2.toml"
+      - "--genesis"
+      - "/data/genesis.toml"
+      - "--validator-key"
+      - "/data/keys/validator2.json"
+      - "--rpc-addr"
+      - "0.0.0.0:9944"
+      - "--metrics"
+    volumes:
+      - ./data/node2:/data
+      - ./data/genesis:/data/genesis
+    ports:
+      - "9945:9944"
+    networks:
+      - aztibase-net
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:9944/ -d '{\"jsonrpc\":\"2.0\",\"method\":\"aztb_blockNumber\",\"id\":1}' || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  validator3:
+    build: .
+    container_name: aztibase-validator3
+    command:
+      - "--config"
+      - "/data/node3.toml"
+      - "--genesis"
+      - "/data/genesis.toml"
+      - "--validator-key"
+      - "/data/keys/validator3.json"
+      - "--rpc-addr"
+      - "0.0.0.0:9944"
+      - "--metrics"
+    volumes:
+      - ./data/node3:/data
+      - ./data/genesis:/data/genesis
+    ports:
+      - "9946:9944"
+    networks:
+      - aztibase-net
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:9944/ -d '{\"jsonrpc\":\"2.0\",\"method\":\"aztb_blockNumber\",\"id\":1}' || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+networks:
+  aztibase-net:
+    driver: bridge

@@ -1,3 +1,3 @@
 pub mod server;
 
-pub use server::{RpcServer, RpcState};
+pub use server::{EventBus, RpcServer, RpcState};

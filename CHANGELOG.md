@@ -5,9 +5,21 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ---
 
-## [M5] -- Light/Browser Nodes + Wallet (IN PROGRESS)
+## [M5] -- Light/Browser Nodes + Wallet (COMPLETE)
 
 ### Added
+- WebSocket gateway on full node: `/ws` upgrade handler on axum RPC server, JSON-RPC dispatch over WebSocket text frames, max 256 concurrent connections (2026-03-07)
+- Light sync over WebSocket: `RequestHeaders`, `RequestBalance`, `RequestProof` message handling from browser light clients (2026-03-07)
+- `aztb_subscribe` method: WebSocket-only, supports `"newHeads"` and `"finality"` topics, returns subscription ID (2026-03-07)
+- `aztb_unsubscribe` method: cancel subscription by ID, aborts forwarding task (2026-03-07)
+- `EventBus`: `tokio::sync::broadcast` channels for `newHeads` and `finality` events, published on batch commit (2026-03-07)
+- HTTP subscribe returns clear error: "Subscriptions are only available over WebSocket" (2026-03-07)
+- `aztibase wallet list`: scan keyfile directory, display address + encrypted status per keyfile (2026-03-07)
+- `aztibase wallet balance --address <addr> --rpc <url>`: query `aztb_getBalance` + `aztb_getNonce` via JSON-RPC (2026-03-07)
+- `aztibase wallet export --key <path>`: export encrypted keyfile as portable JSON (2026-03-07)
+- `aztibase wallet import --file <path>`: import keyfile JSON with format validation (2026-03-07)
+- `Dockerfile`: multi-stage build (rust:1.88 + debian:bookworm-slim), exposes 9944 (RPC/WS) + 9000 (P2P) (2026-03-07)
+- `docker-compose.yml`: 3-node local testnet with health checks (2026-03-07)
 - `aztibase-wasm` crate: browser-compatible WASM light client (cdylib + rlib), wasm-bindgen exports for trustless verification (2026-03-07)
 - WASM header chain verification: `verifyHeaderChain(headersJson, certJson, expectedStart)` — validates sequential rounds, quorum, signatures (2026-03-07)
 - WASM Merkle proof verification: `verifyMerkleProof(proofJson, rootHex, leafHex)` — sibling-path reconstruction (2026-03-07)
@@ -44,6 +56,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 - `PeerId` re-exported from `aztibase-network` for cross-crate use (2026-03-07)
 
 ### Security
+- Sprint 020 security review: 0 ELEVATED, 0 MEDIUM, 3 LOW (2026-03-07)
+  - SEC-WS-002 (LOW): WebSocket connections limited to 256 but no per-IP rate limiting; relies on reverse proxy for production
+  - SEC-SUB-001 (LOW): Broadcast channels bounded at 256; slow consumers get lagged errors, not unbounded memory growth
+  - SEC-EXPORT-001 (LOW): Wallet export outputs encrypted keyfile JSON only; no plaintext secret keys in export format
 - Sprint 019 security review: 0 ELEVATED, 0 MEDIUM, 3 LOW (2026-03-07)
   - SEC-WASM-001 (LOW): WASM linear memory may expose data to JS host; mitigated by verification-only design (no secrets in WASM module)
   - SEC-WS-001 (LOW): WebSocket transport has no built-in auth; relies on wss:// for confidentiality

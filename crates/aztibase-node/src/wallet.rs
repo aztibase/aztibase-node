@@ -230,6 +230,112 @@ fn derive_child(parent_secret: &[u8; 32], index: u32) -> [u8; 32] {
     blake3::derive_key(&context, parent_secret)
 }
 
+pub fn list_keys(dir: &Path) -> Result<Vec<(String, String, bool)>> {
+    let mut results = Vec::new();
+    if !dir.exists() {
+        return Ok(results);
+    }
+    for entry in std::fs::read_dir(dir)? {
+        let entry = entry?;
+        let path = entry.path();
+        if path.extension().and_then(|e| e.to_str()) != Some("json") {
+            continue;
+        }
+        let contents = match std::fs::read_to_string(&path) {
+            Ok(c) => c,
+            Err(_) => continue,
+        };
+        if let Ok(enc) = serde_json::from_str::<EncryptedKeyFile>(&contents) {
+            results.push((enc.address, enc.public_key, true));
+        } else if let Ok(kf) = serde_json::from_str::<KeyFile>(&contents) {
+            results.push((kf.address, kf.public_key, false));
+        }
+    }
+    Ok(results)
+}
+
+pub fn export_keyfile(keyfile_path: &Path) -> Result<String> {
+    let contents = std::fs::read_to_string(keyfile_path)
+        .with_context(|| format!("Failed to read {}", keyfile_path.display()))?;
+    if serde_json::from_str::<EncryptedKeyFile>(&contents).is_ok() {
+        Ok(contents)
+    } else if let Ok(kf) = serde_json::from_str::<KeyFile>(&contents) {
+        serde_json::to_string_pretty(&kf).context("Failed to serialize keyfile")
+    } else {
+        anyhow::bail!("Unrecognized keyfile format")
+    }
+}
+
+pub fn import_keyfile(json: &str, output_path: &Path) -> Result<String> {
+    let address = if let Ok(enc) = serde_json::from_str::<EncryptedKeyFile>(json) {
+        if enc.encrypted.salt.is_empty() || enc.encrypted.ciphertext.is_empty() {
+            anyhow::bail!("Invalid encrypted keyfile: missing salt or ciphertext");
+        }
+        enc.address
+    } else if let Ok(kf) = serde_json::from_str::<KeyFile>(json) {
+        if kf.secret_key.is_empty() || kf.public_key.is_empty() {
+            anyhow::bail!("Invalid keyfile: missing keys");
+        }
+        kf.address
+    } else {
+        anyhow::bail!("Unrecognized keyfile format");
+    };
+
+    if let Some(parent) = output_path.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    std::fs::write(output_path, json)
+        .with_context(|| format!("Failed to write {}", output_path.display()))?;
+
+    Ok(address)
+}
+
+pub async fn query_balance(rpc_url: &str, address_hex: &str) -> Result<(String, u64)> {
+    let client = reqwest::Client::new();
+
+    let balance_body = serde_json::json!({
+        "jsonrpc": "2.0",
+        "method": "aztb_getBalance",
+        "params": [format!("0x{address_hex}")],
+        "id": 1
+    });
+    let resp = client
+        .post(rpc_url)
+        .json(&balance_body)
+        .send()
+        .await
+        .context("Failed to connect to RPC")?;
+    let parsed: serde_json::Value = resp.json().await.context("Invalid JSON from RPC")?;
+    let balance_hex = parsed["result"]
+        .as_str()
+        .unwrap_or("0x0")
+        .strip_prefix("0x")
+        .unwrap_or("0");
+    let balance = u64::from_str_radix(balance_hex, 16).unwrap_or(0);
+
+    let nonce_body = serde_json::json!({
+        "jsonrpc": "2.0",
+        "method": "aztb_getNonce",
+        "params": [format!("0x{address_hex}")],
+        "id": 2
+    });
+    let resp = client
+        .post(rpc_url)
+        .json(&nonce_body)
+        .send()
+        .await
+        .context("Failed to query nonce")?;
+    let parsed: serde_json::Value = resp.json().await.context("Invalid JSON from RPC")?;
+    let nonce = parsed["result"].as_u64().unwrap_or(0);
+
+    let balance_str = format!("0x{balance:x}");
+    println!("Address: 0x{address_hex}");
+    println!("Balance: {balance_str} ({balance} units)");
+    println!("Nonce: {nonce}");
+
+    Ok((balance_str, nonce))
+}
+
 pub fn show_key(path: &Path) -> Result<()> {
     let (kp, addr) = load_keyfile(path)?;
     println!("Address: {}", hex_encode(&addr));
@@ -521,6 +627,102 @@ mod tests {
         assert_eq!(c1, c2);
         let c3 = derive_child(&parent, 1);
         assert_ne!(c1, c3);
+    }
+
+    #[test]
+    fn list_keys_discovers_files() {
+        let dir = std::env::temp_dir().join(format!("aztibase_list_test_{}", std::process::id()));
+        let keys_dir = dir.join("keys");
+        std::fs::create_dir_all(&keys_dir).unwrap();
+
+        generate_key(&keys_dir.join("plain.json")).unwrap();
+
+        let passphrase = "test-pass";
+        let _phrase =
+            generate_key_with_mnemonic(&keys_dir.join("encrypted.json"), passphrase).unwrap();
+
+        let entries = list_keys(&keys_dir).unwrap();
+        assert_eq!(entries.len(), 2);
+
+        let plain = entries.iter().find(|(_, _, enc)| !enc).unwrap();
+        assert!(!plain.0.is_empty());
+        let encrypted = entries.iter().find(|(_, _, enc)| *enc).unwrap();
+        assert!(!encrypted.0.is_empty());
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn export_import_roundtrip() {
+        let dir = std::env::temp_dir().join(format!("aztibase_export_test_{}", std::process::id()));
+        let keyfile_path = dir.join("original.json");
+        let passphrase = "export-test";
+        let _phrase = generate_key_with_mnemonic(&keyfile_path, passphrase).unwrap();
+
+        let exported = export_keyfile(&keyfile_path).unwrap();
+        assert!(exported.contains("ciphertext"));
+
+        let import_path = dir.join("imported.json");
+        let address = import_keyfile(&exported, &import_path).unwrap();
+        assert!(!address.is_empty());
+
+        let original = load_encrypted_keyfile(&keyfile_path, passphrase).unwrap();
+        let imported = load_encrypted_keyfile(&import_path, passphrase).unwrap();
+        assert_eq!(
+            original.public_key().as_bytes(),
+            imported.public_key().as_bytes()
+        );
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn import_rejects_tampered_file() {
+        let dir = std::env::temp_dir().join(format!("aztibase_import_bad_{}", std::process::id()));
+        let result = import_keyfile("not valid json", &dir.join("bad.json"));
+        assert!(result.is_err());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[tokio::test]
+    async fn balance_query_against_mock_rpc() {
+        use axum::{Router, routing::post};
+
+        async fn mock_rpc(
+            body: axum::extract::Json<serde_json::Value>,
+        ) -> axum::response::Json<serde_json::Value> {
+            let method = body.get("method").and_then(|v| v.as_str()).unwrap_or("");
+            match method {
+                "aztb_getBalance" => axum::response::Json(serde_json::json!({
+                    "jsonrpc": "2.0",
+                    "result": "0x3e8",
+                    "id": 1
+                })),
+                "aztb_getNonce" => axum::response::Json(serde_json::json!({
+                    "jsonrpc": "2.0",
+                    "result": 5,
+                    "id": 2
+                })),
+                _ => axum::response::Json(serde_json::json!({
+                    "jsonrpc": "2.0",
+                    "error": {"code": -32601, "message": "not found"},
+                    "id": 1
+                })),
+            }
+        }
+
+        let app = Router::new().route("/", post(mock_rpc));
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        tokio::spawn(async move {
+            axum::serve(listener, app).await.unwrap();
+        });
+
+        let url = format!("http://{addr}/");
+        let addr_hex = hex_encode(&[0x01u8; 32]);
+        let (balance, nonce) = query_balance(&url, &addr_hex).await.unwrap();
+        assert_eq!(balance, "0x3e8");
+        assert_eq!(nonce, 5);
     }
 
     #[tokio::test]

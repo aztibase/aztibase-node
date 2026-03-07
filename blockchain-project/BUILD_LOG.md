@@ -21,6 +21,32 @@ Entries are prepended (newest first).
 
 ## Entries
 
+### 2026-03-07 -- project-lead -- Sprint 020 Complete
+**Task:** Sprint 020: WebSocket Gateway, RPC Subscriptions & Deployment (16 tasks, 4 phases)
+**Sprint:** Sprint 020, Phases 1-4
+**Git Ref:** pending
+**Files Changed:**
+- Cargo.toml (workspace: axum ws feature enabled, tokio-tungstenite dev-dep)
+- crates/aztibase-rpc/Cargo.toml (futures dep, tokio-tungstenite dev-dep)
+- crates/aztibase-rpc/src/lib.rs (EventBus export)
+- crates/aztibase-rpc/src/server.rs (WebSocket upgrade handler at /ws, JSON-RPC dispatch over WS, light sync message handling over WS, EventBus with broadcast channels, aztb_subscribe/aztb_unsubscribe methods, connection limit enforcement; 6 new tests)
+- crates/aztibase-node/src/main.rs (EventBus wiring, event publishing on batch commit, WalletAction::List/Balance/Export/Import subcommands)
+- crates/aztibase-node/src/wallet.rs (list_keys, export_keyfile, import_keyfile, query_balance; 4 new tests)
+- Dockerfile (NEW: multi-stage build, rust:1.88 builder + debian:bookworm-slim runtime)
+- docker-compose.yml (NEW: 3-node local testnet with health checks)
+- blockchain-project/sprints/SPRINT-020.md (NEW: sprint plan, all tasks marked DONE)
+- blockchain-project/STATUS.md, BUILD_LOG.md, CHANGELOG.md, DECISIONS.md updated
+**Review Notes:**
+- Phase 1: axum WebSocket upgrade at /ws, JSON-RPC dispatch over WS text frames, light sync protocol handling (RequestHeaders/RequestBalance/RequestProof), max 256 concurrent connections
+- Phase 2: aztb_subscribe (newHeads/finality topics), aztb_unsubscribe with task abort, broadcast channels per topic, HTTP subscribe returns clear error
+- Phase 3: wallet list (scans keyfile dir), wallet balance (aztb_getBalance + aztb_getNonce via RPC), wallet export/import (encrypted keyfile JSON roundtrip)
+- Phase 4: Dockerfile (multi-stage, debian bookworm-slim for blst glibc), docker-compose 3-validator testnet, security review, 491 tests passing
+**Security Flags:**
+- SEC-WS-002 (LOW): WebSocket connections limited to 256 but no per-IP rate limiting; relies on reverse proxy for production
+- SEC-SUB-001 (LOW): Broadcast channels bounded at 256; slow consumers receive lagged errors, not unbounded memory growth
+- SEC-EXPORT-001 (LOW): Wallet export outputs encrypted keyfile JSON; no plaintext secret keys exposed in export format
+- 0 ELEVATED, 0 MEDIUM
+
 ### 2026-03-07 -- project-lead -- Sprint 019 Complete
 **Task:** Sprint 019: Browser WASM Light Node & HD Wallet Derivation (16 tasks, 4 phases)
 **Sprint:** Sprint 019, Phases 1-4

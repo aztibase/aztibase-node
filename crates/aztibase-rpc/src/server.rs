@@ -1,15 +1,19 @@
+use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
 
-use axum::extract::{DefaultBodyLimit, State};
+use axum::extract::ws::{Message, WebSocket};
+use axum::extract::{DefaultBodyLimit, State, WebSocketUpgrade};
 use axum::http::StatusCode;
 use axum::response::IntoResponse;
 use axum::{
     Json, Router,
     routing::{get, post},
 };
+use futures::{SinkExt, StreamExt};
 use serde::{Deserialize, Serialize};
-use tokio::sync::{RwLock, mpsc};
+use tokio::sync::{RwLock, broadcast, mpsc};
 use tracing::{debug, info};
 
 use aztibase_execution::AccountState;
@@ -26,7 +30,7 @@ pub struct JsonRpcRequest {
     pub id: serde_json::Value,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone)]
 pub struct JsonRpcResponse {
     pub jsonrpc: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -36,7 +40,7 @@ pub struct JsonRpcResponse {
     pub id: serde_json::Value,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone)]
 pub struct JsonRpcError {
     pub code: i32,
     pub message: String,
@@ -68,17 +72,25 @@ const INVALID_REQUEST: i32 = -32600;
 const METHOD_NOT_FOUND: i32 = -32601;
 const INVALID_PARAMS: i32 = -32602;
 
+// ── Subscription Event ──────────────────────────────────────────────
+
+#[derive(Clone, Debug, Serialize)]
+pub struct SubscriptionEvent {
+    pub topic: String,
+    pub data: serde_json::Value,
+}
+
 // ── Shared State ────────────────────────────────────────────────────
 
-/// Shared state accessible by RPC handlers. The execution pipeline updates
-/// the AccountState via the write lock; RPC handlers read via the read lock.
 pub struct RpcState {
     pub accounts: Arc<RwLock<AccountState>>,
     pub tx_sender: mpsc::Sender<Vec<u8>>,
-    pub batch_count: Arc<std::sync::atomic::AtomicU64>,
+    pub batch_count: Arc<AtomicU64>,
     pub receipt_store: Option<Arc<StateStore>>,
-    pub base_fee: Arc<std::sync::atomic::AtomicU64>,
+    pub base_fee: Arc<AtomicU64>,
     pub node_metrics: Option<Arc<RwLock<serde_json::Value>>>,
+    pub event_bus: Arc<EventBus>,
+    ws_connection_count: Arc<AtomicU64>,
 }
 
 impl Clone for RpcState {
@@ -90,7 +102,53 @@ impl Clone for RpcState {
             receipt_store: self.receipt_store.clone(),
             base_fee: Arc::clone(&self.base_fee),
             node_metrics: self.node_metrics.clone(),
+            event_bus: Arc::clone(&self.event_bus),
+            ws_connection_count: Arc::clone(&self.ws_connection_count),
         }
+    }
+}
+
+const MAX_WS_CONNECTIONS: u64 = 256;
+const MAX_SUBSCRIPTIONS_PER_CLIENT: usize = 16;
+const MAX_WS_FRAME_SIZE: usize = 1_048_576;
+
+// ── Event Bus ───────────────────────────────────────────────────────
+
+pub struct EventBus {
+    new_heads: broadcast::Sender<serde_json::Value>,
+    finality: broadcast::Sender<serde_json::Value>,
+}
+
+impl EventBus {
+    pub fn new() -> Self {
+        let (new_heads, _) = broadcast::channel(256);
+        let (finality, _) = broadcast::channel(256);
+        Self {
+            new_heads,
+            finality,
+        }
+    }
+
+    pub fn publish_new_head(&self, header: serde_json::Value) {
+        let _ = self.new_heads.send(header);
+    }
+
+    pub fn publish_finality(&self, cert: serde_json::Value) {
+        let _ = self.finality.send(cert);
+    }
+
+    fn subscribe(&self, topic: &str) -> Option<broadcast::Receiver<serde_json::Value>> {
+        match topic {
+            "newHeads" => Some(self.new_heads.subscribe()),
+            "finality" => Some(self.finality.subscribe()),
+            _ => None,
+        }
+    }
+}
+
+impl Default for EventBus {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -104,9 +162,9 @@ impl RpcServer {
     pub fn new(
         accounts: Arc<RwLock<AccountState>>,
         tx_sender: mpsc::Sender<Vec<u8>>,
-        batch_count: Arc<std::sync::atomic::AtomicU64>,
+        batch_count: Arc<AtomicU64>,
         receipt_store: Option<Arc<StateStore>>,
-        base_fee: Arc<std::sync::atomic::AtomicU64>,
+        base_fee: Arc<AtomicU64>,
     ) -> Self {
         Self {
             state: RpcState {
@@ -116,6 +174,8 @@ impl RpcServer {
                 receipt_store,
                 base_fee,
                 node_metrics: None,
+                event_bus: Arc::new(EventBus::new()),
+                ws_connection_count: Arc::new(AtomicU64::new(0)),
             },
         }
     }
@@ -125,13 +185,24 @@ impl RpcServer {
         self
     }
 
+    pub fn with_event_bus(mut self, bus: Arc<EventBus>) -> Self {
+        self.state.event_bus = bus;
+        self
+    }
+
+    pub fn event_bus(&self) -> Arc<EventBus> {
+        Arc::clone(&self.state.event_bus)
+    }
+
     pub fn router(&self) -> Router {
-        let mut router = Router::new().route("/", post(handle_rpc));
+        let mut router = Router::new()
+            .route("/", post(handle_rpc))
+            .route("/ws", get(handle_ws_upgrade));
         if self.state.node_metrics.is_some() {
             router = router.route("/metrics", get(handle_metrics));
         }
         router
-            .layer(DefaultBodyLimit::max(1_048_576))
+            .layer(DefaultBodyLimit::max(MAX_WS_FRAME_SIZE))
             .with_state(self.state.clone())
     }
 
@@ -144,7 +215,7 @@ impl RpcServer {
     }
 }
 
-// ── Request Handler ─────────────────────────────────────────────────
+// ── HTTP Request Handler ────────────────────────────────────────────
 
 async fn handle_rpc(State(state): State<RpcState>, body: String) -> impl IntoResponse {
     let request: JsonRpcRequest = match serde_json::from_str(&body) {
@@ -174,6 +245,17 @@ async fn handle_rpc(State(state): State<RpcState>, body: String) -> impl IntoRes
 
     debug!(method = %request.method, "RPC request");
 
+    if request.method == "aztb_subscribe" || request.method == "aztb_unsubscribe" {
+        return (
+            StatusCode::OK,
+            Json(JsonRpcResponse::error(
+                request.id,
+                INVALID_REQUEST,
+                "Subscriptions are only available over WebSocket".into(),
+            )),
+        );
+    }
+
     let response = dispatch(&state, &request).await;
     (StatusCode::OK, Json(response))
 }
@@ -195,6 +277,234 @@ async fn dispatch(state: &RpcState, req: &JsonRpcRequest) -> JsonRpcResponse {
             METHOD_NOT_FOUND,
             format!("Method not found: {}", req.method),
         ),
+    }
+}
+
+// ── WebSocket Handler ───────────────────────────────────────────────
+
+async fn handle_ws_upgrade(
+    ws: WebSocketUpgrade,
+    State(state): State<RpcState>,
+) -> impl IntoResponse {
+    let current = state.ws_connection_count.load(Ordering::Relaxed);
+    if current >= MAX_WS_CONNECTIONS {
+        return (
+            StatusCode::SERVICE_UNAVAILABLE,
+            "Too many WebSocket connections",
+        )
+            .into_response();
+    }
+    ws.max_message_size(MAX_WS_FRAME_SIZE)
+        .on_upgrade(move |socket| handle_ws_connection(socket, state))
+        .into_response()
+}
+
+async fn handle_ws_connection(socket: WebSocket, state: RpcState) {
+    state.ws_connection_count.fetch_add(1, Ordering::Relaxed);
+    let (mut ws_tx, mut ws_rx) = socket.split();
+
+    let (response_tx, mut response_rx) = mpsc::channel::<String>(64);
+
+    let mut sub_handles: HashMap<String, tokio::task::JoinHandle<()>> = HashMap::new();
+    let mut sub_counter: u64 = 0;
+
+    let writer = tokio::spawn(async move {
+        while let Some(msg) = response_rx.recv().await {
+            if ws_tx.send(Message::Text(msg.into())).await.is_err() {
+                break;
+            }
+        }
+    });
+
+    while let Some(Ok(msg)) = ws_rx.next().await {
+        let text = match msg {
+            Message::Text(t) => t.to_string(),
+            Message::Close(_) => break,
+            _ => continue,
+        };
+
+        if text.len() > MAX_WS_FRAME_SIZE {
+            let err = JsonRpcResponse::error(
+                serde_json::Value::Null,
+                PARSE_ERROR,
+                "Message too large".into(),
+            );
+            let _ = response_tx.send(serde_json::to_string(&err).unwrap()).await;
+            continue;
+        }
+
+        // Try JSON-RPC first
+        let request: JsonRpcRequest = match serde_json::from_str(&text) {
+            Ok(r) => r,
+            Err(_) => {
+                // Try light sync message format
+                if let Ok(light_msg) = serde_json::from_str::<serde_json::Value>(&text)
+                    && let Some(msg_type) = light_msg.get("type").and_then(|v| v.as_str())
+                {
+                    let resp = handle_light_sync_ws(&state, msg_type, &light_msg).await;
+                    let _ = response_tx
+                        .send(serde_json::to_string(&resp).unwrap())
+                        .await;
+                    continue;
+                }
+                let err = JsonRpcResponse::error(
+                    serde_json::Value::Null,
+                    PARSE_ERROR,
+                    "Parse error".into(),
+                );
+                let _ = response_tx.send(serde_json::to_string(&err).unwrap()).await;
+                continue;
+            }
+        };
+
+        if request.jsonrpc != "2.0" {
+            let err = JsonRpcResponse::error(
+                request.id,
+                INVALID_REQUEST,
+                "Invalid JSON-RPC version".into(),
+            );
+            let _ = response_tx.send(serde_json::to_string(&err).unwrap()).await;
+            continue;
+        }
+
+        match request.method.as_str() {
+            "aztb_subscribe" => {
+                let topic = request.params.get(0).and_then(|v| v.as_str()).unwrap_or("");
+
+                if sub_handles.len() >= MAX_SUBSCRIPTIONS_PER_CLIENT {
+                    let err =
+                        JsonRpcResponse::error(request.id, -32000, "Too many subscriptions".into());
+                    let _ = response_tx.send(serde_json::to_string(&err).unwrap()).await;
+                    continue;
+                }
+
+                if let Some(mut rx) = state.event_bus.subscribe(topic) {
+                    sub_counter += 1;
+                    let sub_id = format!("0x{sub_counter:x}");
+
+                    let sub_id_clone = sub_id.clone();
+                    let resp_tx = response_tx.clone();
+                    let handle = tokio::spawn(async move {
+                        while let Ok(data) = rx.recv().await {
+                            let notification = serde_json::json!({
+                                "jsonrpc": "2.0",
+                                "method": "aztb_subscription",
+                                "params": {
+                                    "subscription": sub_id_clone,
+                                    "result": data,
+                                }
+                            });
+                            if resp_tx
+                                .send(serde_json::to_string(&notification).unwrap())
+                                .await
+                                .is_err()
+                            {
+                                break;
+                            }
+                        }
+                    });
+                    sub_handles.insert(sub_id.clone(), handle);
+
+                    let resp =
+                        JsonRpcResponse::success(request.id, serde_json::Value::String(sub_id));
+                    let _ = response_tx
+                        .send(serde_json::to_string(&resp).unwrap())
+                        .await;
+                } else {
+                    let err = JsonRpcResponse::error(
+                        request.id,
+                        INVALID_PARAMS,
+                        format!("Unknown subscription topic: {topic}"),
+                    );
+                    let _ = response_tx.send(serde_json::to_string(&err).unwrap()).await;
+                }
+            }
+            "aztb_unsubscribe" => {
+                let sub_id = request
+                    .params
+                    .get(0)
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("")
+                    .to_string();
+
+                let removed = if let Some(handle) = sub_handles.remove(&sub_id) {
+                    handle.abort();
+                    true
+                } else {
+                    false
+                };
+                let resp = JsonRpcResponse::success(request.id, serde_json::Value::Bool(removed));
+                let _ = response_tx
+                    .send(serde_json::to_string(&resp).unwrap())
+                    .await;
+            }
+            _ => {
+                let resp = dispatch(&state, &request).await;
+                let _ = response_tx
+                    .send(serde_json::to_string(&resp).unwrap())
+                    .await;
+            }
+        }
+    }
+
+    for (_, h) in sub_handles {
+        h.abort();
+    }
+    drop(response_tx);
+    let _ = writer.await;
+    state.ws_connection_count.fetch_sub(1, Ordering::Relaxed);
+}
+
+// ── Light Sync over WebSocket ───────────────────────────────────────
+
+async fn handle_light_sync_ws(
+    state: &RpcState,
+    msg_type: &str,
+    msg: &serde_json::Value,
+) -> serde_json::Value {
+    match msg_type {
+        "RequestHeaders" => {
+            let _from_round = msg.get("from_round").and_then(|v| v.as_u64()).unwrap_or(0);
+            let _count = msg.get("count").and_then(|v| v.as_u64()).unwrap_or(100);
+            let batch_count = state.batch_count.load(Ordering::Relaxed);
+            serde_json::json!({
+                "type": "ResponseHeaders",
+                "headers": [],
+                "finality_cert": null,
+                "target_round": batch_count,
+            })
+        }
+        "RequestBalance" => {
+            let address_hex = msg.get("address").and_then(|v| v.as_str()).unwrap_or("");
+            let addr_hex = address_hex.strip_prefix("0x").unwrap_or(address_hex);
+            let balance = if let Ok(bytes) = hex::decode(addr_hex) {
+                if let Ok(addr) = <[u8; 32]>::try_from(bytes.as_slice()) {
+                    let accounts = state.accounts.read().await;
+                    accounts.balance(&addr)
+                } else {
+                    0
+                }
+            } else {
+                0
+            };
+            serde_json::json!({
+                "type": "BalanceResponse",
+                "address": address_hex,
+                "balance": format!("0x{balance:x}"),
+            })
+        }
+        "RequestProof" => {
+            serde_json::json!({
+                "type": "ResponseProof",
+                "proof": null,
+            })
+        }
+        _ => {
+            serde_json::json!({
+                "type": "Error",
+                "message": format!("Unknown message type: {msg_type}"),
+            })
+        }
     }
 }
 
@@ -292,7 +602,7 @@ async fn handle_send_transaction(state: &RpcState, req: &JsonRpcRequest) -> Json
 }
 
 async fn handle_block_number(state: &RpcState, req: &JsonRpcRequest) -> JsonRpcResponse {
-    let count = state.batch_count.load(std::sync::atomic::Ordering::Relaxed);
+    let count = state.batch_count.load(Ordering::Relaxed);
     JsonRpcResponse::success(req.id.clone(), serde_json::json!(format!("0x{count:x}")))
 }
 
@@ -383,7 +693,7 @@ async fn handle_get_transaction_receipt(state: &RpcState, req: &JsonRpcRequest) 
 }
 
 async fn handle_gas_price(state: &RpcState, req: &JsonRpcRequest) -> JsonRpcResponse {
-    let base_fee = state.base_fee.load(std::sync::atomic::Ordering::Relaxed);
+    let base_fee = state.base_fee.load(Ordering::Relaxed);
     JsonRpcResponse::success(req.id.clone(), serde_json::json!(format!("0x{base_fee:x}")))
 }
 
@@ -430,10 +740,12 @@ mod tests {
         let state = RpcState {
             accounts: Arc::new(RwLock::new(AccountState::new())),
             tx_sender: tx,
-            batch_count: Arc::new(std::sync::atomic::AtomicU64::new(0)),
+            batch_count: Arc::new(AtomicU64::new(0)),
             receipt_store: None,
-            base_fee: Arc::new(std::sync::atomic::AtomicU64::new(1)),
+            base_fee: Arc::new(AtomicU64::new(1)),
             node_metrics: None,
+            event_bus: Arc::new(EventBus::new()),
+            ws_connection_count: Arc::new(AtomicU64::new(0)),
         };
         (state, rx)
     }
@@ -449,10 +761,12 @@ mod tests {
         let state = RpcState {
             accounts: Arc::new(RwLock::new(accounts)),
             tx_sender: tx,
-            batch_count: Arc::new(std::sync::atomic::AtomicU64::new(42)),
+            batch_count: Arc::new(AtomicU64::new(42)),
             receipt_store: None,
-            base_fee: Arc::new(std::sync::atomic::AtomicU64::new(1)),
+            base_fee: Arc::new(AtomicU64::new(1)),
             node_metrics: None,
+            event_bus: Arc::new(EventBus::new()),
+            ws_connection_count: Arc::new(AtomicU64::new(0)),
         };
         (state, rx)
     }
@@ -640,7 +954,7 @@ mod tests {
 
     // ── Receipt tests ────────────────────────────────────────────────
 
-    use std::sync::atomic::{AtomicU32, Ordering};
+    use std::sync::atomic::AtomicU32;
 
     static RECEIPT_TEST_COUNTER: AtomicU32 = AtomicU32::new(0);
 
@@ -677,10 +991,12 @@ mod tests {
         let state = RpcState {
             accounts: Arc::new(RwLock::new(AccountState::new())),
             tx_sender: tx,
-            batch_count: Arc::new(std::sync::atomic::AtomicU64::new(0)),
+            batch_count: Arc::new(AtomicU64::new(0)),
             receipt_store: Some(store),
-            base_fee: Arc::new(std::sync::atomic::AtomicU64::new(1)),
+            base_fee: Arc::new(AtomicU64::new(1)),
             node_metrics: None,
+            event_bus: Arc::new(EventBus::new()),
+            ws_connection_count: Arc::new(AtomicU64::new(0)),
         };
         (state, rx, path)
     }
@@ -830,5 +1146,181 @@ mod tests {
         let (status, json) = metrics_call(&state).await;
         assert_eq!(status, StatusCode::SERVICE_UNAVAILABLE);
         assert!(json["error"].as_str().unwrap().contains("not enabled"));
+    }
+
+    // ── WebSocket tests ─────────────────────────────────────────────
+
+    async fn start_test_server(state: RpcState) -> SocketAddr {
+        let router = Router::new()
+            .route("/", post(handle_rpc))
+            .route("/ws", get(handle_ws_upgrade))
+            .with_state(state);
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        tokio::spawn(async move {
+            axum::serve(listener, router).await.unwrap();
+        });
+        addr
+    }
+
+    async fn ws_connect(
+        addr: SocketAddr,
+    ) -> (
+        futures::stream::SplitSink<
+            tokio_tungstenite::WebSocketStream<
+                tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>,
+            >,
+            tokio_tungstenite::tungstenite::Message,
+        >,
+        futures::stream::SplitStream<
+            tokio_tungstenite::WebSocketStream<
+                tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>,
+            >,
+        >,
+    ) {
+        let url = format!("ws://{addr}/ws");
+        let (stream, _) = tokio_tungstenite::connect_async(&url).await.unwrap();
+        stream.split()
+    }
+
+    #[tokio::test]
+    async fn ws_upgrade_and_rpc_call() {
+        let (state, _rx) = test_state_with_accounts();
+        let addr = start_test_server(state).await;
+        let (mut tx, mut rx) = ws_connect(addr).await;
+
+        let req = r#"{"jsonrpc":"2.0","method":"aztb_blockNumber","id":1}"#;
+        tx.send(tokio_tungstenite::tungstenite::Message::Text(req.into()))
+            .await
+            .unwrap();
+
+        let msg = rx.next().await.unwrap().unwrap();
+        let resp: serde_json::Value = serde_json::from_str(msg.to_text().unwrap()).unwrap();
+        assert_eq!(resp["result"], "0x2a");
+    }
+
+    #[tokio::test]
+    async fn ws_light_sync_request() {
+        let (state, _rx) = test_state();
+        state.batch_count.store(99, Ordering::Relaxed);
+        let addr = start_test_server(state).await;
+        let (mut tx, mut rx) = ws_connect(addr).await;
+
+        let req = r#"{"type":"RequestHeaders","version":1,"from_round":1,"count":10}"#;
+        tx.send(tokio_tungstenite::tungstenite::Message::Text(req.into()))
+            .await
+            .unwrap();
+
+        let msg = rx.next().await.unwrap().unwrap();
+        let resp: serde_json::Value = serde_json::from_str(msg.to_text().unwrap()).unwrap();
+        assert_eq!(resp["type"], "ResponseHeaders");
+        assert_eq!(resp["target_round"], 99);
+    }
+
+    #[tokio::test]
+    async fn ws_subscribe_and_receive_event() {
+        let (state, _rx) = test_state();
+        let bus = Arc::clone(&state.event_bus);
+        let addr = start_test_server(state).await;
+        let (mut tx, mut rx) = ws_connect(addr).await;
+
+        let sub_req = r#"{"jsonrpc":"2.0","method":"aztb_subscribe","params":["newHeads"],"id":1}"#;
+        tx.send(tokio_tungstenite::tungstenite::Message::Text(
+            sub_req.into(),
+        ))
+        .await
+        .unwrap();
+
+        let msg = rx.next().await.unwrap().unwrap();
+        let resp: serde_json::Value = serde_json::from_str(msg.to_text().unwrap()).unwrap();
+        let sub_id = resp["result"].as_str().unwrap().to_string();
+        assert!(sub_id.starts_with("0x"));
+
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        bus.publish_new_head(serde_json::json!({"round": 42, "state_root": "0xabc"}));
+
+        let notification = tokio::time::timeout(std::time::Duration::from_secs(2), rx.next())
+            .await
+            .unwrap()
+            .unwrap()
+            .unwrap();
+        let notif: serde_json::Value =
+            serde_json::from_str(notification.to_text().unwrap()).unwrap();
+        assert_eq!(notif["method"], "aztb_subscription");
+        assert_eq!(notif["params"]["subscription"], sub_id);
+        assert_eq!(notif["params"]["result"]["round"], 42);
+    }
+
+    #[tokio::test]
+    async fn ws_unsubscribe_stops_delivery() {
+        let (state, _rx) = test_state();
+        let bus = Arc::clone(&state.event_bus);
+        let addr = start_test_server(state).await;
+        let (mut tx, mut rx) = ws_connect(addr).await;
+
+        let sub_req = r#"{"jsonrpc":"2.0","method":"aztb_subscribe","params":["finality"],"id":1}"#;
+        tx.send(tokio_tungstenite::tungstenite::Message::Text(
+            sub_req.into(),
+        ))
+        .await
+        .unwrap();
+
+        let msg = rx.next().await.unwrap().unwrap();
+        let resp: serde_json::Value = serde_json::from_str(msg.to_text().unwrap()).unwrap();
+        let sub_id = resp["result"].as_str().unwrap().to_string();
+
+        let unsub_req = format!(
+            r#"{{"jsonrpc":"2.0","method":"aztb_unsubscribe","params":["{sub_id}"],"id":2}}"#
+        );
+        tx.send(tokio_tungstenite::tungstenite::Message::Text(
+            unsub_req.into(),
+        ))
+        .await
+        .unwrap();
+
+        let msg = rx.next().await.unwrap().unwrap();
+        let resp: serde_json::Value = serde_json::from_str(msg.to_text().unwrap()).unwrap();
+        assert_eq!(resp["result"], true);
+
+        bus.publish_finality(serde_json::json!({"round": 100}));
+
+        let timeout_result =
+            tokio::time::timeout(std::time::Duration::from_millis(200), rx.next()).await;
+        assert!(
+            timeout_result.is_err(),
+            "Should not receive event after unsubscribe"
+        );
+    }
+
+    #[tokio::test]
+    async fn http_subscribe_returns_error() {
+        let (state, _rx) = test_state();
+        let body = r#"{"jsonrpc":"2.0","method":"aztb_subscribe","params":["newHeads"],"id":1}"#;
+        let resp = rpc_call(&state, body).await;
+        assert_eq!(resp["error"]["code"], INVALID_REQUEST);
+        assert!(
+            resp["error"]["message"]
+                .as_str()
+                .unwrap()
+                .contains("WebSocket")
+        );
+    }
+
+    #[tokio::test]
+    async fn ws_connection_limit_enforced() {
+        let (state, _rx) = test_state();
+        state
+            .ws_connection_count
+            .store(MAX_WS_CONNECTIONS, Ordering::Relaxed);
+        let addr = start_test_server(state).await;
+
+        let url = format!("ws://{addr}/ws");
+        let result = tokio_tungstenite::connect_async(&url).await;
+        assert!(
+            result.is_err() || {
+                let (_, response) = result.unwrap();
+                response.status() == axum::http::StatusCode::SERVICE_UNAVAILABLE
+            }
+        );
     }
 }

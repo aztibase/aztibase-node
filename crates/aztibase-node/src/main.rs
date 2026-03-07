@@ -23,7 +23,7 @@ use aztibase_network::{
     Libp2pTransport, NetworkEvent, TOPIC_CONSENSUS, TOPIC_STATE_SYNC, TOPIC_TRANSACTIONS,
     TransportConfig, build_header_response, decode_request, encode_response,
 };
-use aztibase_rpc::RpcServer;
+use aztibase_rpc::{EventBus, RpcServer};
 use aztibase_runtime::TractRuntime;
 use aztibase_storage::StateStore;
 use config::NodeConfig;
@@ -149,6 +149,36 @@ enum WalletAction {
         /// Passphrase for encrypting the derived keyfile
         #[arg(long)]
         passphrase: Option<String>,
+    },
+    /// List all keyfiles in the keys directory
+    List {
+        /// Directory containing keyfiles (default: {data_dir}/keys/)
+        #[arg(long)]
+        dir: Option<PathBuf>,
+    },
+    /// Query account balance and nonce from a full node
+    Balance {
+        /// Account address (hex, 32 bytes)
+        #[arg(long)]
+        address: String,
+        /// RPC endpoint URL
+        #[arg(long)]
+        rpc: String,
+    },
+    /// Export a keyfile as portable JSON
+    Export {
+        /// Path to keyfile to export
+        #[arg(long)]
+        key: PathBuf,
+    },
+    /// Import a keyfile from JSON
+    Import {
+        /// Path to JSON file to import
+        #[arg(long)]
+        file: PathBuf,
+        /// Output path (default: keys/{address}.json)
+        #[arg(long)]
+        output: Option<PathBuf>,
     },
     /// Sign and broadcast a transfer transaction
     Transfer {
@@ -307,6 +337,40 @@ async fn main() -> Result<()> {
                     } else {
                         wallet::show_key(&keyfile)?;
                     }
+                }
+                WalletAction::List { dir } => {
+                    let keys_dir = dir.unwrap_or_else(|| {
+                        let cfg =
+                            NodeConfig::load_or_default(cli.config.as_deref()).unwrap_or_default();
+                        cfg.data_dir.join("keys")
+                    });
+                    let entries = wallet::list_keys(&keys_dir)?;
+                    if entries.is_empty() {
+                        println!("No keyfiles found in {}", keys_dir.display());
+                    } else {
+                        println!("{:<68}  ENCRYPTED", "ADDRESS");
+                        for (addr, _pk, encrypted) in &entries {
+                            let enc_str = if *encrypted { "yes" } else { "no" };
+                            println!("0x{addr}  {enc_str}");
+                        }
+                        println!("\n{} keyfile(s) found", entries.len());
+                    }
+                }
+                WalletAction::Balance { address, rpc } => {
+                    let addr_hex = address.strip_prefix("0x").unwrap_or(&address);
+                    wallet::query_balance(&rpc, addr_hex).await?;
+                }
+                WalletAction::Export { key } => {
+                    let json = wallet::export_keyfile(&key)?;
+                    println!("{json}");
+                }
+                WalletAction::Import { file, output } => {
+                    let json = std::fs::read_to_string(&file)
+                        .with_context(|| format!("Failed to read {}", file.display()))?;
+                    let out = output.unwrap_or_else(|| PathBuf::from("imported.json"));
+                    let address = wallet::import_keyfile(&json, &out)?;
+                    println!("Imported address: 0x{address}");
+                    println!("Saved to: {}", out.display());
                 }
                 WalletAction::Transfer {
                     from,
@@ -521,6 +585,9 @@ async fn main() -> Result<()> {
     let node_metrics: Arc<tokio::sync::RwLock<serde_json::Value>> =
         Arc::new(tokio::sync::RwLock::new(serde_json::json!({})));
 
+    // Event bus for WebSocket subscriptions
+    let event_bus = Arc::new(EventBus::new());
+
     // RPC server
     let (mempool_tx, mut mempool_rx) = tokio::sync::mpsc::channel::<Vec<u8>>(4096);
     let mut rpc_server = RpcServer::new(
@@ -529,7 +596,8 @@ async fn main() -> Result<()> {
         exec_pipeline.shared_batch_count(),
         Some(exec_store),
         exec_pipeline.shared_base_fee(),
-    );
+    )
+    .with_event_bus(Arc::clone(&event_bus));
 
     if config.metrics.enabled || cli.metrics {
         rpc_server = rpc_server.with_metrics(Arc::clone(&node_metrics));
@@ -836,6 +904,13 @@ async fn main() -> Result<()> {
                 {
                     tracing::debug!(error = %e, "Failed to publish state root");
                 }
+
+                // Publish events for WebSocket subscribers
+                event_bus.publish_new_head(serde_json::json!({
+                    "round": batch_index,
+                    "anchor_hash": format!("0x{}", hex::encode(result.batch_anchor)),
+                    "state_root": format!("0x{}", hex::encode(result.state_root)),
+                }));
 
                 // Update metrics snapshot
                 let snap = consensus_metrics.snapshot();

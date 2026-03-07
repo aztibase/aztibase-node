@@ -16,6 +16,7 @@ Every non-obvious technical decision is recorded here. Each ADR is immutable onc
 | ADR-006 | Post-execution fee collection (not pre-execution escrow) | 2026-03-07 | ACCEPTED | smart-contract-engineer |
 | ADR-007 | StateCommitment trait with enum-based proofs | 2026-03-07 | ACCEPTED | blockchain-architect |
 | ADR-008 | Metrics via opaque JSON to avoid cross-crate coupling | 2026-03-07 | ACCEPTED | node-engineer |
+| ADR-009 | WebSocket gateway via axum upgrade (not separate server) | 2026-03-07 | ACCEPTED | node-engineer |
 
 ---
 
@@ -243,6 +244,36 @@ Use `Arc<RwLock<serde_json::Value>>` as an opaque metrics container. The node bi
 - Metrics JSON is eventually consistent — readers may see partially-updated snapshots
 - No compile-time type safety on metric names (mitigated by tests)
 - If structured metrics are needed later (e.g., Prometheus format), this can be refactored without changing the RPC interface
+
+---
+
+## ADR-009: WebSocket gateway via axum upgrade (not separate server)
+
+**Date:** 2026-03-07
+**Status:** ACCEPTED
+**Decided By:** node-engineer
+**Git Ref:** pending (Sprint 020)
+
+### Context
+The browser light client (Sprint 019) requires a WebSocket connection to a full node for header sync and event streaming. ADR-005 chose axum for HTTP-only JSON-RPC. Three approaches for WebSocket support:
+- **Separate WebSocket server**: Run a second listener (e.g., on port 9945) with a dedicated WS library
+- **jsonrpsee migration**: Replace hand-rolled dispatch with jsonrpsee (has built-in WS+subscriptions)
+- **axum upgrade**: Add `/ws` route to existing axum router using `axum::extract::ws`, sharing state
+
+### Decision
+Add WebSocket support via axum's built-in `ws` feature on the same port as the HTTP RPC server. WebSocket clients connect to `/ws` and can send JSON-RPC requests, light sync messages, and subscriptions over the same connection.
+
+### Rationale
+- Zero new dependencies — axum already supports WebSocket via the `ws` feature flag
+- Same port for HTTP and WS — simplifies deployment (one port to expose/firewall)
+- Shared `RpcState` — WebSocket handler reuses existing `dispatch()` for JSON-RPC methods
+- jsonrpsee migration would require rewriting all existing RPC handlers for no clear benefit
+- Subscription model (broadcast channels + per-client forwarding tasks) is simple and auditable
+
+### Consequences
+- WebSocket and HTTP share the same `DefaultBodyLimit` (1MB) — appropriate for both
+- Subscription tasks are per-client, spawned on subscribe, aborted on unsubscribe or disconnect
+- Max 256 concurrent WebSocket connections enforced at upgrade time; production deployments should add per-IP limits via reverse proxy
 
 ---
 

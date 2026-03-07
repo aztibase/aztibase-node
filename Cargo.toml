@@ -88,7 +88,7 @@ wasmtime = "28"
 revm = { version = "36", default-features = false, features = ["std"] }
 
 # HTTP / RPC
-axum = "0.8"
+axum = { version = "0.8", features = ["ws"] }
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
 
 # Async utilities

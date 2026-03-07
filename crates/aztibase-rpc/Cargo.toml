@@ -17,6 +17,8 @@ thiserror = { workspace = true }
 anyhow = { workspace = true }
 axum = { workspace = true }
 hex = { workspace = true }
+futures = { workspace = true }
 
 [dev-dependencies]
 tower = "0.5"
+tokio-tungstenite = "0.26"

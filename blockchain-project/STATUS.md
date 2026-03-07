@@ -2,8 +2,8 @@
 
 **Last Updated:** 2026-03-07
 **Updated By:** project-lead
-**Current Phase:** M5 -- Light/Browser Nodes + Wallet (IN PROGRESS)
-**Current Sprint:** Sprint 019 -- COMPLETE (Browser WASM Light Node & HD Wallet Derivation)
+**Current Phase:** M5 -- Light/Browser Nodes + Wallet (COMPLETE)
+**Current Sprint:** Sprint 020 -- COMPLETE (WebSocket Gateway, RPC Subscriptions & Deployment)
 
 ---
 
@@ -16,7 +16,7 @@
 | M2 | P2P networking + basic consensus | DONE | 2026-03-05 | 2026-03-06 |
 | M3 | Execution layer (WASM VM, state management) | DONE | 2026-03-06 | 2026-03-06 |
 | M4 | Integration testing + basic AI + testnet | DONE | 2026-03-06 | 2026-03-07 |
-| M5 | Light/browser nodes + wallet | IN PROGRESS | 2026-03-07 | -- |
+| M5 | Light/browser nodes + wallet | DONE | 2026-03-07 | 2026-03-07 |
 | M6 | AI compute market + PoUW | NOT STARTED | -- | -- |
 | M7 | Security audit + hardening | NOT STARTED | -- | -- |
 | M8 | Public testnet | NOT STARTED | -- | -- |
@@ -33,7 +33,7 @@
 - Build-phase tracking infrastructure (5 documents)
 - Implementation depth audit (Sprint 001, Task 7)
 - Reference repos cloned (MystiCeti, Sui, Lighthouse, rust-libp2p, redb)
-- cargo build + cargo test pass (481 tests, 0 failures)
+- cargo build + cargo test pass (491 tests, 0 failures)
 - Sprint 001 closed with retrospective
 - Sprint 002 closed: 24/24 tasks, 5 phases complete
 - Sprint 003 closed: 18/18 tasks, 4 phases complete
@@ -41,6 +41,7 @@
 - Sprint 005 closed: 21/21 tasks, 4 phases complete
 - Sprint 006 closed: 23/24 tasks (1 deferred), 4 phases complete
 - Sprint 007 complete: receipt store, EVM via revm, AI inference via tract
+- Sprint 020 complete: 16/16 tasks, 4 phases (WebSocket gateway, RPC subscriptions, wallet management CLI, Docker deployment)
 - Sprint 019 complete: 16/16 tasks, 4 phases (WASM light client crate, browser transport bridge + demo, HD wallet derivation, security review)
 - Sprint 018 complete: 16/16 tasks, 4 phases (light sync P2P handler, sync loop with peer scoring, wallet transfer broadcast, security review)
 - Sprint 017 complete: 16/16 tasks, 4 phases (wallet hardening BIP-39/Argon2id, light node storage, header sync protocol, security review)
@@ -73,12 +74,16 @@
 | aztibase-wasm | PARTIAL | p2p-network-engineer | NO | YES |
 
 ### In Progress
-- Sprint 020 planning
+- Sprint 021 planning (M6: AI compute market + PoUW)
 
 ### Blocked
 - Nothing currently blocked
 
 ### Recently Completed
+- Sprint 020 Phase 4: Security review — 0 ELEVATED, 0 MEDIUM, 3 LOW (SEC-WS-002, SEC-SUB-001, SEC-EXPORT-001); clippy/fmt/test clean; 491 tests
+- Sprint 020 Phase 3: Wallet management — wallet list (keyfile dir scan), wallet balance (RPC query), wallet export/import (encrypted JSON roundtrip) (4 new tests)
+- Sprint 020 Phase 2: Event subscriptions — aztb_subscribe/aztb_unsubscribe (newHeads/finality topics), broadcast channels, HTTP subscribe returns error (4 new tests)
+- Sprint 020 Phase 1: WebSocket gateway — /ws upgrade handler, JSON-RPC dispatch over WS, light sync message handling over WS, max 256 connections (6 new tests incl. 4 subscription tests)
 - Sprint 019 Phase 4: Security review — 0 ELEVATED, 0 MEDIUM, 3 LOW (SEC-WASM-001, SEC-WS-001, SEC-HD-001); clippy/fmt/test clean; 481 tests
 - Sprint 019 Phase 3: HD wallet derivation — derive_account(phrase, index) with BLAKE3 domain separation, index 0 backward-compatible, wallet derive CLI (4 new tests)
 - Sprint 019 Phase 2: Browser transport bridge — LightClient JS API, WebSocket adapter, IndexedDB header cache, demo HTML page
@@ -137,7 +142,7 @@
 - Sprint 005 Phase 1: Consensus-to-execution wiring, TxKind routing, ExecutionPipeline
 
 ### Next Up
-1. Sprint 020: TBD (candidate areas: full Verkle IPA/KZG, Docker deployment, WebSocket full-node endpoint, wallet export/import)
+1. Sprint 021: M6 start — AI compute market + PoUW (candidates: compute task marketplace, PoUW proof generation, inference attestation pipeline, full Verkle IPA/KZG)
 
 ---
 
