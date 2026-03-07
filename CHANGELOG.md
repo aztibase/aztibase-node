@@ -5,6 +5,30 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ---
 
+## [M6] -- AI Compute Market + PoUW (IN PROGRESS)
+
+### Added
+- `ModelRegistry` in aztibase-execution: on-chain model metadata with register/query/deregister/list_active, backed by AccountState storage at `MODEL_REGISTRY_ADDRESS` (2026-03-07)
+- `TxKind::RegisterModel` (0x08): register AI models on-chain with owner, fingerprint, compute_cost, min_stake (2026-03-07)
+- `TxKind::PostTask` (0x09): post inference tasks with model_id, input_hash, reward escrow, deadline_round (2026-03-07)
+- `ComputeCommitment` + `ComputeCommitmentStore`: validator opt-in to provide AI compute for specific models (2026-03-07)
+- `SlidingWindowPoUWScore`: multi-metric PoUW scoring — 0.4 accuracy + 0.3 latency + 0.3 availability, replaces `StubPoUWScore` (2026-03-07)
+- `AttestationAggregator`: quorum-based attestation consensus (≥ 2 matching result_hash, validator dedup) (2026-03-07)
+- `ValidatorWorkHistory`: sliding window attestation tracking with accuracy/latency/availability calculations and pruning (2026-03-07)
+- `TaskPool`: pending inference task storage with model index, 1024 capacity limit, expiry eviction (2026-03-07)
+- `TaskAssigner`: select best validator by PoUW score from committed candidates (2026-03-07)
+- `TaskSettlement`: settle completed tasks — verify attestation quorum, distribute reward with remainder handling (2026-03-07)
+- `aztb_getModelInfo` RPC: query model metadata by ID (2026-03-07)
+- `aztb_listModels` RPC: list all active registered models (2026-03-07)
+- `aztb_getTaskStatus` RPC: query pending inference task by task_id (2026-03-07)
+- Pipeline execution for RegisterModel and PostTask transactions with nonce checks, fee escrow, and receipts (2026-03-07)
+- ADR-010: PoUW scoring formula and attestation quorum design (2026-03-07)
+
+### Fixed
+- SEC-SYBIL-001: `AttestationAggregator` now deduplicates attestations by validator_id, preventing single-validator quorum faking (2026-03-07)
+
+---
+
 ## [M5] -- Light/Browser Nodes + Wallet (COMPLETE)
 
 ### Added

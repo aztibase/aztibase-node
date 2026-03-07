@@ -21,6 +21,31 @@ Entries are prepended (newest first).
 
 ## Entries
 
+### 2026-03-07 -- project-lead -- Sprint 021 Complete
+**Task:** Sprint 021: AI Compute Market & PoUW Scoring (16 tasks, 4 phases)
+**Sprint:** Sprint 021, Phases 1-4
+**Git Ref:** pending
+**Files Changed:**
+- crates/aztibase-execution/src/model_registry.rs (NEW: on-chain model registry)
+- crates/aztibase-execution/src/routing.rs (RegisterModel 0x08, PostTask 0x09 variants)
+- crates/aztibase-execution/src/lib.rs (model_registry module + exports)
+- crates/aztibase-execution/src/state.rs (storage() method for full BTreeMap access)
+- crates/aztibase-consensus/src/pouw.rs (ComputeCommitment, SlidingWindowPoUWScore, AttestationAggregator, ValidatorWorkHistory)
+- crates/aztibase-consensus/src/lib.rs (updated pouw exports)
+- crates/aztibase-node/src/pipeline.rs (RegisterModel + PostTask execution, task escrow)
+- crates/aztibase-node/src/task_pool.rs (NEW: TaskPool, TaskAssigner, TaskSettlement)
+- crates/aztibase-node/src/main.rs (task_pool module, cfg(test) gated)
+- crates/aztibase-rpc/src/server.rs (aztb_getModelInfo, aztb_listModels, aztb_getTaskStatus endpoints)
+- crates/aztibase-rpc/Cargo.toml (aztibase-consensus + bincode deps)
+- blockchain-project/sprints/SPRINT-021.md (sprint plan + retrospective)
+- blockchain-project/DECISIONS.md (ADR-010: PoUW scoring formula)
+**Review Notes:**
+- Phase 1: ModelRegistry (register/query/deregister), TxKind::RegisterModel (0x08), ComputeCommitmentStore
+- Phase 2: SlidingWindowPoUWScore (0.4 accuracy + 0.3 latency + 0.3 availability), AttestationAggregator (quorum ≥ 2)
+- Phase 3: TxKind::PostTask (0x09), TaskPool (1024 cap, expiry eviction), TaskAssigner (highest PoUW score), TaskSettlement (reward split)
+- Phase 4: Security review (1 MEDIUM fixed: Sybil dedup), 3 new RPC endpoints, ADR-010, clippy/fmt clean
+**Security Flags:** SEC-SYBIL-001 (MEDIUM, FIXED): AttestationAggregator now deduplicates by validator_id
+
 ### 2026-03-07 -- project-lead -- Sprint 020 Complete
 **Task:** Sprint 020: WebSocket Gateway, RPC Subscriptions & Deployment (16 tasks, 4 phases)
 **Sprint:** Sprint 020, Phases 1-4

@@ -2,8 +2,8 @@
 
 **Last Updated:** 2026-03-07
 **Updated By:** project-lead
-**Current Phase:** M5 -- Light/Browser Nodes + Wallet (COMPLETE)
-**Current Sprint:** Sprint 020 -- COMPLETE (WebSocket Gateway, RPC Subscriptions & Deployment)
+**Current Phase:** M6 -- AI Compute Market + PoUW (IN PROGRESS)
+**Current Sprint:** Sprint 021 -- COMPLETE (AI Compute Market & PoUW Scoring)
 
 ---
 
@@ -17,7 +17,7 @@
 | M3 | Execution layer (WASM VM, state management) | DONE | 2026-03-06 | 2026-03-06 |
 | M4 | Integration testing + basic AI + testnet | DONE | 2026-03-06 | 2026-03-07 |
 | M5 | Light/browser nodes + wallet | DONE | 2026-03-07 | 2026-03-07 |
-| M6 | AI compute market + PoUW | NOT STARTED | -- | -- |
+| M6 | AI compute market + PoUW | IN PROGRESS | 2026-03-07 | -- |
 | M7 | Security audit + hardening | NOT STARTED | -- | -- |
 | M8 | Public testnet | NOT STARTED | -- | -- |
 | M9 | Mainnet launch | NOT STARTED | -- | -- |
@@ -33,7 +33,7 @@
 - Build-phase tracking infrastructure (5 documents)
 - Implementation depth audit (Sprint 001, Task 7)
 - Reference repos cloned (MystiCeti, Sui, Lighthouse, rust-libp2p, redb)
-- cargo build + cargo test pass (491 tests, 0 failures)
+- cargo build + cargo test pass (500+ tests, 0 failures)
 - Sprint 001 closed with retrospective
 - Sprint 002 closed: 24/24 tasks, 5 phases complete
 - Sprint 003 closed: 18/18 tasks, 4 phases complete
@@ -41,6 +41,7 @@
 - Sprint 005 closed: 21/21 tasks, 4 phases complete
 - Sprint 006 closed: 23/24 tasks (1 deferred), 4 phases complete
 - Sprint 007 complete: receipt store, EVM via revm, AI inference via tract
+- Sprint 021 complete: 16/16 tasks, 4 phases (ModelRegistry, PoUW multi-metric scoring, task marketplace + settlement, security review)
 - Sprint 020 complete: 16/16 tasks, 4 phases (WebSocket gateway, RPC subscriptions, wallet management CLI, Docker deployment)
 - Sprint 019 complete: 16/16 tasks, 4 phases (WASM light client crate, browser transport bridge + demo, HD wallet derivation, security review)
 - Sprint 018 complete: 16/16 tasks, 4 phases (light sync P2P handler, sync loop with peer scoring, wallet transfer broadcast, security review)
@@ -74,12 +75,16 @@
 | aztibase-wasm | PARTIAL | p2p-network-engineer | NO | YES |
 
 ### In Progress
-- Sprint 021 planning (M6: AI compute market + PoUW)
+- Sprint 022 planning (M6 continuation: wire task execution loop, attestation signature verification, Verkle IPA)
 
 ### Blocked
 - Nothing currently blocked
 
 ### Recently Completed
+- Sprint 021 Phase 4: Security review — 0 ELEVATED, 1 MEDIUM fixed (SEC-SYBIL-001: duplicate validator dedup), 3 RPC endpoints, ADR-010; clippy/fmt clean; 500+ tests
+- Sprint 021 Phase 3: Task marketplace — TxKind::PostTask (0x09), TaskPool (1024 cap, expiry eviction), TaskAssigner (highest PoUW score), TaskSettlement (reward split), 14 new tests
+- Sprint 021 Phase 2: PoUW scoring — SlidingWindowPoUWScore (0.4 acc + 0.3 lat + 0.3 avail), AttestationAggregator (quorum ≥ 2, validator dedup), ValidatorWorkHistory, 7 new tests
+- Sprint 021 Phase 1: Model registry — ModelRegistry (register/query/deregister), TxKind::RegisterModel (0x08), ComputeCommitmentStore, pipeline integration, 12 new tests
 - Sprint 020 Phase 4: Security review — 0 ELEVATED, 0 MEDIUM, 3 LOW (SEC-WS-002, SEC-SUB-001, SEC-EXPORT-001); clippy/fmt/test clean; 491 tests
 - Sprint 020 Phase 3: Wallet management — wallet list (keyfile dir scan), wallet balance (RPC query), wallet export/import (encrypted JSON roundtrip) (4 new tests)
 - Sprint 020 Phase 2: Event subscriptions — aztb_subscribe/aztb_unsubscribe (newHeads/finality topics), broadcast channels, HTTP subscribe returns error (4 new tests)
@@ -142,7 +147,7 @@
 - Sprint 005 Phase 1: Consensus-to-execution wiring, TxKind routing, ExecutionPipeline
 
 ### Next Up
-1. Sprint 021: M6 start — AI compute market + PoUW (candidates: compute task marketplace, PoUW proof generation, inference attestation pipeline, full Verkle IPA/KZG)
+1. Sprint 022: M6 continuation — wire TaskPool into main execution loop, attestation signature verification (Ed25519/BLS), task expiry refund, full Verkle IPA/KZG commitment
 
 ---
 
@@ -160,6 +165,7 @@
 | Block-STM parallel validation race | MEDIUM | smart-contract-engineer | FIXED (prior-tx check in finish_validation) |
 | BLS rogue-key attack without PoP | MEDIUM | consensus-engineer | DOCUMENTED (ADR-004) |
 | Cross-VM reentrancy within depth limit (SEC-BRIDGE-003) | MEDIUM | smart-contract-engineer | DOCUMENTED (M7 guard) |
+| Attestation Sybil via duplicate validators (SEC-SYBIL-001) | MEDIUM | consensus-engineer | FIXED (validator dedup in aggregate) |
 
 ---
 

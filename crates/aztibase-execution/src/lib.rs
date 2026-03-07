@@ -4,6 +4,7 @@ pub mod cross_vm;
 pub mod evm;
 pub mod fee;
 pub mod light_client;
+pub mod model_registry;
 pub mod parallel;
 pub mod persist;
 pub mod precompiles;
@@ -19,6 +20,7 @@ pub use contract::{ContractReceipt, ContractTx, compute_contract_address, execut
 pub use cross_vm::{CrossVmCall, CrossVmResult, evm_to_wasm, wasm_to_evm};
 pub use fee::{BaseFeeCalculator, FeeEscrow, escrow_fee, refund_unused};
 pub use light_client::{build_light_client_proof, verify_light_client_proof};
+pub use model_registry::{MODEL_REGISTRY_ADDRESS, ModelMetadata, ModelRegistry, RegistryError};
 pub use parallel::{BatchResult, TransferTx, TxReceipt, TxStatus, execute_transfers};
 pub use persist::{
     flush_state, get_batch_root, load_base_fee, load_state, store_base_fee, store_batch_root,

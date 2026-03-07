@@ -5,6 +5,8 @@ mod integration;
 mod mempool;
 mod pipeline;
 mod sync;
+#[cfg(test)]
+mod task_pool;
 mod wallet;
 
 use std::path::PathBuf;

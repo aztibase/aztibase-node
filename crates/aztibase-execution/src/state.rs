@@ -128,6 +128,13 @@ impl AccountState {
             .map(|v| v.as_slice())
     }
 
+    pub fn storage(&self, address: &Address) -> BTreeMap<Vec<u8>, Vec<u8>> {
+        self.accounts
+            .get(address)
+            .map(|a| a.storage.clone())
+            .unwrap_or_default()
+    }
+
     pub fn account_count(&self) -> usize {
         self.accounts.len()
     }

@@ -17,6 +17,7 @@ use tokio::sync::{RwLock, broadcast, mpsc};
 use tracing::{debug, info};
 
 use aztibase_execution::AccountState;
+use aztibase_execution::model_registry::{MODEL_REGISTRY_ADDRESS, ModelMetadata, ModelRegistry};
 use aztibase_storage::StateStore;
 
 // ── JSON-RPC 2.0 Types ─────────────────────────────────────────────
@@ -272,6 +273,9 @@ async fn dispatch(state: &RpcState, req: &JsonRpcRequest) -> JsonRpcResponse {
         "aztb_getAccountType" => handle_get_account_type(state, req).await,
         "aztb_gasPrice" => handle_gas_price(state, req).await,
         "aztb_estimateGas" => handle_estimate_gas(state, req).await,
+        "aztb_getModelInfo" => handle_get_model_info(state, req).await,
+        "aztb_listModels" => handle_list_models(state, req).await,
+        "aztb_getTaskStatus" => handle_get_task_status(state, req).await,
         _ => JsonRpcResponse::error(
             req.id.clone(),
             METHOD_NOT_FOUND,
@@ -709,6 +713,104 @@ async fn handle_estimate_gas(_state: &RpcState, req: &JsonRpcRequest) -> JsonRpc
         .unwrap_or(0x01);
     let estimate = aztibase_execution::BaseFeeCalculator::estimate_gas(prefix);
     JsonRpcResponse::success(req.id.clone(), serde_json::json!(format!("0x{estimate:x}")))
+}
+
+// ── Model Registry & Task Endpoints ─────────────────────────────────
+
+fn registry_storage(accounts: &AccountState) -> std::collections::BTreeMap<Vec<u8>, Vec<u8>> {
+    accounts.storage(&MODEL_REGISTRY_ADDRESS)
+}
+
+async fn handle_get_model_info(state: &RpcState, req: &JsonRpcRequest) -> JsonRpcResponse {
+    let model_id = match req.params.get(0).and_then(|v| v.as_str()) {
+        Some(s) => s,
+        None => {
+            return JsonRpcResponse::error(
+                req.id.clone(),
+                INVALID_PARAMS,
+                "missing model_id parameter".into(),
+            );
+        }
+    };
+    let accounts = state.accounts.read().await;
+    let storage = registry_storage(&accounts);
+    match ModelRegistry::get(&storage, model_id) {
+        Some(meta) => JsonRpcResponse::success(req.id.clone(), model_to_json(&meta)),
+        None => JsonRpcResponse::success(req.id.clone(), serde_json::Value::Null),
+    }
+}
+
+async fn handle_list_models(state: &RpcState, req: &JsonRpcRequest) -> JsonRpcResponse {
+    let accounts = state.accounts.read().await;
+    let storage = registry_storage(&accounts);
+    let active: Vec<serde_json::Value> = ModelRegistry::list_active(&storage)
+        .into_iter()
+        .map(|m| model_to_json(&m))
+        .collect();
+    JsonRpcResponse::success(req.id.clone(), serde_json::json!(active))
+}
+
+async fn handle_get_task_status(state: &RpcState, req: &JsonRpcRequest) -> JsonRpcResponse {
+    let hex_str = match req.params.get(0).and_then(|v| v.as_str()) {
+        Some(s) => s,
+        None => {
+            return JsonRpcResponse::error(
+                req.id.clone(),
+                INVALID_PARAMS,
+                "missing task_id parameter".into(),
+            );
+        }
+    };
+    let hex_str = hex_str.strip_prefix("0x").unwrap_or(hex_str);
+    let task_id_bytes = match hex::decode(hex_str) {
+        Ok(b) if b.len() == 32 => b,
+        _ => {
+            return JsonRpcResponse::error(
+                req.id.clone(),
+                INVALID_PARAMS,
+                "task_id must be 32-byte hex".into(),
+            );
+        }
+    };
+
+    let accounts = state.accounts.read().await;
+    let storage = registry_storage(&accounts);
+    let mut key = b"task:".to_vec();
+    key.extend_from_slice(&task_id_bytes);
+
+    match storage.get(&key) {
+        Some(data) => {
+            if let Ok(task) = bincode::deserialize::<aztibase_consensus::InferenceTask>(data) {
+                JsonRpcResponse::success(
+                    req.id.clone(),
+                    serde_json::json!({
+                        "taskId": format!("0x{}", hex::encode(task.task_id)),
+                        "modelId": task.model_id,
+                        "inputHash": format!("0x{}", hex::encode(task.input_hash)),
+                        "requester": format!("0x{}", hex::encode(task.requester)),
+                        "reward": format!("0x{:x}", task.reward),
+                        "deadlineRound": task.deadline_round,
+                        "status": "pending",
+                    }),
+                )
+            } else {
+                JsonRpcResponse::success(req.id.clone(), serde_json::Value::Null)
+            }
+        }
+        None => JsonRpcResponse::success(req.id.clone(), serde_json::Value::Null),
+    }
+}
+
+fn model_to_json(meta: &ModelMetadata) -> serde_json::Value {
+    serde_json::json!({
+        "modelId": meta.model_id,
+        "owner": format!("0x{}", hex::encode(meta.owner)),
+        "fingerprint": format!("0x{}", hex::encode(meta.fingerprint)),
+        "computeCost": meta.compute_cost,
+        "minStake": meta.min_stake,
+        "registeredRound": meta.registered_round,
+        "active": meta.active,
+    })
 }
 
 // ── Metrics Endpoint ────────────────────────────────────────────────
@@ -1304,6 +1406,131 @@ mod tests {
                 .unwrap()
                 .contains("WebSocket")
         );
+    }
+
+    // ── Model Registry & Task RPC tests ─────────────────────────────
+
+    fn test_state_with_model() -> (RpcState, mpsc::Receiver<Vec<u8>>) {
+        let mut accounts = AccountState::new();
+        let owner = [1u8; 32];
+        let fp = aztibase_core::hash(b"model-weights");
+        let mut storage = std::collections::BTreeMap::new();
+        ModelRegistry::register(
+            &mut storage,
+            "sentiment_v1".into(),
+            owner,
+            fp,
+            1000,
+            500,
+            10,
+        )
+        .unwrap();
+        for (k, v) in &storage {
+            accounts.set_storage(&MODEL_REGISTRY_ADDRESS, k.clone(), v.clone());
+        }
+
+        let (tx, rx) = mpsc::channel(64);
+        let state = RpcState {
+            accounts: Arc::new(RwLock::new(accounts)),
+            tx_sender: tx,
+            batch_count: Arc::new(AtomicU64::new(0)),
+            receipt_store: None,
+            base_fee: Arc::new(AtomicU64::new(1)),
+            node_metrics: None,
+            event_bus: Arc::new(EventBus::new()),
+            ws_connection_count: Arc::new(AtomicU64::new(0)),
+        };
+        (state, rx)
+    }
+
+    #[tokio::test]
+    async fn get_model_info_found() {
+        let (state, _rx) = test_state_with_model();
+        let body =
+            r#"{"jsonrpc":"2.0","method":"aztb_getModelInfo","params":["sentiment_v1"],"id":1}"#;
+        let resp = rpc_call(&state, body).await;
+        assert!(resp.get("error").is_none(), "unexpected error: {resp}");
+        assert_eq!(resp["result"]["modelId"], "sentiment_v1");
+        assert_eq!(resp["result"]["computeCost"], 1000);
+        assert_eq!(resp["result"]["active"], true);
+    }
+
+    #[tokio::test]
+    async fn get_model_info_not_found() {
+        let (state, _rx) = test_state();
+        let body =
+            r#"{"jsonrpc":"2.0","method":"aztb_getModelInfo","params":["nonexistent"],"id":1}"#;
+        let resp = rpc_call(&state, body).await;
+        assert!(resp["result"].is_null());
+    }
+
+    #[tokio::test]
+    async fn list_models_returns_active() {
+        let (state, _rx) = test_state_with_model();
+        let body = r#"{"jsonrpc":"2.0","method":"aztb_listModels","params":[],"id":1}"#;
+        let resp = rpc_call(&state, body).await;
+        let models = resp["result"].as_array().unwrap();
+        assert_eq!(models.len(), 1);
+        assert_eq!(models[0]["modelId"], "sentiment_v1");
+    }
+
+    #[tokio::test]
+    async fn list_models_empty() {
+        let (state, _rx) = test_state();
+        let body = r#"{"jsonrpc":"2.0","method":"aztb_listModels","params":[],"id":1}"#;
+        let resp = rpc_call(&state, body).await;
+        let models = resp["result"].as_array().unwrap();
+        assert!(models.is_empty());
+    }
+
+    #[tokio::test]
+    async fn get_task_status_not_found() {
+        let (state, _rx) = test_state();
+        let fake_id = hex::encode([0xABu8; 32]);
+        let body = format!(
+            r#"{{"jsonrpc":"2.0","method":"aztb_getTaskStatus","params":["0x{fake_id}"],"id":1}}"#
+        );
+        let resp = rpc_call(&state, &body).await;
+        assert!(resp["result"].is_null());
+    }
+
+    #[tokio::test]
+    async fn get_task_status_found() {
+        let mut accounts = AccountState::new();
+        let task = aztibase_consensus::InferenceTask::new(
+            "model_a".into(),
+            aztibase_core::hash(b"input"),
+            [1u8; 32],
+            500,
+            100,
+        );
+        let task_id = task.task_id;
+        let mut key = b"task:".to_vec();
+        key.extend_from_slice(&task_id);
+        let data = bincode::serialize(&task).unwrap();
+        accounts.set_storage(&MODEL_REGISTRY_ADDRESS, key, data);
+
+        let (tx, _rx) = mpsc::channel(64);
+        let state = RpcState {
+            accounts: Arc::new(RwLock::new(accounts)),
+            tx_sender: tx,
+            batch_count: Arc::new(AtomicU64::new(0)),
+            receipt_store: None,
+            base_fee: Arc::new(AtomicU64::new(1)),
+            node_metrics: None,
+            event_bus: Arc::new(EventBus::new()),
+            ws_connection_count: Arc::new(AtomicU64::new(0)),
+        };
+
+        let task_hex = hex::encode(task_id);
+        let body = format!(
+            r#"{{"jsonrpc":"2.0","method":"aztb_getTaskStatus","params":["0x{task_hex}"],"id":1}}"#
+        );
+        let resp = rpc_call(&state, &body).await;
+        assert!(resp.get("error").is_none(), "unexpected error: {resp}");
+        assert_eq!(resp["result"]["modelId"], "model_a");
+        assert_eq!(resp["result"]["status"], "pending");
+        assert_eq!(resp["result"]["deadlineRound"], 100);
     }
 
     #[tokio::test]

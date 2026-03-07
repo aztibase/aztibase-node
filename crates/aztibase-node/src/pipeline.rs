@@ -6,7 +6,9 @@ use aztibase_core::hash;
 use aztibase_execution::{
     AccountState, BaseFeeCalculator, ContractTx, ExecutionReceipt, FeeEscrow, TransferTx, TxKind,
     block_stm::{BlockSTMExecutor, apply_block_stm_to_state},
-    escrow_fee, evm, execute_contract_txs, flush_state, load_base_fee, load_state, refund_unused,
+    escrow_fee, evm, execute_contract_txs, flush_state, load_base_fee, load_state,
+    model_registry::{MODEL_REGISTRY_ADDRESS, ModelRegistry},
+    refund_unused,
     state::AccountType,
     store_base_fee, store_batch_root, store_receipts, verify_and_route_batch,
 };
@@ -246,6 +248,8 @@ impl ExecutionPipeline {
         let mut evm_calls = Vec::new();
         let mut ai_infers = Vec::new();
         let mut create_agents = Vec::new();
+        let mut register_models = Vec::new();
+        let mut post_tasks = Vec::new();
 
         for tx in &executable {
             match tx {
@@ -354,6 +358,42 @@ impl ExecutionPipeline {
                 } => {
                     create_agents.push((*creator, model_id.clone(), *nonce));
                 }
+                TxKind::RegisterModel {
+                    owner,
+                    model_id,
+                    fingerprint,
+                    compute_cost,
+                    min_stake,
+                    nonce,
+                    ..
+                } => {
+                    register_models.push((
+                        *owner,
+                        model_id.clone(),
+                        *fingerprint,
+                        *compute_cost,
+                        *min_stake,
+                        *nonce,
+                    ));
+                }
+                TxKind::PostTask {
+                    requester,
+                    model_id,
+                    input_hash,
+                    reward,
+                    deadline_round,
+                    nonce,
+                    ..
+                } => {
+                    post_tasks.push((
+                        *requester,
+                        model_id.clone(),
+                        *input_hash,
+                        *reward,
+                        *deadline_round,
+                        *nonce,
+                    ));
+                }
             }
         }
 
@@ -362,7 +402,9 @@ impl ExecutionPipeline {
             + evm_deploys.len()
             + evm_calls.len()
             + ai_infers.len()
-            + create_agents.len();
+            + create_agents.len()
+            + register_models.len()
+            + post_tasks.len();
 
         // Phase 2: Execute transactions.
         let mut exec_receipts = Vec::new();
@@ -518,6 +560,153 @@ impl ExecutionPipeline {
             });
         }
 
+        for (owner, model_id, fingerprint, compute_cost, min_stake, nonce) in &register_models {
+            let mut preimage = Vec::new();
+            preimage.extend_from_slice(owner);
+            preimage.extend_from_slice(model_id.as_bytes());
+            preimage.extend_from_slice(fingerprint);
+            let tx_hash = hash(&preimage);
+
+            let owner_nonce = state.nonce(owner);
+            if *nonce != owner_nonce {
+                state.increment_nonce(owner);
+                exec_receipts.push(ExecutionReceipt {
+                    tx_hash,
+                    success: false,
+                    gas_used: 21_000,
+                    contract_address: None,
+                    error: Some(format!(
+                        "nonce mismatch: expected {owner_nonce}, got {nonce}"
+                    )),
+                    inference_hash: None,
+                    anomaly_score: 0.0,
+                });
+                continue;
+            }
+
+            let registry_acct = state.get_mut(&MODEL_REGISTRY_ADDRESS);
+            let result = ModelRegistry::register(
+                &mut registry_acct.storage,
+                model_id.clone(),
+                *owner,
+                *fingerprint,
+                *compute_cost,
+                *min_stake,
+                0,
+            );
+            state.increment_nonce(owner);
+
+            match result {
+                Ok(_) => {
+                    exec_receipts.push(ExecutionReceipt {
+                        tx_hash,
+                        success: true,
+                        gas_used: 100_000,
+                        contract_address: None,
+                        error: None,
+                        inference_hash: None,
+                        anomaly_score: 0.0,
+                    });
+                }
+                Err(e) => {
+                    exec_receipts.push(ExecutionReceipt {
+                        tx_hash,
+                        success: false,
+                        gas_used: 21_000,
+                        contract_address: None,
+                        error: Some(format!("register model failed: {e}")),
+                        inference_hash: None,
+                        anomaly_score: 0.0,
+                    });
+                }
+            }
+        }
+
+        for (requester, model_id, input_hash, reward, deadline_round, nonce) in &post_tasks {
+            let mut preimage = Vec::new();
+            preimage.extend_from_slice(requester);
+            preimage.extend_from_slice(model_id.as_bytes());
+            preimage.extend_from_slice(input_hash);
+            let tx_hash = hash(&preimage);
+
+            let req_nonce = state.nonce(requester);
+            if *nonce != req_nonce {
+                state.increment_nonce(requester);
+                exec_receipts.push(ExecutionReceipt {
+                    tx_hash,
+                    success: false,
+                    gas_used: 21_000,
+                    contract_address: None,
+                    error: Some(format!("nonce mismatch: expected {req_nonce}, got {nonce}")),
+                    inference_hash: None,
+                    anomaly_score: 0.0,
+                });
+                continue;
+            }
+
+            let registry_acct = state.get_mut(&MODEL_REGISTRY_ADDRESS);
+            let model_exists =
+                ModelRegistry::get(&registry_acct.storage, model_id).is_some_and(|m| m.active);
+
+            if !model_exists {
+                state.increment_nonce(requester);
+                exec_receipts.push(ExecutionReceipt {
+                    tx_hash,
+                    success: false,
+                    gas_used: 21_000,
+                    contract_address: None,
+                    error: Some(format!("model not registered: {model_id}")),
+                    inference_hash: None,
+                    anomaly_score: 0.0,
+                });
+                continue;
+            }
+
+            let balance = state.balance(requester);
+            if balance < *reward {
+                state.increment_nonce(requester);
+                exec_receipts.push(ExecutionReceipt {
+                    tx_hash,
+                    success: false,
+                    gas_used: 21_000,
+                    contract_address: None,
+                    error: Some("insufficient balance for task reward".into()),
+                    inference_hash: None,
+                    anomaly_score: 0.0,
+                });
+                continue;
+            }
+
+            let new_balance = state.balance(requester) - *reward;
+            state.set_balance(requester, new_balance);
+
+            let task = aztibase_consensus::InferenceTask::new(
+                model_id.clone(),
+                *input_hash,
+                *requester,
+                *reward,
+                *deadline_round,
+            );
+
+            let task_key = format!("task:{}", hex::encode(task.task_id));
+            let registry_acct = state.get_mut(&MODEL_REGISTRY_ADDRESS);
+            registry_acct
+                .storage
+                .insert(task_key.into_bytes(), bincode::serialize(&task).unwrap());
+
+            state.increment_nonce(requester);
+
+            exec_receipts.push(ExecutionReceipt {
+                tx_hash,
+                success: true,
+                gas_used: 42_000,
+                contract_address: None,
+                error: None,
+                inference_hash: Some(task.task_id),
+                anomaly_score: 0.0,
+            });
+        }
+
         // Phase 2.5: Score each executed tx for anomalous behavior.
         for (i, tx) in executable.iter().enumerate() {
             if i >= exec_receipts.len() {
@@ -618,6 +807,30 @@ fn compute_tx_hash(tx: &TxKind) -> [u8; 32] {
             buf.extend_from_slice(creator);
             buf.extend_from_slice(model_id.as_bytes());
             buf.extend_from_slice(&nonce.to_le_bytes());
+            hash(&buf)
+        }
+        TxKind::RegisterModel {
+            owner,
+            model_id,
+            fingerprint,
+            ..
+        } => {
+            let mut buf = Vec::new();
+            buf.extend_from_slice(owner);
+            buf.extend_from_slice(model_id.as_bytes());
+            buf.extend_from_slice(fingerprint);
+            hash(&buf)
+        }
+        TxKind::PostTask {
+            requester,
+            model_id,
+            input_hash,
+            ..
+        } => {
+            let mut buf = Vec::new();
+            buf.extend_from_slice(requester);
+            buf.extend_from_slice(model_id.as_bytes());
+            buf.extend_from_slice(input_hash);
             hash(&buf)
         }
     }
@@ -1810,5 +2023,206 @@ mod tests {
         // Base fee should have been updated (decreased since gas_used < target)
         assert!(after >= 1);
         assert_eq!(before, 1);
+    }
+
+    // ── Phase: Model registry + task posting tests ──────────────
+
+    #[tokio::test]
+    async fn pipeline_register_model() {
+        let (_tx, rx) = mpsc::channel(16);
+        let mut pipeline = make_pipeline(rx);
+
+        let (owner_kp, owner) = make_sender();
+        let fingerprint = hash(b"model-weights-v1");
+
+        let reg_tx = TxKind::RegisterModel {
+            owner,
+            model_id: "sentiment_v1".into(),
+            fingerprint,
+            compute_cost: 500,
+            min_stake: 100,
+            nonce: 0,
+            gas_price: 0,
+        };
+
+        let batch = make_batch(vec![sign(&reg_tx, &owner_kp)]);
+        let result = pipeline.execute_batch(&batch).await.unwrap();
+
+        assert_eq!(result.receipts.len(), 1);
+        assert!(result.receipts[0].success);
+        assert_eq!(result.receipts[0].gas_used, 100_000);
+
+        let state = pipeline.state.read().await;
+        let registry = state
+            .get(&aztibase_execution::MODEL_REGISTRY_ADDRESS)
+            .unwrap();
+        let meta = aztibase_execution::ModelRegistry::get(&registry.storage, "sentiment_v1");
+        assert!(meta.is_some());
+        let meta = meta.unwrap();
+        assert_eq!(meta.owner, owner);
+        assert!(meta.active);
+    }
+
+    #[tokio::test]
+    async fn pipeline_register_duplicate_model_fails() {
+        let (_tx, rx) = mpsc::channel(16);
+        let mut pipeline = make_pipeline(rx);
+
+        let (owner_kp, owner) = make_sender();
+        let fingerprint = hash(b"fp");
+
+        let reg_tx = TxKind::RegisterModel {
+            owner,
+            model_id: "m1".into(),
+            fingerprint,
+            compute_cost: 100,
+            min_stake: 0,
+            nonce: 0,
+            gas_price: 0,
+        };
+
+        let batch1 = make_batch(vec![sign(&reg_tx, &owner_kp)]);
+        pipeline.execute_batch(&batch1).await.unwrap();
+
+        let reg_tx2 = TxKind::RegisterModel {
+            owner,
+            model_id: "m1".into(),
+            fingerprint,
+            compute_cost: 200,
+            min_stake: 0,
+            nonce: 1,
+            gas_price: 0,
+        };
+
+        let batch2 = make_batch_with_anchor([0xBB; 32], vec![sign(&reg_tx2, &owner_kp)]);
+        let result = pipeline.execute_batch(&batch2).await.unwrap();
+
+        assert!(!result.receipts[0].success);
+        assert!(
+            result.receipts[0]
+                .error
+                .as_ref()
+                .unwrap()
+                .contains("already registered")
+        );
+    }
+
+    #[tokio::test]
+    async fn pipeline_post_task() {
+        let (_tx, rx) = mpsc::channel(16);
+        let mut pipeline = make_pipeline(rx);
+
+        let (owner_kp, owner) = make_sender();
+        let (req_kp, requester) = make_sender();
+        pipeline.state.write().await.set_balance(&requester, 10_000);
+
+        let reg_tx = TxKind::RegisterModel {
+            owner,
+            model_id: "classifier".into(),
+            fingerprint: hash(b"fp"),
+            compute_cost: 100,
+            min_stake: 0,
+            nonce: 0,
+            gas_price: 0,
+        };
+        let batch1 = make_batch(vec![sign(&reg_tx, &owner_kp)]);
+        pipeline.execute_batch(&batch1).await.unwrap();
+
+        let post_tx = TxKind::PostTask {
+            requester,
+            model_id: "classifier".into(),
+            input_hash: hash(b"test-input"),
+            reward: 500,
+            deadline_round: 100,
+            nonce: 0,
+            gas_price: 0,
+        };
+
+        let batch2 = make_batch_with_anchor([0xBB; 32], vec![sign(&post_tx, &req_kp)]);
+        let result = pipeline.execute_batch(&batch2).await.unwrap();
+
+        assert_eq!(result.receipts.len(), 1);
+        assert!(result.receipts[0].success);
+        assert!(result.receipts[0].inference_hash.is_some());
+        assert_eq!(result.receipts[0].gas_used, 42_000);
+
+        let state = pipeline.state.read().await;
+        assert_eq!(state.balance(&requester), 9_500);
+    }
+
+    #[tokio::test]
+    async fn pipeline_post_task_unregistered_model_fails() {
+        let (_tx, rx) = mpsc::channel(16);
+        let mut pipeline = make_pipeline(rx);
+
+        let (req_kp, requester) = make_sender();
+        pipeline.state.write().await.set_balance(&requester, 10_000);
+
+        let post_tx = TxKind::PostTask {
+            requester,
+            model_id: "nonexistent".into(),
+            input_hash: hash(b"data"),
+            reward: 500,
+            deadline_round: 100,
+            nonce: 0,
+            gas_price: 0,
+        };
+
+        let batch = make_batch(vec![sign(&post_tx, &req_kp)]);
+        let result = pipeline.execute_batch(&batch).await.unwrap();
+
+        assert!(!result.receipts[0].success);
+        assert!(
+            result.receipts[0]
+                .error
+                .as_ref()
+                .unwrap()
+                .contains("not registered")
+        );
+        assert_eq!(pipeline.state.read().await.balance(&requester), 10_000);
+    }
+
+    #[tokio::test]
+    async fn pipeline_post_task_insufficient_reward_fails() {
+        let (_tx, rx) = mpsc::channel(16);
+        let mut pipeline = make_pipeline(rx);
+
+        let (owner_kp, owner) = make_sender();
+        let (req_kp, requester) = make_sender();
+        pipeline.state.write().await.set_balance(&requester, 100);
+
+        let reg = TxKind::RegisterModel {
+            owner,
+            model_id: "m1".into(),
+            fingerprint: hash(b"fp"),
+            compute_cost: 100,
+            min_stake: 0,
+            nonce: 0,
+            gas_price: 0,
+        };
+        let batch1 = make_batch(vec![sign(&reg, &owner_kp)]);
+        pipeline.execute_batch(&batch1).await.unwrap();
+
+        let post_tx = TxKind::PostTask {
+            requester,
+            model_id: "m1".into(),
+            input_hash: hash(b"data"),
+            reward: 500,
+            deadline_round: 100,
+            nonce: 0,
+            gas_price: 0,
+        };
+
+        let batch2 = make_batch_with_anchor([0xBB; 32], vec![sign(&post_tx, &req_kp)]);
+        let result = pipeline.execute_batch(&batch2).await.unwrap();
+
+        assert!(!result.receipts[0].success);
+        assert!(
+            result.receipts[0]
+                .error
+                .as_ref()
+                .unwrap()
+                .contains("insufficient balance")
+        );
     }
 }

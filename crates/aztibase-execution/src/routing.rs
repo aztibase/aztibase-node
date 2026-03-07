@@ -10,6 +10,8 @@ const PREFIX_EVM_DEPLOY: u8 = 0x04;
 const PREFIX_EVM_CALL: u8 = 0x05;
 const PREFIX_AI_INFER: u8 = 0x06;
 const PREFIX_CREATE_AGENT: u8 = 0x07;
+const PREFIX_REGISTER_MODEL: u8 = 0x08;
+const PREFIX_POST_TASK: u8 = 0x09;
 
 /// Maximum encoded transaction size (1 MB). Rejects oversized payloads before
 /// deserialization to prevent memory-bomb attacks via bincode length prefixes.
@@ -70,6 +72,24 @@ pub enum TxKind {
         nonce: u64,
         gas_price: u64,
     },
+    RegisterModel {
+        owner: Address,
+        model_id: String,
+        fingerprint: [u8; 32],
+        compute_cost: u64,
+        min_stake: u64,
+        nonce: u64,
+        gas_price: u64,
+    },
+    PostTask {
+        requester: Address,
+        model_id: String,
+        input_hash: [u8; 32],
+        reward: u64,
+        deadline_round: u64,
+        nonce: u64,
+        gas_price: u64,
+    },
 }
 
 impl TxKind {
@@ -83,6 +103,8 @@ impl TxKind {
             TxKind::EvmCall { .. } => PREFIX_EVM_CALL,
             TxKind::AiInfer { .. } => PREFIX_AI_INFER,
             TxKind::CreateAgent { .. } => PREFIX_CREATE_AGENT,
+            TxKind::RegisterModel { .. } => PREFIX_REGISTER_MODEL,
+            TxKind::PostTask { .. } => PREFIX_POST_TASK,
         };
         let payload = bincode::serialize(self).expect("TxKind serialization cannot fail");
         let mut buf = Vec::with_capacity(1 + payload.len());
@@ -99,7 +121,9 @@ impl TxKind {
             | TxKind::EvmDeploy { nonce, .. }
             | TxKind::EvmCall { nonce, .. }
             | TxKind::AiInfer { nonce, .. }
-            | TxKind::CreateAgent { nonce, .. } => *nonce,
+            | TxKind::CreateAgent { nonce, .. }
+            | TxKind::RegisterModel { nonce, .. }
+            | TxKind::PostTask { nonce, .. } => *nonce,
         }
     }
 
@@ -111,7 +135,9 @@ impl TxKind {
             | TxKind::EvmDeploy { gas_price, .. }
             | TxKind::EvmCall { gas_price, .. }
             | TxKind::AiInfer { gas_price, .. }
-            | TxKind::CreateAgent { gas_price, .. } => *gas_price,
+            | TxKind::CreateAgent { gas_price, .. }
+            | TxKind::RegisterModel { gas_price, .. }
+            | TxKind::PostTask { gas_price, .. } => *gas_price,
         }
     }
 
@@ -126,6 +152,8 @@ impl TxKind {
                 max_compute_units, ..
             } => *max_compute_units,
             TxKind::CreateAgent { .. } => 53_000,
+            TxKind::RegisterModel { .. } => 100_000,
+            TxKind::PostTask { .. } => 42_000,
         }
     }
 
@@ -138,6 +166,8 @@ impl TxKind {
             TxKind::EvmCall { caller, .. } => caller,
             TxKind::AiInfer { requester, .. } => requester,
             TxKind::CreateAgent { creator, .. } => creator,
+            TxKind::RegisterModel { owner, .. } => owner,
+            TxKind::PostTask { requester, .. } => requester,
         }
     }
 
@@ -150,6 +180,8 @@ impl TxKind {
             TxKind::EvmCall { .. } => PREFIX_EVM_CALL,
             TxKind::AiInfer { .. } => PREFIX_AI_INFER,
             TxKind::CreateAgent { .. } => PREFIX_CREATE_AGENT,
+            TxKind::RegisterModel { .. } => PREFIX_REGISTER_MODEL,
+            TxKind::PostTask { .. } => PREFIX_POST_TASK,
         }
     }
 }
@@ -214,8 +246,15 @@ pub fn route_tx(raw: &[u8]) -> Result<TxKind, RoutingError> {
     }
     let (&prefix, body) = raw.split_first().ok_or(RoutingError::EmptyPayload)?;
     match prefix {
-        PREFIX_TRANSFER | PREFIX_DEPLOY | PREFIX_CALL | PREFIX_EVM_DEPLOY | PREFIX_EVM_CALL
-        | PREFIX_AI_INFER | PREFIX_CREATE_AGENT => {}
+        PREFIX_TRANSFER
+        | PREFIX_DEPLOY
+        | PREFIX_CALL
+        | PREFIX_EVM_DEPLOY
+        | PREFIX_EVM_CALL
+        | PREFIX_AI_INFER
+        | PREFIX_CREATE_AGENT
+        | PREFIX_REGISTER_MODEL
+        | PREFIX_POST_TASK => {}
         other => return Err(RoutingError::UnknownPrefix(other)),
     }
     let decoded: TxKind = bincode_options()
@@ -239,6 +278,16 @@ pub fn route_tx(raw: &[u8]) -> Result<TxKind, RoutingError> {
         return Err(RoutingError::InvalidFuncName(model_id.clone()));
     }
     if let TxKind::CreateAgent { ref model_id, .. } = decoded
+        && !is_valid_func_name(model_id)
+    {
+        return Err(RoutingError::InvalidFuncName(model_id.clone()));
+    }
+    if let TxKind::RegisterModel { ref model_id, .. } = decoded
+        && !is_valid_func_name(model_id)
+    {
+        return Err(RoutingError::InvalidFuncName(model_id.clone()));
+    }
+    if let TxKind::PostTask { ref model_id, .. } = decoded
         && !is_valid_func_name(model_id)
     {
         return Err(RoutingError::InvalidFuncName(model_id.clone()));

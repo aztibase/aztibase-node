@@ -929,9 +929,11 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "axum",
+ "aztibase-consensus",
  "aztibase-core",
  "aztibase-execution",
  "aztibase-storage",
+ "bincode",
  "futures",
  "hex",
  "serde",

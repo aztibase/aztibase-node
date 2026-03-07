@@ -17,6 +17,7 @@ Every non-obvious technical decision is recorded here. Each ADR is immutable onc
 | ADR-007 | StateCommitment trait with enum-based proofs | 2026-03-07 | ACCEPTED | blockchain-architect |
 | ADR-008 | Metrics via opaque JSON to avoid cross-crate coupling | 2026-03-07 | ACCEPTED | node-engineer |
 | ADR-009 | WebSocket gateway via axum upgrade (not separate server) | 2026-03-07 | ACCEPTED | node-engineer |
+| ADR-010 | PoUW scoring formula and attestation quorum design | 2026-03-07 | ACCEPTED | blockchain-architect + consensus-engineer |
 
 ---
 
@@ -274,6 +275,40 @@ Add WebSocket support via axum's built-in `ws` feature on the same port as the H
 - WebSocket and HTTP share the same `DefaultBodyLimit` (1MB) — appropriate for both
 - Subscription tasks are per-client, spawned on subscribe, aborted on unsubscribe or disconnect
 - Max 256 concurrent WebSocket connections enforced at upgrade time; production deployments should add per-IP limits via reverse proxy
+
+---
+
+## ADR-010: PoUW scoring formula and attestation quorum design
+
+**Date:** 2026-03-07
+**Status:** ACCEPTED
+**Decided By:** blockchain-architect + consensus-engineer
+**Git Ref:** pending (Sprint 021)
+
+### Context
+The Proof of Useful Work (PoUW) system needs a concrete scoring formula to rank validators by their AI compute performance. The formula must balance multiple metrics (accuracy, speed, availability) and resist gaming. Additionally, attestation consensus requires a quorum mechanism to prevent single-validator results from being accepted.
+
+### Decision
+1. **Scoring formula**: `0.4 * accuracy + 0.3 * latency_score + 0.3 * availability_score`
+   - `accuracy` = accepted_attestations / total_attestations in sliding window
+   - `latency_score` = 1.0 - (avg_latency / max_latency), clamped to [0, 1]
+   - `availability_score` = min(tasks_completed / expected_tasks_per_window, 1.0)
+2. **Attestation quorum**: Minimum 2 validators must submit matching `result_hash` for a task result to be accepted. Attestations are deduplicated by `validator_id`.
+3. **Settlement**: Reward is split equally among quorum validators, with remainder distributed to the first validators in order.
+
+### Rationale
+- **Weighted multi-metric** prevents gaming: a validator can't get high scores by being fast but inaccurate, or accurate but rarely available
+- **40% accuracy weight** makes correctness the most important factor — matches the network's AI-native priority
+- **30/30 latency/availability split** ensures validators can't game by cherry-picking easy tasks (availability penalizes inactivity)
+- **Quorum ≥ 2** is the minimum viable decentralization — prevents single-validator collusion while keeping overhead low
+- **Validator dedup** prevents Sybil: a validator running multiple attestation submissions counts as one vote
+- **Equal reward split** is simple and fair — more sophisticated mechanisms (proportional to stake, score-weighted) can be added in M7
+
+### Consequences
+- Validators with consistently accurate, fast, and available inference will earn higher PoUW scores and be preferred for task assignment
+- The formula parameters (weights, max_latency, expected_tasks_per_window) are configurable per-network
+- StubPoUWScore remains available as fallback for networks without AI compute validators
+- Future work: weighted reward distribution, dynamic quorum based on task reward value, attestation signature verification
 
 ---
 
