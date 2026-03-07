@@ -20,6 +20,7 @@ pub use finality::{
     verify_certificate, verify_certificate_from_set,
 };
 pub use ordering::{CommittedBatch, extract_committed_batch};
+pub use pouw::{InferenceAttestation, InferenceTask, PoUWScore, StubPoUWScore};
 pub use validator::{ValidatorInfo, ValidatorSet};
 pub use wire::{WireError, decode_vertex, encode_vertex};
 

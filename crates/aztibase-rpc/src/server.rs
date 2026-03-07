@@ -669,6 +669,7 @@ mod tests {
             contract_address: None,
             error: None,
             inference_hash: None,
+            anomaly_score: 0.0,
         };
         aztibase_execution::store_receipts(&store, &[receipt]).unwrap();
 

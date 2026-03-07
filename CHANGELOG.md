@@ -8,6 +8,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 ## [M4] -- Integration Testing + AI + Testnet (IN PROGRESS)
 
 ### Security
+- Sprint 016 security review: 0 ELEVATED, 1 MEDIUM (SEC-BRIDGE-003: cross-VM reentrancy), 4 LOW, 1 INFO (2026-03-07)
 - Sprint 015 security review: 0 ELEVATED, 0 MEDIUM, 3 LOW (SEC-METRIC-001, SEC-WEBRTC-001, SEC-LC-001) (2026-03-07)
 - Block-STM parallel validation race FIXED: `finish_validation()` now checks all prior txs are Validated before accepting (2026-03-07)
 - Sprint 014 security review: 0 ELEVATED, 0 MEDIUM, 4 LOW, 1 INFO (SEC-EQUI-001, SEC-BUF-001, SEC-VERKLE-001/002, SEC-METRICS-001) (2026-03-07)
@@ -25,6 +26,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 - Sprint 009 security review: 2 ELEVATED fixed, 8 MEDIUM (2 fixed, 6 documented), 5 LOW documented (2026-03-07)
 
 ### Added
+- `AnomalyScorer` with deterministic heuristic scoring for transaction anomaly detection (0.0-1.0) (2026-03-07)
+- `anomaly_score` field on `ExecutionReceipt` with `#[serde(default)]` backward compat (2026-03-07)
+- Anomaly scoring wired into execution pipeline: every tx receipt carries an advisory score (2026-03-07)
+- Cross-VM bridge: `CrossVmCall`, `wasm_to_evm()`, `evm_to_wasm()` with depth limit of 4 (2026-03-07)
+- `InferenceTask` type for PoUW: task_id, model_id, input_hash, requester, reward, deadline_round (2026-03-07)
+- `InferenceAttestation` type for PoUW: validator attestation of completed inference work (2026-03-07)
+- `PoUWScore` trait with `StubPoUWScore` returning 0.0 (stub for M6) (2026-03-07)
 - `GET /metrics` HTTP endpoint with consensus + execution JSON counters, gated by `--metrics` CLI flag (2026-03-07)
 - `MetricsConfig` in `NodeConfig` for metrics endpoint configuration (2026-03-07)
 - `LightClientProof` variant in `StateProof`: wraps inner proof + state root + height + finality certificate (2026-03-07)

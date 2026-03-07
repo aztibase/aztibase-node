@@ -10,7 +10,7 @@ use aztibase_execution::{
     state::AccountType,
     store_base_fee, store_batch_root, store_receipts, verify_and_route_batch,
 };
-use aztibase_runtime::{AIRuntime, InferenceRequest};
+use aztibase_runtime::{AIRuntime, AnomalyScorer, InferenceRequest, TxFeatures};
 use aztibase_storage::StateStore;
 use tokio::sync::{RwLock, mpsc};
 
@@ -38,6 +38,7 @@ pub struct ExecutionPipeline {
     ai_runtime: Option<Arc<dyn AIRuntime>>,
     base_fee: Arc<std::sync::atomic::AtomicU64>,
     base_fee_calculator: BaseFeeCalculator,
+    anomaly_scorer: AnomalyScorer,
 }
 
 impl ExecutionPipeline {
@@ -72,6 +73,7 @@ impl ExecutionPipeline {
             ai_runtime: None,
             base_fee,
             base_fee_calculator: calculator,
+            anomaly_scorer: AnomalyScorer::new(),
         }
     }
 
@@ -180,6 +182,7 @@ impl ExecutionPipeline {
                             tx.nonce()
                         )),
                         inference_hash: None,
+                        anomaly_score: 0.0,
                     });
                 }
             }
@@ -227,6 +230,7 @@ impl ExecutionPipeline {
                         contract_address: None,
                         error: Some("insufficient balance for gas escrow".into()),
                         inference_hash: None,
+                        anomaly_score: 0.0,
                     });
                     escrows.push(None);
                 }
@@ -374,6 +378,7 @@ impl ExecutionPipeline {
                     contract_address: None,
                     error: output.error.clone(),
                     inference_hash: None,
+                    anomaly_score: 0.0,
                 });
             }
 
@@ -389,6 +394,7 @@ impl ExecutionPipeline {
                     contract_address: cr.contract_address,
                     error: cr.error.clone(),
                     inference_hash: None,
+                    anomaly_score: 0.0,
                 });
             }
         }
@@ -403,6 +409,7 @@ impl ExecutionPipeline {
                 contract_address: cr.contract_address,
                 error: cr.error,
                 inference_hash: None,
+                anomaly_score: 0.0,
             });
         }
 
@@ -418,6 +425,7 @@ impl ExecutionPipeline {
                 contract_address: cr.contract_address,
                 error: cr.error,
                 inference_hash: None,
+                anomaly_score: 0.0,
             });
         }
 
@@ -444,6 +452,7 @@ impl ExecutionPipeline {
                             contract_address: None,
                             error: None,
                             inference_hash: Some(result.deterministic_hash),
+                            anomaly_score: 0.0,
                         },
                         Err(e) => ExecutionReceipt {
                             tx_hash,
@@ -452,6 +461,7 @@ impl ExecutionPipeline {
                             contract_address: None,
                             error: Some(format!("inference failed: {e}")),
                             inference_hash: None,
+                            anomaly_score: 0.0,
                         },
                     }
                 }
@@ -462,6 +472,7 @@ impl ExecutionPipeline {
                     contract_address: None,
                     error: Some(format!("model not available: {model_id}")),
                     inference_hash: None,
+                    anomaly_score: 0.0,
                 },
             };
             exec_receipts.push(receipt);
@@ -486,6 +497,7 @@ impl ExecutionPipeline {
                         "nonce mismatch: expected {creator_nonce}, got {nonce}"
                     )),
                     inference_hash: None,
+                    anomaly_score: 0.0,
                 });
                 continue;
             }
@@ -502,7 +514,17 @@ impl ExecutionPipeline {
                 contract_address: Some(agent_addr),
                 error: None,
                 inference_hash: None,
+                anomaly_score: 0.0,
             });
+        }
+
+        // Phase 2.5: Score each executed tx for anomalous behavior.
+        for (i, tx) in executable.iter().enumerate() {
+            if i >= exec_receipts.len() {
+                break;
+            }
+            let features = extract_tx_features(tx);
+            exec_receipts[i].anomaly_score = self.anomaly_scorer.score(&features);
         }
 
         // Phase 3: Refund unused gas and collect actual fees.
@@ -601,6 +623,28 @@ fn compute_tx_hash(tx: &TxKind) -> [u8; 32] {
     }
 }
 
+fn extract_tx_features(tx: &TxKind) -> TxFeatures {
+    let value = match tx {
+        TxKind::Transfer { value, .. } | TxKind::EvmCall { value, .. } => *value,
+        _ => 0,
+    };
+    let payload_size = match tx {
+        TxKind::ContractDeploy { code, .. } | TxKind::EvmDeploy { code, .. } => code.len() as u32,
+        TxKind::ContractCall { args_data, .. } => args_data.len() as u32,
+        TxKind::EvmCall { calldata, .. } => calldata.len() as u32,
+        TxKind::AiInfer { input, .. } => input.len() as u32,
+        _ => 0,
+    };
+    TxFeatures {
+        value,
+        gas_price: tx.gas_price(),
+        gas_limit: tx.gas_limit(),
+        payload_size,
+        is_contract_deploy: matches!(tx, TxKind::ContractDeploy { .. } | TxKind::EvmDeploy { .. }),
+        is_ai_infer: matches!(tx, TxKind::AiInfer { .. }),
+    }
+}
+
 fn short_hex(bytes: &[u8; 32]) -> String {
     format!(
         "{:02x}{:02x}{:02x}{:02x}",
@@ -652,6 +696,7 @@ mod tests {
             ai_runtime: None,
             base_fee: Arc::new(std::sync::atomic::AtomicU64::new(calculator.base_fee())),
             base_fee_calculator: calculator,
+            anomaly_scorer: AnomalyScorer::new(),
         }
     }
 
@@ -1160,6 +1205,7 @@ mod tests {
             ai_runtime: Some(rt),
             base_fee: Arc::new(std::sync::atomic::AtomicU64::new(calculator.base_fee())),
             base_fee_calculator: calculator,
+            anomaly_scorer: AnomalyScorer::new(),
         }
     }
 

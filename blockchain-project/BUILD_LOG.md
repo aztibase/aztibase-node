@@ -21,6 +21,33 @@ Entries are prepended (newest first).
 
 ## Entries
 
+### 2026-03-07 -- project-lead -- Sprint 016 Complete
+**Task:** Sprint 016: Transaction Anomaly Scoring, Cross-VM Bridge, PoUW Foundations (all 16 tasks, 4 phases)
+**Sprint:** Sprint 016, Phases 1-4
+**Git Ref:** pending
+**Files Changed:**
+- crates/aztibase-runtime/src/anomaly.rs (NEW: AnomalyScorer, TxFeatures, heuristic scoring, 5 tests)
+- crates/aztibase-runtime/src/lib.rs (anomaly module, exports)
+- crates/aztibase-execution/src/receipt.rs (anomaly_score field on ExecutionReceipt)
+- crates/aztibase-execution/src/cross_vm.rs (NEW: CrossVmCall, wasm_to_evm, evm_to_wasm, depth limiting, 6 tests)
+- crates/aztibase-execution/src/lib.rs (cross_vm module, exports)
+- crates/aztibase-consensus/src/pouw.rs (InferenceTask, InferenceAttestation, PoUWScore trait, StubPoUWScore, 8 tests)
+- crates/aztibase-consensus/src/lib.rs (PoUW exports)
+- crates/aztibase-node/src/pipeline.rs (AnomalyScorer wiring, extract_tx_features, anomaly_score on all receipts)
+- crates/aztibase-rpc/src/server.rs (anomaly_score in test receipt)
+- blockchain-project/sprints/SPRINT-016.md (all tasks marked DONE, security findings, retrospective)
+- blockchain-project/STATUS.md, BUILD_LOG.md, CHANGELOG.md updated
+**Review Notes:**
+- Phase 1: Heuristic anomaly scorer (deterministic BLAKE3-seeded noise + feature thresholds), advisory only
+- Phase 2: Cross-VM bridge via existing evm_call/ExecutionEngine, depth limit 4, reentrancy guard deferred to M7
+- Phase 3: PoUW types are pure data definitions with serde/bincode serialization, stub scorer returns 0.0
+- M4 substantially complete — Docker/deployment docs deferred
+**Security Flags:**
+- SEC-BRIDGE-003 (MEDIUM): Cross-VM reentrancy within depth limit; full guard deferred to M7
+- SEC-ANOMALY-001, SEC-BRIDGE-001, SEC-BRIDGE-002, SEC-POUW-001 (LOW)
+- SEC-POUW-002 (INFO)
+- 0 ELEVATED
+
 ### 2026-03-07 -- project-lead -- Sprint 015 Complete
 **Task:** Sprint 015: Metrics Telemetry, Light Client Foundations, WebRTC Transport (all 15 tasks, 4 phases)
 **Sprint:** Sprint 015, Phases 1-4

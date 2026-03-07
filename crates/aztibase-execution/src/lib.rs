@@ -1,5 +1,6 @@
 pub mod block_stm;
 pub mod contract;
+pub mod cross_vm;
 pub mod evm;
 pub mod fee;
 pub mod light_client;
@@ -15,6 +16,7 @@ pub mod verkle;
 pub mod vm;
 
 pub use contract::{ContractReceipt, ContractTx, compute_contract_address, execute_contract_txs};
+pub use cross_vm::{CrossVmCall, CrossVmResult, evm_to_wasm, wasm_to_evm};
 pub use fee::{BaseFeeCalculator, FeeEscrow, escrow_fee, refund_unused};
 pub use light_client::{build_light_client_proof, verify_light_client_proof};
 pub use parallel::{BatchResult, TransferTx, TxReceipt, TxStatus, execute_transfers};

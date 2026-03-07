@@ -15,6 +15,9 @@ pub struct ExecutionReceipt {
     pub error: Option<String>,
     /// Deterministic hash for AI inference verification (None for non-AI transactions).
     pub inference_hash: Option<[u8; 32]>,
+    /// Transaction anomaly score (0.0 = normal, 1.0 = highly anomalous). Advisory only.
+    #[serde(default)]
+    pub anomaly_score: f32,
 }
 
 /// Store a batch of receipts atomically alongside state flush.
@@ -79,6 +82,7 @@ mod tests {
             contract_address: None,
             error: None,
             inference_hash: None,
+            anomaly_score: 0.0,
         };
 
         store_receipts(&store, &[receipt.clone()]).unwrap();
@@ -117,6 +121,7 @@ mod tests {
             contract_address: None,
             error: Some("insufficient balance".into()),
             inference_hash: None,
+            anomaly_score: 0.0,
         };
 
         store_receipts(&store, &[receipt]).unwrap();
@@ -142,6 +147,7 @@ mod tests {
             contract_address: Some(contract_addr),
             error: None,
             inference_hash: None,
+            anomaly_score: 0.0,
         };
 
         store_receipts(&store, &[receipt]).unwrap();
@@ -172,6 +178,7 @@ mod tests {
                         None
                     },
                     inference_hash: None,
+                    anomaly_score: 0.0,
                 }
             })
             .collect();
