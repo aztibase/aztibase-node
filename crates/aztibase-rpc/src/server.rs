@@ -802,18 +802,20 @@ async fn handle_get_task_status(state: &RpcState, req: &JsonRpcRequest) -> JsonR
     match storage.get(&key) {
         Some(data) => {
             if let Ok(task) = bincode::deserialize::<aztibase_consensus::InferenceTask>(data) {
-                JsonRpcResponse::success(
-                    req.id.clone(),
-                    serde_json::json!({
-                        "taskId": format!("0x{}", hex::encode(task.task_id)),
-                        "modelId": task.model_id,
-                        "inputHash": format!("0x{}", hex::encode(task.input_hash)),
-                        "requester": format!("0x{}", hex::encode(task.requester)),
-                        "reward": format!("0x{:x}", task.reward),
-                        "deadlineRound": task.deadline_round,
-                        "status": "pending",
-                    }),
-                )
+                let mut result = serde_json::json!({
+                    "taskId": format!("0x{}", hex::encode(task.task_id)),
+                    "modelId": task.model_id,
+                    "inputHash": format!("0x{}", hex::encode(task.input_hash)),
+                    "requester": format!("0x{}", hex::encode(task.requester)),
+                    "reward": format!("0x{:x}", task.reward),
+                    "deadlineRound": task.deadline_round,
+                    "status": "pending",
+                });
+                if let Some(v) = task.assigned_validator {
+                    result["assignedValidator"] =
+                        serde_json::json!(format!("0x{}", hex::encode(v)));
+                }
+                JsonRpcResponse::success(req.id.clone(), result)
             } else {
                 JsonRpcResponse::success(req.id.clone(), serde_json::Value::Null)
             }

@@ -2,8 +2,8 @@
 
 **Last Updated:** 2026-03-07
 **Updated By:** project-lead
-**Current Phase:** M6 -- AI Compute Market + PoUW (IN PROGRESS)
-**Current Sprint:** Sprint 022 -- COMPLETE (Task Execution Loop & Attestation Flow)
+**Current Phase:** M6 -- AI Compute Market + PoUW (COMPLETE)
+**Current Sprint:** Sprint 023 -- COMPLETE (M6 Closure: Deregistration, Task Assignment, Compute Validation)
 
 ---
 
@@ -17,7 +17,7 @@
 | M3 | Execution layer (WASM VM, state management) | DONE | 2026-03-06 | 2026-03-06 |
 | M4 | Integration testing + basic AI + testnet | DONE | 2026-03-06 | 2026-03-07 |
 | M5 | Light/browser nodes + wallet | DONE | 2026-03-07 | 2026-03-07 |
-| M6 | AI compute market + PoUW | IN PROGRESS | 2026-03-07 | -- |
+| M6 | AI compute market + PoUW | DONE | 2026-03-07 | 2026-03-07 |
 | M7 | Security audit + hardening | NOT STARTED | -- | -- |
 | M8 | Public testnet | NOT STARTED | -- | -- |
 | M9 | Mainnet launch | NOT STARTED | -- | -- |
@@ -41,6 +41,7 @@
 - Sprint 005 closed: 21/21 tasks, 4 phases complete
 - Sprint 006 closed: 23/24 tasks (1 deferred), 4 phases complete
 - Sprint 007 complete: receipt store, EVM via revm, AI inference via tract
+- Sprint 023 complete: 16/16 tasks, 4 phases (DeregisterCompute stake refund, TaskAssigner pipeline wiring, CommitCompute model validation, DeregisterModel owner auth, M6 closed)
 - Sprint 022 complete: 16/16 tasks, 4 phases (TaskPool wiring, SubmitAttestation Ed25519 sig verify, CommitCompute stake bond, settlement flow, 3 RPC endpoints, security review)
 - Sprint 021 complete: 16/16 tasks, 4 phases (ModelRegistry, PoUW multi-metric scoring, task marketplace + settlement, security review)
 - Sprint 020 complete: 16/16 tasks, 4 phases (WebSocket gateway, RPC subscriptions, wallet management CLI, Docker deployment)
@@ -76,12 +77,17 @@
 | aztibase-wasm | PARTIAL | p2p-network-engineer | NO | YES |
 
 ### In Progress
-- Sprint 022 planning (M6 continuation: wire task execution loop, attestation signature verification, Verkle IPA)
+- Nothing currently in progress — M6 complete, M7 next
 
 ### Blocked
 - Nothing currently blocked
 
 ### Recently Completed
+- Sprint 023 Phase 4: Security review + M6 close — SEC-COMMIT-OVERWRITE resolved, 0 new ELEVATED/MEDIUM; 555 tests, 0 clippy warnings, fmt clean
+- Sprint 023 Phase 3: Compute validation + DeregisterModel — CommitCompute model validation, TxKind::DeregisterModel (0x0D) with owner auth + pending task block, 3 new tests
+- Sprint 023 Phase 2: TaskAssigner wiring — PostTask auto-assigns validator via PoUW score, SubmitAttestation enforces assigned_validator, InferenceTask.assigned_validator field, 3 new tests
+- Sprint 023 Phase 1: DeregisterCompute — TxKind::DeregisterCompute (0x0C), stake refund, ComputeCommitmentStore::deregister returns Option<ComputeCommitment>, CommitCompute overwrite refund, 5 new tests
+- Sprint 022 Phase 4: Security review — SEC-ATT-LEAK-001 LOW FIXED, SEC-COMMIT-OVERWRITE LOW ACCEPTED (resolved in Sprint 023); 544 tests
 - Sprint 021 Phase 4: Security review — 0 ELEVATED, 1 MEDIUM fixed (SEC-SYBIL-001: duplicate validator dedup), 3 RPC endpoints, ADR-010; clippy/fmt clean; 500+ tests
 - Sprint 021 Phase 3: Task marketplace — TxKind::PostTask (0x09), TaskPool (1024 cap, expiry eviction), TaskAssigner (highest PoUW score), TaskSettlement (reward split), 14 new tests
 - Sprint 021 Phase 2: PoUW scoring — SlidingWindowPoUWScore (0.4 acc + 0.3 lat + 0.3 avail), AttestationAggregator (quorum ≥ 2, validator dedup), ValidatorWorkHistory, 7 new tests
@@ -148,7 +154,7 @@
 - Sprint 005 Phase 1: Consensus-to-execution wiring, TxKind routing, ExecutionPipeline
 
 ### Next Up
-1. Sprint 022: M6 continuation — wire TaskPool into main execution loop, attestation signature verification (Ed25519/BLS), task expiry refund, full Verkle IPA/KZG commitment
+1. M7: Security audit + hardening (Sprint 024+)
 
 ---
 

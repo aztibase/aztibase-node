@@ -60,20 +60,6 @@ impl TaskPool {
             .unwrap_or_default()
     }
 
-    pub fn evict_expired(&mut self, current_round: u64) -> usize {
-        let expired: Vec<Hash> = self
-            .tasks
-            .values()
-            .filter(|t| t.is_expired(current_round))
-            .map(|t| t.task_id)
-            .collect();
-        let count = expired.len();
-        for id in expired {
-            self.remove(&id);
-        }
-        count
-    }
-
     /// Remove all expired tasks, returning them for refund processing.
     pub fn drain_expired(&mut self, current_round: u64) -> Vec<InferenceTask> {
         let expired_ids: Vec<Hash> = self
@@ -90,10 +76,6 @@ impl TaskPool {
 
     pub fn len(&self) -> usize {
         self.tasks.len()
-    }
-
-    pub fn is_empty(&self) -> bool {
-        self.tasks.is_empty()
     }
 }
 
@@ -213,12 +195,12 @@ mod tests {
 
         let removed = pool.remove(&tid).unwrap();
         assert_eq!(removed.task_id, tid);
-        assert!(pool.is_empty());
+        assert_eq!(pool.len(), 0);
         assert_eq!(pool.tasks_for_model("m1").len(), 0);
     }
 
     #[test]
-    fn task_pool_evicts_expired() {
+    fn task_pool_drains_expired() {
         let mut pool = TaskPool::new();
         pool.insert(make_task("m1", 10));
         pool.insert(InferenceTask::new(
@@ -229,8 +211,8 @@ mod tests {
             50,
         ));
 
-        let evicted = pool.evict_expired(20);
-        assert_eq!(evicted, 1);
+        let drained = pool.drain_expired(20);
+        assert_eq!(drained.len(), 1);
         assert_eq!(pool.len(), 1);
     }
 

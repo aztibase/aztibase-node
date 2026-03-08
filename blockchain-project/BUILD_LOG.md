@@ -21,6 +21,31 @@ Entries are prepended (newest first).
 
 ## Entries
 
+### 2026-03-07 -- project-lead -- Sprint 023 Complete (M6 CLOSED)
+**Task:** Sprint 023: M6 Closure — Deregistration, Task Assignment, Compute Validation (16 tasks, 4 phases)
+**Sprint:** Sprint 023, Phases 1-4
+**Git Ref:** pending
+**Files Changed:**
+- crates/aztibase-consensus/src/pouw.rs (ComputeCommitmentStore::deregister returns Option<ComputeCommitment>, InferenceTask.assigned_validator field, 1 new test)
+- crates/aztibase-execution/src/routing.rs (DeregisterCompute 0x0C + DeregisterModel 0x0D TxKind variants, encode/decode/gas/sender/route, 2 roundtrip tests)
+- crates/aztibase-node/src/pipeline.rs (DeregisterCompute execution + stake refund, DeregisterModel execution + owner auth + pending task check, TaskAssigner wiring in PostTask, SubmitAttestation assigned_validator enforcement, CommitCompute model validation + overwrite refund, 8 new tests)
+- crates/aztibase-node/src/task_pool.rs (removed dead code: evict_expired + is_empty, fmt cleanup)
+- crates/aztibase-node/src/main.rs (removed #[allow(dead_code)] from task_pool module)
+- crates/aztibase-rpc/src/server.rs (aztb_getTaskStatus includes assignedValidator field)
+**Review Notes:**
+- SEC-COMMIT-OVERWRITE from Sprint 022 fully resolved: CommitCompute overwrite now refunds prior stake
+- TaskAssigner automatically assigns best validator on PostTask via PoUW score
+- SubmitAttestation enforces assigned_validator match when set
+- CommitCompute validates all supported_models exist in ModelRegistry
+- DeregisterModel blocked if pending tasks exist for that model
+- 555 tests pass, 0 clippy warnings, fmt clean
+- M6 milestone complete: full AI compute market flow operational
+**Security Flags:**
+- SEC-COMMIT-OVERWRITE LOW RESOLVED: CommitCompute overwrite now refunds prior stake before deducting new
+- No new ELEVATED or MEDIUM findings
+
+---
+
 ### 2026-03-07 -- project-lead -- Sprint 022 Complete
 **Task:** Sprint 022: Task Execution Loop & Attestation Flow (16 tasks, 4 phases)
 **Sprint:** Sprint 022, Phases 1-4

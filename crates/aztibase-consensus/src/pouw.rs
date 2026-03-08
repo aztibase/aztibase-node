@@ -11,6 +11,7 @@ pub struct InferenceTask {
     pub requester: [u8; 32],
     pub reward: u64,
     pub deadline_round: u64,
+    pub assigned_validator: Option<[u8; 32]>,
 }
 
 impl InferenceTask {
@@ -29,6 +30,7 @@ impl InferenceTask {
             requester,
             reward,
             deadline_round,
+            assigned_validator: None,
         }
     }
 
@@ -147,12 +149,15 @@ impl ComputeCommitmentStore {
         self.commitments.get(validator)
     }
 
-    pub fn deregister(&mut self, validator: &ValidatorId) -> bool {
+    pub fn deregister(&mut self, validator: &ValidatorId) -> Option<ComputeCommitment> {
         if let Some(c) = self.commitments.get_mut(validator) {
+            if !c.active {
+                return None;
+            }
             c.deactivate();
-            true
+            Some(c.clone())
         } else {
-            false
+            None
         }
     }
 
@@ -575,10 +580,22 @@ mod tests {
         let v1 = [1u8; 32];
         store.register(ComputeCommitment::new(v1, vec!["m1".into()], 100, 0));
 
-        assert!(store.deregister(&v1));
+        let removed = store.deregister(&v1);
+        assert!(removed.is_some());
+        assert_eq!(removed.unwrap().committed_stake, 100);
         assert_eq!(store.active_count(), 0);
         assert_eq!(store.validators_for_model("m1").len(), 0);
-        assert!(!store.deregister(&[2u8; 32]));
+        assert!(store.deregister(&[2u8; 32]).is_none());
+    }
+
+    #[test]
+    fn commitment_store_double_deregister_returns_none() {
+        let mut store = ComputeCommitmentStore::new();
+        let v1 = [1u8; 32];
+        store.register(ComputeCommitment::new(v1, vec!["m1".into()], 200, 0));
+
+        assert!(store.deregister(&v1).is_some());
+        assert!(store.deregister(&v1).is_none());
     }
 
     #[test]

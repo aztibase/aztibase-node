@@ -18,7 +18,7 @@ use aztibase_runtime::{AIRuntime, AnomalyScorer, InferenceRequest, TxFeatures};
 use aztibase_storage::StateStore;
 use tokio::sync::{RwLock, mpsc};
 
-use crate::task_pool::{SettlementResult, TaskPool, TaskSettlement};
+use crate::task_pool::{SettlementResult, TaskAssigner, TaskPool, TaskSettlement};
 
 /// Result of executing a single committed batch.
 #[derive(Clone, Debug)]
@@ -305,6 +305,8 @@ impl ExecutionPipeline {
         let mut post_tasks = Vec::new();
         let mut submit_attestations = Vec::new();
         let mut commit_computes = Vec::new();
+        let mut deregister_computes = Vec::new();
+        let mut deregister_models = Vec::new();
 
         for tx in &executable {
             match tx {
@@ -481,6 +483,19 @@ impl ExecutionPipeline {
                         *nonce,
                     ));
                 }
+                TxKind::DeregisterCompute {
+                    validator, nonce, ..
+                } => {
+                    deregister_computes.push((*validator, *nonce));
+                }
+                TxKind::DeregisterModel {
+                    owner,
+                    model_id,
+                    nonce,
+                    ..
+                } => {
+                    deregister_models.push((*owner, model_id.clone(), *nonce));
+                }
             }
         }
 
@@ -493,7 +508,9 @@ impl ExecutionPipeline {
             + register_models.len()
             + post_tasks.len()
             + submit_attestations.len()
-            + commit_computes.len();
+            + commit_computes.len()
+            + deregister_computes.len()
+            + deregister_models.len();
 
         // Phase 2: Execute transactions.
         let mut exec_receipts = Vec::new();
@@ -799,12 +816,20 @@ impl ExecutionPipeline {
             });
         }
 
-        // Insert successfully posted tasks into the live TaskPool.
+        // Insert successfully posted tasks into the live TaskPool and assign validators.
         if !pending_new_tasks.is_empty() {
+            let commitments_guard = self.compute_commitments.read().await;
+            let scorer = aztibase_consensus::SlidingWindowPoUWScore::new(1000.0, 10.0);
             let mut pool = self.task_pool.write().await;
-            for task in pending_new_tasks {
+            for mut task in pending_new_tasks {
+                let candidates = commitments_guard.validators_for_model(&task.model_id);
+                if !candidates.is_empty() {
+                    task.assigned_validator =
+                        TaskAssigner::select_validator(&candidates, &scorer, 100);
+                }
                 pool.insert(task);
             }
+            drop(commitments_guard);
             self.pending_task_count
                 .store(pool.len() as u64, std::sync::atomic::Ordering::Relaxed);
         }
@@ -860,24 +885,43 @@ impl ExecutionPipeline {
                 continue;
             }
 
-            // Check task exists in pool
-            let task_exists = {
+            // Check task exists in pool and validate assigned validator.
+            let task_check = {
                 let pool = self.task_pool.read().await;
-                pool.get(task_id).is_some()
+                pool.get(task_id).map(|t| t.assigned_validator)
             };
 
-            if !task_exists {
-                state.increment_nonce(validator);
-                exec_receipts.push(ExecutionReceipt {
-                    tx_hash,
-                    success: false,
-                    gas_used: 25_000,
-                    contract_address: None,
-                    error: Some(format!("task not found: 0x{}", hex::encode(&task_id[..4]))),
-                    inference_hash: None,
-                    anomaly_score: 0.0,
-                });
-                continue;
+            match task_check {
+                Some(Some(assigned)) if assigned != *validator => {
+                    state.increment_nonce(validator);
+                    exec_receipts.push(ExecutionReceipt {
+                        tx_hash,
+                        success: false,
+                        gas_used: 25_000,
+                        contract_address: None,
+                        error: Some(format!(
+                            "validator not assigned to this task (assigned: 0x{})",
+                            hex::encode(&assigned[..4])
+                        )),
+                        inference_hash: None,
+                        anomaly_score: 0.0,
+                    });
+                    continue;
+                }
+                Some(_) => {}
+                None => {
+                    state.increment_nonce(validator);
+                    exec_receipts.push(ExecutionReceipt {
+                        tx_hash,
+                        success: false,
+                        gas_used: 25_000,
+                        contract_address: None,
+                        error: Some(format!("task not found: 0x{}", hex::encode(&task_id[..4]))),
+                        inference_hash: None,
+                        anomaly_score: 0.0,
+                    });
+                    continue;
+                }
             }
 
             self.attestation_buffer
@@ -970,8 +1014,42 @@ impl ExecutionPipeline {
                 continue;
             }
 
+            // Validate all supported_models exist in the registry.
+            let registry_acct = state.get_mut(&MODEL_REGISTRY_ADDRESS);
+            let mut all_models_valid = true;
+            for model_id in supported_models {
+                let model_exists =
+                    ModelRegistry::get(&registry_acct.storage, model_id).is_some_and(|m| m.active);
+                if !model_exists {
+                    all_models_valid = false;
+                    break;
+                }
+            }
+            if !all_models_valid {
+                state.increment_nonce(validator);
+                exec_receipts.push(ExecutionReceipt {
+                    tx_hash,
+                    success: false,
+                    gas_used: 21_000,
+                    contract_address: None,
+                    error: Some("one or more supported_models not registered".into()),
+                    inference_hash: None,
+                    anomaly_score: 0.0,
+                });
+                continue;
+            }
+
+            // Refund previous commitment stake if overwriting.
+            let mut store_guard = self.compute_commitments.write().await;
+            if let Some(prev) = store_guard.get(validator).filter(|p| p.active) {
+                let refund = prev.committed_stake;
+                let cur = state.balance(validator);
+                state.set_balance(validator, cur + refund);
+            }
+
             let balance = state.balance(validator);
             if balance < *committed_stake {
+                drop(store_guard);
                 state.increment_nonce(validator);
                 exec_receipts.push(ExecutionReceipt {
                     tx_hash,
@@ -994,7 +1072,8 @@ impl ExecutionPipeline {
                 *committed_stake,
                 self.current_round,
             );
-            self.compute_commitments.write().await.register(commitment);
+            store_guard.register(commitment);
+            drop(store_guard);
             state.increment_nonce(validator);
 
             exec_receipts.push(ExecutionReceipt {
@@ -1006,6 +1085,145 @@ impl ExecutionPipeline {
                 inference_hash: None,
                 anomaly_score: 0.0,
             });
+        }
+
+        // Execute DeregisterCompute transactions.
+        for (validator, nonce) in &deregister_computes {
+            let mut preimage = Vec::new();
+            preimage.extend_from_slice(validator);
+            preimage.extend_from_slice(b"deregister_compute");
+            let tx_hash = hash(&preimage);
+
+            let val_nonce = state.nonce(validator);
+            if *nonce != val_nonce {
+                state.increment_nonce(validator);
+                exec_receipts.push(ExecutionReceipt {
+                    tx_hash,
+                    success: false,
+                    gas_used: 21_000,
+                    contract_address: None,
+                    error: Some(format!("nonce mismatch: expected {val_nonce}, got {nonce}")),
+                    inference_hash: None,
+                    anomaly_score: 0.0,
+                });
+                continue;
+            }
+
+            let mut store_guard = self.compute_commitments.write().await;
+            match store_guard.deregister(validator) {
+                Some(prev) => {
+                    let refund = prev.committed_stake;
+                    let cur = state.balance(validator);
+                    state.set_balance(validator, cur + refund);
+                    drop(store_guard);
+                    state.increment_nonce(validator);
+
+                    tracing::info!(
+                        validator = %short_hex(validator),
+                        refund = refund,
+                        "Compute provider deregistered"
+                    );
+
+                    exec_receipts.push(ExecutionReceipt {
+                        tx_hash,
+                        success: true,
+                        gas_used: 50_000,
+                        contract_address: None,
+                        error: None,
+                        inference_hash: None,
+                        anomaly_score: 0.0,
+                    });
+                }
+                None => {
+                    drop(store_guard);
+                    state.increment_nonce(validator);
+                    exec_receipts.push(ExecutionReceipt {
+                        tx_hash,
+                        success: false,
+                        gas_used: 25_000,
+                        contract_address: None,
+                        error: Some("no active compute commitment to deregister".into()),
+                        inference_hash: None,
+                        anomaly_score: 0.0,
+                    });
+                }
+            }
+        }
+
+        // Execute DeregisterModel transactions.
+        for (owner, model_id, nonce) in &deregister_models {
+            let mut preimage = Vec::new();
+            preimage.extend_from_slice(owner);
+            preimage.extend_from_slice(model_id.as_bytes());
+            preimage.extend_from_slice(b"deregister");
+            let tx_hash = hash(&preimage);
+
+            let owner_nonce = state.nonce(owner);
+            if *nonce != owner_nonce {
+                state.increment_nonce(owner);
+                exec_receipts.push(ExecutionReceipt {
+                    tx_hash,
+                    success: false,
+                    gas_used: 21_000,
+                    contract_address: None,
+                    error: Some(format!(
+                        "nonce mismatch: expected {owner_nonce}, got {nonce}"
+                    )),
+                    inference_hash: None,
+                    anomaly_score: 0.0,
+                });
+                continue;
+            }
+
+            // Check if any pending tasks exist for this model.
+            let has_pending = {
+                let pool = self.task_pool.read().await;
+                !pool.tasks_for_model(model_id).is_empty()
+            };
+            if has_pending {
+                state.increment_nonce(owner);
+                exec_receipts.push(ExecutionReceipt {
+                    tx_hash,
+                    success: false,
+                    gas_used: 25_000,
+                    contract_address: None,
+                    error: Some(format!(
+                        "cannot deregister model with pending tasks: {model_id}"
+                    )),
+                    inference_hash: None,
+                    anomaly_score: 0.0,
+                });
+                continue;
+            }
+
+            let registry_acct = state.get_mut(&MODEL_REGISTRY_ADDRESS);
+            let result = ModelRegistry::deregister(&mut registry_acct.storage, model_id, owner);
+            state.increment_nonce(owner);
+
+            match result {
+                Ok(()) => {
+                    exec_receipts.push(ExecutionReceipt {
+                        tx_hash,
+                        success: true,
+                        gas_used: 60_000,
+                        contract_address: None,
+                        error: None,
+                        inference_hash: None,
+                        anomaly_score: 0.0,
+                    });
+                }
+                Err(e) => {
+                    exec_receipts.push(ExecutionReceipt {
+                        tx_hash,
+                        success: false,
+                        gas_used: 25_000,
+                        contract_address: None,
+                        error: Some(format!("deregister model failed: {e}")),
+                        inference_hash: None,
+                        anomaly_score: 0.0,
+                    });
+                }
+            }
         }
 
         // Phase 2.5: Score each executed tx for anomalous behavior.
@@ -1154,6 +1372,21 @@ fn compute_tx_hash(tx: &TxKind) -> [u8; 32] {
             let mut buf = Vec::new();
             buf.extend_from_slice(validator);
             buf.extend_from_slice(&committed_stake.to_le_bytes());
+            hash(&buf)
+        }
+        TxKind::DeregisterCompute { validator, .. } => {
+            let mut buf = Vec::new();
+            buf.extend_from_slice(validator);
+            buf.extend_from_slice(b"deregister_compute");
+            hash(&buf)
+        }
+        TxKind::DeregisterModel {
+            owner, model_id, ..
+        } => {
+            let mut buf = Vec::new();
+            buf.extend_from_slice(owner);
+            buf.extend_from_slice(model_id.as_bytes());
+            buf.extend_from_slice(b"deregister");
             hash(&buf)
         }
     }
@@ -2761,5 +2994,339 @@ mod tests {
                 .load(std::sync::atomic::Ordering::Relaxed),
             0
         );
+    }
+
+    // ── Phase: DeregisterCompute tests ──────────────────────────
+
+    #[tokio::test]
+    async fn pipeline_deregister_compute_refunds_stake() {
+        let (_tx, rx) = mpsc::channel(16);
+        let mut pipeline = make_pipeline(rx);
+
+        let (val_kp, validator) = make_sender();
+        pipeline.state.write().await.set_balance(&validator, 10_000);
+
+        let (owner_kp, owner) = make_sender();
+        let reg_tx = TxKind::RegisterModel {
+            owner,
+            model_id: "m1".into(),
+            fingerprint: hash(b"fp"),
+            compute_cost: 100,
+            min_stake: 0,
+            nonce: 0,
+            gas_price: 0,
+        };
+        let batch0 = make_batch(vec![sign(&reg_tx, &owner_kp)]);
+        pipeline.execute_batch(&batch0).await.unwrap();
+
+        let commit_tx = TxKind::CommitCompute {
+            validator,
+            supported_models: vec!["m1".into()],
+            committed_stake: 3000,
+            nonce: 0,
+            gas_price: 0,
+        };
+        let batch1 = make_batch_with_anchor([0xBB; 32], vec![sign(&commit_tx, &val_kp)]);
+        pipeline.execute_batch(&batch1).await.unwrap();
+        assert_eq!(pipeline.state.read().await.balance(&validator), 7_000);
+
+        let dereg_tx = TxKind::DeregisterCompute {
+            validator,
+            nonce: 1,
+            gas_price: 0,
+        };
+        let batch2 = make_batch_with_anchor([0xCC; 32], vec![sign(&dereg_tx, &val_kp)]);
+        let result = pipeline.execute_batch(&batch2).await.unwrap();
+
+        assert!(result.receipts[0].success);
+        assert_eq!(pipeline.state.read().await.balance(&validator), 10_000);
+        assert_eq!(pipeline.compute_commitments.read().await.active_count(), 0);
+    }
+
+    #[tokio::test]
+    async fn pipeline_deregister_compute_no_commitment_fails() {
+        let (_tx, rx) = mpsc::channel(16);
+        let mut pipeline = make_pipeline(rx);
+
+        let (val_kp, validator) = make_sender();
+        pipeline.state.write().await.set_balance(&validator, 10_000);
+
+        let dereg_tx = TxKind::DeregisterCompute {
+            validator,
+            nonce: 0,
+            gas_price: 0,
+        };
+        let batch = make_batch(vec![sign(&dereg_tx, &val_kp)]);
+        let result = pipeline.execute_batch(&batch).await.unwrap();
+
+        assert!(!result.receipts[0].success);
+        assert!(
+            result.receipts[0]
+                .error
+                .as_ref()
+                .unwrap()
+                .contains("no active compute commitment")
+        );
+    }
+
+    #[tokio::test]
+    async fn pipeline_commit_compute_overwrites_refunds_previous() {
+        let (_tx, rx) = mpsc::channel(16);
+        let mut pipeline = make_pipeline(rx);
+
+        let (val_kp, validator) = make_sender();
+        pipeline.state.write().await.set_balance(&validator, 10_000);
+
+        let (owner_kp, owner) = make_sender();
+        let reg_tx = TxKind::RegisterModel {
+            owner,
+            model_id: "m1".into(),
+            fingerprint: hash(b"fp"),
+            compute_cost: 100,
+            min_stake: 0,
+            nonce: 0,
+            gas_price: 0,
+        };
+        let batch0 = make_batch(vec![sign(&reg_tx, &owner_kp)]);
+        pipeline.execute_batch(&batch0).await.unwrap();
+
+        let commit1 = TxKind::CommitCompute {
+            validator,
+            supported_models: vec!["m1".into()],
+            committed_stake: 2000,
+            nonce: 0,
+            gas_price: 0,
+        };
+        let batch1 = make_batch_with_anchor([0xBB; 32], vec![sign(&commit1, &val_kp)]);
+        pipeline.execute_batch(&batch1).await.unwrap();
+        assert_eq!(pipeline.state.read().await.balance(&validator), 8_000);
+
+        let commit2 = TxKind::CommitCompute {
+            validator,
+            supported_models: vec!["m1".into()],
+            committed_stake: 5000,
+            nonce: 1,
+            gas_price: 0,
+        };
+        let batch2 = make_batch_with_anchor([0xCC; 32], vec![sign(&commit2, &val_kp)]);
+        pipeline.execute_batch(&batch2).await.unwrap();
+
+        // 10000 - 2000 (first) + 2000 (refund) - 5000 (second) = 5000
+        assert_eq!(pipeline.state.read().await.balance(&validator), 5_000);
+    }
+
+    // ── Phase: DeregisterModel tests ────────────────────────────
+
+    #[tokio::test]
+    async fn pipeline_deregister_model() {
+        let (_tx, rx) = mpsc::channel(16);
+        let mut pipeline = make_pipeline(rx);
+
+        let (owner_kp, owner) = make_sender();
+        let reg_tx = TxKind::RegisterModel {
+            owner,
+            model_id: "m1".into(),
+            fingerprint: hash(b"fp"),
+            compute_cost: 100,
+            min_stake: 0,
+            nonce: 0,
+            gas_price: 0,
+        };
+        let batch1 = make_batch(vec![sign(&reg_tx, &owner_kp)]);
+        pipeline.execute_batch(&batch1).await.unwrap();
+
+        let dereg_tx = TxKind::DeregisterModel {
+            owner,
+            model_id: "m1".into(),
+            nonce: 1,
+            gas_price: 0,
+        };
+        let batch2 = make_batch_with_anchor([0xBB; 32], vec![sign(&dereg_tx, &owner_kp)]);
+        let result = pipeline.execute_batch(&batch2).await.unwrap();
+
+        assert!(result.receipts[0].success);
+        let state = pipeline.state.read().await;
+        let registry = state
+            .get(&aztibase_execution::MODEL_REGISTRY_ADDRESS)
+            .unwrap();
+        let meta = aztibase_execution::ModelRegistry::get(&registry.storage, "m1");
+        assert!(meta.is_some());
+        assert!(!meta.unwrap().active);
+    }
+
+    #[tokio::test]
+    async fn pipeline_deregister_model_non_owner_fails() {
+        let (_tx, rx) = mpsc::channel(16);
+        let mut pipeline = make_pipeline(rx);
+
+        let (owner_kp, owner) = make_sender();
+        let (other_kp, _other) = make_sender();
+        let reg_tx = TxKind::RegisterModel {
+            owner,
+            model_id: "m1".into(),
+            fingerprint: hash(b"fp"),
+            compute_cost: 100,
+            min_stake: 0,
+            nonce: 0,
+            gas_price: 0,
+        };
+        let batch1 = make_batch(vec![sign(&reg_tx, &owner_kp)]);
+        pipeline.execute_batch(&batch1).await.unwrap();
+
+        let other_addr = aztibase_core::address_from_pubkey(other_kp.public_key().as_bytes());
+        let dereg_tx = TxKind::DeregisterModel {
+            owner: other_addr,
+            model_id: "m1".into(),
+            nonce: 0,
+            gas_price: 0,
+        };
+        let batch2 = make_batch_with_anchor([0xBB; 32], vec![sign(&dereg_tx, &other_kp)]);
+        let result = pipeline.execute_batch(&batch2).await.unwrap();
+
+        assert!(!result.receipts[0].success);
+        assert!(
+            result.receipts[0]
+                .error
+                .as_ref()
+                .unwrap()
+                .contains("not model owner")
+        );
+    }
+
+    #[tokio::test]
+    async fn pipeline_deregister_model_with_pending_tasks_fails() {
+        let (_tx, rx) = mpsc::channel(16);
+        let mut pipeline = make_pipeline(rx);
+
+        let (owner_kp, owner) = make_sender();
+        let (req_kp, requester) = make_sender();
+        pipeline.state.write().await.set_balance(&requester, 10_000);
+
+        let reg_tx = TxKind::RegisterModel {
+            owner,
+            model_id: "m1".into(),
+            fingerprint: hash(b"fp"),
+            compute_cost: 100,
+            min_stake: 0,
+            nonce: 0,
+            gas_price: 0,
+        };
+        let batch1 = make_batch(vec![sign(&reg_tx, &owner_kp)]);
+        pipeline.execute_batch(&batch1).await.unwrap();
+
+        let post_tx = TxKind::PostTask {
+            requester,
+            model_id: "m1".into(),
+            input_hash: hash(b"input"),
+            reward: 500,
+            deadline_round: 100,
+            nonce: 0,
+            gas_price: 0,
+        };
+        let batch2 = make_batch_with_anchor([0xBB; 32], vec![sign(&post_tx, &req_kp)]);
+        pipeline.execute_batch(&batch2).await.unwrap();
+
+        let dereg_tx = TxKind::DeregisterModel {
+            owner,
+            model_id: "m1".into(),
+            nonce: 1,
+            gas_price: 0,
+        };
+        let batch3 = make_batch_with_anchor([0xCC; 32], vec![sign(&dereg_tx, &owner_kp)]);
+        let result = pipeline.execute_batch(&batch3).await.unwrap();
+
+        assert!(!result.receipts[0].success);
+        assert!(
+            result.receipts[0]
+                .error
+                .as_ref()
+                .unwrap()
+                .contains("pending tasks")
+        );
+    }
+
+    // ── Phase: CommitCompute model validation test ───────────────
+
+    #[tokio::test]
+    async fn pipeline_commit_compute_unregistered_model_fails() {
+        let (_tx, rx) = mpsc::channel(16);
+        let mut pipeline = make_pipeline(rx);
+
+        let (val_kp, validator) = make_sender();
+        pipeline.state.write().await.set_balance(&validator, 10_000);
+
+        let commit_tx = TxKind::CommitCompute {
+            validator,
+            supported_models: vec!["nonexistent_model".into()],
+            committed_stake: 1000,
+            nonce: 0,
+            gas_price: 0,
+        };
+        let batch = make_batch(vec![sign(&commit_tx, &val_kp)]);
+        let result = pipeline.execute_batch(&batch).await.unwrap();
+
+        assert!(!result.receipts[0].success);
+        assert!(
+            result.receipts[0]
+                .error
+                .as_ref()
+                .unwrap()
+                .contains("not registered")
+        );
+        assert_eq!(pipeline.state.read().await.balance(&validator), 10_000);
+    }
+
+    // ── Phase: TaskAssigner wiring test ──────────────────────────
+
+    #[tokio::test]
+    async fn pipeline_post_task_assigns_validator() {
+        let (_tx, rx) = mpsc::channel(16);
+        let mut pipeline = make_pipeline(rx);
+
+        let (owner_kp, owner) = make_sender();
+        let (val_kp, validator) = make_sender();
+        let (req_kp, requester) = make_sender();
+        pipeline.state.write().await.set_balance(&validator, 10_000);
+        pipeline.state.write().await.set_balance(&requester, 10_000);
+
+        let reg_tx = TxKind::RegisterModel {
+            owner,
+            model_id: "m1".into(),
+            fingerprint: hash(b"fp"),
+            compute_cost: 100,
+            min_stake: 0,
+            nonce: 0,
+            gas_price: 0,
+        };
+        let batch0 = make_batch(vec![sign(&reg_tx, &owner_kp)]);
+        pipeline.execute_batch(&batch0).await.unwrap();
+
+        let commit_tx = TxKind::CommitCompute {
+            validator,
+            supported_models: vec!["m1".into()],
+            committed_stake: 1000,
+            nonce: 0,
+            gas_price: 0,
+        };
+        let batch1 = make_batch_with_anchor([0xBB; 32], vec![sign(&commit_tx, &val_kp)]);
+        pipeline.execute_batch(&batch1).await.unwrap();
+
+        let post_tx = TxKind::PostTask {
+            requester,
+            model_id: "m1".into(),
+            input_hash: hash(b"input"),
+            reward: 500,
+            deadline_round: 100,
+            nonce: 0,
+            gas_price: 0,
+        };
+        let batch2 = make_batch_with_anchor([0xCC; 32], vec![sign(&post_tx, &req_kp)]);
+        let result = pipeline.execute_batch(&batch2).await.unwrap();
+        assert!(result.receipts[0].success);
+
+        let pool = pipeline.task_pool.read().await;
+        let task_id = result.receipts[0].inference_hash.unwrap();
+        let task = pool.get(&task_id).unwrap();
+        assert_eq!(task.assigned_validator, Some(validator));
     }
 }

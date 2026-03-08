@@ -5,7 +5,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ---
 
-## [M6] -- AI Compute Market + PoUW (IN PROGRESS)
+## [M6] -- AI Compute Market + PoUW (COMPLETE)
 
 ### Added
 - `ModelRegistry` in aztibase-execution: on-chain model metadata with register/query/deregister/list_active, backed by AccountState storage at `MODEL_REGISTRY_ADDRESS` (2026-03-07)
@@ -33,7 +33,17 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 - Attestation buffer cleanup on task expiry to prevent unbounded memory growth (2026-03-07)
 - ADR-011: Attestation signature scheme and settlement flow design (2026-03-07)
 
+- `TxKind::DeregisterCompute` (0x0C): validators deregister from compute market with stake refund (2026-03-07)
+- `TxKind::DeregisterModel` (0x0D): model owners deregister models (blocked if pending tasks exist) (2026-03-07)
+- TaskAssigner pipeline wiring: PostTask automatically assigns best validator via PoUW score from ComputeCommitmentStore candidates (2026-03-07)
+- `InferenceTask.assigned_validator`: tracks which validator is assigned to execute the task (2026-03-07)
+- SubmitAttestation enforcement: rejects attestations from validators not matching assigned_validator (2026-03-07)
+- CommitCompute model validation: validates all supported_models exist in ModelRegistry before accepting commitment (2026-03-07)
+- CommitCompute overwrite refund: previous stake automatically refunded when validator updates commitment (2026-03-07)
+- `aztb_getTaskStatus` now includes `assignedValidator` field in response (2026-03-07)
+
 ### Fixed
+- SEC-COMMIT-OVERWRITE (LOW): CommitCompute now refunds prior stake on overwrite, preventing locked funds (2026-03-07)
 - SEC-SYBIL-001: `AttestationAggregator` now deduplicates attestations by validator_id, preventing single-validator quorum faking (2026-03-07)
 - SEC-ATT-LEAK-001 (LOW): Attestation buffer entries now cleaned up when tasks expire, preventing memory leak (2026-03-07)
 

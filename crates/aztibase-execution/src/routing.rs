@@ -14,6 +14,8 @@ const PREFIX_REGISTER_MODEL: u8 = 0x08;
 const PREFIX_POST_TASK: u8 = 0x09;
 const PREFIX_SUBMIT_ATTESTATION: u8 = 0x0A;
 const PREFIX_COMMIT_COMPUTE: u8 = 0x0B;
+const PREFIX_DEREGISTER_COMPUTE: u8 = 0x0C;
+const PREFIX_DEREGISTER_MODEL: u8 = 0x0D;
 
 /// Maximum encoded transaction size (1 MB). Rejects oversized payloads before
 /// deserialization to prevent memory-bomb attacks via bincode length prefixes.
@@ -108,6 +110,17 @@ pub enum TxKind {
         nonce: u64,
         gas_price: u64,
     },
+    DeregisterCompute {
+        validator: Address,
+        nonce: u64,
+        gas_price: u64,
+    },
+    DeregisterModel {
+        owner: Address,
+        model_id: String,
+        nonce: u64,
+        gas_price: u64,
+    },
 }
 
 impl TxKind {
@@ -125,6 +138,8 @@ impl TxKind {
             TxKind::PostTask { .. } => PREFIX_POST_TASK,
             TxKind::SubmitAttestation { .. } => PREFIX_SUBMIT_ATTESTATION,
             TxKind::CommitCompute { .. } => PREFIX_COMMIT_COMPUTE,
+            TxKind::DeregisterCompute { .. } => PREFIX_DEREGISTER_COMPUTE,
+            TxKind::DeregisterModel { .. } => PREFIX_DEREGISTER_MODEL,
         };
         let payload = bincode::serialize(self).expect("TxKind serialization cannot fail");
         let mut buf = Vec::with_capacity(1 + payload.len());
@@ -145,7 +160,9 @@ impl TxKind {
             | TxKind::RegisterModel { nonce, .. }
             | TxKind::PostTask { nonce, .. }
             | TxKind::SubmitAttestation { nonce, .. }
-            | TxKind::CommitCompute { nonce, .. } => *nonce,
+            | TxKind::CommitCompute { nonce, .. }
+            | TxKind::DeregisterCompute { nonce, .. }
+            | TxKind::DeregisterModel { nonce, .. } => *nonce,
         }
     }
 
@@ -161,7 +178,9 @@ impl TxKind {
             | TxKind::RegisterModel { gas_price, .. }
             | TxKind::PostTask { gas_price, .. }
             | TxKind::SubmitAttestation { gas_price, .. }
-            | TxKind::CommitCompute { gas_price, .. } => *gas_price,
+            | TxKind::CommitCompute { gas_price, .. }
+            | TxKind::DeregisterCompute { gas_price, .. }
+            | TxKind::DeregisterModel { gas_price, .. } => *gas_price,
         }
     }
 
@@ -180,6 +199,8 @@ impl TxKind {
             TxKind::PostTask { .. } => 42_000,
             TxKind::SubmitAttestation { .. } => 50_000,
             TxKind::CommitCompute { .. } => 75_000,
+            TxKind::DeregisterCompute { .. } => 50_000,
+            TxKind::DeregisterModel { .. } => 60_000,
         }
     }
 
@@ -196,6 +217,8 @@ impl TxKind {
             TxKind::PostTask { requester, .. } => requester,
             TxKind::SubmitAttestation { validator, .. } => validator,
             TxKind::CommitCompute { validator, .. } => validator,
+            TxKind::DeregisterCompute { validator, .. } => validator,
+            TxKind::DeregisterModel { owner, .. } => owner,
         }
     }
 
@@ -212,6 +235,8 @@ impl TxKind {
             TxKind::PostTask { .. } => PREFIX_POST_TASK,
             TxKind::SubmitAttestation { .. } => PREFIX_SUBMIT_ATTESTATION,
             TxKind::CommitCompute { .. } => PREFIX_COMMIT_COMPUTE,
+            TxKind::DeregisterCompute { .. } => PREFIX_DEREGISTER_COMPUTE,
+            TxKind::DeregisterModel { .. } => PREFIX_DEREGISTER_MODEL,
         }
     }
 }
@@ -286,7 +311,9 @@ pub fn route_tx(raw: &[u8]) -> Result<TxKind, RoutingError> {
         | PREFIX_REGISTER_MODEL
         | PREFIX_POST_TASK
         | PREFIX_SUBMIT_ATTESTATION
-        | PREFIX_COMMIT_COMPUTE => {}
+        | PREFIX_COMMIT_COMPUTE
+        | PREFIX_DEREGISTER_COMPUTE
+        | PREFIX_DEREGISTER_MODEL => {}
         other => return Err(RoutingError::UnknownPrefix(other)),
     }
     let decoded: TxKind = bincode_options()
@@ -320,6 +347,11 @@ pub fn route_tx(raw: &[u8]) -> Result<TxKind, RoutingError> {
         return Err(RoutingError::InvalidFuncName(model_id.clone()));
     }
     if let TxKind::PostTask { ref model_id, .. } = decoded
+        && !is_valid_func_name(model_id)
+    {
+        return Err(RoutingError::InvalidFuncName(model_id.clone()));
+    }
+    if let TxKind::DeregisterModel { ref model_id, .. } = decoded
         && !is_valid_func_name(model_id)
     {
         return Err(RoutingError::InvalidFuncName(model_id.clone()));
@@ -686,6 +718,37 @@ mod tests {
         let decoded = route_tx(&encoded).unwrap();
         assert_eq!(decoded.nonce(), 10);
         assert_eq!(decoded.gas_price(), 3);
+        assert_eq!(*decoded.sender(), [0xE0; 32]);
+    }
+
+    #[test]
+    fn deregister_compute_roundtrip() {
+        let tx = TxKind::DeregisterCompute {
+            validator: [0xD0; 32],
+            nonce: 5,
+            gas_price: 1,
+        };
+        let encoded = tx.encode();
+        assert_eq!(encoded[0], PREFIX_DEREGISTER_COMPUTE);
+        let decoded = route_tx(&encoded).unwrap();
+        assert_eq!(decoded.nonce(), 5);
+        assert_eq!(decoded.gas_price(), 1);
+        assert_eq!(*decoded.sender(), [0xD0; 32]);
+    }
+
+    #[test]
+    fn deregister_model_roundtrip() {
+        let tx = TxKind::DeregisterModel {
+            owner: [0xE0; 32],
+            model_id: "llama_7b".into(),
+            nonce: 8,
+            gas_price: 2,
+        };
+        let encoded = tx.encode();
+        assert_eq!(encoded[0], PREFIX_DEREGISTER_MODEL);
+        let decoded = route_tx(&encoded).unwrap();
+        assert_eq!(decoded.nonce(), 8);
+        assert_eq!(decoded.gas_price(), 2);
         assert_eq!(*decoded.sender(), [0xE0; 32]);
     }
 

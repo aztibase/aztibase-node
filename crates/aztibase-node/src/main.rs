@@ -5,7 +5,6 @@ mod integration;
 mod mempool;
 mod pipeline;
 mod sync;
-#[allow(dead_code)]
 mod task_pool;
 mod wallet;
 
