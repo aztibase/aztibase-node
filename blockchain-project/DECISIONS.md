@@ -19,6 +19,7 @@ Every non-obvious technical decision is recorded here. Each ADR is immutable onc
 | ADR-009 | WebSocket gateway via axum upgrade (not separate server) | 2026-03-07 | ACCEPTED | node-engineer |
 | ADR-010 | PoUW scoring formula and attestation quorum design | 2026-03-07 | ACCEPTED | blockchain-architect + consensus-engineer |
 | ADR-011 | Attestation signature scheme and settlement flow | 2026-03-07 | ACCEPTED | blockchain-architect + security-engineer |
+| ADR-012 | Packed SignerBitmap for finality certificates | 2026-03-08 | ACCEPTED | security-engineer + blockchain-architect |
 
 ---
 
@@ -348,6 +349,30 @@ Sprint 022 wires the task execution loop end-to-end: PostTask → TaskPool → S
 - Settlement is deterministic across all nodes (same quorum → same payouts)
 - CommitCompute overwrites previous commitments without refunding prior stake — a known limitation addressed by future deregistration support
 - The attestation buffer is ephemeral (in-memory only) — node restarts lose pending attestations, which is acceptable since unfinished quorums will eventually expire
+
+---
+
+## ADR-012: Packed SignerBitmap for finality certificates
+
+**Date:** 2026-03-08
+**Status:** ACCEPTED
+**Decided By:** security-engineer + blockchain-architect
+**Git Ref:** pending
+
+### Context
+`FinalityCertificate.signer_bitmap` used `Vec<bool>` (1 byte per validator). With 100+ validators, this wastes 7/8 of bandwidth in every finality cert transmitted to light clients.
+
+### Decision
+Replace `Vec<bool>` with a custom `SignerBitmap` struct backed by `Vec<u8>` (packed bits). Each bit represents one validator's signing status.
+
+### Rationale
+- 8x bandwidth reduction (1 bit per validator vs 1 byte)
+- Zero new dependencies (hand-rolled packed bitmap vs bitvec crate)
+- Only consensus `FinalityCertificate` changed; light sync/WASM types remain `Vec<bool>` for JSON interop
+
+### Consequences
+- Breaking serialization change for `FinalityCertificate` (acceptable pre-testnet)
+- Future: if validator set grows >256, bitmap is still compact (32 bytes for 256 validators)
 
 ---
 

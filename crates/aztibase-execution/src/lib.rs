@@ -17,7 +17,7 @@ pub mod verkle;
 pub mod vm;
 
 pub use contract::{ContractReceipt, ContractTx, compute_contract_address, execute_contract_txs};
-pub use cross_vm::{CrossVmCall, CrossVmResult, evm_to_wasm, wasm_to_evm};
+pub use cross_vm::{CrossVmCall, CrossVmResult, ReentrancyGuard, evm_to_wasm, wasm_to_evm};
 pub use fee::{BaseFeeCalculator, FeeEscrow, escrow_fee, refund_unused};
 pub use light_client::{build_light_client_proof, verify_light_client_proof};
 pub use model_registry::{MODEL_REGISTRY_ADDRESS, ModelMetadata, ModelRegistry, RegistryError};
@@ -25,7 +25,7 @@ pub use parallel::{BatchResult, TransferTx, TxReceipt, TxStatus, execute_transfe
 pub use persist::{
     flush_state, get_batch_root, load_base_fee, load_state, store_base_fee, store_batch_root,
 };
-pub use receipt::{ExecutionReceipt, get_receipt, store_receipts};
+pub use receipt::{ExecutionReceipt, evict_old_receipts, get_receipt, store_receipts};
 pub use routing::{RoutingError, TxKind, route_batch, route_tx};
 pub use snapshot::{
     SnapshotError, StateSnapshot, apply_snapshot, create_snapshot, create_snapshot_with_finality,

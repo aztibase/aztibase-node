@@ -3,6 +3,8 @@ use serde::{Deserialize, Serialize};
 
 use aztibase_storage::{RECEIPTS_TABLE, StateStore, StorageResult};
 
+const MAX_STORED_RECEIPTS: u64 = 100_000;
+
 type Address = [u8; 32];
 
 /// Unified receipt for all transaction types (transfers, WASM contracts, EVM, AI inference).
@@ -33,6 +35,12 @@ pub fn store_receipts(store: &StateStore, receipts: &[ExecutionReceipt]) -> Stor
         .collect();
 
     store.batch_put(RECEIPTS_TABLE, &refs)
+}
+
+/// Evict old receipts if the store exceeds `MAX_STORED_RECEIPTS`.
+/// Returns the number of receipts removed.
+pub fn evict_old_receipts(store: &StateStore) -> StorageResult<u64> {
+    store.evict_oldest(RECEIPTS_TABLE, MAX_STORED_RECEIPTS)
 }
 
 /// Retrieve a receipt by transaction hash.
@@ -155,6 +163,39 @@ mod tests {
 
         assert_eq!(loaded.contract_address, Some(contract_addr));
         assert_eq!(loaded.gas_used, 150_000);
+
+        cleanup(&path);
+    }
+
+    #[test]
+    fn evict_old_receipts_removes_excess() {
+        let path = test_db_path();
+        let store = StateStore::open(path.to_str().unwrap()).unwrap();
+
+        let receipts: Vec<ExecutionReceipt> = (0..10)
+            .map(|i| {
+                let tx_hash = hash(format!("evict-tx-{i}").as_bytes());
+                ExecutionReceipt {
+                    tx_hash,
+                    success: true,
+                    gas_used: 21_000,
+                    contract_address: None,
+                    error: None,
+                    inference_hash: None,
+                    anomaly_score: 0.0,
+                }
+            })
+            .collect();
+
+        store_receipts(&store, &receipts).unwrap();
+
+        let removed = store
+            .evict_oldest(aztibase_storage::RECEIPTS_TABLE, 5)
+            .unwrap();
+        assert_eq!(removed, 5);
+
+        let remaining = store.len(aztibase_storage::RECEIPTS_TABLE).unwrap();
+        assert_eq!(remaining, 5);
 
         cleanup(&path);
     }

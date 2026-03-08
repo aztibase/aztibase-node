@@ -207,6 +207,49 @@ impl LightStore {
         Ok(count)
     }
 
+    /// Count cached proofs, then evict the oldest entries if the count
+    /// exceeds `MAX_PROOF_CACHE_ENTRIES`. Returns the number evicted.
+    pub fn evict_excess_proofs(&self) -> StorageResult<u64> {
+        const MAX_PROOF_CACHE_ENTRIES: u64 = 4096;
+        let read_txn = self.db.begin_read()?;
+        let tbl = read_txn.open_table(PROOF_CACHE_TABLE)?;
+        let total = tbl.len()?;
+        if total <= MAX_PROOF_CACHE_ENTRIES {
+            return Ok(0);
+        }
+        let to_remove = total - MAX_PROOF_CACHE_ENTRIES;
+
+        // Collect oldest entries by lowest at_round
+        let mut entries: Vec<(Vec<u8>, u64)> = Vec::new();
+        for entry in tbl.iter()? {
+            let (k, v) = entry?;
+            let proof: CachedProof = bincode::deserialize(v.value()).expect("proof deser");
+            entries.push((k.value().to_vec(), proof.at_round));
+        }
+        drop(tbl);
+        drop(read_txn);
+
+        entries.sort_by_key(|(_, round)| *round);
+        let keys_to_remove: Vec<Vec<u8>> = entries
+            .into_iter()
+            .take(to_remove as usize)
+            .map(|(k, _)| k)
+            .collect();
+
+        let removed = keys_to_remove.len() as u64;
+        if !keys_to_remove.is_empty() {
+            let write_txn = self.db.begin_write()?;
+            {
+                let mut tbl = write_txn.open_table(PROOF_CACHE_TABLE)?;
+                for key in &keys_to_remove {
+                    tbl.remove(key.as_slice())?;
+                }
+            }
+            write_txn.commit()?;
+        }
+        Ok(removed)
+    }
+
     // ── Wallet State ───────────────────────────────────────────────
 
     pub fn store_wallet_state(
@@ -364,6 +407,27 @@ mod tests {
 
         assert!(store.get_cached_proof(b"account_alice").unwrap().is_none());
         assert!(store.get_cached_proof(b"account_bob").unwrap().is_some());
+
+        cleanup(&path);
+    }
+
+    #[test]
+    fn proof_cache_excess_eviction() {
+        let path = test_db_path();
+        let store = LightStore::open(&path).unwrap();
+
+        for i in 0u64..10 {
+            let proof = CachedProof {
+                state_key: format!("key_{i}").into_bytes(),
+                proof_data: vec![i as u8],
+                at_round: i * 10,
+            };
+            store.cache_proof(&proof).unwrap();
+        }
+
+        // 10 proofs stored, but MAX is 4096 so no eviction needed
+        let evicted = store.evict_excess_proofs().unwrap();
+        assert_eq!(evicted, 0);
 
         cleanup(&path);
     }

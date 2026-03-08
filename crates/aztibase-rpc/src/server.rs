@@ -1,10 +1,10 @@
 use std::collections::HashMap;
-use std::net::SocketAddr;
+use std::net::{IpAddr, SocketAddr};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use axum::extract::ws::{Message, WebSocket};
-use axum::extract::{DefaultBodyLimit, State, WebSocketUpgrade};
+use axum::extract::{ConnectInfo, DefaultBodyLimit, State, WebSocketUpgrade};
 use axum::http::StatusCode;
 use axum::response::IntoResponse;
 use axum::{
@@ -94,6 +94,7 @@ pub struct RpcState {
     pub node_metrics: Option<Arc<RwLock<serde_json::Value>>>,
     pub event_bus: Arc<EventBus>,
     ws_connection_count: Arc<AtomicU64>,
+    ip_tracker: IpConnectionTracker,
     pub pending_task_count: Arc<AtomicU64>,
     pub compute_commitments: Option<Arc<RwLock<ComputeCommitmentStore>>>,
 }
@@ -109,6 +110,7 @@ impl Clone for RpcState {
             node_metrics: self.node_metrics.clone(),
             event_bus: Arc::clone(&self.event_bus),
             ws_connection_count: Arc::clone(&self.ws_connection_count),
+            ip_tracker: self.ip_tracker.clone(),
             pending_task_count: Arc::clone(&self.pending_task_count),
             compute_commitments: self.compute_commitments.clone(),
         }
@@ -116,8 +118,41 @@ impl Clone for RpcState {
 }
 
 const MAX_WS_CONNECTIONS: u64 = 256;
+const MAX_WS_PER_IP: u64 = 8;
 const MAX_SUBSCRIPTIONS_PER_CLIENT: usize = 16;
 const MAX_WS_FRAME_SIZE: usize = 1_048_576;
+
+/// Per-IP WebSocket connection counter.
+#[derive(Clone, Default)]
+pub struct IpConnectionTracker {
+    counts: Arc<std::sync::Mutex<HashMap<IpAddr, u64>>>,
+}
+
+impl IpConnectionTracker {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn try_acquire(&self, ip: IpAddr) -> bool {
+        let mut counts = self.counts.lock().unwrap_or_else(|e| e.into_inner());
+        let count = counts.entry(ip).or_insert(0);
+        if *count >= MAX_WS_PER_IP {
+            return false;
+        }
+        *count += 1;
+        true
+    }
+
+    pub fn release(&self, ip: IpAddr) {
+        let mut counts = self.counts.lock().unwrap_or_else(|e| e.into_inner());
+        if let Some(count) = counts.get_mut(&ip) {
+            *count = count.saturating_sub(1);
+            if *count == 0 {
+                counts.remove(&ip);
+            }
+        }
+    }
+}
 
 // ── Event Bus ───────────────────────────────────────────────────────
 
@@ -183,6 +218,7 @@ impl RpcServer {
                 node_metrics: None,
                 event_bus: Arc::new(EventBus::new()),
                 ws_connection_count: Arc::new(AtomicU64::new(0)),
+                ip_tracker: IpConnectionTracker::new(),
                 pending_task_count: Arc::new(AtomicU64::new(0)),
                 compute_commitments: None,
             },
@@ -229,7 +265,11 @@ impl RpcServer {
         let router = self.router();
         info!(%addr, "RPC server listening");
         let listener = tokio::net::TcpListener::bind(addr).await?;
-        axum::serve(listener, router).await?;
+        axum::serve(
+            listener,
+            router.into_make_service_with_connect_info::<SocketAddr>(),
+        )
+        .await?;
         Ok(())
     }
 }
@@ -309,6 +349,7 @@ async fn dispatch(state: &RpcState, req: &JsonRpcRequest) -> JsonRpcResponse {
 
 async fn handle_ws_upgrade(
     ws: WebSocketUpgrade,
+    ConnectInfo(addr): ConnectInfo<SocketAddr>,
     State(state): State<RpcState>,
 ) -> impl IntoResponse {
     let current = state.ws_connection_count.load(Ordering::Relaxed);
@@ -319,12 +360,22 @@ async fn handle_ws_upgrade(
         )
             .into_response();
     }
+
+    let client_ip = addr.ip();
+    if !state.ip_tracker.try_acquire(client_ip) {
+        return (
+            StatusCode::TOO_MANY_REQUESTS,
+            "Too many WebSocket connections from this IP",
+        )
+            .into_response();
+    }
+
     ws.max_message_size(MAX_WS_FRAME_SIZE)
-        .on_upgrade(move |socket| handle_ws_connection(socket, state))
+        .on_upgrade(move |socket| handle_ws_connection(socket, state, client_ip))
         .into_response()
 }
 
-async fn handle_ws_connection(socket: WebSocket, state: RpcState) {
+async fn handle_ws_connection(socket: WebSocket, state: RpcState, client_ip: IpAddr) {
     state.ws_connection_count.fetch_add(1, Ordering::Relaxed);
     let (mut ws_tx, mut ws_rx) = socket.split();
 
@@ -478,6 +529,7 @@ async fn handle_ws_connection(socket: WebSocket, state: RpcState) {
     drop(response_tx);
     let _ = writer.await;
     state.ws_connection_count.fetch_sub(1, Ordering::Relaxed);
+    state.ip_tracker.release(client_ip);
 }
 
 // ── Light Sync over WebSocket ───────────────────────────────────────
@@ -964,6 +1016,7 @@ mod tests {
             node_metrics: None,
             event_bus: Arc::new(EventBus::new()),
             ws_connection_count: Arc::new(AtomicU64::new(0)),
+            ip_tracker: IpConnectionTracker::new(),
             pending_task_count: Arc::new(AtomicU64::new(0)),
             compute_commitments: None,
         };
@@ -987,6 +1040,7 @@ mod tests {
             node_metrics: None,
             event_bus: Arc::new(EventBus::new()),
             ws_connection_count: Arc::new(AtomicU64::new(0)),
+            ip_tracker: IpConnectionTracker::new(),
             pending_task_count: Arc::new(AtomicU64::new(0)),
             compute_commitments: None,
         };
@@ -1219,6 +1273,7 @@ mod tests {
             node_metrics: None,
             event_bus: Arc::new(EventBus::new()),
             ws_connection_count: Arc::new(AtomicU64::new(0)),
+            ip_tracker: IpConnectionTracker::new(),
             pending_task_count: Arc::new(AtomicU64::new(0)),
             compute_commitments: None,
         };
@@ -1382,7 +1437,12 @@ mod tests {
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let addr = listener.local_addr().unwrap();
         tokio::spawn(async move {
-            axum::serve(listener, router).await.unwrap();
+            axum::serve(
+                listener,
+                router.into_make_service_with_connect_info::<SocketAddr>(),
+            )
+            .await
+            .unwrap();
         });
         addr
     }
@@ -1561,6 +1621,7 @@ mod tests {
             node_metrics: None,
             event_bus: Arc::new(EventBus::new()),
             ws_connection_count: Arc::new(AtomicU64::new(0)),
+            ip_tracker: IpConnectionTracker::new(),
             pending_task_count: Arc::new(AtomicU64::new(0)),
             compute_commitments: None,
         };
@@ -1644,6 +1705,7 @@ mod tests {
             node_metrics: None,
             event_bus: Arc::new(EventBus::new()),
             ws_connection_count: Arc::new(AtomicU64::new(0)),
+            ip_tracker: IpConnectionTracker::new(),
             pending_task_count: Arc::new(AtomicU64::new(0)),
             compute_commitments: None,
         };
@@ -1730,6 +1792,26 @@ mod tests {
         );
         let resp = rpc_call(&state, &body).await;
         assert!(resp["result"].is_null());
+    }
+
+    #[test]
+    fn ip_tracker_limits_connections() {
+        let tracker = IpConnectionTracker::new();
+        let ip: IpAddr = "127.0.0.1".parse().unwrap();
+
+        for _ in 0..MAX_WS_PER_IP {
+            assert!(tracker.try_acquire(ip));
+        }
+        assert!(!tracker.try_acquire(ip), "should reject beyond limit");
+
+        tracker.release(ip);
+        assert!(tracker.try_acquire(ip), "should allow after release");
+
+        let other_ip: IpAddr = "192.168.1.1".parse().unwrap();
+        assert!(
+            tracker.try_acquire(other_ip),
+            "different IP should be independent"
+        );
     }
 
     #[tokio::test]

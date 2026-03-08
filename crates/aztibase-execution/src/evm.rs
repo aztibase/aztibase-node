@@ -12,6 +12,7 @@ use aztibase_core::TxHash;
 type Address = [u8; 32];
 
 const AZTIBASE_CHAIN_ID: u64 = 0xA27B;
+const MAX_REVERT_REASON_BYTES: usize = 1024;
 
 fn to_evm_address(addr: &Address) -> EvmAddress {
     let mut buf = [0u8; 20];
@@ -156,7 +157,7 @@ pub fn evm_deploy(
                     gas_used,
                     contract_address: None,
                     events: vec![],
-                    error: Some(format!("revert: 0x{}", hex_encode(&output))),
+                    error: Some(format!("revert: 0x{}", hex_encode_bounded(&output))),
                 },
                 ExecutionResult::Halt { reason, .. } => ContractReceipt {
                     tx_hash,
@@ -264,7 +265,7 @@ pub fn evm_call(
                     gas_used,
                     contract_address: None,
                     events: vec![],
-                    error: Some(format!("revert: 0x{}", hex_encode(&output))),
+                    error: Some(format!("revert: 0x{}", hex_encode_bounded(&output))),
                 },
                 ExecutionResult::Halt { reason, .. } => ContractReceipt {
                     tx_hash,
@@ -290,11 +291,20 @@ pub fn evm_call(
     }
 }
 
-fn hex_encode(bytes: &[u8]) -> String {
-    let mut s = String::with_capacity(bytes.len() * 2);
-    for b in bytes {
+fn hex_encode_bounded(bytes: &[u8]) -> String {
+    let truncated = bytes.len() > MAX_REVERT_REASON_BYTES;
+    let slice = if truncated {
+        &bytes[..MAX_REVERT_REASON_BYTES]
+    } else {
+        bytes
+    };
+    let mut s = String::with_capacity(slice.len() * 2 + 12);
+    for b in slice {
         use std::fmt::Write;
         let _ = write!(s, "{b:02x}");
+    }
+    if truncated {
+        s.push_str("..truncated");
     }
     s
 }
@@ -355,6 +365,130 @@ mod tests {
 
         assert!(!receipt.success);
         assert!(receipt.error.as_deref().unwrap().contains("nonce"));
+    }
+
+    #[test]
+    fn evm_deploy_gas_nonzero_and_bounded() {
+        let mut state = AccountState::new();
+        let deployer = [1u8; 32];
+        state.set_balance(&deployer, 1_000_000_000);
+
+        let bytecode = vec![0x60, 0x42, 0x60, 0x00, 0x52, 0x60, 0x20, 0x60, 0x00, 0xf3];
+        let receipt = evm_deploy(
+            &mut state,
+            hash(b"gas-check-deploy"),
+            &deployer,
+            &bytecode,
+            0,
+            1_000_000,
+        );
+        assert!(receipt.success);
+        assert!(
+            receipt.gas_used > 21_000,
+            "deploy should cost more than base tx"
+        );
+        assert!(
+            receipt.gas_used < 1_000_000,
+            "gas_used must be less than gas_limit"
+        );
+    }
+
+    #[test]
+    fn evm_call_gas_nonzero_and_bounded() {
+        let mut state = AccountState::new();
+        let deployer = [1u8; 32];
+        state.set_balance(&deployer, 1_000_000_000);
+
+        let init_code = vec![0x60, 0x00, 0x60, 0x00, 0x53, 0x60, 0x01, 0x60, 0x00, 0xf3];
+        let deploy_receipt = evm_deploy(
+            &mut state,
+            hash(b"gas-check-call-deploy"),
+            &deployer,
+            &init_code,
+            0,
+            1_000_000,
+        );
+        assert!(deploy_receipt.success);
+        let contract_addr = deploy_receipt.contract_address.unwrap();
+
+        let call_receipt = evm_call(
+            &mut state,
+            hash(b"gas-check-call"),
+            &deployer,
+            &contract_addr,
+            &[],
+            1,
+            500_000,
+            0,
+        );
+        assert!(call_receipt.success);
+        assert!(call_receipt.gas_used > 0, "call should consume gas");
+        assert!(
+            call_receipt.gas_used < 500_000,
+            "gas_used must be less than gas_limit"
+        );
+    }
+
+    #[test]
+    fn evm_revert_reason_truncated() {
+        let mut state = AccountState::new();
+        let deployer = [1u8; 32];
+        state.set_balance(&deployer, 1_000_000_000);
+
+        // Deploy a contract that always reverts with large data:
+        // PUSH2 0x0800 PUSH1 0x00 REVERT (reverts with 2048 zero bytes from memory)
+        let init_code = vec![
+            // Runtime code: PUSH2 0x0800, PUSH1 0x00, REVERT
+            0x61, 0x08, 0x00, // PUSH2 2048
+            0x60, 0x00, // PUSH1 0
+            0xfd, // REVERT
+        ];
+
+        // We'll deploy runtime = the revert code, using a deployer that stores it
+        let mut deploy_code = Vec::new();
+        // Copy init_code into memory and return it as deployed code
+        for (i, byte) in init_code.iter().enumerate() {
+            deploy_code.push(0x60); // PUSH1
+            deploy_code.push(*byte);
+            deploy_code.push(0x60); // PUSH1
+            deploy_code.push(i as u8);
+            deploy_code.push(0x53); // MSTORE8
+        }
+        deploy_code.push(0x60); // PUSH1 len
+        deploy_code.push(init_code.len() as u8);
+        deploy_code.push(0x60); // PUSH1 0
+        deploy_code.push(0x00);
+        deploy_code.push(0xf3); // RETURN
+
+        let deploy_receipt = evm_deploy(
+            &mut state,
+            hash(b"revert-deploy"),
+            &deployer,
+            &deploy_code,
+            0,
+            2_000_000,
+        );
+        assert!(deploy_receipt.success);
+        let contract_addr = deploy_receipt.contract_address.unwrap();
+
+        let call_receipt = evm_call(
+            &mut state,
+            hash(b"revert-call"),
+            &deployer,
+            &contract_addr,
+            &[],
+            1,
+            1_000_000,
+            0,
+        );
+        assert!(!call_receipt.success);
+        let err = call_receipt.error.unwrap();
+        assert!(err.starts_with("revert: 0x"));
+        // The hex output should be bounded: 1024 bytes = 2048 hex chars + "..truncated"
+        assert!(
+            err.len() < 2048 * 2 + 50,
+            "revert reason should be truncated"
+        );
     }
 
     #[test]

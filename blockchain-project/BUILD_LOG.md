@@ -21,6 +21,46 @@ Entries are prepended (newest first).
 
 ## Entries
 
+### 2026-03-08 -- security-engineer -- Sprint 024 Complete (M7 Security Audit + Hardening)
+**Task:** Sprint 024: Security audit and hardening — resolve 11 documented security findings (16 tasks, 4 phases)
+**Sprint:** Sprint 024, Phases 1-4
+**Git Ref:** pending
+**Files Changed:**
+- crates/aztibase-execution/src/cross_vm.rs (ReentrancyGuard: HashSet-based call stack guard for cross-VM calls, 1 new test)
+- crates/aztibase-execution/src/evm.rs (hex_encode_bounded: truncate revert reasons at 1024 bytes, MAX_REVERT_REASON_BYTES, 3 new tests)
+- crates/aztibase-runtime/src/tract_runtime.rs (inference timeout via Instant elapsed check, MAX_INPUT_SIZE 16MB, 1 new test)
+- crates/aztibase-execution/src/receipt.rs (evict_old_receipts: MAX_STORED_RECEIPTS=100K, 1 new test)
+- crates/aztibase-storage/src/store.rs (evict_oldest: generic count-based eviction for redb tables)
+- crates/aztibase-rpc/src/server.rs (IpConnectionTracker: per-IP WebSocket rate limiting, MAX_WS_PER_IP=8, 429 rejection, 1 new test)
+- crates/aztibase-storage/src/light.rs (evict_excess_proofs: MAX_PROOF_CACHE_ENTRIES=4096, round-sorted eviction, 1 new test)
+- crates/aztibase-network/src/webrtc.rs (validate_stun_uri: scheme/host/port validation on WebRTC STUN config, 3 new tests)
+- crates/aztibase-network/src/light_sync.rs (MultiPeerValidator: majority-based multi-peer header validation for eclipse attack resistance, 4 new tests)
+- crates/aztibase-consensus/src/finality.rs (SignerBitmap: packed u8 bitmap replacing Vec<bool>, 8x bandwidth savings; structural validation: reject zero batch_hash, zero signers, empty bitmap; 3 new tests)
+- crates/aztibase-execution/src/lib.rs (export ReentrancyGuard, evict_old_receipts)
+- crates/aztibase-network/src/lib.rs (export MultiPeerValidator)
+- crates/aztibase-consensus/src/lib.rs (export SignerBitmap)
+- deny.toml (NEW: cargo-deny config for license + advisory + ban + source checks)
+**Review Notes:**
+- 11 security findings resolved: 1 MEDIUM (SEC-BRIDGE-003), 10 LOW/INFO
+- 570 tests pass (up from 555), 0 clippy warnings, fmt clean
+- SignerBitmap: zero new dependencies, uses packed Vec<u8> instead of bitvec
+- MultiPeerValidator: validates header responses from multiple peers via majority consensus
+- IpConnectionTracker: thread-safe per-IP connection counting with automatic release
+**Security Flags:**
+- SEC-BRIDGE-003 MEDIUM RESOLVED: Cross-VM reentrancy guard prevents recursive cross-VM calls
+- SEC-EVM-008 LOW RESOLVED: Revert reason truncated at 1024 bytes
+- SEC-EVM-002 INFO RESOLVED: Gas cost verification tests added
+- SEC-AI-002 LOW RESOLVED: Inference timeout + input size limit
+- SEC-RCPT-002 LOW RESOLVED: Receipt store eviction at 100K entries
+- SEC-WS-002 LOW RESOLVED: Per-IP WebSocket rate limiting
+- SEC-CACHE-001 LOW RESOLVED: Proof cache bounded at 4096 entries
+- SEC-WEBRTC-001 LOW RESOLVED: STUN URI validation on construction
+- SEC-P2P-001 LOW RESOLVED: Multi-peer header validation
+- SEC-BLS-009 INFO RESOLVED: Packed signer bitmap (8x bandwidth savings)
+- SEC-LC-001 LOW RESOLVED: Finality cert structural validation
+
+---
+
 ### 2026-03-07 -- project-lead -- Sprint 023 Complete (M6 CLOSED)
 **Task:** Sprint 023: M6 Closure — Deregistration, Task Assignment, Compute Validation (16 tasks, 4 phases)
 **Sprint:** Sprint 023, Phases 1-4

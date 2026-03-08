@@ -5,6 +5,29 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ---
 
+## [M7] -- Security Audit + Hardening (COMPLETE)
+
+### Security
+- Cross-VM reentrancy guard: `ReentrancyGuard` prevents recursive calls between WASM and EVM VMs (SEC-BRIDGE-003 MEDIUM) (2026-03-08)
+- EVM revert reason truncation at 1024 bytes: prevents unbounded error strings (SEC-EVM-008) (2026-03-08)
+- AI inference timeout enforcement: 30s default with elapsed check + 16MB input size limit (SEC-AI-002) (2026-03-08)
+- Receipt store eviction: automatic pruning at 100K entries via `evict_old_receipts()` (SEC-RCPT-002) (2026-03-08)
+- Per-IP WebSocket rate limiting: `IpConnectionTracker` with MAX_WS_PER_IP=8, returns 429 (SEC-WS-002) (2026-03-08)
+- Proof cache bounded eviction: MAX_PROOF_CACHE_ENTRIES=4096, round-sorted removal (SEC-CACHE-001) (2026-03-08)
+- STUN URI validation: scheme/host/port parsing on WebRTC transport construction (SEC-WEBRTC-001) (2026-03-08)
+- Multi-peer header validation: `MultiPeerValidator` requires majority consensus for eclipse attack resistance (SEC-P2P-001) (2026-03-08)
+- Finality certificate structural validation: reject zero batch_hash, zero signers, empty bitmap (SEC-LC-001) (2026-03-08)
+
+### Changed
+- `FinalityCertificate.signer_bitmap`: replaced `Vec<bool>` with packed `SignerBitmap` (Vec<u8>), 8x bandwidth savings (SEC-BLS-009) (2026-03-08)
+- `StateStore.evict_oldest()`: generic count-based eviction method for any redb table (2026-03-08)
+
+### Added
+- `deny.toml`: cargo-deny configuration for license/advisory/ban/source policy enforcement (2026-03-08)
+- EVM gas cost verification tests: deploy and call gas bounds assertions (SEC-EVM-002) (2026-03-08)
+
+---
+
 ## [M6] -- AI Compute Market + PoUW (COMPLETE)
 
 ### Added

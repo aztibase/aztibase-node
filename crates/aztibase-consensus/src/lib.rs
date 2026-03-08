@@ -16,8 +16,8 @@ pub use engine::{
     MetricsSnapshot, RoundState, StateRootAnnounce,
 };
 pub use finality::{
-    FinalityCertificate, build_certificate, build_certificate_from_set, sign_finality,
-    verify_certificate, verify_certificate_from_set,
+    FinalityCertificate, SignerBitmap, build_certificate, build_certificate_from_set,
+    sign_finality, verify_certificate, verify_certificate_from_set,
 };
 pub use ordering::{CommittedBatch, extract_committed_batch};
 pub use pouw::{

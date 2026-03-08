@@ -7,6 +7,56 @@ use serde::{Deserialize, Serialize};
 
 use crate::ValidatorSet;
 
+/// Packed bitmap for validator signing status. Each bit represents one
+/// validator (by sorted index). 8x more compact than `Vec<bool>`.
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+pub struct SignerBitmap {
+    bytes: Vec<u8>,
+    len: usize,
+}
+
+impl SignerBitmap {
+    pub fn new(num_validators: usize) -> Self {
+        let byte_len = num_validators.div_ceil(8);
+        Self {
+            bytes: vec![0u8; byte_len],
+            len: num_validators,
+        }
+    }
+
+    pub fn set(&mut self, index: usize, value: bool) {
+        assert!(index < self.len, "bitmap index out of bounds");
+        let byte_idx = index / 8;
+        let bit_idx = index % 8;
+        if value {
+            self.bytes[byte_idx] |= 1 << bit_idx;
+        } else {
+            self.bytes[byte_idx] &= !(1 << bit_idx);
+        }
+    }
+
+    pub fn get(&self, index: usize) -> bool {
+        if index >= self.len {
+            return false;
+        }
+        let byte_idx = index / 8;
+        let bit_idx = index % 8;
+        (self.bytes[byte_idx] >> bit_idx) & 1 == 1
+    }
+
+    pub fn count_set(&self) -> usize {
+        self.bytes.iter().map(|b| b.count_ones() as usize).sum()
+    }
+
+    pub fn len(&self) -> usize {
+        self.len
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.len == 0
+    }
+}
+
 /// Cryptographic proof that a supermajority of validators agreed on a
 /// committed batch and its resulting state root. Light clients can verify
 /// finality without replaying the DAG.
@@ -15,8 +65,8 @@ pub struct FinalityCertificate {
     pub batch_hash: BlockHash,
     pub state_root: [u8; 32],
     pub aggregate_signature: BlsSignature,
-    /// Bitmap indicating which validators (by sorted index) signed.
-    pub signer_bitmap: Vec<bool>,
+    /// Packed bitmap indicating which validators (by sorted index) signed.
+    pub signer_bitmap: SignerBitmap,
 }
 
 /// Message that validators sign: BLAKE3(domain || batch_hash || state_root).
@@ -69,15 +119,15 @@ pub fn build_certificate(
         return None;
     }
 
-    let mut bitmap = vec![false; validator_bls_keys.len()];
+    let mut bitmap = SignerBitmap::new(validator_bls_keys.len());
     let mut sigs = Vec::with_capacity(signers.len());
 
     for (pk, sig) in signers {
         if let Some(idx) = validator_bls_keys.iter().position(|k| k == pk) {
-            if bitmap[idx] {
+            if bitmap.get(idx) {
                 continue;
             }
-            bitmap[idx] = true;
+            bitmap.set(idx, true);
             sigs.push(sig.clone());
         }
     }
@@ -106,6 +156,18 @@ pub fn verify_certificate(
     validator_bls_keys: &[BlsPublicKey],
     validator_set: &ValidatorSet,
 ) -> bool {
+    if cert.signer_bitmap.is_empty() {
+        return false;
+    }
+
+    if cert.batch_hash == [0u8; 32] {
+        return false;
+    }
+
+    if cert.signer_bitmap.count_set() == 0 {
+        return false;
+    }
+
     if cert.signer_bitmap.len() != validator_bls_keys.len() {
         return false;
     }
@@ -114,12 +176,9 @@ pub fn verify_certificate(
         return false;
     }
 
-    let signer_keys: Vec<BlsPublicKey> = cert
-        .signer_bitmap
-        .iter()
-        .zip(validator_bls_keys.iter())
-        .filter(|(signed, _)| **signed)
-        .map(|(_, pk)| pk.clone())
+    let signer_keys: Vec<BlsPublicKey> = (0..validator_bls_keys.len())
+        .filter(|i| cert.signer_bitmap.get(*i))
+        .map(|i| validator_bls_keys[i].clone())
         .collect();
 
     let quorum = validator_set.quorum_count();
@@ -192,7 +251,7 @@ mod tests {
 
         assert_eq!(cert.batch_hash, batch_hash);
         assert_eq!(cert.state_root, state_root);
-        assert_eq!(cert.signer_bitmap.iter().filter(|s| **s).count(), 3);
+        assert_eq!(cert.signer_bitmap.count_set(), 3);
     }
 
     #[test]
@@ -314,8 +373,8 @@ mod tests {
 
         let mut cert = build_certificate(batch_hash, state_root, &bls_keys, &signers, &vs).unwrap();
 
-        // Tamper: add extra entry to bitmap
-        cert.signer_bitmap.push(true);
+        // Tamper: replace bitmap with wrong length
+        cert.signer_bitmap = SignerBitmap::new(bls_keys.len() + 1);
         assert!(!verify_certificate(&cert, &bls_keys, &vs));
     }
 
@@ -383,6 +442,64 @@ mod tests {
         let cert = build_certificate(batch_hash, state_root, &bls_keys, &signers, &vs).unwrap();
 
         assert!(verify_certificate(&cert, &bls_keys, &vs));
-        assert!(cert.signer_bitmap.iter().all(|s| *s));
+        assert_eq!(cert.signer_bitmap.count_set(), 4);
+    }
+
+    #[test]
+    fn reject_zero_batch_hash() {
+        let (vs, keypairs, bls_keys) = setup_validators(4);
+        let batch_hash = hash(b"batch_zero");
+        let state_root = hash(b"state_zero");
+
+        let signers: Vec<(BlsPublicKey, BlsSignature)> = keypairs[..3]
+            .iter()
+            .map(|kp| {
+                let sig = sign_finality(kp, &batch_hash, &state_root);
+                (kp.public_key().clone(), sig)
+            })
+            .collect();
+
+        let mut cert = build_certificate(batch_hash, state_root, &bls_keys, &signers, &vs).unwrap();
+        cert.batch_hash = [0u8; 32];
+        assert!(!verify_certificate(&cert, &bls_keys, &vs));
+    }
+
+    #[test]
+    fn reject_zero_signers_in_bitmap() {
+        let (vs, keypairs, bls_keys) = setup_validators(4);
+        let batch_hash = hash(b"batch_nosign");
+        let state_root = hash(b"state_nosign");
+
+        let signers: Vec<(BlsPublicKey, BlsSignature)> = keypairs[..3]
+            .iter()
+            .map(|kp| {
+                let sig = sign_finality(kp, &batch_hash, &state_root);
+                (kp.public_key().clone(), sig)
+            })
+            .collect();
+
+        let mut cert = build_certificate(batch_hash, state_root, &bls_keys, &signers, &vs).unwrap();
+        cert.signer_bitmap = SignerBitmap::new(4);
+        assert!(!verify_certificate(&cert, &bls_keys, &vs));
+    }
+
+    #[test]
+    fn signer_bitmap_packed_operations() {
+        let mut bm = SignerBitmap::new(10);
+        assert_eq!(bm.len(), 10);
+        assert_eq!(bm.count_set(), 0);
+
+        bm.set(0, true);
+        bm.set(5, true);
+        bm.set(9, true);
+        assert!(bm.get(0));
+        assert!(!bm.get(1));
+        assert!(bm.get(5));
+        assert!(bm.get(9));
+        assert_eq!(bm.count_set(), 3);
+
+        bm.set(5, false);
+        assert!(!bm.get(5));
+        assert_eq!(bm.count_set(), 2);
     }
 }

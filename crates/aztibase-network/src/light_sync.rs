@@ -220,6 +220,58 @@ pub fn build_proof_response(
     }
 }
 
+/// Validates header responses from multiple peers. Accepts only if a
+/// majority of responding peers return matching state roots for the
+/// same round, defending against eclipse attacks.
+pub struct MultiPeerValidator {
+    min_peers: usize,
+}
+
+impl MultiPeerValidator {
+    pub fn new(min_peers: usize) -> Self {
+        Self {
+            min_peers: min_peers.max(1),
+        }
+    }
+
+    /// Compare header responses from multiple peers. Returns `Ok(())` if
+    /// a strict majority agree on the state root for the last header,
+    /// or `Err` if no consensus is reached.
+    pub fn validate_responses(
+        &self,
+        responses: &[(libp2p::PeerId, Vec<SyncHeader>)],
+    ) -> Result<(), String> {
+        let valid: Vec<_> = responses.iter().filter(|(_, h)| !h.is_empty()).collect();
+
+        if valid.len() < self.min_peers {
+            return Err(format!(
+                "too few peer responses: {} < {}",
+                valid.len(),
+                self.min_peers
+            ));
+        }
+
+        let mut root_counts: std::collections::HashMap<[u8; 32], usize> =
+            std::collections::HashMap::new();
+        for (_, headers) in &valid {
+            if let Some(last) = headers.last() {
+                *root_counts.entry(last.state_root).or_insert(0) += 1;
+            }
+        }
+
+        let majority = valid.len() / 2 + 1;
+        let best = root_counts.values().max().copied().unwrap_or(0);
+        if best >= majority {
+            Ok(())
+        } else {
+            Err(format!(
+                "no majority consensus: best agreement {best}/{}, need {majority}",
+                valid.len()
+            ))
+        }
+    }
+}
+
 pub struct LightSyncProtocol {
     last_synced_round: u64,
     target_round: u64,
@@ -524,6 +576,73 @@ mod tests {
         let mut cursor = futures::io::Cursor::new(buf);
         let err = read_frame(&mut cursor).await.unwrap_err();
         assert_eq!(err.kind(), std::io::ErrorKind::InvalidData);
+    }
+
+    #[test]
+    fn multi_peer_validator_accepts_majority() {
+        let peer_a = libp2p::PeerId::random();
+        let peer_b = libp2p::PeerId::random();
+        let peer_c = libp2p::PeerId::random();
+
+        let headers = make_headers(1, 3);
+        let responses = vec![
+            (peer_a, headers.clone()),
+            (peer_b, headers.clone()),
+            (peer_c, headers.clone()),
+        ];
+
+        let validator = MultiPeerValidator::new(3);
+        assert!(validator.validate_responses(&responses).is_ok());
+    }
+
+    #[test]
+    fn multi_peer_validator_rejects_too_few_peers() {
+        let peer_a = libp2p::PeerId::random();
+        let responses = vec![(peer_a, make_headers(1, 3))];
+
+        let validator = MultiPeerValidator::new(3);
+        let err = validator.validate_responses(&responses).unwrap_err();
+        assert!(err.contains("too few"));
+    }
+
+    #[test]
+    fn multi_peer_validator_rejects_no_majority() {
+        let peer_a = libp2p::PeerId::random();
+        let peer_b = libp2p::PeerId::random();
+        let peer_c = libp2p::PeerId::random();
+
+        let mut headers_b = make_headers(1, 3);
+        headers_b.last_mut().unwrap().state_root = [0xBB; 32];
+
+        let mut headers_c = make_headers(1, 3);
+        headers_c.last_mut().unwrap().state_root = [0xCC; 32];
+
+        let responses = vec![
+            (peer_a, make_headers(1, 3)),
+            (peer_b, headers_b),
+            (peer_c, headers_c),
+        ];
+
+        let validator = MultiPeerValidator::new(2);
+        let err = validator.validate_responses(&responses).unwrap_err();
+        assert!(err.contains("no majority"));
+    }
+
+    #[test]
+    fn multi_peer_validator_ignores_empty_responses() {
+        let peer_a = libp2p::PeerId::random();
+        let peer_b = libp2p::PeerId::random();
+        let peer_c = libp2p::PeerId::random();
+
+        let headers = make_headers(1, 3);
+        let responses = vec![
+            (peer_a, headers.clone()),
+            (peer_b, headers.clone()),
+            (peer_c, vec![]),
+        ];
+
+        let validator = MultiPeerValidator::new(2);
+        assert!(validator.validate_responses(&responses).is_ok());
     }
 
     #[test]

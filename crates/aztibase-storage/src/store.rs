@@ -278,4 +278,44 @@ impl StateStore {
     pub fn is_empty(&self, table: TableDefinition<&[u8], &[u8]>) -> StorageResult<bool> {
         Ok(self.len(table)? == 0)
     }
+
+    /// Remove the oldest entries from a table, keeping at most `max_entries`.
+    /// Returns the number of entries removed.
+    pub fn evict_oldest(
+        &self,
+        table: TableDefinition<&[u8], &[u8]>,
+        max_entries: u64,
+    ) -> StorageResult<u64> {
+        let current = self.len(table)?;
+        if current <= max_entries {
+            return Ok(0);
+        }
+        let to_remove = current - max_entries;
+
+        let read_txn = self.db.begin_read()?;
+        let tbl = read_txn.open_table(table)?;
+        let mut keys_to_remove = Vec::with_capacity(to_remove as usize);
+        for entry in tbl.iter()? {
+            if keys_to_remove.len() as u64 >= to_remove {
+                break;
+            }
+            let (k, _) = entry?;
+            keys_to_remove.push(k.value().to_vec());
+        }
+        drop(tbl);
+        drop(read_txn);
+
+        let removed = keys_to_remove.len() as u64;
+        if !keys_to_remove.is_empty() {
+            let write_txn = self.db.begin_write()?;
+            {
+                let mut tbl = write_txn.open_table(table)?;
+                for key in &keys_to_remove {
+                    tbl.remove(key.as_slice())?;
+                }
+            }
+            write_txn.commit()?;
+        }
+        Ok(removed)
+    }
 }

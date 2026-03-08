@@ -1,0 +1,55 @@
+[graph]
+targets = []
+all-features = false
+no-default-features = false
+
+[advisories]
+# Known transitive advisories from upstream deps — tracked for Sprint 025 resolution
+ignore = [
+    "RUSTSEC-2025-0141", # bincode unmaintained — migration to postcard planned
+    "RUSTSEC-2025-0057", # fxhash unmaintained (via wasmtime) — wasmtime upgrade planned
+    "RUSTSEC-2024-0384", # instant unmaintained (via libp2p) — libp2p upgrade planned
+    "RUSTSEC-2024-0436", # paste unmaintained (via wasmtime) — wasmtime upgrade planned
+    "RUSTSEC-2025-0046", # wasmtime fd_renumber panic — upgrade planned
+    "RUSTSEC-2025-0118", # wasmtime shared memory unsoundness — upgrade planned
+    "RUSTSEC-2026-0020", # wasmtime resource exhaustion — upgrade planned
+    "RUSTSEC-2026-0021", # wasmtime fields panic — upgrade planned
+]
+
+[licenses]
+allow = [
+    "MIT",
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "ISC",
+    "Unicode-3.0",
+    "Unicode-DFS-2016",
+    "Zlib",
+    "BlueOak-1.0.0",
+    "OpenSSL",
+    "CC0-1.0",
+    "BSL-1.0",
+    "MPL-2.0",
+    "CDLA-Permissive-2.0",
+]
+confidence-threshold = 0.8
+
+# ring 0.16.20 uses ISC/OpenSSL but doesn't declare it in Cargo.toml manifest.
+# ring 0.17.x does declare it. Allow the older version explicitly.
+[[licenses.clarify]]
+crate = "ring"
+expression = "ISC AND MIT AND OpenSSL"
+license-files = [{ path = "LICENSE", hash = 0xbd0eed23 }]
+
+[bans]
+multiple-versions = "warn"
+wildcards = "allow"
+highlight = "all"
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]
+allow-git = []

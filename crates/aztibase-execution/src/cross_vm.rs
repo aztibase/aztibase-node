@@ -1,3 +1,5 @@
+use std::collections::HashSet;
+
 use serde::{Deserialize, Serialize};
 
 use crate::evm;
@@ -19,6 +21,34 @@ pub struct CrossVmCall {
     pub depth: u32,
 }
 
+/// Tracks active cross-VM call targets to prevent reentrancy within a
+/// single execution context. A contract that is currently executing
+/// cannot be called again until it returns.
+#[derive(Clone, Debug, Default)]
+pub struct ReentrancyGuard {
+    active_targets: HashSet<Address>,
+}
+
+impl ReentrancyGuard {
+    pub fn new() -> Self {
+        Self {
+            active_targets: HashSet::new(),
+        }
+    }
+
+    pub fn enter(&mut self, target: &Address) -> bool {
+        self.active_targets.insert(*target)
+    }
+
+    pub fn exit(&mut self, target: &Address) {
+        self.active_targets.remove(target);
+    }
+
+    pub fn is_active(&self, target: &Address) -> bool {
+        self.active_targets.contains(target)
+    }
+}
+
 /// Result of a cross-VM call.
 #[derive(Clone, Debug)]
 pub struct CrossVmResult {
@@ -32,7 +62,11 @@ pub struct CrossVmResult {
 ///
 /// Executes `evm_call` on the shared `AccountState` as an internal call
 /// (nonce is not checked for internal bridge calls).
-pub fn wasm_to_evm(state: &mut AccountState, call: &CrossVmCall) -> CrossVmResult {
+pub fn wasm_to_evm(
+    state: &mut AccountState,
+    call: &CrossVmCall,
+    guard: &mut ReentrancyGuard,
+) -> CrossVmResult {
     if call.depth >= MAX_CROSS_VM_DEPTH {
         return CrossVmResult {
             success: false,
@@ -42,6 +76,15 @@ pub fn wasm_to_evm(state: &mut AccountState, call: &CrossVmCall) -> CrossVmResul
                 "cross-VM call depth exceeded: {} >= {MAX_CROSS_VM_DEPTH}",
                 call.depth
             )),
+        };
+    }
+
+    if !guard.enter(&call.target) {
+        return CrossVmResult {
+            success: false,
+            return_data: Vec::new(),
+            gas_used: 0,
+            error: Some("reentrancy detected: target contract is already executing".into()),
         };
     }
 
@@ -59,6 +102,8 @@ pub fn wasm_to_evm(state: &mut AccountState, call: &CrossVmCall) -> CrossVmResul
         0,
     );
 
+    guard.exit(&call.target);
+
     CrossVmResult {
         success: receipt.success,
         return_data: receipt
@@ -75,7 +120,11 @@ pub fn wasm_to_evm(state: &mut AccountState, call: &CrossVmCall) -> CrossVmResul
 ///
 /// Loads the WASM bytecode from the target account and executes the
 /// specified function. Returns output as raw bytes.
-pub fn evm_to_wasm(state: &mut AccountState, call: &CrossVmCall) -> CrossVmResult {
+pub fn evm_to_wasm(
+    state: &mut AccountState,
+    call: &CrossVmCall,
+    guard: &mut ReentrancyGuard,
+) -> CrossVmResult {
     if call.depth >= MAX_CROSS_VM_DEPTH {
         return CrossVmResult {
             success: false,
@@ -88,9 +137,19 @@ pub fn evm_to_wasm(state: &mut AccountState, call: &CrossVmCall) -> CrossVmResul
         };
     }
 
+    if !guard.enter(&call.target) {
+        return CrossVmResult {
+            success: false,
+            return_data: Vec::new(),
+            gas_used: 0,
+            error: Some("reentrancy detected: target contract is already executing".into()),
+        };
+    }
+
     let code = match state.code(&call.target) {
         Some(c) => c.to_vec(),
         None => {
+            guard.exit(&call.target);
             return CrossVmResult {
                 success: false,
                 return_data: Vec::new(),
@@ -108,6 +167,7 @@ pub fn evm_to_wasm(state: &mut AccountState, call: &CrossVmCall) -> CrossVmResul
     }) {
         Ok(e) => e,
         Err(e) => {
+            guard.exit(&call.target);
             return CrossVmResult {
                 success: false,
                 return_data: Vec::new(),
@@ -122,7 +182,7 @@ pub fn evm_to_wasm(state: &mut AccountState, call: &CrossVmCall) -> CrossVmResul
         .map(|a| a.storage.clone())
         .unwrap_or_default();
 
-    match engine.execute_with_storage(&code, &func_name, &[], existing_storage) {
+    let result = match engine.execute_with_storage(&code, &func_name, &[], existing_storage) {
         Ok(result) => {
             for (k, v) in &result.storage {
                 state.set_storage(&call.target, k.clone(), v.clone());
@@ -149,7 +209,10 @@ pub fn evm_to_wasm(state: &mut AccountState, call: &CrossVmCall) -> CrossVmResul
             gas_used: call.gas_limit,
             error: Some(format!("wasm execution failed: {e}")),
         },
-    }
+    };
+
+    guard.exit(&call.target);
+    result
 }
 
 fn compute_bridge_hash(caller: &Address, target: &Address, data: &[u8], depth: u32) -> TxHash {
@@ -178,6 +241,7 @@ mod tests {
     #[test]
     fn depth_limit_rejects() {
         let mut state = AccountState::new();
+        let mut guard = ReentrancyGuard::new();
         let call = CrossVmCall {
             caller: [1u8; 32],
             target: [2u8; 32],
@@ -185,11 +249,11 @@ mod tests {
             gas_limit: 100_000,
             depth: MAX_CROSS_VM_DEPTH,
         };
-        let r1 = wasm_to_evm(&mut state, &call);
+        let r1 = wasm_to_evm(&mut state, &call, &mut guard);
         assert!(!r1.success);
         assert!(r1.error.unwrap().contains("depth exceeded"));
 
-        let r2 = evm_to_wasm(&mut state, &call);
+        let r2 = evm_to_wasm(&mut state, &call, &mut guard);
         assert!(!r2.success);
         assert!(r2.error.unwrap().contains("depth exceeded"));
     }
@@ -197,6 +261,7 @@ mod tests {
     #[test]
     fn evm_to_wasm_no_code() {
         let mut state = AccountState::new();
+        let mut guard = ReentrancyGuard::new();
         let call = CrossVmCall {
             caller: [1u8; 32],
             target: [2u8; 32],
@@ -204,7 +269,7 @@ mod tests {
             gas_limit: 100_000,
             depth: 0,
         };
-        let result = evm_to_wasm(&mut state, &call);
+        let result = evm_to_wasm(&mut state, &call, &mut guard);
         assert!(!result.success);
         assert!(result.error.unwrap().contains("no WASM code"));
     }
@@ -212,6 +277,7 @@ mod tests {
     #[test]
     fn evm_to_wasm_executes() {
         let mut state = AccountState::new();
+        let mut guard = ReentrancyGuard::new();
         let target = [3u8; 32];
 
         let wasm = wat::parse_str(
@@ -233,7 +299,7 @@ mod tests {
             gas_limit: 1_000_000,
             depth: 0,
         };
-        let result = evm_to_wasm(&mut state, &call);
+        let result = evm_to_wasm(&mut state, &call, &mut guard);
         assert!(result.success, "error: {:?}", result.error);
         assert!(result.gas_used > 0);
         let val = i32::from_le_bytes(result.return_data[..4].try_into().unwrap());
@@ -243,6 +309,7 @@ mod tests {
     #[test]
     fn wasm_to_evm_calls() {
         let mut state = AccountState::new();
+        let mut guard = ReentrancyGuard::new();
         let caller = [1u8; 32];
         let target = [2u8; 32];
         state.set_balance(&caller, 1_000_000);
@@ -254,9 +321,40 @@ mod tests {
             gas_limit: 100_000,
             depth: 0,
         };
-        let result = wasm_to_evm(&mut state, &call);
-        // Calling a non-contract EVM address succeeds (empty code = noop)
+        let result = wasm_to_evm(&mut state, &call, &mut guard);
         assert!(result.success, "error: {:?}", result.error);
+    }
+
+    #[test]
+    fn reentrancy_guard_rejects_active_target() {
+        let mut state = AccountState::new();
+        let mut guard = ReentrancyGuard::new();
+        let target = [5u8; 32];
+
+        // Simulate target already executing
+        assert!(guard.enter(&target));
+
+        let call = CrossVmCall {
+            caller: [1u8; 32],
+            target,
+            calldata: vec![],
+            gas_limit: 100_000,
+            depth: 0,
+        };
+
+        let r1 = wasm_to_evm(&mut state, &call, &mut guard);
+        assert!(!r1.success);
+        assert!(r1.error.unwrap().contains("reentrancy detected"));
+
+        let r2 = evm_to_wasm(&mut state, &call, &mut guard);
+        assert!(!r2.success);
+        assert!(r2.error.unwrap().contains("reentrancy detected"));
+
+        guard.exit(&target);
+
+        // After exit, the target should be callable again
+        let r3 = wasm_to_evm(&mut state, &call, &mut guard);
+        assert!(r3.success);
     }
 
     #[test]

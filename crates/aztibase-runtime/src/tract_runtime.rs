@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use std::io::Cursor;
-use std::sync::RwLock;
+use std::sync::{Arc, RwLock};
+use std::time::Duration;
 
 use anyhow::{Result, bail};
 use tract_onnx::prelude::*;
@@ -10,6 +11,8 @@ use crate::ai_oracle::{AIRuntime, AIRuntimeMode, InferenceRequest, InferenceResu
 type RunModel = RunnableModel<TypedFact, Box<dyn TypedOp>, Graph<TypedFact, Box<dyn TypedOp>>>;
 
 const MAX_MODEL_SIZE: usize = 64 * 1024 * 1024; // 64 MiB
+const DEFAULT_INFERENCE_TIMEOUT: Duration = Duration::from_secs(30);
+const MAX_INPUT_SIZE: usize = 16 * 1024 * 1024; // 16 MiB
 
 struct RegisteredModel {
     plan: RunModel,
@@ -19,7 +22,8 @@ struct RegisteredModel {
 
 /// AI runtime backed by tract for local ONNX inference.
 pub struct TractRuntime {
-    models: RwLock<HashMap<String, RegisteredModel>>,
+    models: Arc<RwLock<HashMap<String, RegisteredModel>>>,
+    inference_timeout: Duration,
 }
 
 impl Default for TractRuntime {
@@ -31,8 +35,14 @@ impl Default for TractRuntime {
 impl TractRuntime {
     pub fn new() -> Self {
         Self {
-            models: RwLock::new(HashMap::new()),
+            models: Arc::new(RwLock::new(HashMap::new())),
+            inference_timeout: DEFAULT_INFERENCE_TIMEOUT,
         }
+    }
+
+    pub fn with_timeout(mut self, timeout: Duration) -> Self {
+        self.inference_timeout = timeout;
+        self
     }
 
     /// Register an ONNX model from raw bytes.
@@ -94,6 +104,14 @@ impl AIRuntime for TractRuntime {
     }
 
     fn infer(&self, request: &InferenceRequest) -> Result<InferenceResult> {
+        if request.input.len() > MAX_INPUT_SIZE {
+            bail!(
+                "input too large: {} bytes (max {})",
+                request.input.len(),
+                MAX_INPUT_SIZE
+            );
+        }
+
         let models = self
             .models
             .read()
@@ -128,7 +146,16 @@ impl AIRuntime for TractRuntime {
             tract_ndarray::Array::from_shape_vec(registered.input_shape.as_slice(), floats)?
                 .into_tensor();
 
+        let start = std::time::Instant::now();
         let outputs = registered.plan.run(tvec![input_tensor.into()])?;
+        let elapsed = start.elapsed();
+        if elapsed > self.inference_timeout {
+            bail!(
+                "inference exceeded timeout: {:.1}s > {:.1}s",
+                elapsed.as_secs_f64(),
+                self.inference_timeout.as_secs_f64()
+            );
+        }
 
         let output_tensor = &outputs[0];
         let output_floats = output_tensor
@@ -498,6 +525,19 @@ mod tests {
         assert_eq!(parse_f32_output(&r_b.output), vec![11.0, 21.0, 31.0]);
         // Different model_id means different deterministic hash
         assert_ne!(r_a.deterministic_hash, r_b.deterministic_hash);
+    }
+
+    #[test]
+    fn infer_rejects_oversized_input() {
+        let rt = TractRuntime::new();
+        let req = InferenceRequest {
+            model_id: "any".into(),
+            input: vec![0u8; MAX_INPUT_SIZE + 1],
+            max_compute_units: 1000,
+            metadata: Default::default(),
+        };
+        let err = rt.infer(&req).unwrap_err();
+        assert!(err.to_string().contains("input too large"));
     }
 
     #[test]
