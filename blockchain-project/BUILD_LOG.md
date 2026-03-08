@@ -21,6 +21,31 @@ Entries are prepended (newest first).
 
 ## Entries
 
+### 2026-03-08 -- node-engineer -- Sprint 027 Complete (M8 Sprint 2: Docker Testnet Bootstrap & Genesis Tooling)
+**Task:** Sprint 027: Docker genesis layout, `--docker` CLI flag, aztb_chainId + aztb_genesisHash RPC, Makefile, reset script
+**Sprint:** Sprint 027, Phases 1-4
+**Git Ref:** pending
+**Files Changed:**
+- crates/aztibase-node/src/genesis.rs (write_docker_configs(), genesis_hash(), write_keyfile refactor)
+- crates/aztibase-node/src/main.rs (--docker flag on Genesis subcommand, with_genesis_hash wiring)
+- crates/aztibase-rpc/src/server.rs (genesis_hash field in RpcState, aztb_chainId + aztb_genesisHash handlers)
+- docker-compose.yml (simplified to use TOML config, removed CLI overrides)
+- Dockerfile (added curl for healthchecks)
+- Makefile (NEW: setup/start/stop/reset/logs/status/build/test/clean targets)
+- scripts/setup-docker-testnet.sh (NEW: generates Docker testnet layout)
+- scripts/reset-testnet.sh (NEW: wipes node DBs preserving keys + genesis)
+- blockchain-project/sprints/SPRINT-027.md (NEW: sprint plan)
+**Review Notes:**
+- Phase 1: write_docker_configs() generates data/genesis/genesis.toml + data/node{N}/node{N}.toml + data/node{N}/keys/validator{N}.json. Boot nodes use /dns4/validatorN/tcp/30333 Docker DNS names.
+- Phase 2: aztb_chainId returns "0xa27b", aztb_genesisHash returns BLAKE3 hash of serialized genesis TOML. genesis_hash stored in RpcState at startup.
+- Phase 3: Makefile wraps docker compose + setup/reset scripts. Dockerfile adds curl for container healthchecks.
+- Phase 4: 201 tests pass (148 node + 53 RPC), 0 clippy warnings, fmt clean.
+**Security Flags:**
+- Genesis keys are plaintext JSON — acceptable for testnet only. Mainnet requires encrypted keyfiles.
+- Boot node DNS trust is implicit within Docker bridge network — production needs explicit peer IDs.
+
+---
+
 ### 2026-03-08 -- node-engineer -- Sprint 026 Complete (M8 Sprint 1: Prometheus Metrics + Testnet Infrastructure)
 **Task:** Sprint 026: Prometheus metrics integration, Grafana/Prometheus Docker stack, testnet faucet + nodeInfo + health endpoints
 **Sprint:** Sprint 026, Phases 1-4

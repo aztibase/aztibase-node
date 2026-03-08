@@ -5,19 +5,12 @@ services:
     command:
       - "--config"
       - "/data/node1.toml"
-      - "--genesis"
-      - "/data/genesis.toml"
-      - "--validator-key"
-      - "/data/keys/validator1.json"
-      - "--rpc-addr"
-      - "0.0.0.0:9944"
-      - "--metrics"
     volumes:
       - ./data/node1:/data
       - ./data/genesis:/data/genesis
     ports:
       - "9944:9944"
-      - "9000:9000"
+      - "30333:30333"
     networks:
       - aztibase-net
     healthcheck:
@@ -32,13 +25,6 @@ services:
     command:
       - "--config"
       - "/data/node2.toml"
-      - "--genesis"
-      - "/data/genesis.toml"
-      - "--validator-key"
-      - "/data/keys/validator2.json"
-      - "--rpc-addr"
-      - "0.0.0.0:9944"
-      - "--metrics"
     volumes:
       - ./data/node2:/data
       - ./data/genesis:/data/genesis
@@ -58,13 +44,6 @@ services:
     command:
       - "--config"
       - "/data/node3.toml"
-      - "--genesis"
-      - "/data/genesis.toml"
-      - "--validator-key"
-      - "/data/keys/validator3.json"
-      - "--rpc-addr"
-      - "0.0.0.0:9944"
-      - "--metrics"
     volumes:
       - ./data/node3:/data
       - ./data/genesis:/data/genesis

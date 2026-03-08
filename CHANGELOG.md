@@ -5,6 +5,25 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ---
 
+## [M8-S2] -- Docker Testnet Bootstrap & Genesis Tooling (Sprint 027)
+
+### Added
+- `aztibase genesis --docker` flag: generates Docker-ready data layout (genesis.toml, per-node configs with boot_nodes, validator keys) (2026-03-08)
+- `write_docker_configs()` in genesis.rs: Docker-aware layout with `/dns4/` boot_nodes for container peer discovery (2026-03-08)
+- `aztb_chainId` RPC: returns chain ID as hex string (2026-03-08)
+- `aztb_genesisHash` RPC: returns BLAKE3 hash of genesis config for network identity verification (2026-03-08)
+- `genesis_hash()` function: deterministic BLAKE3 hash of serialized genesis TOML (2026-03-08)
+- `Makefile` with testnet lifecycle targets: setup, start, stop, reset, logs, status (2026-03-08)
+- `scripts/setup-docker-testnet.sh`: one-command Docker testnet genesis generation (2026-03-08)
+- `scripts/reset-testnet.sh`: wipes node databases while preserving keys and genesis (2026-03-08)
+
+### Changed
+- `docker-compose.yml`: simplified validator commands to use TOML config only (no CLI overrides) (2026-03-08)
+- `Dockerfile`: added `curl` to runtime image for container healthchecks (2026-03-08)
+- `write_keyfile()`: refactored to accept filename parameter (decoupled from hex address) (2026-03-08)
+
+---
+
 ## [M8-S1] -- Prometheus Metrics + Testnet Infrastructure (Sprint 026)
 
 ### Added

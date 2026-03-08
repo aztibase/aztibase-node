@@ -2,8 +2,8 @@
 
 **Last Updated:** 2026-03-08
 **Updated By:** node-engineer
-**Current Phase:** M8 -- Public Testnet (Sprint 1 COMPLETE)
-**Current Sprint:** Sprint 026 -- COMPLETE (Prometheus Metrics + Testnet Infrastructure)
+**Current Phase:** M8 -- Public Testnet (Sprint 2 COMPLETE)
+**Current Sprint:** Sprint 027 -- COMPLETE (Docker Testnet Bootstrap & Genesis Tooling)
 
 ---
 
@@ -77,12 +77,16 @@
 | aztibase-wasm | PARTIAL | p2p-network-engineer | NO | YES |
 
 ### In Progress
-- Nothing currently in progress — Sprint 026 complete, Sprint 027 next
+- Nothing currently in progress — Sprint 027 complete, Sprint 028 next
 
 ### Blocked
 - Nothing currently blocked
 
 ### Recently Completed
+- Sprint 027 Phase 4: Security review — 201 tests pass (148 node + 53 RPC), 0 clippy warnings, fmt clean, 0 new findings
+- Sprint 027 Phase 3: Testnet lifecycle — Makefile (setup/start/stop/reset/logs/status), reset-testnet.sh, Dockerfile curl
+- Sprint 027 Phase 2: Chain identity RPC — aztb_chainId (0xa27b), aztb_genesisHash (BLAKE3), genesis_hash in RpcState
+- Sprint 027 Phase 1: Docker genesis — write_docker_configs(), --docker flag, setup-docker-testnet.sh, /dns4/ boot_nodes
 - Sprint 026 Phase 4: Security review — clippy 0 warnings, fmt clean, cargo-deny clean, 53 RPC tests pass, 0 new findings
 - Sprint 026 Phase 3: Testnet endpoints — aztb_faucetDrip (10 AZTB, 60s rate limit), aztb_nodeInfo (version/chainId/protocol), GET /health (200 OK), 5 new tests
 - Sprint 026 Phase 2: Grafana + Prometheus Docker — prometheus.yml scrape config, grafana provisioning, 2 dashboards (Node Health, Consensus), docker-compose services
@@ -163,10 +167,8 @@
 - Sprint 005 Phase 1: Consensus-to-execution wiring, TxKind routing, ExecutionPipeline
 
 ### Next Up
-1. Sprint 026 Phase 2: Grafana + Prometheus Docker stack (dashboards, provisioning)
-2. Sprint 026 Phase 3: Testnet operational endpoints (faucet, nodeInfo, /health)
-3. Sprint 027: Testnet genesis + bootstrap nodes + faucet service
-4. Sprint 028: Public testnet launch + documentation
+1. Sprint 028: Public testnet launch + documentation
+2. Sprint 029: Mainnet preparation
 
 ### M8 Scope: Monitoring Infrastructure (Planned)
 - **Prometheus**: `prometheus-client` crate (pure Rust), `/metrics` endpoint in Prometheus text format

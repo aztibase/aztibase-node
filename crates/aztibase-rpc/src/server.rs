@@ -103,6 +103,7 @@ pub struct RpcState {
     pub pending_task_count: Arc<AtomicU64>,
     pub compute_commitments: Option<Arc<RwLock<ComputeCommitmentStore>>>,
     pub chain_id: u64,
+    pub genesis_hash: Option<[u8; 32]>,
     faucet_tracker: Arc<std::sync::Mutex<HashMap<[u8; 32], std::time::Instant>>>,
 }
 
@@ -121,6 +122,7 @@ impl Clone for RpcState {
             pending_task_count: Arc::clone(&self.pending_task_count),
             compute_commitments: self.compute_commitments.clone(),
             chain_id: self.chain_id,
+            genesis_hash: self.genesis_hash,
             faucet_tracker: Arc::clone(&self.faucet_tracker),
         }
     }
@@ -231,6 +233,7 @@ impl RpcServer {
                 pending_task_count: Arc::new(AtomicU64::new(0)),
                 compute_commitments: None,
                 chain_id: TESTNET_CHAIN_ID,
+                genesis_hash: None,
                 faucet_tracker: Arc::new(std::sync::Mutex::new(HashMap::new())),
             },
         }
@@ -238,6 +241,11 @@ impl RpcServer {
 
     pub fn with_chain_id(mut self, chain_id: u64) -> Self {
         self.state.chain_id = chain_id;
+        self
+    }
+
+    pub fn with_genesis_hash(mut self, hash: [u8; 32]) -> Self {
+        self.state.genesis_hash = Some(hash);
         self
     }
 
@@ -358,6 +366,8 @@ async fn dispatch(state: &RpcState, req: &JsonRpcRequest) -> JsonRpcResponse {
         "aztb_listComputeProviders" => handle_list_compute_providers(state, req).await,
         "aztb_faucetDrip" => handle_faucet_drip(state, req).await,
         "aztb_nodeInfo" => handle_node_info(state, req).await,
+        "aztb_chainId" => handle_chain_id(state, req).await,
+        "aztb_genesisHash" => handle_genesis_hash(state, req).await,
         _ => JsonRpcResponse::error(
             req.id.clone(),
             METHOD_NOT_FOUND,
@@ -1085,6 +1095,23 @@ async fn handle_node_info(state: &RpcState, req: &JsonRpcRequest) -> JsonRpcResp
     )
 }
 
+async fn handle_chain_id(state: &RpcState, req: &JsonRpcRequest) -> JsonRpcResponse {
+    JsonRpcResponse::success(
+        req.id.clone(),
+        serde_json::json!(format!("0x{:x}", state.chain_id)),
+    )
+}
+
+async fn handle_genesis_hash(state: &RpcState, req: &JsonRpcRequest) -> JsonRpcResponse {
+    match state.genesis_hash {
+        Some(hash) => {
+            let hex: String = hash.iter().map(|b| format!("{b:02x}")).collect();
+            JsonRpcResponse::success(req.id.clone(), serde_json::json!(format!("0x{hex}")))
+        }
+        None => JsonRpcResponse::error(req.id.clone(), INTERNAL_ERROR, "No genesis loaded".into()),
+    }
+}
+
 // ── Health Endpoint ────────────────────────────────────────────────
 
 async fn handle_health(State(state): State<RpcState>) -> impl IntoResponse {
@@ -1147,6 +1174,7 @@ mod tests {
             pending_task_count: Arc::new(AtomicU64::new(0)),
             compute_commitments: None,
             chain_id: TESTNET_CHAIN_ID,
+            genesis_hash: None,
             faucet_tracker: Arc::new(std::sync::Mutex::new(HashMap::new())),
         };
         (state, rx)
@@ -1173,6 +1201,7 @@ mod tests {
             pending_task_count: Arc::new(AtomicU64::new(0)),
             compute_commitments: None,
             chain_id: TESTNET_CHAIN_ID,
+            genesis_hash: None,
             faucet_tracker: Arc::new(std::sync::Mutex::new(HashMap::new())),
         };
         (state, rx)
@@ -1408,6 +1437,7 @@ mod tests {
             pending_task_count: Arc::new(AtomicU64::new(0)),
             compute_commitments: None,
             chain_id: TESTNET_CHAIN_ID,
+            genesis_hash: None,
             faucet_tracker: Arc::new(std::sync::Mutex::new(HashMap::new())),
         };
         (state, rx, path)
@@ -1785,6 +1815,7 @@ mod tests {
             pending_task_count: Arc::new(AtomicU64::new(0)),
             compute_commitments: None,
             chain_id: TESTNET_CHAIN_ID,
+            genesis_hash: None,
             faucet_tracker: Arc::new(std::sync::Mutex::new(HashMap::new())),
         };
         (state, rx)
@@ -1871,6 +1902,7 @@ mod tests {
             pending_task_count: Arc::new(AtomicU64::new(0)),
             compute_commitments: None,
             chain_id: TESTNET_CHAIN_ID,
+            genesis_hash: None,
             faucet_tracker: Arc::new(std::sync::Mutex::new(HashMap::new())),
         };
 

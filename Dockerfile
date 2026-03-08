@@ -8,7 +8,7 @@ RUN cargo build --release --bin aztibase
 FROM debian:bookworm-slim
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    ca-certificates \
+    ca-certificates curl \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=builder /build/target/release/aztibase /usr/local/bin/aztibase

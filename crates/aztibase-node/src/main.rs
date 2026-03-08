@@ -97,6 +97,9 @@ enum Command {
         /// Output directory
         #[arg(long, default_value = "genesis")]
         output: PathBuf,
+        /// Generate Docker-compatible layout for docker-compose
+        #[arg(long)]
+        docker: bool,
     },
     /// Wallet key management and transaction signing
     Wallet {
@@ -243,21 +246,40 @@ async fn main() -> Result<()> {
             validators,
             funded,
             output,
+            docker,
         }) => {
             let timestamp = std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
                 .unwrap()
                 .as_millis() as u64;
             let generated = genesis::generate_genesis(validators, funded, timestamp);
-            genesis::write_genesis(&generated, &output)?;
-            genesis::write_node_configs(&generated, &output)?;
-            println!(
-                "Genesis written to {} ({} validators, {} funded accounts, {} node configs)",
-                output.display(),
-                validators,
-                funded,
-                validators
-            );
+            if docker {
+                genesis::write_docker_configs(&generated, &output)?;
+                let hash = genesis::genesis_hash(&generated.config);
+                println!(
+                    "Docker testnet written to {} ({} validators, {} funded accounts)",
+                    output.display(),
+                    validators,
+                    funded,
+                );
+                println!("Genesis hash: {}", genesis::hex_encode(&hash));
+                println!("\nLayout:");
+                println!("  {}/genesis/genesis.toml", output.display());
+                for i in 1..=validators {
+                    println!("  {}/node{i}/node{i}.toml", output.display());
+                    println!("  {}/node{i}/keys/validator{i}.json", output.display());
+                }
+            } else {
+                genesis::write_genesis(&generated, &output)?;
+                genesis::write_node_configs(&generated, &output)?;
+                println!(
+                    "Genesis written to {} ({} validators, {} funded accounts, {} node configs)",
+                    output.display(),
+                    validators,
+                    funded,
+                    validators,
+                );
+            }
             return Ok(());
         }
         Some(Command::Wallet { action }) => {
@@ -600,6 +622,10 @@ async fn main() -> Result<()> {
     .with_event_bus(Arc::clone(&event_bus))
     .with_pending_task_count(exec_pipeline.shared_pending_task_count())
     .with_compute_commitments(exec_pipeline.shared_compute_commitments());
+
+    if let Some(ref gen_cfg) = genesis_config {
+        rpc_server = rpc_server.with_genesis_hash(genesis::genesis_hash(gen_cfg));
+    }
 
     if config.metrics.enabled || cli.metrics {
         rpc_server = rpc_server.with_metrics(node_metrics.clone());

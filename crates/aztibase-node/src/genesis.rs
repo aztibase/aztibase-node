@@ -164,18 +164,19 @@ pub fn write_genesis(genesis: &GeneratedGenesis, output_dir: &Path) -> Result<()
 
 fn write_keyfile(
     keys_dir: &Path,
-    hex_addr: &str,
+    filename: &str,
     kp: &Keypair,
     bls_kp: Option<&BlsKeypair>,
 ) -> Result<()> {
+    let addr = address_from_pubkey(kp.public_key().as_bytes());
     let keyfile = KeyFile {
         public_key: hex_encode(kp.public_key().as_bytes()),
         secret_key: hex_encode(&kp.secret_bytes()),
-        address: hex_addr.to_string(),
+        address: hex_encode(&addr),
         bls_public_key: bls_kp.map(|b| hex_encode(b.public_key().as_bytes())),
         bls_secret_key: bls_kp.map(|b| hex_encode(&b.secret_bytes())),
     };
-    let path = keys_dir.join(format!("{hex_addr}.json"));
+    let path = keys_dir.join(format!("{filename}.json"));
     let json = serde_json::to_string_pretty(&keyfile).context("Failed to serialize key file")?;
     std::fs::write(&path, json)?;
     Ok(())
@@ -208,6 +209,74 @@ pub fn write_node_configs(genesis: &GeneratedGenesis, output_dir: &Path) -> Resu
     }
 
     Ok(())
+}
+
+/// Write Docker-compatible testnet layout matching docker-compose.yml volume mounts.
+///
+/// Output structure:
+///   output_dir/
+///     genesis/genesis.toml
+///     node1/node1.toml
+///     node1/keys/validator1.json
+///     node2/node2.toml
+///     node2/keys/validator2.json
+///     node3/node3.toml
+///     node3/keys/validator3.json
+pub fn write_docker_configs(genesis: &GeneratedGenesis, output_dir: &Path) -> Result<()> {
+    use crate::config::NodeConfig;
+
+    let genesis_dir = output_dir.join("genesis");
+    std::fs::create_dir_all(&genesis_dir)?;
+
+    let toml_str =
+        toml::to_string_pretty(&genesis.config).context("Failed to serialize genesis config")?;
+    std::fs::write(genesis_dir.join("genesis.toml"), toml_str)?;
+
+    let n = genesis.validator_keys.len();
+    for (i, (_hex_addr, kp, bls_kp)) in genesis.validator_keys.iter().enumerate() {
+        let node_name = format!("node{}", i + 1);
+        let validator_name = format!("validator{}", i + 1);
+        let node_dir = output_dir.join(&node_name);
+        let keys_dir = node_dir.join("keys");
+        std::fs::create_dir_all(&keys_dir)?;
+
+        write_keyfile(&keys_dir, &validator_name, kp, Some(bls_kp))?;
+
+        let boot_nodes: Vec<String> = (0..n)
+            .filter(|&j| j != i)
+            .map(|j| format!("/dns4/validator{}/tcp/30333", j + 1))
+            .collect();
+
+        let mut cfg = NodeConfig {
+            genesis_path: Some("/data/genesis/genesis.toml".into()),
+            validator_key: Some(format!("/data/keys/{validator_name}.json").into()),
+            data_dir: "/data".into(),
+            ..NodeConfig::default()
+        };
+        cfg.network.listen_addresses = vec![
+            "/ip4/0.0.0.0/tcp/30333".into(),
+            "/ip4/0.0.0.0/udp/30333/quic-v1".into(),
+        ];
+        cfg.network.boot_nodes = boot_nodes;
+        cfg.rpc.listen_addr = "0.0.0.0:9944".into();
+        cfg.metrics.enabled = true;
+
+        let toml_str = toml::to_string_pretty(&cfg).context("Failed to serialize node config")?;
+        std::fs::write(node_dir.join(format!("{node_name}.toml")), toml_str)?;
+    }
+
+    for (hex_addr, kp) in &genesis.funded_keys {
+        let keys_dir = genesis_dir.join("keys");
+        std::fs::create_dir_all(&keys_dir)?;
+        write_keyfile(&keys_dir, hex_addr, kp, None)?;
+    }
+
+    Ok(())
+}
+
+pub fn genesis_hash(config: &GenesisConfig) -> [u8; 32] {
+    let serialized = toml::to_string_pretty(config).expect("genesis config serializable");
+    blake3::hash(serialized.as_bytes()).into()
 }
 
 pub fn load_keyfile(path: &Path) -> Result<(Keypair, Address)> {
