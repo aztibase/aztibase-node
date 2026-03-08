@@ -1,11 +1,14 @@
 pub mod behaviour;
+pub mod connection_filter;
 pub mod discovery;
 pub mod gossip;
 pub mod light_sync;
+pub mod reputation;
 pub mod transport;
 #[cfg(feature = "webrtc")]
 pub mod webrtc;
 
+pub use connection_filter::{ConnectionFilter, FilterReason};
 pub use gossip::{TOPIC_CONSENSUS, TOPIC_STATE_SYNC, TOPIC_TRANSACTIONS};
 pub use libp2p::{Multiaddr, PeerId};
 pub use light_sync::{
@@ -15,7 +18,8 @@ pub use light_sync::{
     decode_light_sync, decode_request, decode_response, encode_light_sync, encode_request,
     encode_response, verify_header_chain,
 };
-pub use transport::{Libp2pTransport, NetworkEvent, TransportConfig};
+pub use reputation::{OffenseSeverity, PeerReputation, PeerReputationStore};
+pub use transport::{Libp2pTransport, NatStatus, NetworkEvent, TransportConfig};
 #[cfg(feature = "webrtc")]
 pub use webrtc::{WebRtcConfig, WebRtcTransport};
 
@@ -113,5 +117,47 @@ mod tests {
 
         let event = transport.next_event().await;
         assert!(matches!(event, NetworkEvent::Listening(_)));
+    }
+
+    #[tokio::test]
+    async fn transport_initializes_with_autonat() {
+        let config = TransportConfig {
+            enable_autonat: true,
+            ..TransportConfig::default()
+        };
+        let transport = Libp2pTransport::new(config).unwrap();
+        assert_eq!(transport.nat_status(), NatStatus::Unknown);
+    }
+
+    #[test]
+    fn nat_status_display() {
+        assert_eq!(NatStatus::Unknown.to_string(), "unknown");
+        assert_eq!(NatStatus::Public.to_string(), "public");
+        assert_eq!(NatStatus::Private.to_string(), "private");
+    }
+
+    #[tokio::test]
+    async fn transport_accepts_relay_servers() {
+        let relay: libp2p::Multiaddr =
+            "/ip4/127.0.0.1/tcp/4001/p2p/12D3KooWDpJ7As7BWAwRMfu1VU2WCqNjvq387JEYKDBj4kx6nXTN"
+                .parse()
+                .unwrap();
+        let config = TransportConfig {
+            relay_servers: vec![relay],
+            ..TransportConfig::default()
+        };
+        let transport = Libp2pTransport::new(config);
+        assert!(transport.is_ok());
+    }
+
+    #[test]
+    fn transport_config_defaults() {
+        let config = TransportConfig::default();
+        assert!(config.enable_autonat);
+        assert!(config.relay_servers.is_empty());
+        assert_eq!(
+            config.autonat_probe_interval_secs,
+            transport::AUTONAT_PROBE_INTERVAL_SECS
+        );
     }
 }

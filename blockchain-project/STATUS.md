@@ -2,8 +2,8 @@
 
 **Last Updated:** 2026-03-08
 **Updated By:** node-engineer
-**Current Phase:** M8 -- Public Testnet (Sprint 2 COMPLETE)
-**Current Sprint:** Sprint 027 -- COMPLETE (Docker Testnet Bootstrap & Genesis Tooling)
+**Current Phase:** M8 -- Public Testnet (Sprint 3 COMPLETE)
+**Current Sprint:** Sprint 028 -- COMPLETE (Networking Hardening)
 
 ---
 
@@ -77,12 +77,16 @@
 | aztibase-wasm | PARTIAL | p2p-network-engineer | NO | YES |
 
 ### In Progress
-- Nothing currently in progress — Sprint 027 complete, Sprint 028 next
+- Nothing currently in progress — Sprint 028 complete, Sprint 029 next
 
 ### Blocked
 - Nothing currently blocked
 
 ### Recently Completed
+- Sprint 028 Phase 4: Security review — 47 network tests, 0 ELEVATED, 0 MEDIUM, 4 LOW (all acceptable), clippy 0 warnings, fmt clean
+- Sprint 028 Phase 3: AutoNAT + Relay — autonat probing, NatStatus tracking, relay client with auto-listen on NAT Private, 4 tests
+- Sprint 028 Phase 2: Connection filtering — per-IP limits (3), rate limiting (1s), subnet /16 caps (5), IPv4/IPv6, 7 tests
+- Sprint 028 Phase 1: Peer reputation — redb-backed PeerReputationStore, tiered bans, score decay, prune/evict, 7 tests
 - Sprint 027 Phase 4: Security review — 201 tests pass (148 node + 53 RPC), 0 clippy warnings, fmt clean, 0 new findings
 - Sprint 027 Phase 3: Testnet lifecycle — Makefile (setup/start/stop/reset/logs/status), reset-testnet.sh, Dockerfile curl
 - Sprint 027 Phase 2: Chain identity RPC — aztb_chainId (0xa27b), aztb_genesisHash (BLAKE3), genesis_hash in RpcState
@@ -167,8 +171,8 @@
 - Sprint 005 Phase 1: Consensus-to-execution wiring, TxKind routing, ExecutionPipeline
 
 ### Next Up
-1. Sprint 028: Public testnet launch + documentation
-2. Sprint 029: Mainnet preparation
+1. Sprint 029: Networking hardening phase 2 (gossipsub retuning, peer discovery improvements)
+2. Sprint 030: WebRTC swarm integration + DCUtR hole punching
 
 ### M8 Scope: Monitoring Infrastructure (Planned)
 - **Prometheus**: `prometheus-client` crate (pure Rust), `/metrics` endpoint in Prometheus text format

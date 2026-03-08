@@ -5,6 +5,26 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ---
 
+## [M8-S3] -- Networking Hardening (Sprint 028)
+
+### Added
+- `PeerReputationStore`: redb-backed persistent peer reputation with tiered bans (1hr/24hr/7day), score decay (+1/hr), offense tracking, stale pruning, excess eviction (2026-03-08)
+- `ConnectionFilter`: per-IP connection limits (MAX=3), rate limiting (1000ms cooldown), per-subnet /16 caps (MAX=5) with IPv4/IPv6 support (2026-03-08)
+- `NatStatus` enum: AutoNAT-driven NAT type detection (Public/Private/Unknown), logged on status change (2026-03-08)
+- Relay client integration: NAT'd nodes automatically listen on relay circuit addresses when Private detected (2026-03-08)
+- `TransportConfig` extended: `reputation_store`, `enable_autonat`, `relay_servers`, `autonat_probe_interval_secs` (2026-03-08)
+- 18 new network tests (7 reputation, 7 connection filter, 4 autonat/relay) — 47 total network crate tests (2026-03-08)
+
+### Changed
+- `AztibaseBehaviour`: added `autonat::Behaviour` and `relay::client::Behaviour` fields (2026-03-08)
+- `SwarmBuilder`: uses `.with_relay_client()` for noise+yamux relay transport (2026-03-08)
+- `ConnectionEstablished` handler: ban check → connection filter → peer IP tracking (2026-03-08)
+- `ConnectionClosed` handler: releases IP from connection filter (2026-03-08)
+- `OutgoingConnectionError`: records Low offense in reputation store (2026-03-08)
+- libp2p features: added `autonat` and `relay` to workspace Cargo.toml (2026-03-08)
+
+---
+
 ## [M8-S2] -- Docker Testnet Bootstrap & Genesis Tooling (Sprint 027)
 
 ### Added

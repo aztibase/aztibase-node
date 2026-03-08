@@ -21,6 +21,33 @@ Entries are prepended (newest first).
 
 ## Entries
 
+### 2026-03-08 -- p2p-network-engineer -- Sprint 028 Complete (M8 Sprint 3: Networking Hardening)
+**Task:** Sprint 028: Persistent peer reputation, connection filtering, AutoNAT + relay client, security review
+**Sprint:** Sprint 028, Phases 1-4
+**Git Ref:** pending
+**Files Changed:**
+- Cargo.toml (workspace: added autonat + relay features to libp2p)
+- crates/aztibase-network/Cargo.toml (added redb dependency)
+- crates/aztibase-network/src/reputation.rs (NEW: PeerReputationStore, PeerReputation, OffenseSeverity, tiered bans, score decay, prune/evict)
+- crates/aztibase-network/src/connection_filter.rs (NEW: ConnectionFilter, per-IP limits, rate limiting, subnet caps)
+- crates/aztibase-network/src/behaviour.rs (added autonat + relay_client to AztibaseBehaviour)
+- crates/aztibase-network/src/transport.rs (NatStatus, relay client builder, ban check + conn filter on ConnectionEstablished, autonat event handling, relay fallback)
+- crates/aztibase-network/src/lib.rs (module exports, 4 new tests)
+- crates/aztibase-node/src/main.rs (PeerReputationStore init for full + light nodes, relay_servers wiring)
+- blockchain-project/sprints/SPRINT-028.md (NEW: sprint plan)
+**Review Notes:**
+- Phase 1: PeerReputationStore backed by redb (peer_reputation table). Tiered bans: score < -100 → 1hr, < -200 → 24hr, < -500 → 7 days. Score decay +1/hr toward 0. Prune stale + evict excess (10K cap). 7 tests.
+- Phase 2: ConnectionFilter with per-IP (MAX=3), rate limit (1000ms), subnet /16 cap (MAX=5). Wired into ConnectionEstablished event. 7 tests.
+- Phase 3: AutoNAT probing (30s interval), NatStatus tracking, relay client via SwarmBuilder. NAT Private → auto-listen on relay circuit addresses. 4 tests.
+- Phase 4: Security review — 0 ELEVATED, 0 MEDIUM, 4 LOW (all acceptable). 47 network tests pass, clippy 0 warnings, fmt clean.
+**Security Flags:**
+- SEC-NET-028-001 LOW: Ban check after connection established (inherent to libp2p — immediate disconnect is correct mitigation)
+- SEC-NET-028-002 LOW: peer_ips HashMap growth bounded by MAX_ESTABLISHED_CONNECTIONS=50
+- SEC-NET-028-003 LOW: Reputation redb I/O in event loop — acceptable for single-key lookups at current scale
+- SEC-NET-028-004 LOW: Relay trust assumes boot nodes are honest relays — acceptable for testnet
+
+---
+
 ### 2026-03-08 -- node-engineer -- Sprint 027 Complete (M8 Sprint 2: Docker Testnet Bootstrap & Genesis Tooling)
 **Task:** Sprint 027: Docker genesis layout, `--docker` CLI flag, aztb_chainId + aztb_genesisHash RPC, Makefile, reset script
 **Sprint:** Sprint 027, Phases 1-4

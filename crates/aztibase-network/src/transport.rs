@@ -1,27 +1,57 @@
 use std::collections::HashMap;
+use std::net::IpAddr;
+use std::sync::Arc;
 use std::time::Duration;
 
 use anyhow::{Context, Result};
 use futures::StreamExt;
 use libp2p::request_response::{self, OutboundRequestId, ProtocolSupport, ResponseChannel};
 use libp2p::swarm::SwarmEvent;
-use libp2p::{Multiaddr, PeerId, Swarm, connection_limits, gossipsub, mdns};
-use tracing::warn;
+use libp2p::{Multiaddr, PeerId, Swarm, autonat, connection_limits, gossipsub, mdns};
+use tracing::{info, warn};
 
 use crate::behaviour::{AztibaseBehaviour, AztibaseBehaviourEvent};
+use crate::connection_filter::ConnectionFilter;
 use crate::light_sync::{LIGHT_SYNC_PROTOCOL, LightSyncCodec, LightSyncRequest, LightSyncResponse};
+use crate::reputation::{OffenseSeverity, PeerReputationStore};
 use crate::{discovery, gossip};
 
 pub const MAX_ESTABLISHED_CONNECTIONS: u32 = 50;
+pub const AUTONAT_PROBE_INTERVAL_SECS: u64 = 30;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum NatStatus {
+    Unknown,
+    Public,
+    Private,
+}
+
+impl std::fmt::Display for NatStatus {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Unknown => write!(f, "unknown"),
+            Self::Public => write!(f, "public"),
+            Self::Private => write!(f, "private"),
+        }
+    }
+}
 
 pub struct TransportConfig {
     pub idle_timeout_secs: u64,
+    pub reputation_store: Option<Arc<PeerReputationStore>>,
+    pub enable_autonat: bool,
+    pub relay_servers: Vec<Multiaddr>,
+    pub autonat_probe_interval_secs: u64,
 }
 
 impl Default for TransportConfig {
     fn default() -> Self {
         Self {
             idle_timeout_secs: 60,
+            reputation_store: None,
+            enable_autonat: true,
+            relay_servers: Vec::new(),
+            autonat_probe_interval_secs: AUTONAT_PROBE_INTERVAL_SECS,
         }
     }
 }
@@ -57,10 +87,18 @@ pub struct Libp2pTransport {
     swarm: Swarm<AztibaseBehaviour>,
     topics: HashMap<String, gossipsub::IdentTopic>,
     local_peer_id: PeerId,
+    reputation: Option<Arc<PeerReputationStore>>,
+    conn_filter: ConnectionFilter,
+    peer_ips: HashMap<PeerId, IpAddr>,
+    nat_status: NatStatus,
+    relay_servers: Vec<Multiaddr>,
 }
 
 impl Libp2pTransport {
     pub fn new(config: TransportConfig) -> Result<Self> {
+        let probe_interval = Duration::from_secs(config.autonat_probe_interval_secs);
+        let relay_servers = config.relay_servers.clone();
+
         let swarm = libp2p::SwarmBuilder::with_new_identity()
             .with_tokio()
             .with_tcp(
@@ -70,7 +108,9 @@ impl Libp2pTransport {
             )
             .context("Failed to configure TCP transport")?
             .with_quic()
-            .with_behaviour(|key| {
+            .with_relay_client(libp2p::noise::Config::new, libp2p::yamux::Config::default)
+            .context("Failed to configure relay client")?
+            .with_behaviour(|key, relay_client| {
                 let peer_id = key.public().to_peer_id();
 
                 let gs_config = gossip::gossipsub_config()
@@ -97,12 +137,20 @@ impl Libp2pTransport {
                     request_response::Config::default(),
                 );
 
+                let autonat_config = autonat::Config {
+                    retry_interval: probe_interval,
+                    ..Default::default()
+                };
+                let autonat = autonat::Behaviour::new(peer_id, autonat_config);
+
                 Ok(AztibaseBehaviour {
                     gossipsub: gs,
                     kademlia,
                     mdns,
                     connection_limits: connection_limits::Behaviour::new(conn_limits),
                     light_sync,
+                    autonat,
+                    relay_client,
                 })
             })
             .context("Failed to configure behaviour")?
@@ -117,6 +165,11 @@ impl Libp2pTransport {
             swarm,
             topics: HashMap::new(),
             local_peer_id,
+            reputation: config.reputation_store,
+            conn_filter: ConnectionFilter::new(),
+            peer_ips: HashMap::new(),
+            nat_status: NatStatus::Unknown,
+            relay_servers,
         };
 
         transport.subscribe_all()?;
@@ -126,6 +179,10 @@ impl Libp2pTransport {
 
     pub fn local_peer_id(&self) -> PeerId {
         self.local_peer_id
+    }
+
+    pub fn nat_status(&self) -> NatStatus {
+        self.nat_status
     }
 
     pub fn subscribed_topics(&self) -> Vec<&str> {
@@ -148,6 +205,22 @@ impl Libp2pTransport {
     pub fn listen_on(&mut self, addr: Multiaddr) -> Result<()> {
         self.swarm.listen_on(addr).context("Failed to listen")?;
         Ok(())
+    }
+
+    fn listen_on_relay_servers(&mut self) {
+        for relay_addr in self.relay_servers.clone() {
+            let circuit_addr = relay_addr
+                .clone()
+                .with(libp2p::multiaddr::Protocol::P2pCircuit);
+            match self.swarm.listen_on(circuit_addr.clone()) {
+                Ok(_) => {
+                    info!(%relay_addr, "Listening via relay circuit");
+                }
+                Err(e) => {
+                    warn!(%relay_addr, error = %e, "Failed to listen on relay circuit");
+                }
+            }
+        }
     }
 
     pub fn publish(&mut self, topic_name: &str, data: Vec<u8>) -> Result<()> {
@@ -216,19 +289,69 @@ impl Libp2pTransport {
                             .remove_explicit_peer(&peer_id);
                     }
                 }
+                SwarmEvent::Behaviour(AztibaseBehaviourEvent::Autonat(event)) => match event {
+                    autonat::Event::StatusChanged { old, new } => {
+                        let new_status = match new {
+                            autonat::NatStatus::Public(_) => NatStatus::Public,
+                            autonat::NatStatus::Private => NatStatus::Private,
+                            autonat::NatStatus::Unknown => NatStatus::Unknown,
+                        };
+                        if new_status != self.nat_status {
+                            info!(
+                                old = %format!("{old:?}"),
+                                new = %new_status,
+                                "NAT status changed"
+                            );
+                            self.nat_status = new_status;
+
+                            if new_status == NatStatus::Private && !self.relay_servers.is_empty() {
+                                self.listen_on_relay_servers();
+                            }
+                        }
+                    }
+                    autonat::Event::InboundProbe(_) | autonat::Event::OutboundProbe(_) => {}
+                },
+                SwarmEvent::Behaviour(AztibaseBehaviourEvent::RelayClient(_)) => {}
                 SwarmEvent::IncomingConnectionError { error, .. } => {
                     warn!("Incoming connection denied: {error}");
                 }
-                SwarmEvent::OutgoingConnectionError { error, .. } => {
+                SwarmEvent::OutgoingConnectionError { error, peer_id, .. } => {
                     warn!("Outgoing connection denied: {error}");
+                    if let (Some(rep_store), Some(pid)) = (&self.reputation, peer_id) {
+                        let _ = rep_store.record_offense(&pid.to_bytes(), OffenseSeverity::Low);
+                    }
                 }
                 SwarmEvent::NewListenAddr { address, .. } => {
                     return NetworkEvent::Listening(address);
                 }
-                SwarmEvent::ConnectionEstablished { peer_id, .. } => {
+                SwarmEvent::ConnectionEstablished {
+                    peer_id, endpoint, ..
+                } => {
+                    if let Some(ref rep_store) = self.reputation {
+                        let peer_bytes = peer_id.to_bytes();
+                        if rep_store.is_banned(&peer_bytes).unwrap_or(false) {
+                            warn!(%peer_id, "Rejecting banned peer");
+                            let _ = self.swarm.disconnect_peer_id(peer_id);
+                            continue;
+                        }
+                        let _ = rep_store.record_seen(&peer_bytes);
+                    }
+
+                    if let Some(ip) = ip_from_multiaddr(endpoint.get_remote_address()) {
+                        if let Err(reason) = self.conn_filter.try_accept(ip) {
+                            warn!(%peer_id, %ip, %reason, "Connection filtered");
+                            let _ = self.swarm.disconnect_peer_id(peer_id);
+                            continue;
+                        }
+                        self.peer_ips.insert(peer_id, ip);
+                    }
+
                     return NetworkEvent::PeerConnected(peer_id);
                 }
                 SwarmEvent::ConnectionClosed { peer_id, .. } => {
+                    if let Some(ip) = self.peer_ips.remove(&peer_id) {
+                        self.conn_filter.release(ip);
+                    }
                     return NetworkEvent::PeerDisconnected(peer_id);
                 }
                 SwarmEvent::Behaviour(AztibaseBehaviourEvent::LightSync(
@@ -276,6 +399,25 @@ impl Libp2pTransport {
         }
     }
 
+    pub fn record_peer_offense(&self, peer_id: &PeerId, severity: OffenseSeverity) {
+        if let Some(ref rep_store) = self.reputation {
+            let peer_bytes = peer_id.to_bytes();
+            match rep_store.record_offense(&peer_bytes, severity) {
+                Ok(rep) if rep.banned_until.is_some() => {
+                    info!(%peer_id, score = rep.score, "Peer banned after offense");
+                }
+                Ok(_) => {}
+                Err(e) => {
+                    warn!(%peer_id, "Failed to record offense: {e}");
+                }
+            }
+        }
+    }
+
+    pub fn reputation_store(&self) -> Option<&Arc<PeerReputationStore>> {
+        self.reputation.as_ref()
+    }
+
     pub fn send_light_sync_request(
         &mut self,
         peer: &PeerId,
@@ -298,4 +440,15 @@ impl Libp2pTransport {
             .send_response(channel, response)
             .map_err(|_| anyhow::anyhow!("failed to send light sync response"))
     }
+}
+
+fn ip_from_multiaddr(addr: &Multiaddr) -> Option<IpAddr> {
+    for proto in addr.iter() {
+        match proto {
+            libp2p::multiaddr::Protocol::Ip4(ip) => return Some(IpAddr::V4(ip)),
+            libp2p::multiaddr::Protocol::Ip6(ip) => return Some(IpAddr::V6(ip)),
+            _ => {}
+        }
+    }
+    None
 }
