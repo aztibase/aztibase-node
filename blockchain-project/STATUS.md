@@ -2,8 +2,8 @@
 
 **Last Updated:** 2026-03-08
 **Updated By:** security-engineer
-**Current Phase:** M7 -- Security Audit + Hardening (COMPLETE)
-**Current Sprint:** Sprint 024 -- COMPLETE (Security Audit: 11 findings resolved, 570 tests)
+**Current Phase:** M7 -- Security Audit + Hardening (Sprint 2 COMPLETE)
+**Current Sprint:** Sprint 025 -- COMPLETE (Dep Upgrades, Crypto Audit, Verkle Foundations)
 
 ---
 
@@ -77,12 +77,17 @@
 | aztibase-wasm | PARTIAL | p2p-network-engineer | NO | YES |
 
 ### In Progress
-- Nothing currently in progress — M6 complete, M7 next
+- Nothing currently in progress — Sprint 025 complete, Sprint 026 next
 
 ### Blocked
 - Nothing currently blocked
 
 ### Recently Completed
+- Sprint 025 Phase 4: Fuzz targets + security review — 6 cargo-fuzz targets (core + consensus), cargo-deny clean, clippy 0 warnings, fmt clean
+- Sprint 025 Phase 3: Verkle proof verification rewrite — domain-separated BLAKE3 commitments, self-contained proofs, bottom-up verification, 12 new Verkle tests, ADR-013
+- Sprint 025 Phase 2: Cryptographic audit — Ed25519/BLAKE3/BLS domain separation verified, 8 known-answer test vectors, BLS PoP confirmed enforced
+- Sprint 025 Phase 1: Dependency upgrades — wasmtime v28→v42 (4 CVEs), bincode→postcard (RUSTSEC-2025-0141), cargo-deny clean
+- Sprint 024 Phase 4: Security review — 11 findings resolved, 570 tests, M7 milestone 1 complete
 - Sprint 023 Phase 4: Security review + M6 close — SEC-COMMIT-OVERWRITE resolved, 0 new ELEVATED/MEDIUM; 555 tests, 0 clippy warnings, fmt clean
 - Sprint 023 Phase 3: Compute validation + DeregisterModel — CommitCompute model validation, TxKind::DeregisterModel (0x0D) with owner auth + pending task block, 3 new tests
 - Sprint 023 Phase 2: TaskAssigner wiring — PostTask auto-assigns validator via PoUW score, SubmitAttestation enforces assigned_validator, InferenceTask.assigned_validator field, 3 new tests

@@ -11,6 +11,10 @@ members = [
     "crates/aztibase-node",
     "crates/aztibase-wasm",
 ]
+exclude = [
+    "crates/aztibase-core/fuzz",
+    "crates/aztibase-consensus/fuzz",
+]
 
 [workspace.package]
 version = "0.1.0"

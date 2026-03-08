@@ -21,6 +21,39 @@ Entries are prepended (newest first).
 
 ## Entries
 
+### 2026-03-08 -- security-engineer -- Sprint 025 Complete (M7 Continued: Dep Upgrades, Crypto Audit, Verkle)
+**Task:** Sprint 025: Dependency upgrades (wasmtime v42, postcard), cryptographic audit (domain separation, known-answer vectors), Verkle proof verification rewrite, fuzz target setup
+**Sprint:** Sprint 025, Phases 1-4
+**Git Ref:** pending
+**Files Changed:**
+- Cargo.toml (wasmtime v28→v42, bincode→postcard, workspace exclude fuzz dirs)
+- Cargo.lock (dependency tree updates)
+- deny.toml (removed wasmtime/bincode ignores, added 5 transitive dep ignores)
+- crates/aztibase-core/Cargo.toml (postcard replaces bincode)
+- crates/aztibase-core/src/lib.rs (8 known-answer crypto test vectors: BLAKE3, Ed25519, BLS12-381)
+- crates/aztibase-core/src/commitment.rs (VerkleProof rewrite: stem, value_hash, levels fields)
+- crates/aztibase-core/fuzz/ (3 fuzz targets: transaction_deser, block_header_deser, hash_and_pubkey)
+- crates/aztibase-consensus/Cargo.toml (postcard replaces bincode)
+- crates/aztibase-consensus/fuzz/ (3 fuzz targets: vertex_deser, finality_cert_deser, signer_bitmap)
+- crates/aztibase-execution/Cargo.toml (wasmtime v42, postcard)
+- crates/aztibase-execution/src/verkle.rs (complete rewrite: domain-separated commitments, proper proof verification)
+- crates/aztibase-execution/src/vm.rs (wasmtime v42 API migration)
+- crates/aztibase-execution/src/tx.rs (Ed25519 TX_DOMAIN prefix)
+- crates/aztibase-execution/src/state.rs (Merkle LEAF_DOMAIN/NODE_DOMAIN prefixes)
+- crates/aztibase-execution/src/routing.rs (postcard take_from_bytes + trailing bytes check)
+- crates/aztibase-wasm/src/proof.rs (Verkle proof types updated, verify_verkle_proof rewritten)
+- 16 additional files migrated bincode→postcard
+**Review Notes:**
+- Phase 1: wasmtime v28→v42 resolves 4 CVEs; bincode→postcard resolves RUSTSEC-2025-0141
+- Phase 2: Ed25519 tx signing domain-separated (AZTB_TX_V1), attestation hashing prefixed, Merkle leaf/node collision fixed
+- Phase 2: BLS PoP enforcement already present in pipeline (Task 7 confirmed complete)
+- Phase 2: 8 pinned crypto test vectors ensure no regression across backend changes
+- Phase 3: Verkle tree rewritten with domain-separated BLAKE3 commitments (AZTB_VERKLE_INNER, AZTB_VERKLE_LEAF); proofs are self-contained with stem + value_hash + 256-width level commitments; bottom-up verification. ADR-013 documents the decision to keep BLAKE3 placeholder vs IPA (no mature pure-Rust crate exists).
+- Phase 4: cargo-fuzz targets defined for core (3) and consensus (3); cargo-deny clean; clippy 0 warnings; fmt clean
+**Security Flags:** BLS PoP was already enforced (no gap). Verkle proofs now properly verifiable (was trivially forgeable placeholder).
+
+---
+
 ### 2026-03-08 -- security-engineer -- Sprint 024 Complete (M7 Security Audit + Hardening)
 **Task:** Sprint 024: Security audit and hardening — resolve 11 documented security findings (16 tasks, 4 phases)
 **Sprint:** Sprint 024, Phases 1-4

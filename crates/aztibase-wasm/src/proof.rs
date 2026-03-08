@@ -17,7 +17,15 @@ pub enum Side {
 #[derive(Clone, Debug)]
 pub struct VerkleProof {
     pub leaf_hash: [u8; 32],
-    pub path_commitments: Vec<[u8; 32]>,
+    pub stem: Vec<u8>,
+    pub value_hash: [u8; 32],
+    pub levels: Vec<VerkleProofLevel>,
+}
+
+#[derive(Clone, Debug)]
+pub struct VerkleProofLevel {
+    pub child_index: u8,
+    pub child_commitments: Vec<[u8; 32]>,
 }
 
 pub fn verify_merkle_proof(root: &[u8; 32], leaf: &[u8; 32], proof: &MerkleProof) -> bool {
@@ -43,11 +51,37 @@ pub fn verify_merkle_proof(root: &[u8; 32], leaf: &[u8; 32], proof: &MerkleProof
     current == *root
 }
 
+const VERKLE_INNER_DOMAIN: &[u8] = b"AZTB_VERKLE_INNER\0";
+
 pub fn verify_verkle_proof(root: &[u8; 32], proof: &VerkleProof) -> bool {
-    if proof.path_commitments.is_empty() {
-        return false;
+    let leaf_commit = {
+        let mut buf = Vec::with_capacity(18 + proof.stem.len() + 32);
+        buf.extend_from_slice(b"AZTB_VERKLE_LEAF\0");
+        buf.extend_from_slice(&proof.stem);
+        buf.extend_from_slice(&proof.value_hash);
+        hash(&buf)
+    };
+
+    if proof.levels.is_empty() {
+        return leaf_commit == *root;
     }
-    proof.path_commitments[0] == *root
+
+    let mut expected_child = leaf_commit;
+    for level in proof.levels.iter().rev() {
+        if level.child_commitments.len() != 256 {
+            return false;
+        }
+        if level.child_commitments[level.child_index as usize] != expected_child {
+            return false;
+        }
+        let mut buf = Vec::with_capacity(VERKLE_INNER_DOMAIN.len() + 256 * 32);
+        buf.extend_from_slice(VERKLE_INNER_DOMAIN);
+        for c in &level.child_commitments {
+            buf.extend_from_slice(c);
+        }
+        expected_child = hash(&buf);
+    }
+    expected_child == *root
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -65,7 +99,15 @@ pub struct JsSibling {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct JsVerkleProof {
     pub leaf_hash: String,
-    pub path_commitments: Vec<String>,
+    pub stem: String,
+    pub value_hash: String,
+    pub levels: Vec<JsVerkleLevel>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct JsVerkleLevel {
+    pub child_index: u8,
+    pub child_commitments: Vec<String>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -103,14 +145,27 @@ impl JsMerkleProof {
 impl JsVerkleProof {
     pub fn into_verkle_proof(self) -> VerkleProof {
         let leaf_hash = crate::parse_hash(&self.leaf_hash).unwrap_or([0u8; 32]);
-        let path_commitments = self
-            .path_commitments
-            .iter()
-            .map(|s| crate::parse_hash(s).unwrap_or([0u8; 32]))
+        let stem = crate::parse_hash(&self.stem)
+            .map(|h| h.to_vec())
+            .unwrap_or_else(|| vec![0u8; 32]);
+        let value_hash = crate::parse_hash(&self.value_hash).unwrap_or([0u8; 32]);
+        let levels = self
+            .levels
+            .into_iter()
+            .map(|l| VerkleProofLevel {
+                child_index: l.child_index,
+                child_commitments: l
+                    .child_commitments
+                    .iter()
+                    .map(|s| crate::parse_hash(s).unwrap_or([0u8; 32]))
+                    .collect(),
+            })
             .collect();
         VerkleProof {
             leaf_hash,
-            path_commitments,
+            stem,
+            value_hash,
+            levels,
         }
     }
 }
@@ -244,31 +299,28 @@ mod tests {
     }
 
     #[test]
-    fn verkle_proof_valid() {
-        let root = hash(b"root");
-        let vp = VerkleProof {
-            leaf_hash: hash(b"leaf"),
-            path_commitments: vec![root, hash(b"inner")],
-        };
-        assert!(verify_verkle_proof(&root, &vp));
-    }
-
-    #[test]
     fn verkle_proof_rejects_wrong_root() {
         let root = hash(b"root");
         let vp = VerkleProof {
             leaf_hash: hash(b"leaf"),
-            path_commitments: vec![hash(b"wrong"), hash(b"inner")],
+            stem: vec![0u8; 32],
+            value_hash: [0u8; 32],
+            levels: vec![],
         };
         assert!(!verify_verkle_proof(&root, &vp));
     }
 
     #[test]
-    fn verkle_proof_rejects_empty() {
+    fn verkle_proof_rejects_wrong_width() {
         let root = hash(b"root");
         let vp = VerkleProof {
             leaf_hash: hash(b"leaf"),
-            path_commitments: vec![],
+            stem: vec![0u8; 32],
+            value_hash: [0u8; 32],
+            levels: vec![VerkleProofLevel {
+                child_index: 0,
+                child_commitments: vec![[0u8; 32]; 10],
+            }],
         };
         assert!(!verify_verkle_proof(&root, &vp));
     }

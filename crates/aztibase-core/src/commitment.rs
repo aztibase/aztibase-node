@@ -23,12 +23,30 @@ pub enum Side {
     Right,
 }
 
-/// Verkle proof placeholder: path commitments from leaf to root.
-/// Real IPA/KZG opening proofs will replace this in a future sprint.
+/// Verkle opening proof for a single key.
+///
+/// Each `VerkleProofLevel` carries the child index taken and all 256
+/// sibling commitments at that inner node, allowing the verifier to
+/// recompute the inner-node commitment and walk up to the root.
+///
+/// Proof size is O(depth * 256 * 32) with BLAKE3 commitments.
+/// Upgrading to IPA polynomial commitments (future ADR) compresses
+/// each level to a single ~48-byte opening proof.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct VerkleProof {
     pub leaf_hash: Hash,
-    pub path_commitments: Vec<Hash>,
+    pub stem: Vec<u8>,
+    pub value_hash: Hash,
+    pub levels: Vec<VerkleProofLevel>,
+}
+
+/// One level of a Verkle opening proof.
+/// Contains the child index taken at this inner node and all 256
+/// child commitments so the verifier can reconstruct the node commitment.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct VerkleProofLevel {
+    pub child_index: u8,
+    pub child_commitments: Vec<Hash>,
 }
 
 /// Light client proof: carries the state root, committed height, and a

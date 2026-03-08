@@ -1,0 +1,36 @@
+[package]
+name = "aztibase-consensus-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2021"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+postcard = "1"
+
+[dependencies.aztibase-consensus]
+path = ".."
+
+[dependencies.aztibase-core]
+path = "../../aztibase-core"
+
+[workspace]
+members = ["."]
+
+[[bin]]
+name = "fuzz_vertex_deser"
+path = "fuzz_targets/fuzz_vertex_deser.rs"
+doc = false
+
+[[bin]]
+name = "fuzz_finality_cert_deser"
+path = "fuzz_targets/fuzz_finality_cert_deser.rs"
+doc = false
+
+[[bin]]
+name = "fuzz_signer_bitmap"
+path = "fuzz_targets/fuzz_signer_bitmap.rs"
+doc = false

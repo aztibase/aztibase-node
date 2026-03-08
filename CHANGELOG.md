@@ -5,6 +5,29 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ---
 
+## [M7-S2] -- Dependency Upgrades, Crypto Audit, Verkle Foundations (Sprint 025)
+
+### Security
+- wasmtime upgraded v28→v42: resolves 4 CVEs (2026-03-08)
+- bincode→postcard migration: resolves RUSTSEC-2025-0141 (unmaintained crate) (2026-03-08)
+- Ed25519 transaction signing: `AZTB_TX_V1` domain prefix prevents cross-protocol replay (2026-03-08)
+- Attestation hashing: `AZTB_ATTESTATION_V1` domain prefix added (2026-03-08)
+- Merkle tree: `LEAF_DOMAIN`/`NODE_DOMAIN` prefixes prevent leaf-node collision attacks (2026-03-08)
+- Verkle proof verification: replaced trivially-forgeable placeholder with domain-separated BLAKE3 commitment verification (2026-03-08)
+- BLS PoP enforcement confirmed at CommitCompute registration (2026-03-08)
+
+### Added
+- 8 known-answer cryptographic test vectors: BLAKE3 (3), Ed25519 (2), BLS12-381 (3) — pins exact hex values (2026-03-08)
+- cargo-fuzz targets: 3 for aztibase-core (Transaction/BlockHeader deser, hash+pubkey), 3 for aztibase-consensus (Vertex/FinalityCert deser, SignerBitmap ops) (2026-03-08)
+- ADR-013: Verkle BLAKE3 placeholder retained — no mature pure-Rust IPA crate exists (2026-03-08)
+
+### Changed
+- `VerkleProof` struct: now carries `stem`, `value_hash`, and `levels` (self-contained proof) (2026-03-08)
+- `VerkleTree::verify_proof()`: bottom-up commitment recomputation with 256-width inner nodes (2026-03-08)
+- WASM `JsVerkleProof`: updated to match new proof structure (2026-03-08)
+
+---
+
 ## [M7] -- Security Audit + Hardening (COMPLETE)
 
 ### Security

@@ -1,0 +1,33 @@
+[package]
+name = "aztibase-core-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2021"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+postcard = "1"
+
+[dependencies.aztibase-core]
+path = ".."
+
+[workspace]
+members = ["."]
+
+[[bin]]
+name = "fuzz_transaction_deser"
+path = "fuzz_targets/fuzz_transaction_deser.rs"
+doc = false
+
+[[bin]]
+name = "fuzz_block_header_deser"
+path = "fuzz_targets/fuzz_block_header_deser.rs"
+doc = false
+
+[[bin]]
+name = "fuzz_hash_and_pubkey"
+path = "fuzz_targets/fuzz_signed_tx_verify.rs"
+doc = false

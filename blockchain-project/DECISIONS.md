@@ -20,6 +20,7 @@ Every non-obvious technical decision is recorded here. Each ADR is immutable onc
 | ADR-010 | PoUW scoring formula and attestation quorum design | 2026-03-07 | ACCEPTED | blockchain-architect + consensus-engineer |
 | ADR-011 | Attestation signature scheme and settlement flow | 2026-03-07 | ACCEPTED | blockchain-architect + security-engineer |
 | ADR-012 | Packed SignerBitmap for finality certificates | 2026-03-08 | ACCEPTED | security-engineer + blockchain-architect |
+| ADR-013 | Retain BLAKE3 Verkle placeholder over IPA polynomial commitments | 2026-03-08 | ACCEPTED | blockchain-architect + security-engineer |
 
 ---
 
@@ -373,6 +374,39 @@ Replace `Vec<bool>` with a custom `SignerBitmap` struct backed by `Vec<u8>` (pac
 ### Consequences
 - Breaking serialization change for `FinalityCertificate` (acceptable pre-testnet)
 - Future: if validator set grows >256, bitmap is still compact (32 bytes for 256 validators)
+
+---
+
+## ADR-013: Retain BLAKE3 Verkle placeholder over IPA polynomial commitments
+
+**Date:** 2026-03-08
+**Status:** ACCEPTED
+**Decided By:** blockchain-architect + security-engineer
+**Git Ref:** pending
+
+### Context
+Sprint 025 Task 9 required evaluating whether to replace the BLAKE3-based Verkle tree with true IPA (Inner Product Argument) polynomial commitments over the Banderwagon curve. The original placeholder used raw BLAKE3 hashes as node commitments, which made proofs trivially forgeable (no binding to the tree structure).
+
+### Options Evaluated
+1. **verkle-trie crate** — Ethereum-focused, depends on banderwagon/ipa-multipoint. Immature (pre-1.0), tightly coupled to Ethereum's specific stem structure. Not pure Rust (C deps via arkworks).
+2. **ipa-multipoint crate** — Low-level IPA math. Would require building the entire tree structure ourselves. Pre-alpha quality.
+3. **Hand-rolled Pedersen/IPA** — Full control but months of cryptographic engineering. High audit burden.
+4. **Domain-separated BLAKE3 commitments** — Keep the hash-based approach but make it properly verifiable with domain separation, full sibling commitments at each level, and bottom-up verification.
+
+### Decision
+Retain BLAKE3 domain-separated commitments (option 4). The tree structure (width-256 inner nodes, stem-based navigation) already matches the production IPA design. The commitment math is the only difference — BLAKE3 is binding but not hiding, while IPA would be both.
+
+### Rationale
+- No mature pure-Rust IPA crate exists that meets ADR-001 (no C/C++ build deps)
+- The verification structure is identical: bottom-up recomputation of inner-node commitments from 256 children
+- Domain separation (AZTB_VERKLE_INNER, AZTB_VERKLE_LEAF) prevents cross-domain collision
+- Proofs are now properly verifiable (not trivially forgeable) — the security improvement is real
+- Swapping BLAKE3 for IPA later requires changing only `leaf_commitment()` and `inner_commitment()` — the tree structure and proof format are stable
+
+### Consequences
+- Verkle proofs are large (256 × 32 bytes per level) compared to IPA proofs (~500 bytes)
+- No hiding property (all commitments are deterministic) — acceptable for a public blockchain
+- Future: when a mature pure-Rust IPA crate emerges, swap commitment functions only
 
 ---
 
