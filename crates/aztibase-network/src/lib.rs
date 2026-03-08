@@ -3,13 +3,17 @@ pub mod connection_filter;
 pub mod discovery;
 pub mod gossip;
 pub mod light_sync;
+pub mod peer_store;
 pub mod reputation;
 pub mod transport;
 #[cfg(feature = "webrtc")]
 pub mod webrtc;
 
 pub use connection_filter::{ConnectionFilter, FilterReason};
-pub use gossip::{TOPIC_CONSENSUS, TOPIC_STATE_SYNC, TOPIC_TRANSACTIONS};
+pub use gossip::{
+    MessageAcceptance, TOPIC_CONSENSUS, TOPIC_STATE_SYNC, TOPIC_TRANSACTIONS,
+    validate_gossip_message,
+};
 pub use libp2p::{Multiaddr, PeerId};
 pub use light_sync::{
     LIGHT_SYNC_PROTOCOL, LightSyncCodec, LightSyncMessage, LightSyncProtocol, LightSyncRequest,
@@ -18,6 +22,7 @@ pub use light_sync::{
     decode_light_sync, decode_request, decode_response, encode_light_sync, encode_request,
     encode_response, verify_header_chain,
 };
+pub use peer_store::{PeerStore, StoredPeer};
 pub use reputation::{OffenseSeverity, PeerReputation, PeerReputationStore};
 pub use transport::{Libp2pTransport, NatStatus, NetworkEvent, TransportConfig};
 #[cfg(feature = "webrtc")]
@@ -88,6 +93,30 @@ mod tests {
         assert!(thresholds.graylist_threshold <= thresholds.publish_threshold);
     }
 
+    #[test]
+    fn topic_weights_differentiated() {
+        let params = gossip::peer_score_params();
+        let consensus_hash = libp2p::gossipsub::IdentTopic::new(gossip::TOPIC_CONSENSUS).hash();
+        let tx_hash = libp2p::gossipsub::IdentTopic::new(gossip::TOPIC_TRANSACTIONS).hash();
+        let state_hash = libp2p::gossipsub::IdentTopic::new(gossip::TOPIC_STATE_SYNC).hash();
+
+        let consensus_weight = params.topics[&consensus_hash].topic_weight;
+        let tx_weight = params.topics[&tx_hash].topic_weight;
+        let state_weight = params.topics[&state_hash].topic_weight;
+
+        assert!(consensus_weight > tx_weight);
+        assert!(tx_weight > state_weight);
+    }
+
+    #[test]
+    fn invalid_message_penalty_is_severe() {
+        let params = gossip::peer_score_params();
+        let consensus_hash = libp2p::gossipsub::IdentTopic::new(gossip::TOPIC_CONSENSUS).hash();
+        let tp = &params.topics[&consensus_hash];
+        assert!(tp.invalid_message_deliveries_weight <= -50.0);
+        assert!(tp.invalid_message_deliveries_decay <= 0.1);
+    }
+
     #[tokio::test]
     async fn transport_creates_with_signed_messages() {
         let config = TransportConfig::default();
@@ -155,9 +184,30 @@ mod tests {
         let config = TransportConfig::default();
         assert!(config.enable_autonat);
         assert!(config.relay_servers.is_empty());
+        assert!(config.peer_store.is_none());
         assert_eq!(
             config.autonat_probe_interval_secs,
             transport::AUTONAT_PROBE_INTERVAL_SECS
         );
+    }
+
+    #[test]
+    fn validate_rejects_empty_message() {
+        let result = gossip::validate_gossip_message(gossip::TOPIC_BLOCKS, &[]);
+        assert_eq!(result, gossip::MessageAcceptance::Reject);
+    }
+
+    #[test]
+    fn validate_rejects_undersized_block() {
+        let small = vec![0u8; 10];
+        let result = gossip::validate_gossip_message(gossip::TOPIC_BLOCKS, &small);
+        assert_eq!(result, gossip::MessageAcceptance::Reject);
+    }
+
+    #[test]
+    fn validate_accepts_valid_message() {
+        let data = vec![0u8; 128];
+        let result = gossip::validate_gossip_message(gossip::TOPIC_BLOCKS, &data);
+        assert_eq!(result, gossip::MessageAcceptance::Accept);
     }
 }

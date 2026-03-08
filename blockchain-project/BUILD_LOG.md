@@ -21,6 +21,28 @@ Entries are prepended (newest first).
 
 ## Entries
 
+### 2026-03-08 -- p2p-network-engineer -- Sprint 029 Complete (M8 Sprint 4: Gossipsub Hardening & Persistent Peer Discovery)
+**Task:** Sprint 029: Gossipsub scoring retune, persistent peer store, Kademlia bootstrap, message validation
+**Sprint:** Sprint 029, Phases 1-4
+**Git Ref:** pending
+**Files Changed:**
+- crates/aztibase-network/src/gossip.rs (per-topic weights, tightened penalties, message validation)
+- crates/aztibase-network/src/peer_store.rs (NEW: PeerStore redb-backed persistent peer addresses)
+- crates/aztibase-network/src/transport.rs (PeerStore wiring, Kademlia bootstrap, message validation in event loop)
+- crates/aztibase-network/src/lib.rs (peer_store module, exports, 7 new tests)
+- crates/aztibase-node/src/main.rs (PeerStore init, load_cached_peers on startup)
+- blockchain-project/sprints/SPRINT-029.md (NEW: sprint plan)
+**Review Notes:**
+- Phase 1: invalid_message_deliveries_weight -10→-50, decay 0.3→0.1. mesh_message_deliveries threshold 20→50, cap 100→500. Per-topic weights: consensus=2.0, blocks=1.5, validator-announce=1.5. publish_threshold -50→-30, graylist_threshold -80→-60.
+- Phase 2: PeerStore (redb), address merge+dedup, load_cached_peers on startup (50 max, skip banned).
+- Phase 3: Kademlia bootstrap on first PeerConnected, RoutingUpdated→PeerStore. validate_gossip_message: structural checks, Medium offense on reject.
+- Phase 4: 0 ELEVATED, 0 MEDIUM, 2 LOW. 56 network tests, clippy 0 warnings, fmt clean.
+**Security Flags:**
+- SEC-NET-029-001 LOW: Gossipsub over-penalization by design
+- SEC-NET-029-002 LOW: Topic matching via contains() — not exploitable with fixed topic set
+
+---
+
 ### 2026-03-08 -- p2p-network-engineer -- Sprint 028 Complete (M8 Sprint 3: Networking Hardening)
 **Task:** Sprint 028: Persistent peer reputation, connection filtering, AutoNAT + relay client, security review
 **Sprint:** Sprint 028, Phases 1-4

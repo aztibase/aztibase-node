@@ -2,8 +2,8 @@
 
 **Last Updated:** 2026-03-08
 **Updated By:** node-engineer
-**Current Phase:** M8 -- Public Testnet (Sprint 3 COMPLETE)
-**Current Sprint:** Sprint 028 -- COMPLETE (Networking Hardening)
+**Current Phase:** M8 -- Public Testnet (Sprint 4 COMPLETE)
+**Current Sprint:** Sprint 029 -- COMPLETE (Gossipsub Hardening & Persistent Peer Discovery)
 
 ---
 
@@ -77,12 +77,16 @@
 | aztibase-wasm | PARTIAL | p2p-network-engineer | NO | YES |
 
 ### In Progress
-- Nothing currently in progress — Sprint 028 complete, Sprint 029 next
+- Nothing currently in progress — Sprint 029 complete, Sprint 030 next
 
 ### Blocked
 - Nothing currently blocked
 
 ### Recently Completed
+- Sprint 029 Phase 4: Security review — 56 network tests, 0 ELEVATED, 0 MEDIUM, 2 LOW, clippy 0 warnings, fmt clean
+- Sprint 029 Phase 3: Kademlia bootstrap + message validation — bootstrap on first peer, RoutingUpdated→PeerStore, structural message validation, 3 tests
+- Sprint 029 Phase 2: Persistent peer store — PeerStore (redb), address merge/dedup, load_cached_peers on startup, 4 tests
+- Sprint 029 Phase 1: Gossipsub scoring retune — per-topic weights, tightened penalties, lower thresholds, 2 tests
 - Sprint 028 Phase 4: Security review — 47 network tests, 0 ELEVATED, 0 MEDIUM, 4 LOW (all acceptable), clippy 0 warnings, fmt clean
 - Sprint 028 Phase 3: AutoNAT + Relay — autonat probing, NatStatus tracking, relay client with auto-listen on NAT Private, 4 tests
 - Sprint 028 Phase 2: Connection filtering — per-IP limits (3), rate limiting (1s), subnet /16 caps (5), IPv4/IPv6, 7 tests
@@ -171,8 +175,8 @@
 - Sprint 005 Phase 1: Consensus-to-execution wiring, TxKind routing, ExecutionPipeline
 
 ### Next Up
-1. Sprint 029: Networking hardening phase 2 (gossipsub retuning, peer discovery improvements)
-2. Sprint 030: WebRTC swarm integration + DCUtR hole punching
+1. Sprint 030: WebRTC swarm integration + DCUtR hole punching
+2. Sprint 031: End-to-end testnet smoke tests + integration testing
 
 ### M8 Scope: Monitoring Infrastructure (Planned)
 - **Prometheus**: `prometheus-client` crate (pure Rust), `/metrics` endpoint in Prometheus text format

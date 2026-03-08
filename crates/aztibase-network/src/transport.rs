@@ -7,12 +7,13 @@ use anyhow::{Context, Result};
 use futures::StreamExt;
 use libp2p::request_response::{self, OutboundRequestId, ProtocolSupport, ResponseChannel};
 use libp2p::swarm::SwarmEvent;
-use libp2p::{Multiaddr, PeerId, Swarm, autonat, connection_limits, gossipsub, mdns};
-use tracing::{info, warn};
+use libp2p::{Multiaddr, PeerId, Swarm, autonat, connection_limits, gossipsub, kad, mdns};
+use tracing::{debug, info, warn};
 
 use crate::behaviour::{AztibaseBehaviour, AztibaseBehaviourEvent};
 use crate::connection_filter::ConnectionFilter;
 use crate::light_sync::{LIGHT_SYNC_PROTOCOL, LightSyncCodec, LightSyncRequest, LightSyncResponse};
+use crate::peer_store::PeerStore;
 use crate::reputation::{OffenseSeverity, PeerReputationStore};
 use crate::{discovery, gossip};
 
@@ -39,6 +40,7 @@ impl std::fmt::Display for NatStatus {
 pub struct TransportConfig {
     pub idle_timeout_secs: u64,
     pub reputation_store: Option<Arc<PeerReputationStore>>,
+    pub peer_store: Option<Arc<PeerStore>>,
     pub enable_autonat: bool,
     pub relay_servers: Vec<Multiaddr>,
     pub autonat_probe_interval_secs: u64,
@@ -49,6 +51,7 @@ impl Default for TransportConfig {
         Self {
             idle_timeout_secs: 60,
             reputation_store: None,
+            peer_store: None,
             enable_autonat: true,
             relay_servers: Vec::new(),
             autonat_probe_interval_secs: AUTONAT_PROBE_INTERVAL_SECS,
@@ -88,10 +91,12 @@ pub struct Libp2pTransport {
     topics: HashMap<String, gossipsub::IdentTopic>,
     local_peer_id: PeerId,
     reputation: Option<Arc<PeerReputationStore>>,
+    peer_store: Option<Arc<PeerStore>>,
     conn_filter: ConnectionFilter,
     peer_ips: HashMap<PeerId, IpAddr>,
     nat_status: NatStatus,
     relay_servers: Vec<Multiaddr>,
+    kad_bootstrapped: bool,
 }
 
 impl Libp2pTransport {
@@ -166,10 +171,12 @@ impl Libp2pTransport {
             topics: HashMap::new(),
             local_peer_id,
             reputation: config.reputation_store,
+            peer_store: config.peer_store,
             conn_filter: ConnectionFilter::new(),
             peer_ips: HashMap::new(),
             nat_status: NatStatus::Unknown,
             relay_servers,
+            kad_bootstrapped: false,
         };
 
         transport.subscribe_all()?;
@@ -259,11 +266,26 @@ impl Libp2pTransport {
                         ..
                     },
                 )) => {
-                    return NetworkEvent::Message {
-                        source: propagation_source,
-                        topic: message.topic.to_string(),
-                        data: message.data,
-                    };
+                    let topic_str = message.topic.to_string();
+                    match gossip::validate_gossip_message(&topic_str, &message.data) {
+                        gossip::MessageAcceptance::Accept => {
+                            return NetworkEvent::Message {
+                                source: propagation_source,
+                                topic: topic_str,
+                                data: message.data,
+                            };
+                        }
+                        gossip::MessageAcceptance::Reject => {
+                            warn!(
+                                %propagation_source,
+                                topic = %topic_str,
+                                len = message.data.len(),
+                                "Rejected invalid gossip message"
+                            );
+                            self.record_peer_offense(&propagation_source, OffenseSeverity::Medium);
+                        }
+                        gossip::MessageAcceptance::Ignore => {}
+                    }
                 }
                 SwarmEvent::Behaviour(AztibaseBehaviourEvent::Mdns(mdns::Event::Discovered(
                     peers,
@@ -337,7 +359,8 @@ impl Libp2pTransport {
                         let _ = rep_store.record_seen(&peer_bytes);
                     }
 
-                    if let Some(ip) = ip_from_multiaddr(endpoint.get_remote_address()) {
+                    let remote_addr = endpoint.get_remote_address().clone();
+                    if let Some(ip) = ip_from_multiaddr(&remote_addr) {
                         if let Err(reason) = self.conn_filter.try_accept(ip) {
                             warn!(%peer_id, %ip, %reason, "Connection filtered");
                             let _ = self.swarm.disconnect_peer_id(peer_id);
@@ -346,11 +369,25 @@ impl Libp2pTransport {
                         self.peer_ips.insert(peer_id, ip);
                     }
 
+                    if let Some(ref ps) = self.peer_store {
+                        let _ = ps.insert(&peer_id.to_bytes(), &[remote_addr.to_string()]);
+                    }
+
+                    if !self.kad_bootstrapped
+                        && self.swarm.behaviour_mut().kademlia.bootstrap().is_ok()
+                    {
+                        debug!("Kademlia bootstrap triggered");
+                        self.kad_bootstrapped = true;
+                    }
+
                     return NetworkEvent::PeerConnected(peer_id);
                 }
                 SwarmEvent::ConnectionClosed { peer_id, .. } => {
                     if let Some(ip) = self.peer_ips.remove(&peer_id) {
                         self.conn_filter.release(ip);
+                    }
+                    if let Some(ref ps) = self.peer_store {
+                        let _ = ps.update_last_seen(&peer_id.to_bytes());
                     }
                     return NetworkEvent::PeerDisconnected(peer_id);
                 }
@@ -394,6 +431,30 @@ impl Libp2pTransport {
                 SwarmEvent::Behaviour(AztibaseBehaviourEvent::LightSync(
                     request_response::Event::ResponseSent { .. },
                 )) => {}
+                SwarmEvent::Behaviour(AztibaseBehaviourEvent::Kademlia(
+                    kad::Event::RoutingUpdated {
+                        peer, addresses, ..
+                    },
+                )) => {
+                    if let Some(ref ps) = self.peer_store {
+                        let addr_strs: Vec<String> =
+                            addresses.iter().map(|a| a.to_string()).collect();
+                        let _ = ps.insert(&peer.to_bytes(), &addr_strs);
+                    }
+                    debug!(%peer, "Kademlia routing table updated");
+                }
+                SwarmEvent::Behaviour(AztibaseBehaviourEvent::Kademlia(
+                    kad::Event::OutboundQueryProgressed {
+                        result:
+                            kad::QueryResult::Bootstrap(Ok(kad::BootstrapOk { num_remaining, .. })),
+                        ..
+                    },
+                )) => {
+                    if num_remaining == 0 {
+                        debug!("Kademlia bootstrap complete");
+                    }
+                }
+                SwarmEvent::Behaviour(AztibaseBehaviourEvent::Kademlia(_)) => {}
                 _ => {}
             }
         }
@@ -416,6 +477,46 @@ impl Libp2pTransport {
 
     pub fn reputation_store(&self) -> Option<&Arc<PeerReputationStore>> {
         self.reputation.as_ref()
+    }
+
+    pub fn peer_store(&self) -> Option<&Arc<PeerStore>> {
+        self.peer_store.as_ref()
+    }
+
+    pub fn load_cached_peers(&mut self, limit: usize) -> usize {
+        let (ps, rep) = match (&self.peer_store, &self.reputation) {
+            (Some(ps), rep) => (ps, rep),
+            _ => return 0,
+        };
+
+        let recent = match ps.list_recent(limit) {
+            Ok(peers) => peers,
+            Err(e) => {
+                warn!("Failed to load cached peers: {e}");
+                return 0;
+            }
+        };
+
+        let mut dialed = 0;
+        for (peer_bytes, stored) in &recent {
+            if let Some(rep_store) = rep
+                && rep_store.is_banned(peer_bytes).unwrap_or(false)
+            {
+                continue;
+            }
+            for addr_str in &stored.addrs {
+                if let Ok(addr) = addr_str.parse::<Multiaddr>()
+                    && self.swarm.dial(addr).is_ok()
+                {
+                    dialed += 1;
+                    break;
+                }
+            }
+        }
+        if dialed > 0 {
+            info!(count = dialed, "Dialed cached peers from store");
+        }
+        dialed
     }
 
     pub fn send_light_sync_request(

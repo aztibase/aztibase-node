@@ -21,8 +21,9 @@ use aztibase_consensus::{
     StateRootAnnounce, ValidatorSet,
 };
 use aztibase_network::{
-    Libp2pTransport, NetworkEvent, PeerReputationStore, TOPIC_CONSENSUS, TOPIC_STATE_SYNC,
-    TOPIC_TRANSACTIONS, TransportConfig, build_header_response, decode_request, encode_response,
+    Libp2pTransport, NetworkEvent, PeerReputationStore, PeerStore, TOPIC_CONSENSUS,
+    TOPIC_STATE_SYNC, TOPIC_TRANSACTIONS, TransportConfig, build_header_response, decode_request,
+    encode_response,
 };
 use aztibase_rpc::{EventBus, NodeMetrics, RpcServer};
 use aztibase_runtime::TractRuntime;
@@ -651,6 +652,8 @@ async fn main() -> Result<()> {
     let rep_store = Arc::new(
         PeerReputationStore::open(&rep_db_path).context("Failed to open peer reputation store")?,
     );
+    let peer_db_path = config.data_dir.join("peer_store.redb");
+    let peer_store = Arc::new(PeerStore::open(&peer_db_path).context("Failed to open peer store")?);
     let boot_addrs: Vec<aztibase_network::Multiaddr> = config
         .network
         .boot_nodes
@@ -660,12 +663,14 @@ async fn main() -> Result<()> {
     let transport_config = TransportConfig {
         idle_timeout_secs: config.network.idle_timeout_secs,
         reputation_store: Some(rep_store),
+        peer_store: Some(Arc::clone(&peer_store)),
         relay_servers: boot_addrs,
         ..TransportConfig::default()
     };
     let mut transport =
         Libp2pTransport::new(transport_config).context("Failed to create network transport")?;
-    tracing::info!(peer_id = %transport.local_peer_id(), nat = %transport.nat_status(), "Network identity");
+    let cached = transport.load_cached_peers(50);
+    tracing::info!(peer_id = %transport.local_peer_id(), nat = %transport.nat_status(), cached_peers = cached, "Network identity");
 
     for addr_str in &config.network.listen_addresses {
         let addr: aztibase_network::Multiaddr = addr_str
@@ -1019,6 +1024,9 @@ async fn run_light_node(config: &NodeConfig) -> Result<()> {
         PeerReputationStore::open(&light_rep_path)
             .context("Failed to open peer reputation store")?,
     );
+    let light_peer_path = config.data_dir.join("peer_store.redb");
+    let light_peer_store =
+        Arc::new(PeerStore::open(&light_peer_path).context("Failed to open peer store")?);
     let light_boot_addrs: Vec<aztibase_network::Multiaddr> = config
         .network
         .boot_nodes
@@ -1028,11 +1036,13 @@ async fn run_light_node(config: &NodeConfig) -> Result<()> {
     let transport_config = TransportConfig {
         idle_timeout_secs: config.network.idle_timeout_secs,
         reputation_store: Some(light_rep_store),
+        peer_store: Some(light_peer_store),
         relay_servers: light_boot_addrs,
         ..TransportConfig::default()
     };
     let mut transport =
         Libp2pTransport::new(transport_config).context("Failed to create P2P transport")?;
+    transport.load_cached_peers(50);
 
     for addr_str in &config.network.listen_addresses {
         if let Ok(addr) = addr_str.parse() {

@@ -5,6 +5,26 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ---
 
+## [M8-S4] -- Gossipsub Hardening & Persistent Peer Discovery (Sprint 029)
+
+### Added
+- `PeerStore`: redb-backed persistent peer address storage with merge/dedup, list_recent, prune_stale, evict_excess (2026-03-08)
+- `validate_gossip_message()`: structural validation — reject empty, oversized, per-topic minimum sizes (blocks ≥ 64B, tx ≥ 32B, consensus ≥ 32B) (2026-03-08)
+- `MessageAcceptance` enum: Accept/Reject/Ignore for gossip message validation (2026-03-08)
+- `load_cached_peers()`: on startup, dial up to 50 most-recent peers from PeerStore, skip banned (2026-03-08)
+- Kademlia bootstrap: triggered on first PeerConnected, routing updates persisted to PeerStore (2026-03-08)
+- 9 new tests (2 scoring, 4 peer store, 3 message validation) — 56 total network crate tests (2026-03-08)
+
+### Changed
+- Gossipsub per-topic weights: consensus=2.0, blocks=1.5, validator-announce=1.5, tx=1.0, state-sync=0.5, ai-proofs=0.5 (2026-03-08)
+- `invalid_message_deliveries_weight`: -10 → -50, decay 0.3 → 0.1 (2026-03-08)
+- `mesh_message_deliveries_threshold`: 20 → 50, cap 100 → 500 (2026-03-08)
+- `publish_threshold`: -50 → -30, `graylist_threshold`: -80 → -60 (2026-03-08)
+- Gossipsub event handler: validates messages before processing, records Medium offense on rejection (2026-03-08)
+- `KademliaEvent::RoutingUpdated`: persists peer addresses to PeerStore (2026-03-08)
+
+---
+
 ## [M8-S3] -- Networking Hardening (Sprint 028)
 
 ### Added
