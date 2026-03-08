@@ -91,8 +91,8 @@ mod tests {
             timestamp: 1709654400000,
             signature: vec![],
         };
-        let serialized = bincode::serialize(&header).expect("serialize");
-        let deserialized: BlockHeader = bincode::deserialize(&serialized).expect("deserialize");
+        let serialized = postcard::to_allocvec(&header).expect("serialize");
+        let deserialized: BlockHeader = postcard::from_bytes(&serialized).expect("deserialize");
         assert_eq!(deserialized.version, 1);
         assert_eq!(deserialized.slot, 0);
         assert_eq!(deserialized.timestamp, 1709654400000);

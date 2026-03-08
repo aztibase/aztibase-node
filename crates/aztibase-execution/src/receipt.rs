@@ -26,7 +26,7 @@ pub struct ExecutionReceipt {
 pub fn store_receipts(store: &StateStore, receipts: &[ExecutionReceipt]) -> StorageResult<()> {
     let serialized: Vec<(TxHash, Vec<u8>)> = receipts
         .iter()
-        .filter_map(|r| bincode::serialize(r).ok().map(|data| (r.tx_hash, data)))
+        .filter_map(|r| postcard::to_allocvec(r).ok().map(|data| (r.tx_hash, data)))
         .collect();
 
     let refs: Vec<(&[u8], &[u8])> = serialized
@@ -49,7 +49,7 @@ pub fn get_receipt(
     tx_hash: &TxHash,
 ) -> StorageResult<Option<ExecutionReceipt>> {
     match store.get(RECEIPTS_TABLE, tx_hash)? {
-        Some(bytes) => match bincode::deserialize(&bytes) {
+        Some(bytes) => match postcard::from_bytes(&bytes) {
             Ok(receipt) => Ok(Some(receipt)),
             Err(_) => Ok(None),
         },

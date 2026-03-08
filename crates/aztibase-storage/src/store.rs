@@ -6,7 +6,7 @@ use tracing::{debug, info};
 
 // ── Table Definitions ──────────────────────────────────────────────
 // Each table maps a byte-slice key to a byte-slice value.
-// Higher-level types are serialized via bincode before storage.
+// Higher-level types are serialized via postcard before storage.
 
 /// DAG blocks keyed by block hash (32 bytes).
 pub const BLOCKS_TABLE: TableDefinition<&[u8], &[u8]> = TableDefinition::new("blocks");
@@ -26,7 +26,7 @@ pub const VALIDATORS_TABLE: TableDefinition<&[u8], &[u8]> = TableDefinition::new
 /// Verkle tree nodes keyed by node hash (32 bytes).
 pub const VERKLE_TABLE: TableDefinition<&[u8], &[u8]> = TableDefinition::new("verkle");
 
-/// Account records keyed by address (32 bytes). Value: bincode(balance, nonce).
+/// Account records keyed by address (32 bytes). Value: postcard(balance, nonce).
 pub const ACCOUNTS_TABLE: TableDefinition<&[u8], &[u8]> = TableDefinition::new("accounts");
 
 /// Contract WASM bytecode keyed by contract address (32 bytes).

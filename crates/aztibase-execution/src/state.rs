@@ -163,12 +163,26 @@ impl AccountState {
                     buf.extend_from_slice(&hash(k));
                     buf.extend_from_slice(&hash(v));
                 }
-                hash(&buf)
+                let mut leaf_buf = Vec::with_capacity(LEAF_DOMAIN.len() + buf.len());
+                leaf_buf.extend_from_slice(LEAF_DOMAIN);
+                leaf_buf.extend_from_slice(&buf);
+                hash(&leaf_buf)
             })
             .collect();
 
         merkle_root(&leaves)
     }
+}
+
+const LEAF_DOMAIN: &[u8] = b"AZTB_MERKLE_LEAF\0";
+const NODE_DOMAIN: &[u8] = b"AZTB_MERKLE_NODE\0";
+
+fn merkle_parent(left: &[u8; 32], right: &[u8; 32]) -> [u8; 32] {
+    let mut buf = [0u8; 17 + 64];
+    buf[..17].copy_from_slice(NODE_DOMAIN);
+    buf[17..49].copy_from_slice(left);
+    buf[49..81].copy_from_slice(right);
+    hash(&buf)
 }
 
 fn merkle_root(leaves: &[[u8; 32]]) -> [u8; 32] {
@@ -184,10 +198,7 @@ fn merkle_root(leaves: &[[u8; 32]]) -> [u8; 32] {
         let mut next = Vec::with_capacity(layer.len().div_ceil(2));
         for pair in layer.chunks(2) {
             if pair.len() == 2 {
-                let mut combined = [0u8; 64];
-                combined[..32].copy_from_slice(&pair[0]);
-                combined[32..].copy_from_slice(&pair[1]);
-                next.push(hash(&combined));
+                next.push(merkle_parent(&pair[0], &pair[1]));
             } else {
                 next.push(pair[0]);
             }
@@ -238,10 +249,7 @@ impl StateCommitment for MerkleCommitment {
             let mut next = Vec::with_capacity(layer.len().div_ceil(2));
             for pair in layer.chunks(2) {
                 if pair.len() == 2 {
-                    let mut combined = [0u8; 64];
-                    combined[..32].copy_from_slice(&pair[0]);
-                    combined[32..].copy_from_slice(&pair[1]);
-                    next.push(hash(&combined));
+                    next.push(merkle_parent(&pair[0], &pair[1]));
                 } else {
                     next.push(pair[0]);
                 }
@@ -266,18 +274,10 @@ impl StateCommitment for MerkleCommitment {
 
         let mut current = *leaf;
         for (sibling, side) in &mp.siblings {
-            let mut combined = [0u8; 64];
-            match side {
-                Side::Right => {
-                    combined[..32].copy_from_slice(&current);
-                    combined[32..].copy_from_slice(sibling);
-                }
-                Side::Left => {
-                    combined[..32].copy_from_slice(sibling);
-                    combined[32..].copy_from_slice(&current);
-                }
-            }
-            current = hash(&combined);
+            current = match side {
+                Side::Right => merkle_parent(&current, sibling),
+                Side::Left => merkle_parent(sibling, &current),
+            };
         }
         current == *root
     }

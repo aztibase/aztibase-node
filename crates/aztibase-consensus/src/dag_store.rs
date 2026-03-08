@@ -87,8 +87,8 @@ impl DagStore {
             block.validate_parent_rounds(&parent_rounds)?;
         }
 
-        let encoded =
-            bincode::serialize(&block).map_err(|e| DagStoreError::Serialization(e.to_string()))?;
+        let encoded = postcard::to_allocvec(&block)
+            .map_err(|e| DagStoreError::Serialization(e.to_string()))?;
         self.store.put(BLOCKS_TABLE, &hash, &encoded)?;
 
         for parent_hash in &block.parents {
@@ -117,7 +117,7 @@ impl DagStore {
             .store
             .get(BLOCKS_TABLE, hash)?
             .ok_or(DagStoreError::BlockNotFound(*hash))?;
-        bincode::deserialize(&raw).map_err(|e| DagStoreError::Serialization(e.to_string()))
+        postcard::from_bytes(&raw).map_err(|e| DagStoreError::Serialization(e.to_string()))
     }
 
     /// Check if a block exists in the store.
@@ -284,7 +284,7 @@ impl DagStore {
         let mut blocks: Vec<DagBlock> = Vec::with_capacity(all.len());
 
         for (_key, value) in &all {
-            let block: DagBlock = bincode::deserialize(value)
+            let block: DagBlock = postcard::from_bytes(value)
                 .map_err(|e| DagStoreError::Serialization(e.to_string()))?;
             blocks.push(block);
         }

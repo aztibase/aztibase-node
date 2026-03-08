@@ -24,11 +24,11 @@ impl ModelMetadata {
     }
 
     pub fn to_bytes(&self) -> Vec<u8> {
-        bincode::serialize(self).expect("ModelMetadata serialization cannot fail")
+        postcard::to_allocvec(self).expect("ModelMetadata serialization cannot fail")
     }
 
     pub fn from_bytes(data: &[u8]) -> Option<Self> {
-        bincode::deserialize(data).ok()
+        postcard::from_bytes(data).ok()
     }
 }
 

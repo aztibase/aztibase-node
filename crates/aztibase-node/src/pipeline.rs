@@ -473,6 +473,8 @@ impl ExecutionPipeline {
                     validator,
                     supported_models,
                     committed_stake,
+                    bls_pubkey,
+                    bls_pop,
                     nonce,
                     ..
                 } => {
@@ -480,6 +482,8 @@ impl ExecutionPipeline {
                         *validator,
                         supported_models.clone(),
                         *committed_stake,
+                        bls_pubkey.clone(),
+                        bls_pop.clone(),
                         *nonce,
                     ));
                 }
@@ -800,7 +804,7 @@ impl ExecutionPipeline {
             let registry_acct = state.get_mut(&MODEL_REGISTRY_ADDRESS);
             registry_acct
                 .storage
-                .insert(task_key.into_bytes(), bincode::serialize(&task).unwrap());
+                .insert(task_key.into_bytes(), postcard::to_allocvec(&task).unwrap());
 
             state.increment_nonce(requester);
             pending_new_tasks.push(task.clone());
@@ -990,7 +994,9 @@ impl ExecutionPipeline {
         }
 
         // Execute CommitCompute transactions.
-        for (validator, supported_models, committed_stake, nonce) in &commit_computes {
+        for (validator, supported_models, committed_stake, bls_pubkey, bls_pop, nonce) in
+            &commit_computes
+        {
             let mut preimage = Vec::new();
             preimage.extend_from_slice(validator);
             for m in supported_models {
@@ -1008,6 +1014,37 @@ impl ExecutionPipeline {
                     gas_used: 21_000,
                     contract_address: None,
                     error: Some(format!("nonce mismatch: expected {val_nonce}, got {nonce}")),
+                    inference_hash: None,
+                    anomaly_score: 0.0,
+                });
+                continue;
+            }
+
+            // Verify BLS proof-of-possession (rogue-key attack prevention).
+            let pk_arr: Option<[u8; 48]> = bls_pubkey.as_slice().try_into().ok();
+            let pop_arr: Option<[u8; 96]> = bls_pop.as_slice().try_into().ok();
+            let pop_valid = match (pk_arr, pop_arr) {
+                (Some(pk_bytes), Some(pop_bytes)) => {
+                    match (
+                        aztibase_core::BlsPublicKey::from_bytes(pk_bytes),
+                        aztibase_core::BlsSignature::from_bytes(pop_bytes),
+                    ) {
+                        (Some(pk), Some(sig)) => {
+                            aztibase_core::verify_proof_of_possession(&pk, &sig)
+                        }
+                        _ => false,
+                    }
+                }
+                _ => false,
+            };
+            if !pop_valid {
+                state.increment_nonce(validator);
+                exec_receipts.push(ExecutionReceipt {
+                    tx_hash,
+                    success: false,
+                    gas_used: 21_000,
+                    contract_address: None,
+                    error: Some("invalid BLS proof-of-possession".into()),
                     inference_hash: None,
                     anomaly_score: 0.0,
                 });
@@ -1070,6 +1107,7 @@ impl ExecutionPipeline {
                 *validator,
                 supported_models.clone(),
                 *committed_stake,
+                bls_pubkey.clone(),
                 self.current_round,
             );
             store_guard.register(commitment);
@@ -1424,7 +1462,7 @@ fn short_hex(bytes: &[u8; 32]) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use aztibase_core::{Keypair, address_from_pubkey};
+    use aztibase_core::{BlsKeypair, Keypair, address_from_pubkey};
     use aztibase_execution::{SignedTx, TxKind, get_batch_root, load_state};
     use aztibase_runtime::TractRuntime;
     use std::sync::atomic::{AtomicU32, Ordering};
@@ -1447,6 +1485,14 @@ mod tests {
         let kp = Keypair::generate();
         let addr = address_from_pubkey(kp.public_key().as_bytes());
         (kp, addr)
+    }
+
+    fn make_bls() -> (Vec<u8>, Vec<u8>) {
+        let bls = BlsKeypair::generate();
+        (
+            bls.public_key().as_bytes().to_vec(),
+            bls.proof_of_possession().as_bytes().to_vec(),
+        )
     }
 
     fn sign(tx: &TxKind, kp: &Keypair) -> Vec<u8> {
@@ -3019,10 +3065,13 @@ mod tests {
         let batch0 = make_batch(vec![sign(&reg_tx, &owner_kp)]);
         pipeline.execute_batch(&batch0).await.unwrap();
 
+        let (bls_pk, bls_pop) = make_bls();
         let commit_tx = TxKind::CommitCompute {
             validator,
             supported_models: vec!["m1".into()],
             committed_stake: 3000,
+            bls_pubkey: bls_pk,
+            bls_pop,
             nonce: 0,
             gas_price: 0,
         };
@@ -3090,10 +3139,13 @@ mod tests {
         let batch0 = make_batch(vec![sign(&reg_tx, &owner_kp)]);
         pipeline.execute_batch(&batch0).await.unwrap();
 
+        let (bls_pk, bls_pop) = make_bls();
         let commit1 = TxKind::CommitCompute {
             validator,
             supported_models: vec!["m1".into()],
             committed_stake: 2000,
+            bls_pubkey: bls_pk.clone(),
+            bls_pop: bls_pop.clone(),
             nonce: 0,
             gas_price: 0,
         };
@@ -3105,6 +3157,8 @@ mod tests {
             validator,
             supported_models: vec!["m1".into()],
             committed_stake: 5000,
+            bls_pubkey: bls_pk,
+            bls_pop,
             nonce: 1,
             gas_price: 0,
         };
@@ -3255,10 +3309,13 @@ mod tests {
         let (val_kp, validator) = make_sender();
         pipeline.state.write().await.set_balance(&validator, 10_000);
 
+        let (bls_pk, bls_pop) = make_bls();
         let commit_tx = TxKind::CommitCompute {
             validator,
             supported_models: vec!["nonexistent_model".into()],
             committed_stake: 1000,
+            bls_pubkey: bls_pk,
+            bls_pop,
             nonce: 0,
             gas_price: 0,
         };
@@ -3274,6 +3331,83 @@ mod tests {
                 .contains("not registered")
         );
         assert_eq!(pipeline.state.read().await.balance(&validator), 10_000);
+    }
+
+    #[tokio::test]
+    async fn pipeline_commit_compute_invalid_bls_pop_fails() {
+        let (_tx, rx) = mpsc::channel(16);
+        let mut pipeline = make_pipeline(rx);
+
+        let (val_kp, validator) = make_sender();
+        let (owner_kp, owner) = make_sender();
+        pipeline.state.write().await.set_balance(&validator, 10_000);
+
+        let reg_tx = TxKind::RegisterModel {
+            owner,
+            model_id: "m1".into(),
+            fingerprint: hash(b"fp"),
+            compute_cost: 100,
+            min_stake: 0,
+            nonce: 0,
+            gas_price: 0,
+        };
+        let batch0 = make_batch(vec![sign(&reg_tx, &owner_kp)]);
+        pipeline.execute_batch(&batch0).await.unwrap();
+
+        // Use a valid BLS pubkey but a PoP from a different keypair.
+        let (bls_pk, _) = make_bls();
+        let (_, wrong_pop) = make_bls();
+        let commit_tx = TxKind::CommitCompute {
+            validator,
+            supported_models: vec!["m1".into()],
+            committed_stake: 1000,
+            bls_pubkey: bls_pk,
+            bls_pop: wrong_pop,
+            nonce: 0,
+            gas_price: 0,
+        };
+        let batch = make_batch_with_anchor([0xBB; 32], vec![sign(&commit_tx, &val_kp)]);
+        let result = pipeline.execute_batch(&batch).await.unwrap();
+
+        assert!(!result.receipts[0].success);
+        assert!(
+            result.receipts[0]
+                .error
+                .as_ref()
+                .unwrap()
+                .contains("proof-of-possession")
+        );
+        assert_eq!(pipeline.state.read().await.balance(&validator), 10_000);
+    }
+
+    #[tokio::test]
+    async fn pipeline_commit_compute_malformed_bls_pop_fails() {
+        let (_tx, rx) = mpsc::channel(16);
+        let mut pipeline = make_pipeline(rx);
+
+        let (val_kp, validator) = make_sender();
+        pipeline.state.write().await.set_balance(&validator, 10_000);
+
+        let commit_tx = TxKind::CommitCompute {
+            validator,
+            supported_models: vec!["m1".into()],
+            committed_stake: 1000,
+            bls_pubkey: vec![0xFF; 48],
+            bls_pop: vec![0xFF; 96],
+            nonce: 0,
+            gas_price: 0,
+        };
+        let batch = make_batch(vec![sign(&commit_tx, &val_kp)]);
+        let result = pipeline.execute_batch(&batch).await.unwrap();
+
+        assert!(!result.receipts[0].success);
+        assert!(
+            result.receipts[0]
+                .error
+                .as_ref()
+                .unwrap()
+                .contains("proof-of-possession")
+        );
     }
 
     // ── Phase: TaskAssigner wiring test ──────────────────────────
@@ -3301,10 +3435,13 @@ mod tests {
         let batch0 = make_batch(vec![sign(&reg_tx, &owner_kp)]);
         pipeline.execute_batch(&batch0).await.unwrap();
 
+        let (bls_pk, bls_pop) = make_bls();
         let commit_tx = TxKind::CommitCompute {
             validator,
             supported_models: vec!["m1".into()],
             committed_stake: 1000,
+            bls_pubkey: bls_pk,
+            bls_pop,
             nonce: 0,
             gas_price: 0,
         };

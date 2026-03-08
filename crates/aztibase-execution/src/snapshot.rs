@@ -93,7 +93,8 @@ pub fn snapshot_header_hash(snapshot: &StateSnapshot) -> [u8; 32] {
 }
 
 pub fn serialize_snapshot(snapshot: &StateSnapshot) -> Result<Vec<u8>, SnapshotError> {
-    let data = bincode::serialize(snapshot).map_err(|e| SnapshotError::Serialize(e.to_string()))?;
+    let data =
+        postcard::to_allocvec(snapshot).map_err(|e| SnapshotError::Serialize(e.to_string()))?;
     if data.len() > MAX_SNAPSHOT_SIZE {
         return Err(SnapshotError::TooLarge(data.len()));
     }
@@ -105,7 +106,7 @@ pub fn deserialize_snapshot(data: &[u8]) -> Result<StateSnapshot, SnapshotError>
         return Err(SnapshotError::TooLarge(data.len()));
     }
     let snapshot: StateSnapshot =
-        bincode::deserialize(data).map_err(|e| SnapshotError::Deserialize(e.to_string()))?;
+        postcard::from_bytes(data).map_err(|e| SnapshotError::Deserialize(e.to_string()))?;
     if snapshot.version != SNAPSHOT_VERSION {
         return Err(SnapshotError::UnsupportedVersion(snapshot.version));
     }
@@ -246,7 +247,7 @@ mod tests {
         let state = sample_state();
         let mut snap = create_snapshot(&state, 1);
         snap.version = 99;
-        let bytes = bincode::serialize(&snap).unwrap();
+        let bytes = postcard::to_allocvec(&snap).unwrap();
         let err = deserialize_snapshot(&bytes).unwrap_err();
         assert!(matches!(err, SnapshotError::UnsupportedVersion(99)));
     }

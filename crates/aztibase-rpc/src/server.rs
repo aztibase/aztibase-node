@@ -853,7 +853,7 @@ async fn handle_get_task_status(state: &RpcState, req: &JsonRpcRequest) -> JsonR
 
     match storage.get(&key) {
         Some(data) => {
-            if let Ok(task) = bincode::deserialize::<aztibase_consensus::InferenceTask>(data) {
+            if let Ok(task) = postcard::from_bytes::<aztibase_consensus::InferenceTask>(data) {
                 let mut result = serde_json::json!({
                     "taskId": format!("0x{}", hex::encode(task.task_id)),
                     "modelId": task.model_id,
@@ -1692,7 +1692,7 @@ mod tests {
         let task_id = task.task_id;
         let mut key = b"task:".to_vec();
         key.extend_from_slice(&task_id);
-        let data = bincode::serialize(&task).unwrap();
+        let data = postcard::to_allocvec(&task).unwrap();
         accounts.set_storage(&MODEL_REGISTRY_ADDRESS, key, data);
 
         let (tx, _rx) = mpsc::channel(64);
@@ -1762,6 +1762,7 @@ mod tests {
                 validator,
                 vec!["llama-7b".into()],
                 5000,
+                vec![],
                 1,
             ));
         }
@@ -1824,12 +1825,14 @@ mod tests {
                 [0x01; 32],
                 vec!["llama-7b".into()],
                 1000,
+                vec![],
                 1,
             ));
             guard.register(aztibase_consensus::ComputeCommitment::new(
                 [0x02; 32],
                 vec!["gpt-neo".into()],
                 2000,
+                vec![],
                 1,
             ));
         }

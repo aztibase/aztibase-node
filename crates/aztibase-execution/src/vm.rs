@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use anyhow::{Context, Result, bail};
+use anyhow::Result;
 
 pub struct EngineConfig {
     pub fuel_limit: u64,
@@ -36,6 +36,10 @@ pub struct ExecutionResult {
     pub events: Vec<ContractEvent>,
 }
 
+fn wt_err(msg: &str) -> wasmtime::Error {
+    wasmtime::Error::msg(msg.to_string())
+}
+
 pub struct ExecutionEngine {
     engine: wasmtime::Engine,
     fuel_limit: u64,
@@ -49,8 +53,8 @@ impl ExecutionEngine {
         wasm_config.wasm_relaxed_simd(config.enable_simd);
         wasm_config.wasm_threads(config.enable_threads);
 
-        let engine =
-            wasmtime::Engine::new(&wasm_config).context("Failed to create wasmtime engine")?;
+        let engine = wasmtime::Engine::new(&wasm_config)
+            .map_err(|e| anyhow::anyhow!("failed to create wasmtime engine: {e}"))?;
 
         Ok(Self {
             engine,
@@ -65,7 +69,7 @@ impl ExecutionEngine {
         args: &[wasmtime::Val],
     ) -> Result<ExecutionResult> {
         let module = wasmtime::Module::new(&self.engine, wasm_bytes)
-            .context("Failed to compile WASM module")?;
+            .map_err(|e| anyhow::anyhow!("failed to compile WASM module: {e}"))?;
 
         let mut store = wasmtime::Store::new(
             &self.engine,
@@ -76,26 +80,28 @@ impl ExecutionEngine {
         );
         store
             .set_fuel(self.fuel_limit)
-            .context("Failed to set fuel")?;
+            .map_err(|e| anyhow::anyhow!("failed to set fuel: {e}"))?;
 
         let mut linker = wasmtime::Linker::new(&self.engine);
         Self::register_host_functions(&mut linker)?;
 
         let instance = linker
             .instantiate(&mut store, &module)
-            .context("Failed to instantiate module")?;
+            .map_err(|e| anyhow::anyhow!("failed to instantiate module: {e}"))?;
 
         let func = instance
             .get_func(&mut store, func_name)
-            .context("Function not found")?;
+            .ok_or_else(|| anyhow::anyhow!("function not found: {func_name}"))?;
 
         let num_results = func.ty(&store).results().len();
         let mut results = vec![wasmtime::Val::I32(0); num_results];
 
         func.call(&mut store, args, &mut results)
-            .context("Execution failed")?;
+            .map_err(|e| anyhow::anyhow!("execution failed: {e}"))?;
 
-        let fuel_remaining = store.get_fuel().context("Failed to get fuel")?;
+        let fuel_remaining = store
+            .get_fuel()
+            .map_err(|e| anyhow::anyhow!("failed to get fuel: {e}"))?;
         let fuel_consumed = self.fuel_limit - fuel_remaining;
 
         let host_state = store.into_data();
@@ -118,7 +124,7 @@ impl ExecutionEngine {
         initial_storage: std::collections::BTreeMap<Vec<u8>, Vec<u8>>,
     ) -> Result<ExecutionResult> {
         let module = wasmtime::Module::new(&self.engine, wasm_bytes)
-            .context("Failed to compile WASM module")?;
+            .map_err(|e| anyhow::anyhow!("failed to compile WASM module: {e}"))?;
 
         let storage: HashMap<Vec<u8>, Vec<u8>> = initial_storage.into_iter().collect();
         let mut store = wasmtime::Store::new(
@@ -130,26 +136,28 @@ impl ExecutionEngine {
         );
         store
             .set_fuel(self.fuel_limit)
-            .context("Failed to set fuel")?;
+            .map_err(|e| anyhow::anyhow!("failed to set fuel: {e}"))?;
 
         let mut linker = wasmtime::Linker::new(&self.engine);
         Self::register_host_functions(&mut linker)?;
 
         let instance = linker
             .instantiate(&mut store, &module)
-            .context("Failed to instantiate module")?;
+            .map_err(|e| anyhow::anyhow!("failed to instantiate module: {e}"))?;
 
         let func = instance
             .get_func(&mut store, func_name)
-            .context("Function not found")?;
+            .ok_or_else(|| anyhow::anyhow!("function not found: {func_name}"))?;
 
         let num_results = func.ty(&store).results().len();
         let mut results = vec![wasmtime::Val::I32(0); num_results];
 
         func.call(&mut store, args, &mut results)
-            .context("Execution failed")?;
+            .map_err(|e| anyhow::anyhow!("execution failed: {e}"))?;
 
-        let fuel_remaining = store.get_fuel().context("Failed to get fuel")?;
+        let fuel_remaining = store
+            .get_fuel()
+            .map_err(|e| anyhow::anyhow!("failed to get fuel: {e}"))?;
         let fuel_consumed = self.fuel_limit - fuel_remaining;
 
         let host_state = store.into_data();
@@ -162,16 +170,19 @@ impl ExecutionEngine {
         })
     }
 
-    fn read_guest_memory(data: &[u8], ptr: i32, len: i32) -> anyhow::Result<Vec<u8>> {
+    fn read_guest_memory(data: &[u8], ptr: i32, len: i32) -> Result<Vec<u8>, wasmtime::Error> {
         if ptr < 0 || len < 0 {
-            bail!("negative pointer or length");
+            return Err(wt_err("negative pointer or length"));
         }
         let start = ptr as usize;
         let end = start
             .checked_add(len as usize)
-            .ok_or_else(|| anyhow::anyhow!("pointer arithmetic overflow"))?;
+            .ok_or_else(|| wt_err("pointer arithmetic overflow"))?;
         if end > data.len() {
-            bail!("out-of-bounds memory access: {end} > {}", data.len());
+            return Err(wasmtime::Error::msg(format!(
+                "out-of-bounds memory access: {end} > {}",
+                data.len()
+            )));
         }
         Ok(data[start..end].to_vec())
     }
@@ -186,11 +197,11 @@ impl ExecutionEngine {
                  key_len: i32,
                  val_ptr: i32,
                  val_len: i32|
-                 -> anyhow::Result<()> {
+                 -> Result<(), wasmtime::Error> {
                     let memory = caller
                         .get_export("memory")
                         .and_then(|e| e.into_memory())
-                        .ok_or_else(|| anyhow::anyhow!("missing memory export"))?;
+                        .ok_or_else(|| wt_err("missing memory export"))?;
 
                     let data = memory.data(&caller);
                     let key = Self::read_guest_memory(data, key_ptr, key_len)?;
@@ -200,7 +211,7 @@ impl ExecutionEngine {
                     Ok(())
                 },
             )
-            .context("Failed to register storage_set")?;
+            .map_err(|e| anyhow::anyhow!("failed to register storage_set: {e}"))?;
 
         linker
             .func_wrap(
@@ -211,11 +222,11 @@ impl ExecutionEngine {
                  key_len: i32,
                  out_ptr: i32,
                  out_cap: i32|
-                 -> anyhow::Result<i32> {
+                 -> Result<i32, wasmtime::Error> {
                     let memory = caller
                         .get_export("memory")
                         .and_then(|e| e.into_memory())
-                        .ok_or_else(|| anyhow::anyhow!("missing memory export"))?;
+                        .ok_or_else(|| wt_err("missing memory export"))?;
 
                     let data = memory.data(&caller);
                     let key = Self::read_guest_memory(data, key_ptr, key_len)?;
@@ -223,24 +234,27 @@ impl ExecutionEngine {
                     match caller.data().storage.get(&key) {
                         Some(val) => {
                             if out_ptr < 0 || out_cap < 0 {
-                                bail!("negative output pointer or capacity");
+                                return Err(wt_err("negative output pointer or capacity"));
                             }
                             let write_len = val.len().min(out_cap as usize);
                             let out_start = out_ptr as usize;
                             let out_end = out_start
                                 .checked_add(write_len)
-                                .ok_or_else(|| anyhow::anyhow!("output pointer overflow"))?;
+                                .ok_or_else(|| wt_err("output pointer overflow"))?;
 
                             let val_copy = val[..write_len].to_vec();
 
                             let memory = caller
                                 .get_export("memory")
                                 .and_then(|e| e.into_memory())
-                                .ok_or_else(|| anyhow::anyhow!("missing memory export"))?;
+                                .ok_or_else(|| wt_err("missing memory export"))?;
 
                             let mem_data = memory.data_mut(&mut caller);
                             if out_end > mem_data.len() {
-                                bail!("out-of-bounds write: {out_end} > {}", mem_data.len());
+                                return Err(wasmtime::Error::msg(format!(
+                                    "out-of-bounds write: {out_end} > {}",
+                                    mem_data.len()
+                                )));
                             }
                             mem_data[out_start..out_end].copy_from_slice(&val_copy);
 
@@ -250,7 +264,7 @@ impl ExecutionEngine {
                     }
                 },
             )
-            .context("Failed to register storage_get")?;
+            .map_err(|e| anyhow::anyhow!("failed to register storage_get: {e}"))?;
 
         linker
             .func_wrap(
@@ -261,11 +275,11 @@ impl ExecutionEngine {
                  topic_len: i32,
                  data_ptr: i32,
                  data_len: i32|
-                 -> anyhow::Result<()> {
+                 -> Result<(), wasmtime::Error> {
                     let memory = caller
                         .get_export("memory")
                         .and_then(|e| e.into_memory())
-                        .ok_or_else(|| anyhow::anyhow!("missing memory export"))?;
+                        .ok_or_else(|| wt_err("missing memory export"))?;
 
                     let mem = memory.data(&caller);
                     let topic = Self::read_guest_memory(mem, topic_ptr, topic_len)?;
@@ -275,7 +289,7 @@ impl ExecutionEngine {
                     Ok(())
                 },
             )
-            .context("Failed to register emit_event")?;
+            .map_err(|e| anyhow::anyhow!("failed to register emit_event: {e}"))?;
 
         Ok(())
     }

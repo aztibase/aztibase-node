@@ -799,7 +799,7 @@ async fn main() -> Result<()> {
                                         }
                                     }
                                 }
-                            } else if let Ok(announce) = bincode::deserialize::<StateRootAnnounce>(&data) {
+                            } else if let Ok(announce) = postcard::from_bytes::<StateRootAnnounce>(&data) {
                                 tracing::debug!(
                                     peer_validator = announce.validator[0],
                                     batch = announce.batch_index,
@@ -902,7 +902,7 @@ async fn main() -> Result<()> {
                     batch_index,
                     validator: identity,
                 };
-                if let Ok(data) = bincode::serialize(&announce)
+                if let Ok(data) = postcard::to_allocvec(&announce)
                     && let Err(e) = transport.publish(TOPIC_STATE_SYNC, data)
                 {
                     tracing::debug!(error = %e, "Failed to publish state root");

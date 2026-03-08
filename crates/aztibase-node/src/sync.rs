@@ -32,11 +32,11 @@ pub enum SyncMessage {
 }
 
 pub fn encode_sync_message(msg: &SyncMessage) -> Result<Vec<u8>, String> {
-    bincode::serialize(msg).map_err(|e| e.to_string())
+    postcard::to_allocvec(msg).map_err(|e| e.to_string())
 }
 
 pub fn decode_sync_message(data: &[u8]) -> Result<SyncMessage, String> {
-    let msg: SyncMessage = bincode::deserialize(data).map_err(|e| e.to_string())?;
+    let msg: SyncMessage = postcard::from_bytes(data).map_err(|e| e.to_string())?;
     match &msg {
         SyncMessage::SnapshotRequest { version, .. }
         | SyncMessage::SnapshotResponse { version, .. } => {
@@ -336,7 +336,7 @@ mod tests {
             version: 99,
             requester: [0u8; 32],
         };
-        let encoded = bincode::serialize(&req).unwrap();
+        let encoded = postcard::to_allocvec(&req).unwrap();
         let err = decode_sync_message(&encoded).unwrap_err();
         assert!(err.contains("unsupported"));
     }

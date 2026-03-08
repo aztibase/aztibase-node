@@ -15,7 +15,7 @@ pub enum WireError {
     #[error("message exceeds size limit ({size} > {limit})")]
     TooLarge { size: usize, limit: usize },
 
-    #[error("bincode decode failed: {0}")]
+    #[error("postcard decode failed: {0}")]
     Decode(String),
 
     #[error("hash mismatch")]
@@ -29,9 +29,9 @@ pub enum WireError {
 }
 
 /// Encode a DAG vertex for gossip transmission.
-/// Wire format: [version: u8][bincode payload]
+/// Wire format: [version: u8][postcard payload]
 pub fn encode_vertex(block: &DagBlock) -> Result<Vec<u8>, WireError> {
-    let body = bincode::serialize(block).map_err(|e| WireError::Decode(e.to_string()))?;
+    let body = postcard::to_allocvec(block).map_err(|e| WireError::Decode(e.to_string()))?;
     let mut buf = Vec::with_capacity(1 + body.len());
     buf.push(WIRE_VERSION);
     buf.extend_from_slice(&body);
@@ -40,7 +40,7 @@ pub fn encode_vertex(block: &DagBlock) -> Result<Vec<u8>, WireError> {
 
 /// Decode and validate a gossip vertex.
 ///
-/// Checks: size limits, version byte, bincode decode, hash integrity,
+/// Checks: size limits, version byte, postcard decode, hash integrity,
 /// known validator, and round proximity.
 pub fn decode_vertex(
     data: &[u8],
@@ -64,7 +64,7 @@ pub fn decode_vertex(
     }
 
     let block: DagBlock =
-        bincode::deserialize(&data[1..]).map_err(|e| WireError::Decode(e.to_string()))?;
+        postcard::from_bytes(&data[1..]).map_err(|e| WireError::Decode(e.to_string()))?;
 
     let expected = block.compute_hash();
     if expected != block.hash {
@@ -148,7 +148,7 @@ mod tests {
         let mut block = DagBlock::genesis([1u8; 32], 1000);
         block.hash = [0xFF; 32];
         let mut buf = vec![WIRE_VERSION];
-        buf.extend_from_slice(&bincode::serialize(&block).unwrap());
+        buf.extend_from_slice(&postcard::to_allocvec(&block).unwrap());
         let result = decode_vertex(&buf, &vs, 0);
         assert!(matches!(result, Err(WireError::HashMismatch)));
     }

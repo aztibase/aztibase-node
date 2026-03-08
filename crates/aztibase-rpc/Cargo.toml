@@ -10,7 +10,7 @@ aztibase-core = { workspace = true }
 aztibase-consensus = { workspace = true }
 aztibase-execution = { workspace = true }
 aztibase-storage = { workspace = true }
-bincode = { workspace = true }
+postcard = { workspace = true }
 tokio = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }

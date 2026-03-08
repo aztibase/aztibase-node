@@ -4,16 +4,13 @@ all-features = false
 no-default-features = false
 
 [advisories]
-# Known transitive advisories from upstream deps — tracked for Sprint 025 resolution
+# Transitive advisories from upstream deps — none are direct dependencies
 ignore = [
-    "RUSTSEC-2025-0141", # bincode unmaintained — migration to postcard planned
-    "RUSTSEC-2025-0057", # fxhash unmaintained (via wasmtime) — wasmtime upgrade planned
     "RUSTSEC-2024-0384", # instant unmaintained (via libp2p) — libp2p upgrade planned
-    "RUSTSEC-2024-0436", # paste unmaintained (via wasmtime) — wasmtime upgrade planned
-    "RUSTSEC-2025-0046", # wasmtime fd_renumber panic — upgrade planned
-    "RUSTSEC-2025-0118", # wasmtime shared memory unsoundness — upgrade planned
-    "RUSTSEC-2026-0020", # wasmtime resource exhaustion — upgrade planned
-    "RUSTSEC-2026-0021", # wasmtime fields panic — upgrade planned
+    "RUSTSEC-2023-0089", # atomic-polyfill unmaintained (via postcard→heapless) — no-op on desktop
+    "RUSTSEC-2024-0436", # paste unmaintained (via revm, libp2p, tract) — no vulnerability
+    "RUSTSEC-2025-0009", # ring 0.16.20 AES panic (via libp2p-tls→rcgen) — libp2p upgrade planned
+    "RUSTSEC-2025-0010", # ring 0.16.20 unmaintained (via libp2p-tls) — libp2p upgrade planned
 ]
 
 [licenses]

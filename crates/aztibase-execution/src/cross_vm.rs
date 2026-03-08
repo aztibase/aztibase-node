@@ -366,8 +366,8 @@ mod tests {
             gas_limit: 500_000,
             depth: 2,
         };
-        let encoded = bincode::serialize(&call).unwrap();
-        let decoded: CrossVmCall = bincode::deserialize(&encoded).unwrap();
+        let encoded = postcard::to_allocvec(&call).unwrap();
+        let decoded: CrossVmCall = postcard::from_bytes(&encoded).unwrap();
         assert_eq!(decoded.caller, call.caller);
         assert_eq!(decoded.target, call.target);
         assert_eq!(decoded.calldata, call.calldata);

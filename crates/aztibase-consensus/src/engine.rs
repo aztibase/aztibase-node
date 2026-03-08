@@ -766,7 +766,7 @@ mod tests {
         let mut block = DagBlock::new(1, [2u8; 32], genesis_hashes, vec![], now_ms()).unwrap();
         block.hash = [0xFFu8; 32];
         let mut data = vec![1u8]; // version byte
-        data.extend_from_slice(&bincode::serialize(&block).unwrap());
+        data.extend_from_slice(&postcard::to_allocvec(&block).unwrap());
 
         engine.handle_received_vertex(&data).unwrap();
         assert_eq!(engine.state.vertices_at_round(1).len(), 0);

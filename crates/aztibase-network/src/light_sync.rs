@@ -163,11 +163,11 @@ pub struct SyncFinalityCert {
 }
 
 pub fn encode_light_sync(msg: &LightSyncMessage) -> Result<Vec<u8>, String> {
-    bincode::serialize(msg).map_err(|e| e.to_string())
+    postcard::to_allocvec(msg).map_err(|e| e.to_string())
 }
 
 pub fn decode_light_sync(data: &[u8]) -> Result<LightSyncMessage, String> {
-    let msg: LightSyncMessage = bincode::deserialize(data).map_err(|e| e.to_string())?;
+    let msg: LightSyncMessage = postcard::from_bytes(data).map_err(|e| e.to_string())?;
     let version = match &msg {
         LightSyncMessage::RequestHeaders { version, .. }
         | LightSyncMessage::ResponseHeaders { version, .. }
@@ -437,7 +437,7 @@ mod tests {
             from_round: 1,
             count: 10,
         };
-        let encoded = bincode::serialize(&bad).unwrap();
+        let encoded = postcard::to_allocvec(&bad).unwrap();
         assert!(decode_light_sync(&encoded).is_err());
     }
 

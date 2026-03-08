@@ -1,4 +1,3 @@
-use bincode::Options;
 use serde::{Deserialize, Serialize};
 
 type Address = [u8; 32];
@@ -18,7 +17,7 @@ const PREFIX_DEREGISTER_COMPUTE: u8 = 0x0C;
 const PREFIX_DEREGISTER_MODEL: u8 = 0x0D;
 
 /// Maximum encoded transaction size (1 MB). Rejects oversized payloads before
-/// deserialization to prevent memory-bomb attacks via bincode length prefixes.
+/// deserialization to prevent memory-bomb attacks via oversized payloads.
 const MAX_TX_SIZE: u64 = 1_048_576;
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -107,6 +106,8 @@ pub enum TxKind {
         validator: Address,
         supported_models: Vec<String>,
         committed_stake: u64,
+        bls_pubkey: Vec<u8>,
+        bls_pop: Vec<u8>,
         nonce: u64,
         gas_price: u64,
     },
@@ -124,7 +125,7 @@ pub enum TxKind {
 }
 
 impl TxKind {
-    /// Serialize to wire format: [prefix_byte][bincode payload].
+    /// Serialize to wire format: [prefix_byte][postcard payload].
     pub fn encode(&self) -> Vec<u8> {
         let prefix = match self {
             TxKind::Transfer { .. } => PREFIX_TRANSFER,
@@ -141,7 +142,7 @@ impl TxKind {
             TxKind::DeregisterCompute { .. } => PREFIX_DEREGISTER_COMPUTE,
             TxKind::DeregisterModel { .. } => PREFIX_DEREGISTER_MODEL,
         };
-        let payload = bincode::serialize(self).expect("TxKind serialization cannot fail");
+        let payload = postcard::to_allocvec(self).expect("TxKind serialization cannot fail");
         let mut buf = Vec::with_capacity(1 + payload.len());
         buf.push(prefix);
         buf.extend_from_slice(&payload);
@@ -275,12 +276,6 @@ impl std::fmt::Display for RoutingError {
 
 impl std::error::Error for RoutingError {}
 
-fn bincode_options() -> impl Options {
-    bincode::DefaultOptions::new()
-        .with_limit(MAX_TX_SIZE)
-        .with_fixint_encoding()
-}
-
 fn is_valid_func_name(name: &str) -> bool {
     if name.is_empty() || name.len() > 128 {
         return false;
@@ -294,7 +289,7 @@ fn is_valid_func_name(name: &str) -> bool {
 }
 
 /// Decode raw payload bytes into a typed transaction.
-/// Wire format: [prefix_byte][bincode-encoded TxKind].
+/// Wire format: [prefix_byte][postcard-encoded TxKind].
 pub fn route_tx(raw: &[u8]) -> Result<TxKind, RoutingError> {
     if raw.len() as u64 > MAX_TX_SIZE {
         return Err(RoutingError::OversizedPayload(raw.len()));
@@ -316,9 +311,14 @@ pub fn route_tx(raw: &[u8]) -> Result<TxKind, RoutingError> {
         | PREFIX_DEREGISTER_MODEL => {}
         other => return Err(RoutingError::UnknownPrefix(other)),
     }
-    let decoded: TxKind = bincode_options()
-        .deserialize(body)
-        .map_err(|e| RoutingError::DecodeFailed(e.to_string()))?;
+    let (decoded, remaining): (TxKind, &[u8]) =
+        postcard::take_from_bytes(body).map_err(|e| RoutingError::DecodeFailed(e.to_string()))?;
+    if !remaining.is_empty() {
+        return Err(RoutingError::DecodeFailed(format!(
+            "trailing bytes: {}",
+            remaining.len()
+        )));
+    }
     let actual = decoded.expected_prefix();
     if prefix != actual {
         return Err(RoutingError::PrefixMismatch {
@@ -758,6 +758,8 @@ mod tests {
             validator: [0xF0; 32],
             supported_models: vec!["llama-7b".into(), "gpt-neo".into()],
             committed_stake: 5000,
+            bls_pubkey: vec![0xAB; 48],
+            bls_pop: vec![0xCD; 96],
             nonce: 15,
             gas_price: 4,
         };

@@ -35,7 +35,7 @@ tokio = { version = "1", features = ["full"] }
 # Serialization
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-bincode = "1"
+postcard = { version = "1", features = ["alloc"] }
 prost = "0.13"
 prost-build = "0.13"
 
@@ -82,7 +82,7 @@ thiserror = "2"
 anyhow = "1"
 
 # WASM execution
-wasmtime = "28"
+wasmtime = "42"
 
 # EVM execution (no default C deps — precompiles added separately)
 revm = { version = "36", default-features = false, features = ["std"] }

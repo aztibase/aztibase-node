@@ -7,6 +7,7 @@ type Address = [u8; 32];
 const ENVELOPE_MAGIC: u8 = 0xAA;
 const MAX_ENVELOPE_SIZE: usize = 1_048_576;
 const MIN_ENVELOPE_SIZE: usize = 1 + 4 + 32 + 64; // magic + payload_len + pubkey + sig
+const TX_DOMAIN: &[u8] = b"AZTB_TX_V1";
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct SignedTx {
@@ -47,9 +48,17 @@ impl std::fmt::Display for TxError {
 impl std::error::Error for TxError {}
 
 impl SignedTx {
+    fn signing_message(payload: &[u8]) -> Vec<u8> {
+        let mut msg = Vec::with_capacity(TX_DOMAIN.len() + payload.len());
+        msg.extend_from_slice(TX_DOMAIN);
+        msg.extend_from_slice(payload);
+        msg
+    }
+
     /// Sign a TxKind-encoded payload with an Ed25519 keypair.
     pub fn new(payload: Vec<u8>, keypair: &Keypair) -> Self {
-        let sig_bytes = keypair.sign(&payload);
+        let msg = Self::signing_message(&payload);
+        let sig_bytes = keypair.sign(&msg);
         let mut signature = [0u8; 64];
         signature.copy_from_slice(&sig_bytes);
         Self {
@@ -65,7 +74,8 @@ impl SignedTx {
             Some(pk) => pk,
             None => return false,
         };
-        pk.verify(&self.payload, &self.signature)
+        let msg = Self::signing_message(&self.payload);
+        pk.verify(&msg, &self.signature)
     }
 
     /// Derive the sender address (BLAKE3 hash of the public key).

@@ -16,4 +16,4 @@ bytes = { workspace = true }
 hex = { workspace = true }
 chrono = { workspace = true }
 prost = { workspace = true }
-bincode = { workspace = true }
+postcard = { workspace = true }

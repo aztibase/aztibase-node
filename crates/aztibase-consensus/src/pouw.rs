@@ -68,7 +68,8 @@ impl InferenceAttestation {
     }
 
     pub fn attestation_hash(&self) -> Hash {
-        let mut buf = Vec::new();
+        let mut buf = Vec::with_capacity(20 + 32 + 32 + 8 + 32);
+        buf.extend_from_slice(b"AZTB_ATTESTATION_V1\0");
         buf.extend_from_slice(&self.task_id);
         buf.extend_from_slice(&self.result_hash);
         buf.extend_from_slice(&self.compute_units.to_le_bytes());
@@ -101,6 +102,7 @@ pub struct ComputeCommitment {
     pub validator_id: ValidatorId,
     pub supported_models: Vec<String>,
     pub committed_stake: u64,
+    pub bls_pubkey: Vec<u8>,
     pub registered_round: u64,
     pub active: bool,
 }
@@ -110,12 +112,14 @@ impl ComputeCommitment {
         validator_id: ValidatorId,
         supported_models: Vec<String>,
         committed_stake: u64,
+        bls_pubkey: Vec<u8>,
         current_round: u64,
     ) -> Self {
         Self {
             validator_id,
             supported_models,
             committed_stake,
+            bls_pubkey,
             registered_round: current_round,
             active: true,
         }
@@ -399,8 +403,8 @@ mod tests {
     #[test]
     fn task_serialization_roundtrip() {
         let task = InferenceTask::new("classifier_v2".into(), hash(b"data"), [3u8; 32], 2000, 200);
-        let encoded = bincode::serialize(&task).unwrap();
-        let decoded: InferenceTask = bincode::deserialize(&encoded).unwrap();
+        let encoded = postcard::to_allocvec(&task).unwrap();
+        let decoded: InferenceTask = postcard::from_bytes(&encoded).unwrap();
         assert_eq!(decoded, task);
     }
 
@@ -413,8 +417,8 @@ mod tests {
             [4u8; 32],
             vec![0xBB; 64],
         );
-        let encoded = bincode::serialize(&att).unwrap();
-        let decoded: InferenceAttestation = bincode::deserialize(&encoded).unwrap();
+        let encoded = postcard::to_allocvec(&att).unwrap();
+        let decoded: InferenceAttestation = postcard::from_bytes(&encoded).unwrap();
         assert_eq!(decoded, att);
     }
 
@@ -436,7 +440,8 @@ mod tests {
     #[test]
     fn compute_commitment_creation() {
         let v = [1u8; 32];
-        let c = ComputeCommitment::new(v, vec!["model_a".into(), "model_b".into()], 500, 10);
+        let c =
+            ComputeCommitment::new(v, vec!["model_a".into(), "model_b".into()], 500, vec![], 10);
         assert!(c.active);
         assert!(c.supports_model("model_a"));
         assert!(c.supports_model("model_b"));
@@ -446,7 +451,7 @@ mod tests {
 
     #[test]
     fn compute_commitment_deactivate() {
-        let mut c = ComputeCommitment::new([1u8; 32], vec!["m".into()], 100, 0);
+        let mut c = ComputeCommitment::new([1u8; 32], vec!["m".into()], 100, vec![], 0);
         assert!(c.supports_model("m"));
         c.deactivate();
         assert!(!c.supports_model("m"));
@@ -459,11 +464,18 @@ mod tests {
         let v1 = [1u8; 32];
         let v2 = [2u8; 32];
 
-        store.register(ComputeCommitment::new(v1, vec!["m1".into()], 100, 0));
+        store.register(ComputeCommitment::new(
+            v1,
+            vec!["m1".into()],
+            100,
+            vec![],
+            0,
+        ));
         store.register(ComputeCommitment::new(
             v2,
             vec!["m1".into(), "m2".into()],
             200,
+            vec![],
             0,
         ));
 
@@ -578,7 +590,13 @@ mod tests {
     fn commitment_store_deregister() {
         let mut store = ComputeCommitmentStore::new();
         let v1 = [1u8; 32];
-        store.register(ComputeCommitment::new(v1, vec!["m1".into()], 100, 0));
+        store.register(ComputeCommitment::new(
+            v1,
+            vec!["m1".into()],
+            100,
+            vec![],
+            0,
+        ));
 
         let removed = store.deregister(&v1);
         assert!(removed.is_some());
@@ -592,7 +610,13 @@ mod tests {
     fn commitment_store_double_deregister_returns_none() {
         let mut store = ComputeCommitmentStore::new();
         let v1 = [1u8; 32];
-        store.register(ComputeCommitment::new(v1, vec!["m1".into()], 200, 0));
+        store.register(ComputeCommitment::new(
+            v1,
+            vec!["m1".into()],
+            200,
+            vec![],
+            0,
+        ));
 
         assert!(store.deregister(&v1).is_some());
         assert!(store.deregister(&v1).is_none());
