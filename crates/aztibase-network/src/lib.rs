@@ -24,7 +24,10 @@ pub use light_sync::{
 };
 pub use peer_store::{PeerStore, StoredPeer};
 pub use reputation::{OffenseSeverity, PeerReputation, PeerReputationStore};
-pub use transport::{Libp2pTransport, NatStatus, NetworkEvent, TransportConfig};
+pub use transport::{
+    DEFAULT_WEBRTC_PORT, Libp2pTransport, NatStatus, NatTraversalStats, NetworkEvent,
+    TransportConfig,
+};
 #[cfg(feature = "webrtc")]
 pub use webrtc::{WebRtcConfig, WebRtcTransport};
 
@@ -189,6 +192,50 @@ mod tests {
             config.autonat_probe_interval_secs,
             transport::AUTONAT_PROBE_INTERVAL_SECS
         );
+        assert!(!config.enable_webrtc);
+        assert_eq!(config.webrtc_listen_port, DEFAULT_WEBRTC_PORT);
+    }
+
+    #[tokio::test]
+    async fn transport_webrtc_config_propagates() {
+        let config = TransportConfig {
+            enable_webrtc: true,
+            webrtc_listen_port: 8500,
+            ..TransportConfig::default()
+        };
+        assert!(config.enable_webrtc);
+        assert_eq!(config.webrtc_listen_port, 8500);
+        let transport = Libp2pTransport::new(config).unwrap();
+        assert_ne!(transport.local_peer_id().to_string(), "");
+    }
+
+    #[tokio::test]
+    async fn transport_has_dcutr_behaviour() {
+        let transport = Libp2pTransport::new(TransportConfig::default()).unwrap();
+        let stats = transport.nat_traversal_stats();
+        assert_eq!(stats.dcutr_attempts, 0);
+        assert_eq!(stats.dcutr_successes, 0);
+        assert_eq!(stats.dcutr_failures, 0);
+    }
+
+    #[test]
+    fn nat_traversal_stats_default() {
+        let stats = NatTraversalStats::default();
+        assert_eq!(stats.dcutr_attempts, 0);
+        assert_eq!(stats.dcutr_successes, 0);
+        assert_eq!(stats.dcutr_failures, 0);
+    }
+
+    #[test]
+    fn nat_traversal_stats_clone() {
+        let mut stats = NatTraversalStats::default();
+        stats.dcutr_attempts = 5;
+        stats.dcutr_successes = 3;
+        stats.dcutr_failures = 2;
+        let cloned = stats.clone();
+        assert_eq!(cloned.dcutr_attempts, 5);
+        assert_eq!(cloned.dcutr_successes, 3);
+        assert_eq!(cloned.dcutr_failures, 2);
     }
 
     #[test]

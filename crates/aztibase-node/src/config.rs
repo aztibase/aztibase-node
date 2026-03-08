@@ -29,6 +29,8 @@ pub struct NetworkConfig {
     pub boot_nodes: Vec<String>,
     pub idle_timeout_secs: u64,
     pub stun_servers: Vec<String>,
+    pub enable_webrtc: bool,
+    pub webrtc_listen_port: u16,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -85,6 +87,8 @@ impl Default for NetworkConfig {
                 "stun:stun.l.google.com:19302".into(),
                 "stun:stun1.l.google.com:19302".into(),
             ],
+            enable_webrtc: false,
+            webrtc_listen_port: 9000,
         }
     }
 }

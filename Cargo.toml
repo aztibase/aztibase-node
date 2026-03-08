@@ -71,6 +71,7 @@ libp2p = { version = "0.54", features = [
     "request-response",
     "autonat",
     "relay",
+    "dcutr",
 ] }
 
 # Storage (redb: pure Rust, no native deps; rocksdb to be added later with LLVM)

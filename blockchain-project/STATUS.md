@@ -1,9 +1,9 @@
 # PROJECT STATUS: Aztibase Network
 
 **Last Updated:** 2026-03-08
-**Updated By:** node-engineer
-**Current Phase:** M8 -- Public Testnet (Sprint 4 COMPLETE)
-**Current Sprint:** Sprint 029 -- COMPLETE (Gossipsub Hardening & Persistent Peer Discovery)
+**Updated By:** p2p-network-engineer
+**Current Phase:** M8 -- Public Testnet (Sprint 5 COMPLETE)
+**Current Sprint:** Sprint 030 -- COMPLETE (WebRTC Direct Transport & DCUtR Hole Punching)
 
 ---
 
@@ -77,12 +77,16 @@
 | aztibase-wasm | PARTIAL | p2p-network-engineer | NO | YES |
 
 ### In Progress
-- Nothing currently in progress — Sprint 029 complete, Sprint 030 next
+- Nothing currently in progress — Sprint 030 complete, Sprint 031 next
 
 ### Blocked
 - Nothing currently blocked
 
 ### Recently Completed
+- Sprint 030 Phase 4: Security review — 60 network tests, 0 ELEVATED, 0 MEDIUM, 1 LOW (WebRTC alpha API), clippy 0 warnings, fmt clean
+- Sprint 030 Phase 3: NAT traversal integration — WebRTC config wired into CLI + node config, Dockerfile EXPOSE updated, DCUtR auto-triggers verified, 1 new test
+- Sprint 030 Phase 2: WebRTC direct transport — build_libp2p_transport() behind feature flag, TransportConfig enable_webrtc/webrtc_listen_port, 4 new tests
+- Sprint 030 Phase 1: DCUtR hole punching — dcutr::Behaviour in swarm, event handling with NatTraversalStats, 3 new tests
 - Sprint 029 Phase 4: Security review — 56 network tests, 0 ELEVATED, 0 MEDIUM, 2 LOW, clippy 0 warnings, fmt clean
 - Sprint 029 Phase 3: Kademlia bootstrap + message validation — bootstrap on first peer, RoutingUpdated→PeerStore, structural message validation, 3 tests
 - Sprint 029 Phase 2: Persistent peer store — PeerStore (redb), address merge/dedup, load_cached_peers on startup, 4 tests
@@ -175,8 +179,8 @@
 - Sprint 005 Phase 1: Consensus-to-execution wiring, TxKind routing, ExecutionPipeline
 
 ### Next Up
-1. Sprint 030: WebRTC swarm integration + DCUtR hole punching
-2. Sprint 031: End-to-end testnet smoke tests + integration testing
+1. Sprint 031: End-to-end testnet smoke tests + integration testing
+2. Sprint 032: TBD — mainnet readiness or additional hardening
 
 ### M8 Scope: Monitoring Infrastructure (Planned)
 - **Prometheus**: `prometheus-client` crate (pure Rust), `/metrics` endpoint in Prometheus text format

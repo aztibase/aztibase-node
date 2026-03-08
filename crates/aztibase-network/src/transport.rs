@@ -7,7 +7,7 @@ use anyhow::{Context, Result};
 use futures::StreamExt;
 use libp2p::request_response::{self, OutboundRequestId, ProtocolSupport, ResponseChannel};
 use libp2p::swarm::SwarmEvent;
-use libp2p::{Multiaddr, PeerId, Swarm, autonat, connection_limits, gossipsub, kad, mdns};
+use libp2p::{Multiaddr, PeerId, Swarm, autonat, connection_limits, dcutr, gossipsub, kad, mdns};
 use tracing::{debug, info, warn};
 
 use crate::behaviour::{AztibaseBehaviour, AztibaseBehaviourEvent};
@@ -37,6 +37,8 @@ impl std::fmt::Display for NatStatus {
     }
 }
 
+pub const DEFAULT_WEBRTC_PORT: u16 = 9000;
+
 pub struct TransportConfig {
     pub idle_timeout_secs: u64,
     pub reputation_store: Option<Arc<PeerReputationStore>>,
@@ -44,6 +46,8 @@ pub struct TransportConfig {
     pub enable_autonat: bool,
     pub relay_servers: Vec<Multiaddr>,
     pub autonat_probe_interval_secs: u64,
+    pub enable_webrtc: bool,
+    pub webrtc_listen_port: u16,
 }
 
 impl Default for TransportConfig {
@@ -55,6 +59,8 @@ impl Default for TransportConfig {
             enable_autonat: true,
             relay_servers: Vec::new(),
             autonat_probe_interval_secs: AUTONAT_PROBE_INTERVAL_SECS,
+            enable_webrtc: false,
+            webrtc_listen_port: DEFAULT_WEBRTC_PORT,
         }
     }
 }
@@ -86,6 +92,13 @@ pub enum NetworkEvent {
     },
 }
 
+#[derive(Debug, Clone, Default)]
+pub struct NatTraversalStats {
+    pub dcutr_attempts: u64,
+    pub dcutr_successes: u64,
+    pub dcutr_failures: u64,
+}
+
 pub struct Libp2pTransport {
     swarm: Swarm<AztibaseBehaviour>,
     topics: HashMap<String, gossipsub::IdentTopic>,
@@ -97,6 +110,7 @@ pub struct Libp2pTransport {
     nat_status: NatStatus,
     relay_servers: Vec<Multiaddr>,
     kad_bootstrapped: bool,
+    nat_traversal_stats: NatTraversalStats,
 }
 
 impl Libp2pTransport {
@@ -156,6 +170,7 @@ impl Libp2pTransport {
                     light_sync,
                     autonat,
                     relay_client,
+                    dcutr: dcutr::Behaviour::new(peer_id),
                 })
             })
             .context("Failed to configure behaviour")?
@@ -177,6 +192,7 @@ impl Libp2pTransport {
             nat_status: NatStatus::Unknown,
             relay_servers,
             kad_bootstrapped: false,
+            nat_traversal_stats: NatTraversalStats::default(),
         };
 
         transport.subscribe_all()?;
@@ -334,6 +350,20 @@ impl Libp2pTransport {
                     autonat::Event::InboundProbe(_) | autonat::Event::OutboundProbe(_) => {}
                 },
                 SwarmEvent::Behaviour(AztibaseBehaviourEvent::RelayClient(_)) => {}
+                SwarmEvent::Behaviour(AztibaseBehaviourEvent::Dcutr(event)) => {
+                    self.nat_traversal_stats.dcutr_attempts += 1;
+                    let remote = event.remote_peer_id;
+                    match event.result {
+                        Ok(connection_id) => {
+                            self.nat_traversal_stats.dcutr_successes += 1;
+                            info!(%remote, ?connection_id, "DCUtR direct connection upgrade succeeded");
+                        }
+                        Err(error) => {
+                            self.nat_traversal_stats.dcutr_failures += 1;
+                            warn!(%remote, %error, "DCUtR direct connection upgrade failed");
+                        }
+                    }
+                }
                 SwarmEvent::IncomingConnectionError { error, .. } => {
                     warn!("Incoming connection denied: {error}");
                 }
@@ -481,6 +511,10 @@ impl Libp2pTransport {
 
     pub fn peer_store(&self) -> Option<&Arc<PeerStore>> {
         self.peer_store.as_ref()
+    }
+
+    pub fn nat_traversal_stats(&self) -> &NatTraversalStats {
+        &self.nat_traversal_stats
     }
 
     pub fn load_cached_peers(&mut self, limit: usize) -> usize {

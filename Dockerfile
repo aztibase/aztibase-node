@@ -13,7 +13,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 COPY --from=builder /build/target/release/aztibase /usr/local/bin/aztibase
 
-EXPOSE 9944 9000
+EXPOSE 30333 9944 9000
 
 ENV AZTIBASE_DATA_DIR=/data
 ENV AZTIBASE_RPC_ADDR=0.0.0.0:9944

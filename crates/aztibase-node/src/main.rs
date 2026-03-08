@@ -83,6 +83,10 @@ struct Cli {
     /// Run as a light node (header sync only, no execution or vertex proposal)
     #[arg(long)]
     light: bool,
+
+    /// Enable WebRTC direct transport for browser-node connectivity (feature-gated)
+    #[arg(long)]
+    webrtc: bool,
 }
 
 #[derive(clap::Subcommand, Debug)]
@@ -665,6 +669,8 @@ async fn main() -> Result<()> {
         reputation_store: Some(rep_store),
         peer_store: Some(Arc::clone(&peer_store)),
         relay_servers: boot_addrs,
+        enable_webrtc: cli.webrtc || config.network.enable_webrtc,
+        webrtc_listen_port: config.network.webrtc_listen_port,
         ..TransportConfig::default()
     };
     let mut transport =
@@ -1038,6 +1044,8 @@ async fn run_light_node(config: &NodeConfig) -> Result<()> {
         reputation_store: Some(light_rep_store),
         peer_store: Some(light_peer_store),
         relay_servers: light_boot_addrs,
+        enable_webrtc: config.network.enable_webrtc,
+        webrtc_listen_port: config.network.webrtc_listen_port,
         ..TransportConfig::default()
     };
     let mut transport =
@@ -1269,6 +1277,7 @@ mod tests {
             genesis: None,
             metrics: false,
             light: false,
+            webrtc: false,
         };
         let config = cli.apply_overrides(NodeConfig::default());
         assert_eq!(config.data_dir, PathBuf::from("/tmp/test"));
@@ -1289,6 +1298,7 @@ mod tests {
             genesis: None,
             metrics: false,
             light: false,
+            webrtc: false,
         };
         let config = cli.apply_overrides(NodeConfig::default());
         assert_eq!(config.network.listen_addresses.len(), 1);
@@ -1374,6 +1384,7 @@ mod tests {
             genesis: Some(PathBuf::from("/cli/genesis.toml")),
             metrics: false,
             light: false,
+            webrtc: false,
         };
         let result = cli.apply_overrides(config);
 

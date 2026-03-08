@@ -5,6 +5,23 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ---
 
+## [M8-S5] -- WebRTC Direct Transport & DCUtR Hole Punching (Sprint 030)
+
+### Added
+- `dcutr::Behaviour` integrated into `AztibaseBehaviour` swarm for NAT hole punching (2026-03-08)
+- `NatTraversalStats`: tracks DCUtR upgrade attempts, successes, failures (2026-03-08)
+- `build_libp2p_transport()`: real libp2p-webrtc transport behind `webrtc` feature flag (2026-03-08)
+- `enable_webrtc` and `webrtc_listen_port` in `TransportConfig` and `NetworkConfig` (2026-03-08)
+- `--webrtc` CLI flag for enabling WebRTC direct transport (2026-03-08)
+- 4 new tests (DCUtR behaviour, stats default/clone, WebRTC config propagation) — 60 total network tests (2026-03-08)
+
+### Changed
+- Dockerfile: EXPOSE now includes 30333 (P2P), 9944 (RPC), 9000 (WebRTC) (2026-03-08)
+- `dcutr` added to workspace libp2p features (2026-03-08)
+- Full-node and light-node TransportConfig construction wired with WebRTC config from CLI + TOML (2026-03-08)
+
+---
+
 ## [M8-S4] -- Gossipsub Hardening & Persistent Peer Discovery (Sprint 029)
 
 ### Added

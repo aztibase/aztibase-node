@@ -1,7 +1,6 @@
 use anyhow::{Context, Result};
 use libp2p::Multiaddr;
 
-/// Configuration for the WebRTC transport layer.
 #[derive(Clone, Debug)]
 pub struct WebRtcConfig {
     pub stun_servers: Vec<String>,
@@ -15,15 +14,11 @@ impl Default for WebRtcConfig {
                 "stun:stun.l.google.com:19302".into(),
                 "stun:stun1.l.google.com:19302".into(),
             ],
-            listen_port: 30334,
+            listen_port: 9000,
         }
     }
 }
 
-/// Validate a STUN/TURN server URI. Accepted formats:
-/// - `stun:<host>:<port>`
-/// - `stun:<host>` (port optional)
-/// - `turn:<host>:<port>`
 fn validate_stun_uri(uri: &str) -> Result<()> {
     let (scheme, rest) = uri
         .split_once(':')
@@ -54,8 +49,6 @@ fn validate_stun_uri(uri: &str) -> Result<()> {
     Ok(())
 }
 
-/// WebRTC transport wrapper for browser-node connectivity.
-/// Uses libp2p-webrtc under the hood with DTLS for encryption.
 pub struct WebRtcTransport {
     config: WebRtcConfig,
     listen_addr: Option<Multiaddr>,
@@ -83,15 +76,11 @@ impl WebRtcTransport {
         self.config.listen_port
     }
 
-    /// Build the multiaddr for the WebRTC UDP listener.
     pub fn listen_multiaddr(&self) -> Result<Multiaddr> {
         let addr_str = format!("/ip4/0.0.0.0/udp/{}/webrtc-direct", self.config.listen_port);
         addr_str.parse().context("invalid WebRTC listen address")
     }
 
-    /// Initialize the transport. In a full implementation this would
-    /// configure the libp2p swarm with the WebRTC transport alongside QUIC.
-    /// For now it validates the config and builds the listen address.
     pub fn initialize(&mut self) -> Result<Multiaddr> {
         let addr = self.listen_multiaddr()?;
         self.listen_addr = Some(addr.clone());
@@ -100,6 +89,20 @@ impl WebRtcTransport {
 
     pub fn is_initialized(&self) -> bool {
         self.listen_addr.is_some()
+    }
+
+    /// Build the libp2p-webrtc transport for use with `SwarmBuilder::with_other_transport`.
+    /// Requires the `webrtc` feature flag.
+    #[cfg(feature = "webrtc")]
+    pub fn build_libp2p_transport(
+        keypair: &libp2p::identity::Keypair,
+    ) -> Result<libp2p_webrtc::tokio::Transport> {
+        let certificate = libp2p_webrtc::tokio::Certificate::generate(&mut rand::thread_rng())
+            .context("failed to generate WebRTC certificate")?;
+        Ok(libp2p_webrtc::tokio::Transport::new(
+            keypair.clone(),
+            certificate,
+        ))
     }
 }
 
@@ -172,5 +175,34 @@ mod tests {
             listen_port: 30334,
         };
         assert!(WebRtcTransport::new(config).is_ok());
+    }
+
+    #[test]
+    fn webrtc_config_defaults() {
+        let config = WebRtcConfig::default();
+        assert_eq!(config.listen_port, 9000);
+        assert_eq!(config.stun_servers.len(), 2);
+    }
+
+    #[test]
+    fn webrtc_config_toml_roundtrip() {
+        let config = WebRtcConfig {
+            stun_servers: vec!["stun:stun.example.com:3478".into()],
+            listen_port: 8888,
+        };
+        let transport = WebRtcTransport::new(config.clone()).unwrap();
+        assert_eq!(transport.listen_port(), 8888);
+        assert_eq!(transport.stun_servers().len(), 1);
+    }
+
+    #[test]
+    fn webrtc_listen_addr_format() {
+        let config = WebRtcConfig {
+            listen_port: 9000,
+            ..Default::default()
+        };
+        let transport = WebRtcTransport::new(config).unwrap();
+        let addr = transport.listen_multiaddr().unwrap();
+        assert_eq!(addr.to_string(), "/ip4/0.0.0.0/udp/9000/webrtc-direct");
     }
 }

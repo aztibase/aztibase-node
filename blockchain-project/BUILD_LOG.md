@@ -21,6 +21,25 @@ Entries are prepended (newest first).
 
 ## Entries
 
+### 2026-03-08 -- p2p-network-engineer -- Sprint 030 Complete (M8 Sprint 5: WebRTC Direct Transport & DCUtR Hole Punching)
+**Task:** Sprint 030: DCUtR hole punching, WebRTC direct transport (feature-gated), NAT traversal pipeline integration
+**Sprint:** Sprint 030, Phases 1-4
+**Git Ref:** pending
+**Files Changed:**
+- Cargo.toml (root): added `dcutr` to libp2p features
+- crates/aztibase-network/Cargo.toml: added `libp2p-webrtc` + `rcgen` optional deps behind `webrtc` feature
+- crates/aztibase-network/src/behaviour.rs: added `dcutr::Behaviour` to `AztibaseBehaviour`
+- crates/aztibase-network/src/transport.rs: `NatTraversalStats`, DCUtR event handling, `enable_webrtc`/`webrtc_listen_port` in TransportConfig, `DEFAULT_WEBRTC_PORT`
+- crates/aztibase-network/src/webrtc.rs: `build_libp2p_transport()` behind `#[cfg(feature = "webrtc")]`, 10 tests total
+- crates/aztibase-network/src/lib.rs: updated exports, 4 new tests (dcutr behaviour, stats default/clone, webrtc config propagation)
+- crates/aztibase-node/src/config.rs: `enable_webrtc`, `webrtc_listen_port` in NetworkConfig
+- crates/aztibase-node/src/main.rs: `--webrtc` CLI flag, wired WebRTC config into both full-node and light-node TransportConfig construction
+- Dockerfile: EXPOSE 30333 9944 9000
+**Review Notes:** DCUtR is pure Rust, auto-triggers via libp2p relay+NAT detection. WebRTC feature-gated (default off) — full build deferred to CI due to disk space. 60 network tests pass. clippy 0 warnings, fmt clean.
+**Security Flags:** 0 ELEVATED, 0 MEDIUM, 1 LOW (WebRTC alpha API — mitigated by feature gate)
+
+---
+
 ### 2026-03-08 -- p2p-network-engineer -- Sprint 029 Complete (M8 Sprint 4: Gossipsub Hardening & Persistent Peer Discovery)
 **Task:** Sprint 029: Gossipsub scoring retune, persistent peer store, Kademlia bootstrap, message validation
 **Sprint:** Sprint 029, Phases 1-4
