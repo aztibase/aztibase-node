@@ -5,6 +5,25 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ---
 
+## [M8-S1] -- Prometheus Metrics + Testnet Infrastructure (Sprint 026)
+
+### Added
+- `prometheus-client` v0.23 (pure Rust) metrics registry with 12 typed counters/gauges (2026-03-08)
+- `GET /metrics` endpoint: Prometheus text format (text/plain; version=0.0.4) for Grafana/Prometheus scraping (2026-03-08)
+- `GET /metrics/json` endpoint: backward-compatible JSON metrics (ADR-008) (2026-03-08)
+- `GET /health` endpoint: returns `{"status":"ok","blockHeight":N}` for Docker/LB healthchecks (2026-03-08)
+- `aztb_faucetDrip` RPC: testnet-only (chain_id=0xA27B), 10 AZTB per drip, 60s rate limit per address (2026-03-08)
+- `aztb_nodeInfo` RPC: returns version, chain_id, block_height, protocol_version (2026-03-08)
+- Prometheus scrape config for 3-validator Docker setup (monitoring/prometheus.yml) (2026-03-08)
+- Grafana provisioned datasource + 2 auto-loaded dashboards: Node Health and Consensus (2026-03-08)
+- Docker Compose: Prometheus (port 9090) and Grafana (port 3000) services with persistent volumes (2026-03-08)
+
+### Changed
+- Metrics backend: `Arc<RwLock<serde_json::Value>>` replaced by `NodeMetrics` (typed prometheus-client registry) (2026-03-08)
+- Docker healthcheck: uses `GET /health` instead of JSON-RPC POST (simpler, faster) (2026-03-08)
+
+---
+
 ## [M7-S2] -- Dependency Upgrades, Crypto Audit, Verkle Foundations (Sprint 025)
 
 ### Security

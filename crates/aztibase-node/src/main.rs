@@ -24,7 +24,7 @@ use aztibase_network::{
     Libp2pTransport, NetworkEvent, TOPIC_CONSENSUS, TOPIC_STATE_SYNC, TOPIC_TRANSACTIONS,
     TransportConfig, build_header_response, decode_request, encode_response,
 };
-use aztibase_rpc::{EventBus, RpcServer};
+use aztibase_rpc::{EventBus, NodeMetrics, RpcServer};
 use aztibase_runtime::TractRuntime;
 use aztibase_storage::StateStore;
 use config::NodeConfig;
@@ -582,9 +582,8 @@ async fn main() -> Result<()> {
         drop(state_guard);
     }
 
-    // Metrics (shared JSON value, updated on each batch result)
-    let node_metrics: Arc<tokio::sync::RwLock<serde_json::Value>> =
-        Arc::new(tokio::sync::RwLock::new(serde_json::json!({})));
+    // Prometheus metrics registry
+    let node_metrics = NodeMetrics::new();
 
     // Event bus for WebSocket subscriptions
     let event_bus = Arc::new(EventBus::new());
@@ -603,8 +602,8 @@ async fn main() -> Result<()> {
     .with_compute_commitments(exec_pipeline.shared_compute_commitments());
 
     if config.metrics.enabled || cli.metrics {
-        rpc_server = rpc_server.with_metrics(Arc::clone(&node_metrics));
-        tracing::info!("Metrics endpoint enabled at GET /metrics");
+        rpc_server = rpc_server.with_metrics(node_metrics.clone());
+        tracing::info!("Metrics enabled at GET /metrics (Prometheus) and GET /metrics/json");
     }
 
     if config.rpc.enabled {
@@ -915,26 +914,19 @@ async fn main() -> Result<()> {
                     "state_root": format!("0x{}", hex::encode(result.state_root)),
                 }));
 
-                // Update metrics snapshot
+                // Update Prometheus metrics
                 let snap = consensus_metrics.snapshot();
                 let base_fee_val = shared_base_fee.load(std::sync::atomic::Ordering::Relaxed);
-                let mut m = node_metrics.write().await;
-                *m = serde_json::json!({
-                    "consensus": {
-                        "vertices_proposed": snap.vertices_proposed,
-                        "vertices_received": snap.vertices_received,
-                        "commits": snap.commits,
-                        "rounds_advanced": snap.rounds_advanced,
-                        "equivocations": snap.equivocations,
-                        "last_commit_latency_us": snap.last_commit_latency_us,
-                    },
-                    "execution": {
-                        "batch_count": batch_index,
-                        "base_fee": base_fee_val,
-                        "state_root": format!("0x{}", hex::encode(result.state_root)),
-                    }
-                });
-                drop(m);
+                node_metrics.update_consensus(
+                    snap.vertices_proposed,
+                    snap.vertices_received,
+                    snap.commits,
+                    snap.rounds_advanced,
+                    snap.equivocations,
+                    snap.last_commit_latency_us,
+                );
+                node_metrics.update_execution(batch_index, base_fee_val);
+                node_metrics.inc_txs_processed(result.receipts.len() as u64);
             }
             _ = shutdown.notified() => {
                 break;

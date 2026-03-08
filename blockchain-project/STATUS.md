@@ -1,9 +1,9 @@
 # PROJECT STATUS: Aztibase Network
 
 **Last Updated:** 2026-03-08
-**Updated By:** security-engineer
-**Current Phase:** M7 -- Security Audit + Hardening (Sprint 2 COMPLETE)
-**Current Sprint:** Sprint 025 -- COMPLETE (Dep Upgrades, Crypto Audit, Verkle Foundations)
+**Updated By:** node-engineer
+**Current Phase:** M8 -- Public Testnet (Sprint 1 COMPLETE)
+**Current Sprint:** Sprint 026 -- COMPLETE (Prometheus Metrics + Testnet Infrastructure)
 
 ---
 
@@ -19,7 +19,7 @@
 | M5 | Light/browser nodes + wallet | DONE | 2026-03-07 | 2026-03-07 |
 | M6 | AI compute market + PoUW | DONE | 2026-03-07 | 2026-03-07 |
 | M7 | Security audit + hardening | DONE | 2026-03-08 | 2026-03-08 |
-| M8 | Public testnet | NOT STARTED | -- | -- |
+| M8 | Public testnet | IN PROGRESS | 2026-03-08 | -- |
 | M9 | Mainnet launch | NOT STARTED | -- | -- |
 
 ---
@@ -77,12 +77,16 @@
 | aztibase-wasm | PARTIAL | p2p-network-engineer | NO | YES |
 
 ### In Progress
-- Nothing currently in progress — Sprint 025 complete, Sprint 026 next
+- Nothing currently in progress — Sprint 026 complete, Sprint 027 next
 
 ### Blocked
 - Nothing currently blocked
 
 ### Recently Completed
+- Sprint 026 Phase 4: Security review — clippy 0 warnings, fmt clean, cargo-deny clean, 53 RPC tests pass, 0 new findings
+- Sprint 026 Phase 3: Testnet endpoints — aztb_faucetDrip (10 AZTB, 60s rate limit), aztb_nodeInfo (version/chainId/protocol), GET /health (200 OK), 5 new tests
+- Sprint 026 Phase 2: Grafana + Prometheus Docker — prometheus.yml scrape config, grafana provisioning, 2 dashboards (Node Health, Consensus), docker-compose services
+- Sprint 026 Phase 1: Prometheus metrics — prometheus-client 0.23, NodeMetrics registry (12 counters/gauges), GET /metrics (Prometheus), GET /metrics/json (backward compat), 4 new tests
 - Sprint 025 Phase 4: Fuzz targets + security review — 6 cargo-fuzz targets (core + consensus), cargo-deny clean, clippy 0 warnings, fmt clean
 - Sprint 025 Phase 3: Verkle proof verification rewrite — domain-separated BLAKE3 commitments, self-contained proofs, bottom-up verification, 12 new Verkle tests, ADR-013
 - Sprint 025 Phase 2: Cryptographic audit — Ed25519/BLAKE3/BLS domain separation verified, 8 known-answer test vectors, BLS PoP confirmed enforced
@@ -159,7 +163,16 @@
 - Sprint 005 Phase 1: Consensus-to-execution wiring, TxKind routing, ExecutionPipeline
 
 ### Next Up
-1. M7: Security audit + hardening (Sprint 024+)
+1. Sprint 026 Phase 2: Grafana + Prometheus Docker stack (dashboards, provisioning)
+2. Sprint 026 Phase 3: Testnet operational endpoints (faucet, nodeInfo, /health)
+3. Sprint 027: Testnet genesis + bootstrap nodes + faucet service
+4. Sprint 028: Public testnet launch + documentation
+
+### M8 Scope: Monitoring Infrastructure (Planned)
+- **Prometheus**: `prometheus-client` crate (pure Rust), `/metrics` endpoint in Prometheus text format
+- **Grafana**: Docker Compose service, auto-provisioned dashboards (Node Health, Consensus)
+- **Dashboards**: Block height, TPS, finality latency, peer count, mempool depth, round progression, equivocations
+- **Alerting**: Missed rounds, peer drops, mempool overflow (Phase 2+)
 
 ---
 

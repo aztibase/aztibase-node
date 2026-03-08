@@ -21,7 +21,7 @@ services:
     networks:
       - aztibase-net
     healthcheck:
-      test: ["CMD-SHELL", "curl -sf http://localhost:9944/ -d '{\"jsonrpc\":\"2.0\",\"method\":\"aztb_blockNumber\",\"id\":1}' || exit 1"]
+      test: ["CMD-SHELL", "curl -sf http://localhost:9944/health || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 3
@@ -47,7 +47,7 @@ services:
     networks:
       - aztibase-net
     healthcheck:
-      test: ["CMD-SHELL", "curl -sf http://localhost:9944/ -d '{\"jsonrpc\":\"2.0\",\"method\":\"aztb_blockNumber\",\"id\":1}' || exit 1"]
+      test: ["CMD-SHELL", "curl -sf http://localhost:9944/health || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 3
@@ -73,11 +73,47 @@ services:
     networks:
       - aztibase-net
     healthcheck:
-      test: ["CMD-SHELL", "curl -sf http://localhost:9944/ -d '{\"jsonrpc\":\"2.0\",\"method\":\"aztb_blockNumber\",\"id\":1}' || exit 1"]
+      test: ["CMD-SHELL", "curl -sf http://localhost:9944/health || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 3
 
+  prometheus:
+    image: prom/prometheus:v2.53.0
+    container_name: aztibase-prometheus
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    ports:
+      - "9090:9090"
+    networks:
+      - aztibase-net
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.retention.time=7d"
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:11.1.0
+    container_name: aztibase-grafana
+    volumes:
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana-data:/var/lib/grafana
+    ports:
+      - "3000:3000"
+    networks:
+      - aztibase-net
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=aztibase
+      - GF_USERS_ALLOW_SIGN_UP=false
+    restart: unless-stopped
+
 networks:
   aztibase-net:
     driver: bridge
+
+volumes:
+  prometheus-data:
+  grafana-data:

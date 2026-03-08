@@ -85,18 +85,25 @@ pub struct SubscriptionEvent {
 
 // ── Shared State ────────────────────────────────────────────────────
 
+const TESTNET_CHAIN_ID: u64 = 0xA27B;
+const FAUCET_DRIP_AMOUNT: u64 = 10;
+const FAUCET_COOLDOWN_SECS: u64 = 60;
+const NODE_VERSION: &str = env!("CARGO_PKG_VERSION");
+
 pub struct RpcState {
     pub accounts: Arc<RwLock<AccountState>>,
     pub tx_sender: mpsc::Sender<Vec<u8>>,
     pub batch_count: Arc<AtomicU64>,
     pub receipt_store: Option<Arc<StateStore>>,
     pub base_fee: Arc<AtomicU64>,
-    pub node_metrics: Option<Arc<RwLock<serde_json::Value>>>,
+    pub node_metrics: Option<crate::metrics::NodeMetrics>,
     pub event_bus: Arc<EventBus>,
     ws_connection_count: Arc<AtomicU64>,
     ip_tracker: IpConnectionTracker,
     pub pending_task_count: Arc<AtomicU64>,
     pub compute_commitments: Option<Arc<RwLock<ComputeCommitmentStore>>>,
+    pub chain_id: u64,
+    faucet_tracker: Arc<std::sync::Mutex<HashMap<[u8; 32], std::time::Instant>>>,
 }
 
 impl Clone for RpcState {
@@ -113,6 +120,8 @@ impl Clone for RpcState {
             ip_tracker: self.ip_tracker.clone(),
             pending_task_count: Arc::clone(&self.pending_task_count),
             compute_commitments: self.compute_commitments.clone(),
+            chain_id: self.chain_id,
+            faucet_tracker: Arc::clone(&self.faucet_tracker),
         }
     }
 }
@@ -221,11 +230,18 @@ impl RpcServer {
                 ip_tracker: IpConnectionTracker::new(),
                 pending_task_count: Arc::new(AtomicU64::new(0)),
                 compute_commitments: None,
+                chain_id: TESTNET_CHAIN_ID,
+                faucet_tracker: Arc::new(std::sync::Mutex::new(HashMap::new())),
             },
         }
     }
 
-    pub fn with_metrics(mut self, metrics: Arc<RwLock<serde_json::Value>>) -> Self {
+    pub fn with_chain_id(mut self, chain_id: u64) -> Self {
+        self.state.chain_id = chain_id;
+        self
+    }
+
+    pub fn with_metrics(mut self, metrics: crate::metrics::NodeMetrics) -> Self {
         self.state.node_metrics = Some(metrics);
         self
     }
@@ -252,9 +268,12 @@ impl RpcServer {
     pub fn router(&self) -> Router {
         let mut router = Router::new()
             .route("/", post(handle_rpc))
-            .route("/ws", get(handle_ws_upgrade));
+            .route("/ws", get(handle_ws_upgrade))
+            .route("/health", get(handle_health));
         if self.state.node_metrics.is_some() {
-            router = router.route("/metrics", get(handle_metrics));
+            router = router
+                .route("/metrics", get(handle_metrics_prometheus))
+                .route("/metrics/json", get(handle_metrics_json));
         }
         router
             .layer(DefaultBodyLimit::max(MAX_WS_FRAME_SIZE))
@@ -337,6 +356,8 @@ async fn dispatch(state: &RpcState, req: &JsonRpcRequest) -> JsonRpcResponse {
         "aztb_pendingTaskCount" => handle_pending_task_count(state, req).await,
         "aztb_getComputeCommitment" => handle_get_compute_commitment(state, req).await,
         "aztb_listComputeProviders" => handle_list_compute_providers(state, req).await,
+        "aztb_faucetDrip" => handle_faucet_drip(state, req).await,
+        "aztb_nodeInfo" => handle_node_info(state, req).await,
         _ => JsonRpcResponse::error(
             req.id.clone(),
             METHOD_NOT_FOUND,
@@ -981,14 +1002,120 @@ fn model_to_json(meta: &ModelMetadata) -> serde_json::Value {
     })
 }
 
-// ── Metrics Endpoint ────────────────────────────────────────────────
+// ── Faucet + Node Info Endpoints ────────────────────────────────────
 
-async fn handle_metrics(State(state): State<RpcState>) -> impl IntoResponse {
-    match &state.node_metrics {
-        Some(metrics) => {
-            let data = metrics.read().await;
-            (StatusCode::OK, Json(data.clone()))
+async fn handle_faucet_drip(state: &RpcState, req: &JsonRpcRequest) -> JsonRpcResponse {
+    if state.chain_id != TESTNET_CHAIN_ID {
+        return JsonRpcResponse::error(
+            req.id.clone(),
+            -32000,
+            "faucet is only available on testnet".into(),
+        );
+    }
+
+    let addr_hex = match req.params.get(0).and_then(|v| v.as_str()) {
+        Some(s) => s.strip_prefix("0x").unwrap_or(s),
+        None => {
+            return JsonRpcResponse::error(
+                req.id.clone(),
+                INVALID_PARAMS,
+                "missing address parameter".into(),
+            );
         }
+    };
+
+    let addr_bytes = match hex::decode(addr_hex) {
+        Ok(b) if b.len() == 32 => {
+            let mut arr = [0u8; 32];
+            arr.copy_from_slice(&b);
+            arr
+        }
+        _ => {
+            return JsonRpcResponse::error(
+                req.id.clone(),
+                INVALID_PARAMS,
+                "invalid address: expected 32-byte hex".into(),
+            );
+        }
+    };
+
+    {
+        let mut tracker = state
+            .faucet_tracker
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
+        if let Some(last) = tracker.get(&addr_bytes)
+            && last.elapsed().as_secs() < FAUCET_COOLDOWN_SECS
+        {
+            let remaining = FAUCET_COOLDOWN_SECS - last.elapsed().as_secs();
+            return JsonRpcResponse::error(
+                req.id.clone(),
+                -32000,
+                format!("rate limited: retry in {remaining}s"),
+            );
+        }
+        tracker.insert(addr_bytes, std::time::Instant::now());
+    }
+
+    let mut accounts = state.accounts.write().await;
+    let current = accounts.balance(&addr_bytes);
+    accounts.set_balance(&addr_bytes, current + FAUCET_DRIP_AMOUNT);
+
+    JsonRpcResponse::success(
+        req.id.clone(),
+        serde_json::json!({
+            "address": format!("0x{}", hex::encode(addr_bytes)),
+            "amount": FAUCET_DRIP_AMOUNT,
+            "balance": current + FAUCET_DRIP_AMOUNT,
+        }),
+    )
+}
+
+async fn handle_node_info(state: &RpcState, req: &JsonRpcRequest) -> JsonRpcResponse {
+    let block_height = state.batch_count.load(Ordering::Relaxed);
+
+    JsonRpcResponse::success(
+        req.id.clone(),
+        serde_json::json!({
+            "version": NODE_VERSION,
+            "chainId": format!("0x{:x}", state.chain_id),
+            "blockHeight": block_height,
+            "protocolVersion": "aztb/1",
+        }),
+    )
+}
+
+// ── Health Endpoint ────────────────────────────────────────────────
+
+async fn handle_health(State(state): State<RpcState>) -> impl IntoResponse {
+    let block_height = state.batch_count.load(Ordering::Relaxed);
+    (
+        StatusCode::OK,
+        Json(serde_json::json!({
+            "status": "ok",
+            "blockHeight": block_height,
+            "chainId": format!("0x{:x}", state.chain_id),
+        })),
+    )
+}
+
+// ── Metrics Endpoints ───────────────────────────────────────────────
+
+async fn handle_metrics_prometheus(State(state): State<RpcState>) -> impl IntoResponse {
+    match &state.node_metrics {
+        Some(metrics) => (
+            StatusCode::OK,
+            [("content-type", "text/plain; version=0.0.4; charset=utf-8")],
+            metrics.encode_prometheus(),
+        )
+            .into_response(),
+        None => (StatusCode::SERVICE_UNAVAILABLE, "metrics not enabled").into_response(),
+    }
+}
+
+async fn handle_metrics_json(State(state): State<RpcState>) -> impl IntoResponse {
+    match &state.node_metrics {
+        Some(metrics) => (StatusCode::OK, Json(metrics.encode_json())),
         None => (
             StatusCode::SERVICE_UNAVAILABLE,
             Json(serde_json::json!({"error": "metrics not enabled"})),
@@ -1019,6 +1146,8 @@ mod tests {
             ip_tracker: IpConnectionTracker::new(),
             pending_task_count: Arc::new(AtomicU64::new(0)),
             compute_commitments: None,
+            chain_id: TESTNET_CHAIN_ID,
+            faucet_tracker: Arc::new(std::sync::Mutex::new(HashMap::new())),
         };
         (state, rx)
     }
@@ -1043,6 +1172,8 @@ mod tests {
             ip_tracker: IpConnectionTracker::new(),
             pending_task_count: Arc::new(AtomicU64::new(0)),
             compute_commitments: None,
+            chain_id: TESTNET_CHAIN_ID,
+            faucet_tracker: Arc::new(std::sync::Mutex::new(HashMap::new())),
         };
         (state, rx)
     }
@@ -1276,6 +1407,8 @@ mod tests {
             ip_tracker: IpConnectionTracker::new(),
             pending_task_count: Arc::new(AtomicU64::new(0)),
             compute_commitments: None,
+            chain_id: TESTNET_CHAIN_ID,
+            faucet_tracker: Arc::new(std::sync::Mutex::new(HashMap::new())),
         };
         (state, rx, path)
     }
@@ -1378,9 +1511,9 @@ mod tests {
 
     // ── Metrics endpoint tests ──────────────────────────────────────
 
-    async fn metrics_call(state: &RpcState) -> (StatusCode, serde_json::Value) {
+    async fn metrics_prometheus_call(state: &RpcState) -> (StatusCode, String) {
         let router = Router::new()
-            .route("/metrics", get(handle_metrics))
+            .route("/metrics", get(handle_metrics_prometheus))
             .with_state(state.clone());
 
         let request = Request::builder()
@@ -1394,37 +1527,64 @@ mod tests {
         let bytes = axum::body::to_bytes(response.into_body(), 1_048_576)
             .await
             .unwrap();
+        (status, String::from_utf8(bytes.to_vec()).unwrap())
+    }
+
+    async fn metrics_json_call(state: &RpcState) -> (StatusCode, serde_json::Value) {
+        let router = Router::new()
+            .route("/metrics/json", get(handle_metrics_json))
+            .with_state(state.clone());
+
+        let request = Request::builder()
+            .method("GET")
+            .uri("/metrics/json")
+            .body(Body::empty())
+            .unwrap();
+
+        let response = router.oneshot(request).await.unwrap();
+        let status = response.status();
+        let bytes = axum::body::to_bytes(response.into_body(), 1_048_576)
+            .await
+            .unwrap();
         let json: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
         (status, json)
     }
 
     #[tokio::test]
-    async fn metrics_endpoint_returns_data() {
+    async fn metrics_prometheus_endpoint_returns_text() {
         let (mut state, _rx) = test_state();
-        let metrics = Arc::new(RwLock::new(serde_json::json!({
-            "consensus": {
-                "vertices_proposed": 10,
-                "commits": 3
-            },
-            "execution": {
-                "batch_count": 5,
-                "base_fee": 1
-            }
-        })));
+        let metrics = crate::metrics::NodeMetrics::new();
+        metrics.update_consensus(10, 20, 3, 2, 0, 500);
+        metrics.update_execution(5, 1);
         state.node_metrics = Some(metrics);
 
-        let (status, json) = metrics_call(&state).await;
+        let (status, text) = metrics_prometheus_call(&state).await;
+        assert_eq!(status, StatusCode::OK);
+        assert!(text.contains("aztibase_consensus_vertices_proposed"));
+        assert!(text.contains("aztibase_consensus_commits"));
+        assert!(text.contains("aztibase_execution_block_height"));
+    }
+
+    #[tokio::test]
+    async fn metrics_json_endpoint_returns_data() {
+        let (mut state, _rx) = test_state();
+        let metrics = crate::metrics::NodeMetrics::new();
+        metrics.update_consensus(10, 20, 3, 2, 0, 500);
+        metrics.update_execution(5, 1);
+        state.node_metrics = Some(metrics);
+
+        let (status, json) = metrics_json_call(&state).await;
         assert_eq!(status, StatusCode::OK);
         assert_eq!(json["consensus"]["vertices_proposed"], 10);
-        assert_eq!(json["execution"]["batch_count"], 5);
+        assert_eq!(json["execution"]["block_height"], 5);
     }
 
     #[tokio::test]
     async fn metrics_endpoint_disabled_returns_503() {
         let (state, _rx) = test_state();
-        let (status, json) = metrics_call(&state).await;
+        let (status, text) = metrics_prometheus_call(&state).await;
         assert_eq!(status, StatusCode::SERVICE_UNAVAILABLE);
-        assert!(json["error"].as_str().unwrap().contains("not enabled"));
+        assert!(text.contains("not enabled"));
     }
 
     // ── WebSocket tests ─────────────────────────────────────────────
@@ -1624,6 +1784,8 @@ mod tests {
             ip_tracker: IpConnectionTracker::new(),
             pending_task_count: Arc::new(AtomicU64::new(0)),
             compute_commitments: None,
+            chain_id: TESTNET_CHAIN_ID,
+            faucet_tracker: Arc::new(std::sync::Mutex::new(HashMap::new())),
         };
         (state, rx)
     }
@@ -1708,6 +1870,8 @@ mod tests {
             ip_tracker: IpConnectionTracker::new(),
             pending_task_count: Arc::new(AtomicU64::new(0)),
             compute_commitments: None,
+            chain_id: TESTNET_CHAIN_ID,
+            faucet_tracker: Arc::new(std::sync::Mutex::new(HashMap::new())),
         };
 
         let task_hex = hex::encode(task_id);
@@ -1847,5 +2011,93 @@ mod tests {
             providers[0].as_str().unwrap(),
             format!("0x{}", hex::encode([0x01; 32]))
         );
+    }
+
+    // ── Faucet tests ─────────────────────────────────────────────────
+
+    #[tokio::test]
+    async fn faucet_drip_credits_account() {
+        let (state, _rx) = test_state();
+        let addr = [0xAA; 32];
+        let addr_hex = hex::encode(addr);
+        let body = format!(
+            r#"{{"jsonrpc":"2.0","method":"aztb_faucetDrip","params":["0x{addr_hex}"],"id":1}}"#
+        );
+        let resp = rpc_call(&state, &body).await;
+        assert!(resp.get("error").is_none(), "unexpected error: {resp}");
+        assert_eq!(resp["result"]["amount"], FAUCET_DRIP_AMOUNT);
+        assert_eq!(resp["result"]["balance"], FAUCET_DRIP_AMOUNT);
+
+        let balance = state.accounts.read().await.balance(&addr);
+        assert_eq!(balance, FAUCET_DRIP_AMOUNT);
+    }
+
+    #[tokio::test]
+    async fn faucet_drip_rate_limited() {
+        let (state, _rx) = test_state();
+        let addr_hex = hex::encode([0xBB; 32]);
+        let body = format!(
+            r#"{{"jsonrpc":"2.0","method":"aztb_faucetDrip","params":["0x{addr_hex}"],"id":1}}"#
+        );
+
+        let resp1 = rpc_call(&state, &body).await;
+        assert!(resp1.get("error").is_none());
+
+        let resp2 = rpc_call(&state, &body).await;
+        assert!(
+            resp2["error"]["message"]
+                .as_str()
+                .unwrap()
+                .contains("rate limited")
+        );
+    }
+
+    #[tokio::test]
+    async fn faucet_drip_invalid_address() {
+        let (state, _rx) = test_state();
+        let body = r#"{"jsonrpc":"2.0","method":"aztb_faucetDrip","params":["0xDEAD"],"id":1}"#;
+        let resp = rpc_call(&state, body).await;
+        assert_eq!(resp["error"]["code"], INVALID_PARAMS);
+    }
+
+    // ── Node Info tests ──────────────────────────────────────────────
+
+    #[tokio::test]
+    async fn node_info_returns_metadata() {
+        let (state, _rx) = test_state();
+        let body = r#"{"jsonrpc":"2.0","method":"aztb_nodeInfo","id":1}"#;
+        let resp = rpc_call(&state, &body).await;
+        assert!(resp.get("error").is_none(), "unexpected error: {resp}");
+        assert_eq!(
+            resp["result"]["chainId"],
+            format!("0x{:x}", TESTNET_CHAIN_ID)
+        );
+        assert_eq!(resp["result"]["protocolVersion"], "aztb/1");
+        assert!(resp["result"]["version"].as_str().is_some());
+    }
+
+    // ── Health endpoint tests ────────────────────────────────────────
+
+    #[tokio::test]
+    async fn health_endpoint_returns_ok() {
+        let (state, _rx) = test_state();
+        let router = Router::new()
+            .route("/health", get(handle_health))
+            .with_state(state.clone());
+
+        let request = Request::builder()
+            .method("GET")
+            .uri("/health")
+            .body(Body::empty())
+            .unwrap();
+
+        let response = router.oneshot(request).await.unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let bytes = axum::body::to_bytes(response.into_body(), 1_048_576)
+            .await
+            .unwrap();
+        let json: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(json["status"], "ok");
+        assert!(json["blockHeight"].as_u64().is_some());
     }
 }

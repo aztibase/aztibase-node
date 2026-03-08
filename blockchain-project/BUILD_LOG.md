@@ -21,6 +21,39 @@ Entries are prepended (newest first).
 
 ## Entries
 
+### 2026-03-08 -- node-engineer -- Sprint 026 Complete (M8 Sprint 1: Prometheus Metrics + Testnet Infrastructure)
+**Task:** Sprint 026: Prometheus metrics integration, Grafana/Prometheus Docker stack, testnet faucet + nodeInfo + health endpoints
+**Sprint:** Sprint 026, Phases 1-4
+**Git Ref:** pending
+**Files Changed:**
+- Cargo.toml (workspace: added prometheus-client 0.23)
+- Cargo.lock (dependency tree updates)
+- crates/aztibase-rpc/Cargo.toml (added prometheus-client)
+- crates/aztibase-rpc/src/lib.rs (export NodeMetrics, metrics module)
+- crates/aztibase-rpc/src/metrics.rs (NEW: NodeMetrics registry with typed counters/gauges, Prometheus + JSON encoding)
+- crates/aztibase-rpc/src/server.rs (dual-format /metrics + /metrics/json, /health endpoint, aztb_faucetDrip + aztb_nodeInfo RPC, chain_id + faucet_tracker state, 10 new tests)
+- crates/aztibase-node/src/main.rs (NodeMetrics replaces Arc<RwLock<Value>>, Prometheus wiring)
+- monitoring/prometheus.yml (NEW: Prometheus scrape config for 3 validators)
+- monitoring/grafana/provisioning/datasources/prometheus.yml (NEW: Grafana Prometheus datasource)
+- monitoring/grafana/provisioning/dashboards/dashboards.yml (NEW: dashboard provisioning)
+- monitoring/grafana/dashboards/node-health.json (NEW: block height, TPS, peers, mempool, base fee, pending tasks)
+- monitoring/grafana/dashboards/consensus.json (NEW: rounds, commit rate, latency, vertices, equivocations)
+- docker-compose.yml (added prometheus + grafana services, healthcheck uses /health)
+- blockchain-project/STATUS.md (M8 scope, Sprint 026 tracking)
+- blockchain-project/sprints/SPRINT-026.md (NEW: sprint plan)
+**Review Notes:**
+- Phase 1: prometheus-client 0.23 (pure Rust, zero C deps) replaces opaque JSON metrics. NodeMetrics struct with 12 counters/gauges. Dual-format: /metrics (Prometheus text 0.0.4), /metrics/json (backward compat with ADR-008). 4 new metrics tests.
+- Phase 2: monitoring/ directory with Prometheus scrape config (5s interval), Grafana provisioned datasource + 2 dashboards (Node Health, Consensus). Docker Compose adds prometheus:9090 + grafana:3000.
+- Phase 3: aztb_faucetDrip (testnet-only, 10 AZTB, 60s rate limit per address), aztb_nodeInfo (version, chain_id, protocol), GET /health (200 OK + block height). Healthchecks updated to use /health. 5 new tests.
+- Phase 4: clippy 0 warnings, fmt clean, cargo-deny clean (warnings only: duplicate foldhash/thiserror). 53 RPC tests pass.
+**Security Flags:**
+- Faucet gated by chain_id == 0xA27B (testnet only) — cannot be used on mainnet
+- Faucet rate limited to 1 drip per address per 60s — prevents treasury drain
+- /health exposes only block height and chain_id — no sensitive data
+- Prometheus /metrics exposes only aggregate counters/gauges — no PII, no keys
+
+---
+
 ### 2026-03-08 -- security-engineer -- Sprint 025 Complete (M7 Continued: Dep Upgrades, Crypto Audit, Verkle)
 **Task:** Sprint 025: Dependency upgrades (wasmtime v42, postcard), cryptographic audit (domain separation, known-answer vectors), Verkle proof verification rewrite, fuzz target setup
 **Sprint:** Sprint 025, Phases 1-4
