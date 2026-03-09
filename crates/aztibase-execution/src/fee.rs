@@ -71,18 +71,36 @@ impl BaseFeeCalculator {
 
     /// Update the base fee after a batch. `gas_used` is the total gas consumed by the batch.
     pub fn update(&mut self, gas_used: u64) {
-        if gas_used > TARGET_GAS_PER_BATCH {
-            let excess = gas_used - TARGET_GAS_PER_BATCH;
-            let delta =
-                (self.base_fee * excess) / TARGET_GAS_PER_BATCH / BASE_FEE_CHANGE_DENOMINATOR;
+        self.update_with_params(
+            gas_used,
+            TARGET_GAS_PER_BATCH,
+            BASE_FEE_CHANGE_DENOMINATOR,
+            MIN_BASE_FEE,
+            MAX_BASE_FEE,
+        );
+    }
+
+    /// Update using governance-controlled parameters.
+    pub fn update_with_params(
+        &mut self,
+        gas_used: u64,
+        target_gas: u64,
+        change_denom: u64,
+        fee_floor: u64,
+        fee_ceiling: u64,
+    ) {
+        let target = target_gas.max(1);
+        let denom = change_denom.max(1);
+        if gas_used > target {
+            let excess = gas_used - target;
+            let delta = (self.base_fee * excess) / target / denom;
             self.base_fee = self.base_fee.saturating_add(delta.max(1));
         } else {
-            let deficit = TARGET_GAS_PER_BATCH - gas_used;
-            let delta =
-                (self.base_fee * deficit) / TARGET_GAS_PER_BATCH / BASE_FEE_CHANGE_DENOMINATOR;
+            let deficit = target - gas_used;
+            let delta = (self.base_fee * deficit) / target / denom;
             self.base_fee = self.base_fee.saturating_sub(delta);
         }
-        self.base_fee = self.base_fee.clamp(MIN_BASE_FEE, MAX_BASE_FEE);
+        self.base_fee = self.base_fee.clamp(fee_floor.max(1), fee_ceiling);
     }
 
     /// Estimate gas for a transaction type. Returns a conservative estimate.

@@ -263,6 +263,14 @@ impl GovernanceStore {
         false
     }
 
+    pub fn passed_unexecuted(&self) -> Vec<Proposal> {
+        self.proposals
+            .values()
+            .filter(|p| p.status == ProposalStatus::Passed)
+            .cloned()
+            .collect()
+    }
+
     pub fn votes_for(&self, proposal_id: &[u8; 32]) -> &[Vote] {
         self.votes
             .get(proposal_id)

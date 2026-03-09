@@ -6,8 +6,8 @@ use aztibase_consensus::{
 };
 use aztibase_core::{Hash, hash};
 use aztibase_execution::{
-    AccountState, BaseFeeCalculator, ContractTx, CreateProposalParams, ExecutionReceipt, FeeEscrow,
-    GovernanceStore, TransferTx, TxKind,
+    AccountState, BaseFeeCalculator, ChainParams, ContractTx, CreateProposalParams,
+    ExecutionReceipt, FeeEscrow, GovernanceStore, TransferTx, TxKind,
     block_stm::{BlockSTMExecutor, apply_block_stm_to_state},
     escrow_fee, evm, execute_contract_txs, flush_state, load_base_fee, load_state,
     model_registry::{MODEL_REGISTRY_ADDRESS, ModelRegistry},
@@ -58,6 +58,7 @@ pub struct ExecutionPipeline {
     attestation_aggregator: AttestationAggregator,
     compute_commitments: Arc<RwLock<ComputeCommitmentStore>>,
     governance: Arc<RwLock<GovernanceStore>>,
+    chain_params: Arc<RwLock<ChainParams>>,
     archive: bool,
 }
 
@@ -102,6 +103,7 @@ impl ExecutionPipeline {
             attestation_aggregator: AttestationAggregator::new(2),
             compute_commitments: Arc::new(RwLock::new(ComputeCommitmentStore::new())),
             governance: Arc::new(RwLock::new(GovernanceStore::new())),
+            chain_params: Arc::new(RwLock::new(ChainParams::defaults())),
             archive: false,
         }
     }
@@ -119,6 +121,11 @@ impl ExecutionPipeline {
     /// Shared governance store (for RPC server).
     pub fn shared_governance(&self) -> Arc<RwLock<GovernanceStore>> {
         Arc::clone(&self.governance)
+    }
+
+    /// Shared chain parameters (for RPC server and fee calculator).
+    pub fn shared_chain_params(&self) -> Arc<RwLock<ChainParams>> {
+        Arc::clone(&self.chain_params)
     }
 
     /// Attach an AI runtime for inference transaction execution.
@@ -1484,6 +1491,35 @@ impl ExecutionPipeline {
                     "Proposal finalized"
                 );
             }
+
+            // Execute passed proposals: apply parameter changes to ChainParams.
+            let passed = gov.passed_unexecuted();
+            if !passed.is_empty() {
+                let mut params = self.chain_params.write().await;
+                for proposal in &passed {
+                    match params.set_from_str(&proposal.param_key, &proposal.param_value) {
+                        Ok(old_value) => {
+                            gov.mark_executed(&proposal.id);
+                            tracing::info!(
+                                proposal_id = %short_hex(&proposal.id),
+                                param_key = %proposal.param_key,
+                                old_value = %old_value,
+                                new_value = %proposal.param_value,
+                                "Governance proposal executed"
+                            );
+                        }
+                        Err(e) => {
+                            gov.mark_executed(&proposal.id);
+                            tracing::warn!(
+                                proposal_id = %short_hex(&proposal.id),
+                                param_key = %proposal.param_key,
+                                error = %e,
+                                "Governance proposal execution failed"
+                            );
+                        }
+                    }
+                }
+            }
         }
 
         // Phase 2.5: Score each executed tx for anomalous behavior.
@@ -1511,9 +1547,18 @@ impl ExecutionPipeline {
         receipts.extend(exec_receipts);
         receipts.extend(nonce_reject_receipts);
 
-        // Update base fee based on total gas consumed this batch.
+        // Update base fee using governance-controlled parameters.
         let total_gas: u64 = receipts.iter().map(|r| r.gas_used).sum();
-        self.base_fee_calculator.update(total_gas);
+        {
+            let cp = self.chain_params.read().await;
+            self.base_fee_calculator.update_with_params(
+                total_gas,
+                cp.get_u64("target_gas_per_batch").unwrap_or(15_000_000),
+                cp.get_u64("base_fee_change_denom").unwrap_or(8),
+                cp.get_u64("base_fee_floor").unwrap_or(1),
+                cp.get_u64("base_fee_ceiling").unwrap_or(1_000_000_000),
+            );
+        }
         self.base_fee.store(
             self.base_fee_calculator.base_fee(),
             std::sync::atomic::Ordering::Relaxed,
@@ -1545,9 +1590,14 @@ impl ExecutionPipeline {
             }
 
             if !self.archive {
-                let _ = aztibase_execution::evict_old_receipts(store);
-                let _ = aztibase_execution::evict_old_transactions(store);
-                let _ = aztibase_execution::evict_old_batch_roots(store);
+                let cp = self.chain_params.read().await;
+                let max_receipts = cp.get_u64("max_stored_receipts").unwrap_or(100_000);
+                let max_txs = cp.get_u64("max_stored_txs").unwrap_or(500_000);
+                let max_roots = cp.get_u64("max_stored_batch_roots").unwrap_or(100_000);
+                drop(cp);
+                let _ = store.evict_oldest(aztibase_storage::RECEIPTS_TABLE, max_receipts);
+                let _ = store.evict_oldest(aztibase_storage::TX_TABLE, max_txs);
+                let _ = store.evict_oldest(aztibase_storage::BATCH_ROOTS_TABLE, max_roots);
             }
         }
 
@@ -1781,6 +1831,7 @@ mod tests {
             attestation_aggregator: AttestationAggregator::new(2),
             compute_commitments: Arc::new(RwLock::new(ComputeCommitmentStore::new())),
             governance: Arc::new(RwLock::new(GovernanceStore::new())),
+            chain_params: Arc::new(RwLock::new(ChainParams::defaults())),
             archive: false,
         }
     }
@@ -2299,6 +2350,7 @@ mod tests {
             attestation_aggregator: AttestationAggregator::new(2),
             compute_commitments: Arc::new(RwLock::new(ComputeCommitmentStore::new())),
             governance: Arc::new(RwLock::new(GovernanceStore::new())),
+            chain_params: Arc::new(RwLock::new(ChainParams::defaults())),
             archive: false,
         }
     }
@@ -3732,5 +3784,318 @@ mod tests {
         let task_id = result.receipts[0].inference_hash.unwrap();
         let task = pool.get(&task_id).unwrap();
         assert_eq!(task.assigned_validator, Some(validator));
+    }
+
+    #[tokio::test]
+    async fn governance_proposal_executes_chain_param() {
+        let (_tx, rx) = mpsc::channel(16);
+        let mut pipeline = make_pipeline(rx);
+
+        let (proposer_kp, proposer_addr) = make_sender();
+        let (voter1_kp, voter1_addr) = make_sender();
+        let (voter2_kp, voter2_addr) = make_sender();
+
+        {
+            let mut state = pipeline.state.write().await;
+            state.set_balance(&proposer_addr, 10_000_000);
+            state.set_balance(&voter1_addr, 5_000_000);
+            state.set_balance(&voter2_addr, 3_000_000);
+        }
+
+        let create_tx = TxKind::CreateProposal {
+            proposer: proposer_addr,
+            description: "Raise base fee floor to 100".into(),
+            param_key: "base_fee_floor".into(),
+            param_value: "100".into(),
+            voting_period: 10,
+            nonce: 0,
+            gas_price: 1,
+        };
+        let batch1 = make_batch(vec![sign(&create_tx, &proposer_kp)]);
+        pipeline.current_round = 5;
+        let result = pipeline.execute_batch(&batch1).await.unwrap();
+        assert!(result.receipts[0].success);
+
+        let vote1 = TxKind::CastVote {
+            voter: voter1_addr,
+            proposal_id: result.receipts[0].tx_hash,
+            approve: true,
+            nonce: 0,
+            gas_price: 1,
+        };
+        let vote2 = TxKind::CastVote {
+            voter: voter2_addr,
+            proposal_id: result.receipts[0].tx_hash,
+            approve: true,
+            nonce: 0,
+            gas_price: 1,
+        };
+        let batch2 = make_batch(vec![sign(&vote1, &voter1_kp), sign(&vote2, &voter2_kp)]);
+        pipeline.current_round = 8;
+        let result2 = pipeline.execute_batch(&batch2).await.unwrap();
+        assert!(result2.receipts[0].success);
+        assert!(result2.receipts[1].success);
+
+        // Advance past voting period (start_round=5, period=10, end_round=15).
+        pipeline.current_round = 16;
+        let noop_batch = make_batch(vec![]);
+        let _ = pipeline.execute_batch(&noop_batch).await.unwrap();
+
+        // Verify the chain param was updated.
+        let params = pipeline.chain_params.read().await;
+        assert_eq!(params.get_u64("base_fee_floor"), Some(100));
+
+        // Verify proposal is marked Executed.
+        let gov = pipeline.governance.read().await;
+        let proposal = gov.get(&result.receipts[0].tx_hash).unwrap();
+        assert_eq!(
+            proposal.status,
+            aztibase_execution::ProposalStatus::Executed
+        );
+    }
+
+    #[tokio::test]
+    async fn governance_proposal_invalid_param_still_marks_executed() {
+        let (_tx, rx) = mpsc::channel(16);
+        let mut pipeline = make_pipeline(rx);
+
+        let (proposer_kp, proposer_addr) = make_sender();
+        let (voter1_kp, voter1_addr) = make_sender();
+        let (voter2_kp, voter2_addr) = make_sender();
+
+        {
+            let mut state = pipeline.state.write().await;
+            state.set_balance(&proposer_addr, 10_000_000);
+            state.set_balance(&voter1_addr, 5_000_000);
+            state.set_balance(&voter2_addr, 3_000_000);
+        }
+
+        // Propose a change to an unknown key.
+        let create_tx = TxKind::CreateProposal {
+            proposer: proposer_addr,
+            description: "Change nonexistent param".into(),
+            param_key: "nonexistent_key".into(),
+            param_value: "42".into(),
+            voting_period: 10,
+            nonce: 0,
+            gas_price: 1,
+        };
+        let batch1 = make_batch(vec![sign(&create_tx, &proposer_kp)]);
+        pipeline.current_round = 1;
+        let result = pipeline.execute_batch(&batch1).await.unwrap();
+        assert!(result.receipts[0].success);
+
+        let proposal_id = result.receipts[0].tx_hash;
+
+        let vote1 = TxKind::CastVote {
+            voter: voter1_addr,
+            proposal_id,
+            approve: true,
+            nonce: 0,
+            gas_price: 1,
+        };
+        let vote2 = TxKind::CastVote {
+            voter: voter2_addr,
+            proposal_id,
+            approve: true,
+            nonce: 0,
+            gas_price: 1,
+        };
+        let batch2 = make_batch(vec![sign(&vote1, &voter1_kp), sign(&vote2, &voter2_kp)]);
+        pipeline.current_round = 5;
+        let _ = pipeline.execute_batch(&batch2).await.unwrap();
+
+        // Finalize + attempt execution.
+        pipeline.current_round = 12;
+        let _ = pipeline.execute_batch(&make_batch(vec![])).await.unwrap();
+
+        // Even though param change failed, proposal should be Executed (prevents retry loop).
+        let gov = pipeline.governance.read().await;
+        let proposal = gov.get(&proposal_id).unwrap();
+        assert_eq!(
+            proposal.status,
+            aztibase_execution::ProposalStatus::Executed
+        );
+    }
+
+    #[tokio::test]
+    async fn governance_multiple_proposals_execute_in_order() {
+        let (_tx, rx) = mpsc::channel(16);
+        let mut pipeline = make_pipeline(rx);
+
+        let (proposer_kp, proposer_addr) = make_sender();
+        let (v1_kp, v1_addr) = make_sender();
+        let (v2_kp, v2_addr) = make_sender();
+
+        {
+            let mut state = pipeline.state.write().await;
+            state.set_balance(&proposer_addr, 50_000_000);
+            state.set_balance(&v1_addr, 5_000_000);
+            state.set_balance(&v2_addr, 3_000_000);
+        }
+
+        // Create two proposals.
+        let create1 = TxKind::CreateProposal {
+            proposer: proposer_addr,
+            description: "Set max_block_range to 200".into(),
+            param_key: "max_block_range".into(),
+            param_value: "200".into(),
+            voting_period: 10,
+            nonce: 0,
+            gas_price: 1,
+        };
+        let create2 = TxKind::CreateProposal {
+            proposer: proposer_addr,
+            description: "Set max_stored_txs to 750000".into(),
+            param_key: "max_stored_txs".into(),
+            param_value: "750000".into(),
+            voting_period: 10,
+            nonce: 1,
+            gas_price: 1,
+        };
+        let batch1 = make_batch(vec![
+            sign(&create1, &proposer_kp),
+            sign(&create2, &proposer_kp),
+        ]);
+        pipeline.current_round = 1;
+        let r1 = pipeline.execute_batch(&batch1).await.unwrap();
+        let pid1 = r1.receipts[0].tx_hash;
+        let pid2 = r1.receipts[1].tx_hash;
+
+        // Vote on both.
+        let vote1a = TxKind::CastVote {
+            voter: v1_addr,
+            proposal_id: pid1,
+            approve: true,
+            nonce: 0,
+            gas_price: 1,
+        };
+        let vote1b = TxKind::CastVote {
+            voter: v2_addr,
+            proposal_id: pid1,
+            approve: true,
+            nonce: 0,
+            gas_price: 1,
+        };
+        let vote2a = TxKind::CastVote {
+            voter: v1_addr,
+            proposal_id: pid2,
+            approve: true,
+            nonce: 1,
+            gas_price: 1,
+        };
+        let vote2b = TxKind::CastVote {
+            voter: v2_addr,
+            proposal_id: pid2,
+            approve: true,
+            nonce: 1,
+            gas_price: 1,
+        };
+        let batch2 = make_batch(vec![
+            sign(&vote1a, &v1_kp),
+            sign(&vote1b, &v2_kp),
+            sign(&vote2a, &v1_kp),
+            sign(&vote2b, &v2_kp),
+        ]);
+        pipeline.current_round = 5;
+        let _ = pipeline.execute_batch(&batch2).await.unwrap();
+
+        // Finalize both.
+        pipeline.current_round = 12;
+        let _ = pipeline.execute_batch(&make_batch(vec![])).await.unwrap();
+
+        let params = pipeline.chain_params.read().await;
+        assert_eq!(params.get_u64("max_block_range"), Some(200));
+        assert_eq!(params.get_u64("max_stored_txs"), Some(750_000));
+
+        let gov = pipeline.governance.read().await;
+        assert_eq!(
+            gov.get(&pid1).unwrap().status,
+            aztibase_execution::ProposalStatus::Executed
+        );
+        assert_eq!(
+            gov.get(&pid2).unwrap().status,
+            aztibase_execution::ProposalStatus::Executed
+        );
+    }
+
+    #[tokio::test]
+    async fn governance_already_executed_proposal_skipped() {
+        let (_tx, rx) = mpsc::channel(16);
+        let mut pipeline = make_pipeline(rx);
+
+        let (proposer_kp, proposer_addr) = make_sender();
+        let (v1_kp, v1_addr) = make_sender();
+        let (v2_kp, v2_addr) = make_sender();
+
+        {
+            let mut state = pipeline.state.write().await;
+            state.set_balance(&proposer_addr, 10_000_000);
+            state.set_balance(&v1_addr, 5_000_000);
+            state.set_balance(&v2_addr, 3_000_000);
+        }
+
+        let create_tx = TxKind::CreateProposal {
+            proposer: proposer_addr,
+            description: "Set max_block_range to 500".into(),
+            param_key: "max_block_range".into(),
+            param_value: "500".into(),
+            voting_period: 10,
+            nonce: 0,
+            gas_price: 1,
+        };
+        let batch1 = make_batch(vec![sign(&create_tx, &proposer_kp)]);
+        pipeline.current_round = 1;
+        let r = pipeline.execute_batch(&batch1).await.unwrap();
+        let pid = r.receipts[0].tx_hash;
+
+        let vote1 = TxKind::CastVote {
+            voter: v1_addr,
+            proposal_id: pid,
+            approve: true,
+            nonce: 0,
+            gas_price: 1,
+        };
+        let vote2 = TxKind::CastVote {
+            voter: v2_addr,
+            proposal_id: pid,
+            approve: true,
+            nonce: 0,
+            gas_price: 1,
+        };
+        let batch2 = make_batch(vec![sign(&vote1, &v1_kp), sign(&vote2, &v2_kp)]);
+        pipeline.current_round = 5;
+        let _ = pipeline.execute_batch(&batch2).await.unwrap();
+
+        // Finalize + execute.
+        pipeline.current_round = 12;
+        let _ = pipeline.execute_batch(&make_batch(vec![])).await.unwrap();
+        assert_eq!(
+            pipeline
+                .chain_params
+                .read()
+                .await
+                .get_u64("max_block_range"),
+            Some(500)
+        );
+
+        // Run another empty batch — should not re-execute.
+        pipeline.current_round = 13;
+        let _ = pipeline.execute_batch(&make_batch(vec![])).await.unwrap();
+
+        // Verify still Executed (passed_unexecuted won't return it).
+        let gov = pipeline.governance.read().await;
+        assert_eq!(
+            gov.get(&pid).unwrap().status,
+            aztibase_execution::ProposalStatus::Executed
+        );
+        assert_eq!(
+            pipeline
+                .chain_params
+                .read()
+                .await
+                .get_u64("max_block_range"),
+            Some(500)
+        );
     }
 }

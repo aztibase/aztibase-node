@@ -5,6 +5,27 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ---
 
+## [M8-S11] -- Governance Execution & Chain Parameters (Sprint 036)
+
+### Added
+- `ChainParams` registry: runtime-mutable parameter store with typed `ParamValue` (U64/Bool/Str), bounds validation, get/set/list, 9 governance-controllable parameters (2026-03-09)
+- `ParamDef` registry: static table of known param keys with type, default, min/max bounds, description (2026-03-09)
+- `GovernanceStore::passed_unexecuted()`: returns Passed proposals not yet Executed (2026-03-09)
+- `BaseFeeCalculator::update_with_params()`: accepts governance-controlled fee parameters (2026-03-09)
+- Pipeline: auto-executes Passed governance proposals — applies param_key/param_value to ChainParams, calls mark_executed() (2026-03-09)
+- Pipeline: failed proposal execution (invalid key/value) still marks Executed to prevent retry loops (2026-03-09)
+- `aztb_getChainParam(key)` RPC: returns current value, type, and description for a chain parameter (2026-03-09)
+- `aztb_listChainParams()` RPC: returns all chain parameters sorted by key (2026-03-09)
+- 13 new tests: 7 ChainParams unit + 4 governance execution pipeline + 2 RPC (2026-03-09)
+
+### Changed
+- `BaseFeeCalculator`: fee update now reads from ChainParams (target_gas, change_denom, fee_floor, fee_ceiling) (2026-03-09)
+- Pipeline eviction: reads max_stored_txs, max_stored_batch_roots, max_stored_receipts from ChainParams (2026-03-09)
+- `RpcState`: added `chain_params: Option<Arc<RwLock<ChainParams>>>` field (2026-03-09)
+- `ExecutionPipeline`: added `chain_params` field, `shared_chain_params()` method (2026-03-09)
+
+---
+
 ## [M8-S10] -- On-Chain Governance Foundations (Sprint 035)
 
 ### Added

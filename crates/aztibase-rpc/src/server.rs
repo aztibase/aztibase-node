@@ -18,8 +18,8 @@ use tracing::{debug, info};
 
 use aztibase_consensus::ComputeCommitmentStore;
 use aztibase_execution::AccountState;
-use aztibase_execution::GovernanceStore;
 use aztibase_execution::model_registry::{MODEL_REGISTRY_ADDRESS, ModelMetadata, ModelRegistry};
+use aztibase_execution::{ChainParams, GovernanceStore};
 use aztibase_storage::StateStore;
 
 // ── JSON-RPC 2.0 Types ─────────────────────────────────────────────
@@ -104,6 +104,7 @@ pub struct RpcState {
     pub pending_task_count: Arc<AtomicU64>,
     pub compute_commitments: Option<Arc<RwLock<ComputeCommitmentStore>>>,
     pub governance: Option<Arc<RwLock<GovernanceStore>>>,
+    pub chain_params: Option<Arc<RwLock<ChainParams>>>,
     pub chain_id: u64,
     pub genesis_hash: Option<[u8; 32]>,
     faucet_tracker: Arc<std::sync::Mutex<HashMap<[u8; 32], std::time::Instant>>>,
@@ -124,6 +125,7 @@ impl Clone for RpcState {
             pending_task_count: Arc::clone(&self.pending_task_count),
             compute_commitments: self.compute_commitments.clone(),
             governance: self.governance.clone(),
+            chain_params: self.chain_params.clone(),
             chain_id: self.chain_id,
             genesis_hash: self.genesis_hash,
             faucet_tracker: Arc::clone(&self.faucet_tracker),
@@ -236,6 +238,7 @@ impl RpcServer {
                 pending_task_count: Arc::new(AtomicU64::new(0)),
                 compute_commitments: None,
                 governance: None,
+                chain_params: None,
                 chain_id: TESTNET_CHAIN_ID,
                 genesis_hash: None,
                 faucet_tracker: Arc::new(std::sync::Mutex::new(HashMap::new())),
@@ -275,6 +278,11 @@ impl RpcServer {
 
     pub fn with_governance(mut self, store: Arc<RwLock<GovernanceStore>>) -> Self {
         self.state.governance = Some(store);
+        self
+    }
+
+    pub fn with_chain_params(mut self, params: Arc<RwLock<ChainParams>>) -> Self {
+        self.state.chain_params = Some(params);
         self
     }
 
@@ -386,6 +394,8 @@ async fn dispatch(state: &RpcState, req: &JsonRpcRequest) -> JsonRpcResponse {
         "aztb_getReceiptsByBatch" => handle_get_receipts_by_batch(state, req).await,
         "aztb_getProposal" => handle_get_proposal(state, req).await,
         "aztb_listProposals" => handle_list_proposals(state, req).await,
+        "aztb_getChainParam" => handle_get_chain_param(state, req).await,
+        "aztb_listChainParams" => handle_list_chain_params(state, req).await,
         _ => JsonRpcResponse::error(
             req.id.clone(),
             METHOD_NOT_FOUND,
@@ -1478,6 +1488,75 @@ async fn handle_list_proposals(state: &RpcState, req: &JsonRpcRequest) -> JsonRp
     JsonRpcResponse::success(req.id.clone(), serde_json::json!(result))
 }
 
+async fn handle_get_chain_param(state: &RpcState, req: &JsonRpcRequest) -> JsonRpcResponse {
+    let params_store = match &state.chain_params {
+        Some(p) => p,
+        None => {
+            return JsonRpcResponse::error(
+                req.id.clone(),
+                -32000,
+                "chain params not available".into(),
+            );
+        }
+    };
+
+    let key = match req.params.get(0).and_then(|v| v.as_str()) {
+        Some(k) => k,
+        None => {
+            return JsonRpcResponse::error(
+                req.id.clone(),
+                INVALID_PARAMS,
+                "missing param key".into(),
+            );
+        }
+    };
+
+    let cp = params_store.read().await;
+    match cp.get(key) {
+        Some(val) => {
+            let def = aztibase_execution::param_def(key);
+            let entry = serde_json::json!({
+                "key": key,
+                "value": val.to_string(),
+                "type": format!("{:?}", def.map(|d| d.param_type)),
+                "description": def.map(|d| d.description).unwrap_or(""),
+            });
+            JsonRpcResponse::success(req.id.clone(), entry)
+        }
+        None => JsonRpcResponse::success(req.id.clone(), serde_json::Value::Null),
+    }
+}
+
+async fn handle_list_chain_params(state: &RpcState, req: &JsonRpcRequest) -> JsonRpcResponse {
+    let params_store = match &state.chain_params {
+        Some(p) => p,
+        None => {
+            return JsonRpcResponse::error(
+                req.id.clone(),
+                -32000,
+                "chain params not available".into(),
+            );
+        }
+    };
+
+    let cp = params_store.read().await;
+    let result: Vec<serde_json::Value> = cp
+        .list()
+        .iter()
+        .map(|(key, val)| {
+            let def = aztibase_execution::param_def(key);
+            serde_json::json!({
+                "key": key,
+                "value": val.to_string(),
+                "type": format!("{:?}", def.map(|d| d.param_type)),
+                "description": def.map(|d| d.description).unwrap_or(""),
+            })
+        })
+        .collect();
+
+    JsonRpcResponse::success(req.id.clone(), serde_json::json!(result))
+}
+
 fn parse_u64_param(params: &serde_json::Value, index: usize) -> Result<u64, String> {
     let val = params
         .get(index)
@@ -1568,6 +1647,7 @@ mod tests {
             pending_task_count: Arc::new(AtomicU64::new(0)),
             compute_commitments: None,
             governance: None,
+            chain_params: None,
             chain_id: TESTNET_CHAIN_ID,
             genesis_hash: None,
             faucet_tracker: Arc::new(std::sync::Mutex::new(HashMap::new())),
@@ -1596,6 +1676,7 @@ mod tests {
             pending_task_count: Arc::new(AtomicU64::new(0)),
             compute_commitments: None,
             governance: None,
+            chain_params: None,
             chain_id: TESTNET_CHAIN_ID,
             genesis_hash: None,
             faucet_tracker: Arc::new(std::sync::Mutex::new(HashMap::new())),
@@ -1833,6 +1914,7 @@ mod tests {
             pending_task_count: Arc::new(AtomicU64::new(0)),
             compute_commitments: None,
             governance: None,
+            chain_params: None,
             chain_id: TESTNET_CHAIN_ID,
             genesis_hash: None,
             faucet_tracker: Arc::new(std::sync::Mutex::new(HashMap::new())),
@@ -2212,6 +2294,7 @@ mod tests {
             pending_task_count: Arc::new(AtomicU64::new(0)),
             compute_commitments: None,
             governance: None,
+            chain_params: None,
             chain_id: TESTNET_CHAIN_ID,
             genesis_hash: None,
             faucet_tracker: Arc::new(std::sync::Mutex::new(HashMap::new())),
@@ -2300,6 +2383,7 @@ mod tests {
             pending_task_count: Arc::new(AtomicU64::new(0)),
             compute_commitments: None,
             governance: None,
+            chain_params: None,
             chain_id: TESTNET_CHAIN_ID,
             genesis_hash: None,
             faucet_tracker: Arc::new(std::sync::Mutex::new(HashMap::new())),
@@ -2530,5 +2614,38 @@ mod tests {
         let json: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
         assert_eq!(json["status"], "ok");
         assert!(json["blockHeight"].as_u64().is_some());
+    }
+
+    #[tokio::test]
+    async fn get_chain_param_returns_value() {
+        let (mut state, _rx) = test_state();
+        state.chain_params = Some(Arc::new(RwLock::new(ChainParams::defaults())));
+
+        let resp = rpc_call(
+            &state,
+            r#"{"jsonrpc":"2.0","method":"aztb_getChainParam","params":["base_fee_floor"],"id":1}"#,
+        )
+        .await;
+        assert!(resp["error"].is_null());
+        assert_eq!(resp["result"]["key"], "base_fee_floor");
+        assert_eq!(resp["result"]["value"], "1");
+    }
+
+    #[tokio::test]
+    async fn list_chain_params_returns_all() {
+        let (mut state, _rx) = test_state();
+        state.chain_params = Some(Arc::new(RwLock::new(ChainParams::defaults())));
+
+        let resp = rpc_call(
+            &state,
+            r#"{"jsonrpc":"2.0","method":"aztb_listChainParams","params":[],"id":1}"#,
+        )
+        .await;
+        assert!(resp["error"].is_null());
+        let result = resp["result"].as_array().unwrap();
+        assert!(result.len() >= 9);
+        let keys: Vec<&str> = result.iter().filter_map(|e| e["key"].as_str()).collect();
+        assert!(keys.contains(&"base_fee_floor"));
+        assert!(keys.contains(&"max_stored_txs"));
     }
 }

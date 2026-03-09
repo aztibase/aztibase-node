@@ -21,6 +21,24 @@ Entries are prepended (newest first).
 
 ## Entries
 
+### 2026-03-09 -- smart-contract-engineer / node-engineer / security-engineer -- Sprint 036 Complete (M8 Sprint 11: Governance Execution & Chain Parameters)
+**Task:** Sprint 036: ChainParams runtime registry, governance proposal execution, dynamic fee/eviction params, 2 new RPCs
+**Sprint:** Sprint 036, Phases 1-4
+**Git Ref:** pending
+**Files Changed:**
+- crates/aztibase-execution/src/chain_params.rs (NEW): ChainParams, ParamValue, ParamDef, ParamType, ChainParamError, 9 governance-controllable params with typed bounds, 7 unit tests
+- crates/aztibase-execution/src/governance.rs: added passed_unexecuted() method
+- crates/aztibase-execution/src/fee.rs: added update_with_params() for governance-controlled fee parameters
+- crates/aztibase-execution/src/lib.rs: chain_params module + re-exports
+- crates/aztibase-node/src/pipeline.rs: ChainParams field, shared_chain_params(), proposal execution after finalize_expired(), dynamic fee update via update_with_params(), dynamic eviction limits from ChainParams, 4 governance execution tests
+- crates/aztibase-node/src/main.rs: .with_chain_params() wired into RPC server
+- crates/aztibase-rpc/src/server.rs: ChainParams in RpcState, with_chain_params() builder, aztb_getChainParam + aztb_listChainParams handlers, 2 RPC tests
+- blockchain-project/sprints/SPRINT-036.md (NEW: sprint plan)
+**Review Notes:** Phase 1: ChainParams registry with 9 typed params (base_fee_floor/ceiling, target/max gas, change denom, max_block_range, max_stored_txs/batch_roots/receipts), bounds validation, get/set/list. Phase 2: Proposal execution engine — passed_unexecuted() + pipeline auto-executes passed proposals via set_from_str(), mark_executed() on success or failure (prevents retry loops). Phase 3: BaseFeeCalculator.update_with_params() reads from ChainParams, eviction uses dynamic limits, 2 new RPCs (getChainParam, listChainParams). Phase 4: clippy 0 warnings, fmt clean, all tests pass (13 new: 7 chain_params + 4 governance execution + 2 RPC).
+**Security Flags:** 0 ELEVATED, 0 MEDIUM. Bounds prevent dangerous values (zero gas, zero base fee). Only Passed proposals execute. Unknown/invalid param_key proposals marked Executed to prevent retry loops. Param key whitelist enforced (9 known keys). No unbounded iteration.
+
+---
+
 ### 2026-03-09 -- smart-contract-engineer / node-engineer / security-engineer -- Sprint 035 Complete (M8 Sprint 10: On-Chain Governance Foundations)
 **Task:** Sprint 035: On-chain governance module — proposal creation, stake-weighted voting, proposal finalization, 2 new TxKinds, 2 governance RPCs
 **Sprint:** Sprint 035, Phases 1-4

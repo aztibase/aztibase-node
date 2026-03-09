@@ -1,4 +1,5 @@
 pub mod block_stm;
+pub mod chain_params;
 pub mod contract;
 pub mod cross_vm;
 pub mod evm;
@@ -17,6 +18,9 @@ pub mod tx;
 pub mod verkle;
 pub mod vm;
 
+pub use chain_params::{
+    ChainParamError, ChainParams, ParamDef, ParamType, ParamValue, all_param_defs, param_def,
+};
 pub use contract::{ContractReceipt, ContractTx, compute_contract_address, execute_contract_txs};
 pub use cross_vm::{CrossVmCall, CrossVmResult, ReentrancyGuard, evm_to_wasm, wasm_to_evm};
 pub use fee::{BaseFeeCalculator, FeeEscrow, escrow_fee, refund_unused};

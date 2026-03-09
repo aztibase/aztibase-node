@@ -2,8 +2,8 @@
 
 **Last Updated:** 2026-03-09
 **Updated By:** smart-contract-engineer
-**Current Phase:** M8 -- Public Testnet (Sprint 10 COMPLETE)
-**Current Sprint:** Sprint 035 -- COMPLETE (On-Chain Governance Foundations)
+**Current Phase:** M8 -- Public Testnet (Sprint 11 COMPLETE)
+**Current Sprint:** Sprint 036 -- COMPLETE (Governance Execution & Chain Parameters)
 
 ---
 
@@ -33,7 +33,7 @@
 - Build-phase tracking infrastructure (5 documents)
 - Implementation depth audit (Sprint 001, Task 7)
 - Reference repos cloned (MystiCeti, Sui, Lighthouse, rust-libp2p, redb)
-- cargo build + cargo test pass (674 tests, 0 failures)
+- cargo build + cargo test pass (687 tests, 0 failures)
 - Sprint 001 closed with retrospective
 - Sprint 002 closed: 24/24 tasks, 5 phases complete
 - Sprint 003 closed: 18/18 tasks, 4 phases complete
@@ -77,12 +77,16 @@
 | aztibase-wasm | PARTIAL | p2p-network-engineer | NO | YES |
 
 ### In Progress
-- Nothing currently in progress — Sprint 035 complete, Sprint 036 next
+- Nothing currently in progress — Sprint 036 complete, Sprint 037 next
 
 ### Blocked
 - Nothing currently blocked
 
 ### Recently Completed
+- Sprint 036 Phase 4: Security review — clippy 0 warnings, fmt clean, 687 tests pass (13 new), 0 ELEVATED, 0 MEDIUM
+- Sprint 036 Phase 3: Pipeline & RPC integration — dynamic fee update via update_with_params(), dynamic eviction limits, aztb_getChainParam + aztb_listChainParams RPCs
+- Sprint 036 Phase 2: Proposal execution — passed_unexecuted(), auto-execute in pipeline, mark_executed on success or failure
+- Sprint 036 Phase 1: ChainParams registry — 9 typed params with bounds, get/set/list, set_from_str, 7 unit tests
 - Sprint 035 Phase 4: Security review — clippy 0 warnings, fmt clean, 674 tests pass (8 new), 0 ELEVATED, 0 MEDIUM
 - Sprint 035 Phase 3: Governance RPCs — aztb_getProposal (with tally), aztb_listProposals (status filter), proposal finalization in batch loop
 - Sprint 035 Phase 2: Governance TxKinds — CreateProposal (0x0E), CastVote (0x0F), pipeline routing + execution, stake-weighted voting
@@ -197,7 +201,7 @@
 - Sprint 005 Phase 1: Consensus-to-execution wiring, TxKind routing, ExecutionPipeline
 
 ### Next Up
-1. Sprint 036: TBD — Proposal execution (parameter changes), privacy foundations, or load testing
+1. Sprint 037: TBD — Privacy foundations, load testing, or token vesting/distribution
 
 ### M8 Scope: Monitoring Infrastructure (Planned)
 - **Prometheus**: `prometheus-client` crate (pure Rust), `/metrics` endpoint in Prometheus text format
