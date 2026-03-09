@@ -1,9 +1,9 @@
 # PROJECT STATUS: Aztibase Network
 
-**Last Updated:** 2026-03-08
-**Updated By:** p2p-network-engineer
-**Current Phase:** M8 -- Public Testnet (Sprint 5 COMPLETE)
-**Current Sprint:** Sprint 030 -- COMPLETE (WebRTC Direct Transport & DCUtR Hole Punching)
+**Last Updated:** 2026-03-09
+**Updated By:** node-engineer
+**Current Phase:** M8 -- Public Testnet (Sprint 6 COMPLETE)
+**Current Sprint:** Sprint 031 -- COMPLETE (End-to-End Smoke Tests & Integration Testing)
 
 ---
 
@@ -77,12 +77,17 @@
 | aztibase-wasm | PARTIAL | p2p-network-engineer | NO | YES |
 
 ### In Progress
-- Nothing currently in progress — Sprint 030 complete, Sprint 031 next
+- Nothing currently in progress — Sprint 031 complete, Sprint 032 next
 
 ### Blocked
 - Nothing currently blocked
 
 ### Recently Completed
+- Sprint 031 Phase 4: Security review — 161 node tests, 0 ELEVATED, 0 MEDIUM, clippy 0 warnings, fmt clean
+- Sprint 031 Phase 3: Edge case tests — duplicate model registration, deregister with pending tasks, mixed batch types
+- Sprint 031 Phase 2: AI compute market e2e — RegisterModel, CommitCompute, PostTask, SubmitAttestation, full lifecycle, DeregisterCompute
+- Sprint 031 Phase 1: RPC-driven e2e tests — fee market transfer, multi-transfer stress (20 txs), nonce gap rejection, insufficient balance
+- Sprint 031 BUG FIX: Attestation signature verification was using BLAKE3-hashed address as Ed25519 key (always invalid). Fixed by threading raw pubkeys from signed tx envelopes (SEC-ATT-PUBKEY-001 CRITICAL → FIXED)
 - Sprint 030 Phase 4: Security review — 60 network tests, 0 ELEVATED, 0 MEDIUM, 1 LOW (WebRTC alpha API), clippy 0 warnings, fmt clean
 - Sprint 030 Phase 3: NAT traversal integration — WebRTC config wired into CLI + node config, Dockerfile EXPOSE updated, DCUtR auto-triggers verified, 1 new test
 - Sprint 030 Phase 2: WebRTC direct transport — build_libp2p_transport() behind feature flag, TransportConfig enable_webrtc/webrtc_listen_port, 4 new tests

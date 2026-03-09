@@ -3,6 +3,11 @@ use aztibase_core::{Keypair, PublicKey, address_from_pubkey};
 use crate::routing::{RoutingError, TxKind, route_tx};
 
 type Address = [u8; 32];
+type BatchWithPubkeys = (
+    Vec<TxKind>,
+    Vec<(usize, TxError)>,
+    std::collections::HashMap<Address, [u8; 32]>,
+);
 
 const ENVELOPE_MAGIC: u8 = 0xAA;
 const MAX_ENVELOPE_SIZE: usize = 1_048_576;
@@ -148,6 +153,26 @@ pub fn verify_and_route(raw: &[u8]) -> Result<TxKind, TxError> {
     Ok(tx)
 }
 
+/// Decode a signed envelope and return both the routed TxKind and the raw
+/// Ed25519 public key from the envelope. The raw pubkey is needed for
+/// attestation signature verification (the sender address is a BLAKE3 hash
+/// of the pubkey, which cannot be reversed).
+pub fn verify_and_route_with_pubkey(raw: &[u8]) -> Result<(TxKind, [u8; 32]), TxError> {
+    let signed = SignedTx::decode(raw)?;
+    if !signed.verify() {
+        return Err(TxError::InvalidSignature);
+    }
+    let sender = signed.sender_address();
+    let tx = route_tx(&signed.payload).map_err(TxError::RoutingFailed)?;
+    if *tx.sender() != sender {
+        return Err(TxError::SenderMismatch {
+            envelope: sender,
+            payload: *tx.sender(),
+        });
+    }
+    Ok((tx, signed.public_key))
+}
+
 /// Verify and route a batch of signed envelopes, collecting successes and errors.
 pub fn verify_and_route_batch(raw_txs: &[Vec<u8>]) -> (Vec<TxKind>, Vec<(usize, TxError)>) {
     let mut routed = Vec::with_capacity(raw_txs.len());
@@ -159,6 +184,24 @@ pub fn verify_and_route_batch(raw_txs: &[Vec<u8>]) -> (Vec<TxKind>, Vec<(usize, 
         }
     }
     (routed, errors)
+}
+
+/// Verify and route a batch, also returning a map from sender address to raw
+/// Ed25519 public key for each transaction. Needed for attestation sig verification.
+pub fn verify_and_route_batch_with_pubkeys(raw_txs: &[Vec<u8>]) -> BatchWithPubkeys {
+    let mut routed = Vec::with_capacity(raw_txs.len());
+    let mut errors = Vec::new();
+    let mut pubkeys = std::collections::HashMap::new();
+    for (i, raw) in raw_txs.iter().enumerate() {
+        match verify_and_route_with_pubkey(raw) {
+            Ok((tx, pk)) => {
+                pubkeys.insert(*tx.sender(), pk);
+                routed.push(tx);
+            }
+            Err(e) => errors.push((i, e)),
+        }
+    }
+    (routed, errors, pubkeys)
 }
 
 #[cfg(test)]

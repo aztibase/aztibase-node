@@ -12,7 +12,7 @@ use aztibase_execution::{
     model_registry::{MODEL_REGISTRY_ADDRESS, ModelRegistry},
     refund_unused,
     state::AccountType,
-    store_base_fee, store_batch_root, store_receipts, verify_and_route_batch,
+    store_base_fee, store_batch_root, store_receipts, verify_and_route_batch_with_pubkeys,
 };
 use aztibase_runtime::{AIRuntime, AnomalyScorer, InferenceRequest, TxFeatures};
 use aztibase_storage::StateStore;
@@ -203,7 +203,8 @@ impl ExecutionPipeline {
                 .store(pool.len() as u64, std::sync::atomic::Ordering::Relaxed);
         }
 
-        let (mut routed, errors) = verify_and_route_batch(&batch.transactions);
+        let (mut routed, errors, sender_pubkeys) =
+            verify_and_route_batch_with_pubkeys(&batch.transactions);
 
         routed.sort_by(|a, b| a.sender().cmp(b.sender()).then(a.nonce().cmp(&b.nonce())));
 
@@ -863,7 +864,10 @@ impl ExecutionPipeline {
                 continue;
             }
 
-            // Verify Ed25519 signature over attestation_hash
+            // Verify Ed25519 signature over attestation_hash.
+            // Use the raw pubkey from the SignedTx envelope (the validator address
+            // is a BLAKE3 hash of the pubkey and can't be reversed).
+            let raw_pubkey = sender_pubkeys.get(validator);
             let att = InferenceAttestation::new(
                 *task_id,
                 *result_hash,
@@ -872,7 +876,8 @@ impl ExecutionPipeline {
                 signature.clone(),
             );
             let att_hash = att.attestation_hash();
-            let sig_valid = aztibase_core::PublicKey::from_bytes(validator)
+            let sig_valid = raw_pubkey
+                .and_then(aztibase_core::PublicKey::from_bytes)
                 .is_some_and(|pk| pk.verify(&att_hash, signature));
 
             if !sig_valid {

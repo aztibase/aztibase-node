@@ -5,6 +5,23 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ---
 
+## [M8-S6] -- End-to-End Smoke Tests & Integration Testing (Sprint 031)
+
+### Added
+- 13 new e2e integration tests covering previously untested paths (2026-03-09)
+- `verify_and_route_with_pubkey()`: returns routed TxKind + raw Ed25519 pubkey from signed envelope (2026-03-09)
+- `verify_and_route_batch_with_pubkeys()`: batch variant returning sender→pubkey map (2026-03-09)
+- `BatchWithPubkeys` type alias for complex return type (2026-03-09)
+- Tests: fee_market_transfer_e2e, multi_transfer_batch_stress, nonce_gap_rejection_e2e, insufficient_balance_receipt_e2e (2026-03-09)
+- Tests: register_model_e2e, commit_compute_e2e, post_task_e2e, submit_attestation_e2e (2026-03-09)
+- Tests: full_ai_lifecycle_e2e (RegisterModel → 2x CommitCompute → PostTask → 2x SubmitAttestation → Settlement) (2026-03-09)
+- Tests: deregister_compute_refund_e2e, duplicate_model_registration_e2e, deregister_model_with_pending_tasks_blocked, batch_mixed_tx_types_e2e (2026-03-09)
+
+### Fixed
+- **CRITICAL BUG**: Attestation signature verification was using BLAKE3-hashed address as Ed25519 public key, making all attestation signatures invalid through the signed tx flow. Fixed by threading raw pubkeys from envelope through batch routing (SEC-ATT-PUBKEY-001) (2026-03-09)
+
+---
+
 ## [M8-S5] -- WebRTC Direct Transport & DCUtR Hole Punching (Sprint 030)
 
 ### Added

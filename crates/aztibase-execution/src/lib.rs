@@ -32,7 +32,10 @@ pub use snapshot::{
     deserialize_snapshot, serialize_snapshot, snapshot_hash, snapshot_header_hash,
 };
 pub use state::{AccountState, AccountType, MerkleCommitment};
-pub use tx::{SignedTx, TxError, verify_and_route, verify_and_route_batch};
+pub use tx::{
+    SignedTx, TxError, verify_and_route, verify_and_route_batch,
+    verify_and_route_batch_with_pubkeys, verify_and_route_with_pubkey,
+};
 pub use verkle::{VerkleCommitment, VerkleTree};
 pub use vm::{EngineConfig, ExecutionEngine, ExecutionResult};
 

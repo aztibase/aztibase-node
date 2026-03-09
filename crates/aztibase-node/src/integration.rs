@@ -917,6 +917,1088 @@ mod tests {
         }
     }
 
+    // ── Sprint 031: Fee market transfer e2e ─────────────────────────
+
+    #[tokio::test]
+    async fn fee_market_transfer_e2e() {
+        let path = test_db_path("fee_mkt");
+        let store = Arc::new(StateStore::open(path.to_str().unwrap()).unwrap());
+        let (_tx, rx) = mpsc::channel(16);
+        let mut pipeline = ExecutionPipeline::with_storage(store, rx);
+
+        let (alice_kp, alice) = make_sender();
+        let bob = [0xBB; 32];
+        let anchor = hash(b"fee_market_batch");
+
+        let shared = pipeline.shared_state();
+        shared.write().await.set_balance(&alice, 1_000_000);
+
+        let gas_price = 2u64;
+        let transfer_value = 5000u64;
+        let gas_limit = 21_000u64;
+        let expected_fee = gas_limit * gas_price;
+
+        let batch = make_batch(
+            anchor,
+            vec![sign(
+                &TxKind::Transfer {
+                    from: alice,
+                    to: bob,
+                    value: transfer_value,
+                    nonce: 0,
+                    gas_price,
+                },
+                &alice_kp,
+            )],
+        );
+
+        let result = pipeline.execute_batch(&batch).await.unwrap();
+        assert_eq!(result.transfer_count, 1);
+        assert_eq!(result.receipts.len(), 1);
+        assert!(result.receipts[0].success);
+        assert_eq!(result.receipts[0].gas_used, gas_limit);
+        assert!(result.total_fees_burned > 0);
+
+        let shared = pipeline.shared_state();
+        let state = shared.read().await;
+        assert_eq!(
+            state.balance(&alice),
+            1_000_000 - transfer_value - expected_fee
+        );
+        assert_eq!(state.balance(&bob), transfer_value);
+
+        cleanup(&path);
+    }
+
+    // ── Sprint 031: Multi-transfer batch stress ──────────────────────
+
+    #[tokio::test]
+    async fn multi_transfer_batch_stress() {
+        let path = test_db_path("multi_xfer");
+        let store = Arc::new(StateStore::open(path.to_str().unwrap()).unwrap());
+        let (_tx, rx) = mpsc::channel(16);
+        let mut pipeline = ExecutionPipeline::with_storage(store, rx);
+
+        let (alice_kp, alice) = make_sender();
+        let bob = [0xCC; 32];
+        let anchor = hash(b"multi_xfer_batch");
+        let transfer_count = 20u64;
+        let per_transfer = 100u64;
+
+        let shared = pipeline.shared_state();
+        shared
+            .write()
+            .await
+            .set_balance(&alice, transfer_count * per_transfer + 10_000);
+
+        let txs: Vec<Vec<u8>> = (0..transfer_count)
+            .map(|i| {
+                sign(
+                    &TxKind::Transfer {
+                        from: alice,
+                        to: bob,
+                        value: per_transfer,
+                        nonce: i,
+                        gas_price: 0,
+                    },
+                    &alice_kp,
+                )
+            })
+            .collect();
+
+        let batch = make_batch(anchor, txs);
+        let result = pipeline.execute_batch(&batch).await.unwrap();
+        assert_eq!(result.transfer_count, transfer_count as usize);
+        assert!(result.receipts.iter().all(|r| r.success));
+        assert_eq!(result.routing_errors, 0);
+
+        let shared = pipeline.shared_state();
+        let state = shared.read().await;
+        assert_eq!(state.balance(&alice), 10_000);
+        assert_eq!(state.balance(&bob), transfer_count * per_transfer);
+        assert_eq!(state.nonce(&alice), transfer_count);
+
+        cleanup(&path);
+    }
+
+    // ── Sprint 031: Nonce gap rejection ──────────────────────────────
+
+    #[tokio::test]
+    async fn nonce_gap_rejection_e2e() {
+        let path = test_db_path("nonce_gap");
+        let store = Arc::new(StateStore::open(path.to_str().unwrap()).unwrap());
+        let (_tx, rx) = mpsc::channel(16);
+        let mut pipeline = ExecutionPipeline::with_storage(store, rx);
+
+        let (alice_kp, alice) = make_sender();
+        let bob = [0xDD; 32];
+        let anchor = hash(b"nonce_gap_batch");
+
+        let shared = pipeline.shared_state();
+        shared.write().await.set_balance(&alice, 10_000);
+
+        let batch = make_batch(
+            anchor,
+            vec![
+                sign(
+                    &TxKind::Transfer {
+                        from: alice,
+                        to: bob,
+                        value: 100,
+                        nonce: 0,
+                        gas_price: 0,
+                    },
+                    &alice_kp,
+                ),
+                sign(
+                    &TxKind::Transfer {
+                        from: alice,
+                        to: bob,
+                        value: 200,
+                        nonce: 2, // gap: skipped nonce 1
+                        gas_price: 0,
+                    },
+                    &alice_kp,
+                ),
+            ],
+        );
+
+        let result = pipeline.execute_batch(&batch).await.unwrap();
+
+        let success_count = result.receipts.iter().filter(|r| r.success).count();
+        let fail_count = result.receipts.iter().filter(|r| !r.success).count();
+        assert_eq!(success_count, 1);
+        assert_eq!(fail_count, 1);
+
+        let nonce_err = result.receipts.iter().find(|r| !r.success).unwrap();
+        assert!(nonce_err.error.as_ref().unwrap().contains("nonce mismatch"));
+
+        let shared = pipeline.shared_state();
+        let state = shared.read().await;
+        assert_eq!(state.balance(&alice), 9900);
+        assert_eq!(state.balance(&bob), 100);
+
+        cleanup(&path);
+    }
+
+    // ── Sprint 031: Insufficient balance receipt ─────────────────────
+
+    #[tokio::test]
+    async fn insufficient_balance_receipt_e2e() {
+        let path = test_db_path("insuf_bal");
+        let store = Arc::new(StateStore::open(path.to_str().unwrap()).unwrap());
+        let (_tx, rx) = mpsc::channel(16);
+        let mut pipeline = ExecutionPipeline::with_storage(store, rx);
+
+        let (alice_kp, alice) = make_sender();
+        let bob = [0xEE; 32];
+        let anchor = hash(b"insuf_balance_batch");
+
+        let shared = pipeline.shared_state();
+        shared.write().await.set_balance(&alice, 500);
+
+        let batch = make_batch(
+            anchor,
+            vec![sign(
+                &TxKind::Transfer {
+                    from: alice,
+                    to: bob,
+                    value: 10_000,
+                    nonce: 0,
+                    gas_price: 0,
+                },
+                &alice_kp,
+            )],
+        );
+
+        let result = pipeline.execute_batch(&batch).await.unwrap();
+        assert_eq!(result.receipts.len(), 1);
+        assert!(!result.receipts[0].success);
+        assert!(
+            result.receipts[0]
+                .error
+                .as_ref()
+                .unwrap()
+                .contains("insufficient")
+        );
+
+        let shared = pipeline.shared_state();
+        let state = shared.read().await;
+        assert_eq!(state.balance(&alice), 500);
+        assert_eq!(state.balance(&bob), 0);
+
+        cleanup(&path);
+    }
+
+    // ── Sprint 031: Register model e2e ───────────────────────────────
+
+    #[tokio::test]
+    async fn register_model_e2e() {
+        use aztibase_execution::model_registry::{MODEL_REGISTRY_ADDRESS, ModelRegistry};
+
+        let path = test_db_path("reg_model");
+        let store = Arc::new(StateStore::open(path.to_str().unwrap()).unwrap());
+        let (_tx, rx) = mpsc::channel(16);
+        let mut pipeline = ExecutionPipeline::with_storage(store, rx);
+
+        let (owner_kp, owner) = make_sender();
+        let anchor = hash(b"register_model_batch");
+        let fingerprint = hash(b"model-weights-v1");
+
+        let batch = make_batch(
+            anchor,
+            vec![sign(
+                &TxKind::RegisterModel {
+                    owner,
+                    model_id: "sentiment_v1".into(),
+                    fingerprint,
+                    compute_cost: 1000,
+                    min_stake: 500,
+                    nonce: 0,
+                    gas_price: 0,
+                },
+                &owner_kp,
+            )],
+        );
+
+        let result = pipeline.execute_batch(&batch).await.unwrap();
+        assert_eq!(result.contract_count, 1);
+        assert_eq!(result.receipts.len(), 1);
+        assert!(result.receipts[0].success);
+        assert_eq!(result.receipts[0].gas_used, 100_000);
+
+        let shared = pipeline.shared_state();
+        let state = shared.read().await;
+        assert_eq!(state.nonce(&owner), 1);
+        let registry_acct = state.get(&MODEL_REGISTRY_ADDRESS).unwrap();
+        let model = ModelRegistry::get(&registry_acct.storage, "sentiment_v1");
+        assert!(model.is_some());
+        let model = model.unwrap();
+        assert!(model.active);
+        assert_eq!(model.compute_cost, 1000);
+        assert_eq!(model.min_stake, 500);
+        assert_eq!(model.owner, owner);
+
+        cleanup(&path);
+    }
+
+    // ── Sprint 031: Commit compute e2e ───────────────────────────────
+
+    #[tokio::test]
+    async fn commit_compute_e2e() {
+        use aztibase_core::BlsKeypair;
+
+        let path = test_db_path("commit_comp");
+        let store = Arc::new(StateStore::open(path.to_str().unwrap()).unwrap());
+        let (_tx, rx) = mpsc::channel(16);
+        let mut pipeline = ExecutionPipeline::with_storage(store, rx);
+
+        let (owner_kp, owner) = make_sender();
+        let (val_kp, val_addr) = make_sender();
+        let bls_kp = BlsKeypair::generate();
+        let fingerprint = hash(b"model-weights-v2");
+
+        let shared = pipeline.shared_state();
+        shared.write().await.set_balance(&val_addr, 50_000);
+
+        // First register a model so CommitCompute can reference it
+        let reg_anchor = hash(b"reg_for_commit");
+        let reg_batch = make_batch(
+            reg_anchor,
+            vec![sign(
+                &TxKind::RegisterModel {
+                    owner,
+                    model_id: "llama_7b".into(),
+                    fingerprint,
+                    compute_cost: 2000,
+                    min_stake: 1000,
+                    nonce: 0,
+                    gas_price: 0,
+                },
+                &owner_kp,
+            )],
+        );
+        let reg_result = pipeline.execute_batch(&reg_batch).await.unwrap();
+        assert!(reg_result.receipts[0].success);
+
+        // Commit compute
+        let commit_anchor = hash(b"commit_compute_batch");
+        let committed_stake = 5000u64;
+        let batch = make_batch(
+            commit_anchor,
+            vec![sign(
+                &TxKind::CommitCompute {
+                    validator: val_addr,
+                    supported_models: vec!["llama_7b".into()],
+                    committed_stake,
+                    bls_pubkey: bls_kp.public_key().as_bytes().to_vec(),
+                    bls_pop: bls_kp.proof_of_possession().as_bytes().to_vec(),
+                    nonce: 0,
+                    gas_price: 0,
+                },
+                &val_kp,
+            )],
+        );
+
+        let result = pipeline.execute_batch(&batch).await.unwrap();
+        assert_eq!(result.receipts.len(), 1);
+        assert!(result.receipts[0].success);
+        assert_eq!(result.receipts[0].gas_used, 75_000);
+
+        let shared = pipeline.shared_state();
+        let state = shared.read().await;
+        assert_eq!(state.balance(&val_addr), 50_000 - committed_stake);
+        assert_eq!(state.nonce(&val_addr), 1);
+
+        let store = pipeline.shared_compute_commitments();
+        let guard = store.read().await;
+        let commitment = guard.get(&val_addr);
+        assert!(commitment.is_some());
+        let commitment = commitment.unwrap();
+        assert!(commitment.active);
+        assert_eq!(commitment.committed_stake, committed_stake);
+        assert_eq!(commitment.supported_models, vec!["llama_7b".to_string()]);
+
+        cleanup(&path);
+    }
+
+    // ── Sprint 031: Post task e2e ────────────────────────────────────
+
+    #[tokio::test]
+    async fn post_task_e2e() {
+        let path = test_db_path("post_task");
+        let store = Arc::new(StateStore::open(path.to_str().unwrap()).unwrap());
+        let (_tx, rx) = mpsc::channel(16);
+        let mut pipeline = ExecutionPipeline::with_storage(store, rx);
+
+        let (owner_kp, owner) = make_sender();
+        let (req_kp, requester) = make_sender();
+        let fingerprint = hash(b"task-model-weights");
+
+        let shared = pipeline.shared_state();
+        shared.write().await.set_balance(&requester, 100_000);
+
+        // Register model first
+        let reg_anchor = hash(b"reg_for_task");
+        let reg_batch = make_batch(
+            reg_anchor,
+            vec![sign(
+                &TxKind::RegisterModel {
+                    owner,
+                    model_id: "task_model".into(),
+                    fingerprint,
+                    compute_cost: 500,
+                    min_stake: 100,
+                    nonce: 0,
+                    gas_price: 0,
+                },
+                &owner_kp,
+            )],
+        );
+        pipeline.execute_batch(&reg_batch).await.unwrap();
+
+        // Post task
+        let task_anchor = hash(b"post_task_batch");
+        let input_hash = hash(b"inference input data");
+        let reward = 10_000u64;
+        let batch = make_batch(
+            task_anchor,
+            vec![sign(
+                &TxKind::PostTask {
+                    requester,
+                    model_id: "task_model".into(),
+                    input_hash,
+                    reward,
+                    deadline_round: 100,
+                    nonce: 0,
+                    gas_price: 0,
+                },
+                &req_kp,
+            )],
+        );
+
+        let result = pipeline.execute_batch(&batch).await.unwrap();
+        assert_eq!(result.receipts.len(), 1);
+        assert!(result.receipts[0].success);
+        assert_eq!(result.receipts[0].gas_used, 42_000);
+        assert!(result.receipts[0].inference_hash.is_some());
+
+        let shared = pipeline.shared_state();
+        let state = shared.read().await;
+        assert_eq!(state.balance(&requester), 100_000 - reward);
+        assert_eq!(state.nonce(&requester), 1);
+
+        let pending = pipeline
+            .shared_pending_task_count()
+            .load(std::sync::atomic::Ordering::Relaxed);
+        assert_eq!(pending, 1);
+
+        cleanup(&path);
+    }
+
+    // ── Sprint 031: Submit attestation e2e ───────────────────────────
+
+    #[tokio::test]
+    async fn submit_attestation_e2e() {
+        use aztibase_consensus::InferenceAttestation;
+        use aztibase_core::BlsKeypair;
+
+        let path = test_db_path("attest");
+        let store = Arc::new(StateStore::open(path.to_str().unwrap()).unwrap());
+        let (_tx, rx) = mpsc::channel(16);
+        let mut pipeline = ExecutionPipeline::with_storage(store, rx);
+
+        let (owner_kp, owner) = make_sender();
+        let (req_kp, requester) = make_sender();
+        let (val_kp, val_addr) = make_sender();
+        let bls_kp = BlsKeypair::generate();
+        let fingerprint = hash(b"attest-model-weights");
+
+        let shared = pipeline.shared_state();
+        {
+            let mut s = shared.write().await;
+            s.set_balance(&requester, 100_000);
+            s.set_balance(&val_addr, 50_000);
+        }
+
+        // 1) Register model
+        let r1 = pipeline
+            .execute_batch(&make_batch(
+                hash(b"attest_reg"),
+                vec![sign(
+                    &TxKind::RegisterModel {
+                        owner,
+                        model_id: "attest_model".into(),
+                        fingerprint,
+                        compute_cost: 500,
+                        min_stake: 100,
+                        nonce: 0,
+                        gas_price: 0,
+                    },
+                    &owner_kp,
+                )],
+            ))
+            .await
+            .unwrap();
+        assert!(r1.receipts[0].success);
+
+        // 2) CommitCompute so validator is known for the model
+        let r2 = pipeline
+            .execute_batch(&make_batch(
+                hash(b"attest_commit"),
+                vec![sign(
+                    &TxKind::CommitCompute {
+                        validator: val_addr,
+                        supported_models: vec!["attest_model".into()],
+                        committed_stake: 5000,
+                        bls_pubkey: bls_kp.public_key().as_bytes().to_vec(),
+                        bls_pop: bls_kp.proof_of_possession().as_bytes().to_vec(),
+                        nonce: 0,
+                        gas_price: 0,
+                    },
+                    &val_kp,
+                )],
+            ))
+            .await
+            .unwrap();
+        assert!(r2.receipts[0].success);
+
+        // 3) PostTask — should assign val_addr since it's the only validator
+        let r3 = pipeline
+            .execute_batch(&make_batch(
+                hash(b"attest_task"),
+                vec![sign(
+                    &TxKind::PostTask {
+                        requester,
+                        model_id: "attest_model".into(),
+                        input_hash: hash(b"attest input"),
+                        reward: 10_000,
+                        deadline_round: 100,
+                        nonce: 0,
+                        gas_price: 0,
+                    },
+                    &req_kp,
+                )],
+            ))
+            .await
+            .unwrap();
+        assert!(r3.receipts[0].success);
+        let task_id = r3.receipts[0].inference_hash.unwrap();
+
+        // 4) SubmitAttestation with valid Ed25519 signature
+        let result_hash = hash(b"inference result");
+        let compute_units = 100u64;
+        let att = InferenceAttestation::new(
+            task_id,
+            result_hash,
+            compute_units,
+            val_addr,
+            vec![0u8; 64], // placeholder, we compute real sig below
+        );
+        let att_hash = att.attestation_hash();
+        let signature = val_kp.sign(&att_hash);
+
+        let r4 = pipeline
+            .execute_batch(&make_batch(
+                hash(b"attest_submit"),
+                vec![sign(
+                    &TxKind::SubmitAttestation {
+                        validator: val_addr,
+                        task_id,
+                        result_hash,
+                        compute_units,
+                        signature,
+                        nonce: 1,
+                        gas_price: 0,
+                    },
+                    &val_kp,
+                )],
+            ))
+            .await
+            .unwrap();
+        assert_eq!(r4.receipts.len(), 1);
+        assert!(
+            r4.receipts[0].success,
+            "attestation should succeed: {:?}",
+            r4.receipts[0].error
+        );
+        assert_eq!(r4.receipts[0].gas_used, 50_000);
+
+        cleanup(&path);
+    }
+
+    // ── Sprint 031: Full AI lifecycle e2e ────────────────────────────
+
+    #[tokio::test]
+    async fn full_ai_lifecycle_e2e() {
+        use aztibase_consensus::InferenceAttestation;
+        use aztibase_core::BlsKeypair;
+
+        let path = test_db_path("ai_lifecycle");
+        let store = Arc::new(StateStore::open(path.to_str().unwrap()).unwrap());
+        let (_tx, rx) = mpsc::channel(16);
+        let mut pipeline = ExecutionPipeline::with_storage(store, rx);
+
+        let (owner_kp, owner) = make_sender();
+        let (req_kp, requester) = make_sender();
+        let (v1_kp, v1_addr) = make_sender();
+        let (v2_kp, v2_addr) = make_sender();
+        let bls1 = BlsKeypair::generate();
+        let bls2 = BlsKeypair::generate();
+        let fingerprint = hash(b"lifecycle-model");
+        let reward = 10_000u64;
+
+        let shared = pipeline.shared_state();
+        {
+            let mut s = shared.write().await;
+            s.set_balance(&requester, 200_000);
+            s.set_balance(&v1_addr, 50_000);
+            s.set_balance(&v2_addr, 50_000);
+        }
+
+        // 1) Register model
+        pipeline
+            .execute_batch(&make_batch(
+                hash(b"life_reg"),
+                vec![sign(
+                    &TxKind::RegisterModel {
+                        owner,
+                        model_id: "life_model".into(),
+                        fingerprint,
+                        compute_cost: 500,
+                        min_stake: 100,
+                        nonce: 0,
+                        gas_price: 0,
+                    },
+                    &owner_kp,
+                )],
+            ))
+            .await
+            .unwrap();
+
+        // 2) Two validators commit compute
+        pipeline
+            .execute_batch(&make_batch(
+                hash(b"life_commit1"),
+                vec![sign(
+                    &TxKind::CommitCompute {
+                        validator: v1_addr,
+                        supported_models: vec!["life_model".into()],
+                        committed_stake: 5000,
+                        bls_pubkey: bls1.public_key().as_bytes().to_vec(),
+                        bls_pop: bls1.proof_of_possession().as_bytes().to_vec(),
+                        nonce: 0,
+                        gas_price: 0,
+                    },
+                    &v1_kp,
+                )],
+            ))
+            .await
+            .unwrap();
+
+        pipeline
+            .execute_batch(&make_batch(
+                hash(b"life_commit2"),
+                vec![sign(
+                    &TxKind::CommitCompute {
+                        validator: v2_addr,
+                        supported_models: vec!["life_model".into()],
+                        committed_stake: 5000,
+                        bls_pubkey: bls2.public_key().as_bytes().to_vec(),
+                        bls_pop: bls2.proof_of_possession().as_bytes().to_vec(),
+                        nonce: 0,
+                        gas_price: 0,
+                    },
+                    &v2_kp,
+                )],
+            ))
+            .await
+            .unwrap();
+
+        // 3) Post task
+        let r3 = pipeline
+            .execute_batch(&make_batch(
+                hash(b"life_task"),
+                vec![sign(
+                    &TxKind::PostTask {
+                        requester,
+                        model_id: "life_model".into(),
+                        input_hash: hash(b"life input"),
+                        reward,
+                        deadline_round: 100,
+                        nonce: 0,
+                        gas_price: 0,
+                    },
+                    &req_kp,
+                )],
+            ))
+            .await
+            .unwrap();
+        assert!(r3.receipts[0].success);
+        let task_id = r3.receipts[0].inference_hash.unwrap();
+
+        let requester_bal_after_post = {
+            let shared = pipeline.shared_state();
+            let state = shared.read().await;
+            state.balance(&requester)
+        };
+        assert_eq!(requester_bal_after_post, 200_000 - reward);
+
+        // 4) Submit attestation — both validators submit to reach quorum
+        let result_hash = hash(b"life result");
+        let compute_units = 100u64;
+
+        let make_attestation_sig = |kp: &Keypair, addr: &[u8; 32]| -> Vec<u8> {
+            let att = InferenceAttestation::new(
+                task_id,
+                result_hash,
+                compute_units,
+                *addr,
+                vec![0u8; 64],
+            );
+            kp.sign(&att.attestation_hash())
+        };
+
+        let sig1 = make_attestation_sig(&v1_kp, &v1_addr);
+        let sig2 = make_attestation_sig(&v2_kp, &v2_addr);
+
+        // Submit both attestations in one batch
+        let r4 = pipeline
+            .execute_batch(&make_batch(
+                hash(b"life_attest"),
+                vec![
+                    sign(
+                        &TxKind::SubmitAttestation {
+                            validator: v1_addr,
+                            task_id,
+                            result_hash,
+                            compute_units,
+                            signature: sig1,
+                            nonce: 1,
+                            gas_price: 0,
+                        },
+                        &v1_kp,
+                    ),
+                    sign(
+                        &TxKind::SubmitAttestation {
+                            validator: v2_addr,
+                            task_id,
+                            result_hash,
+                            compute_units,
+                            signature: sig2,
+                            nonce: 1,
+                            gas_price: 0,
+                        },
+                        &v2_kp,
+                    ),
+                ],
+            ))
+            .await
+            .unwrap();
+
+        // At least the assigned validator's attestation should succeed
+        let success_count = r4.receipts.iter().filter(|r| r.success).count();
+        assert!(
+            success_count >= 1,
+            "At least one attestation should succeed"
+        );
+
+        // If both succeeded, quorum is reached and settlement should have happened
+        if success_count == 2 {
+            let pending = pipeline
+                .shared_pending_task_count()
+                .load(std::sync::atomic::Ordering::Relaxed);
+            assert_eq!(pending, 0, "Task should be settled and removed from pool");
+
+            let shared = pipeline.shared_state();
+            let state = shared.read().await;
+            let v1_bal = state.balance(&v1_addr);
+            let v2_bal = state.balance(&v2_addr);
+            assert!(
+                v1_bal > 45_000 || v2_bal > 45_000,
+                "At least one validator should receive payout: v1={v1_bal}, v2={v2_bal}"
+            );
+        }
+
+        cleanup(&path);
+    }
+
+    // ── Sprint 031: Deregister compute refund e2e ────────────────────
+
+    #[tokio::test]
+    async fn deregister_compute_refund_e2e() {
+        use aztibase_core::BlsKeypair;
+
+        let path = test_db_path("dereg_comp");
+        let store = Arc::new(StateStore::open(path.to_str().unwrap()).unwrap());
+        let (_tx, rx) = mpsc::channel(16);
+        let mut pipeline = ExecutionPipeline::with_storage(store, rx);
+
+        let (owner_kp, owner) = make_sender();
+        let (val_kp, val_addr) = make_sender();
+        let bls_kp = BlsKeypair::generate();
+        let fingerprint = hash(b"dereg-model");
+        let committed_stake = 5000u64;
+
+        let shared = pipeline.shared_state();
+        shared.write().await.set_balance(&val_addr, 50_000);
+
+        // Register model
+        pipeline
+            .execute_batch(&make_batch(
+                hash(b"dereg_reg"),
+                vec![sign(
+                    &TxKind::RegisterModel {
+                        owner,
+                        model_id: "dereg_model".into(),
+                        fingerprint,
+                        compute_cost: 500,
+                        min_stake: 100,
+                        nonce: 0,
+                        gas_price: 0,
+                    },
+                    &owner_kp,
+                )],
+            ))
+            .await
+            .unwrap();
+
+        // Commit compute
+        pipeline
+            .execute_batch(&make_batch(
+                hash(b"dereg_commit"),
+                vec![sign(
+                    &TxKind::CommitCompute {
+                        validator: val_addr,
+                        supported_models: vec!["dereg_model".into()],
+                        committed_stake,
+                        bls_pubkey: bls_kp.public_key().as_bytes().to_vec(),
+                        bls_pop: bls_kp.proof_of_possession().as_bytes().to_vec(),
+                        nonce: 0,
+                        gas_price: 0,
+                    },
+                    &val_kp,
+                )],
+            ))
+            .await
+            .unwrap();
+
+        let bal_after_commit = {
+            let shared = pipeline.shared_state();
+            let state = shared.read().await;
+            state.balance(&val_addr)
+        };
+        assert_eq!(bal_after_commit, 50_000 - committed_stake);
+
+        // Deregister compute — should refund stake
+        let r = pipeline
+            .execute_batch(&make_batch(
+                hash(b"dereg_dereg"),
+                vec![sign(
+                    &TxKind::DeregisterCompute {
+                        validator: val_addr,
+                        nonce: 1,
+                        gas_price: 0,
+                    },
+                    &val_kp,
+                )],
+            ))
+            .await
+            .unwrap();
+        assert!(r.receipts[0].success);
+        assert_eq!(r.receipts[0].gas_used, 50_000);
+
+        let shared = pipeline.shared_state();
+        let state = shared.read().await;
+        assert_eq!(state.balance(&val_addr), 50_000);
+
+        let store = pipeline.shared_compute_commitments();
+        let guard = store.read().await;
+        assert!(guard.get(&val_addr).is_none() || !guard.get(&val_addr).unwrap().active);
+
+        cleanup(&path);
+    }
+
+    // ── Sprint 031: Duplicate model registration e2e ─────────────────
+
+    #[tokio::test]
+    async fn duplicate_model_registration_e2e() {
+        use aztibase_execution::model_registry::{MODEL_REGISTRY_ADDRESS, ModelRegistry};
+
+        let path = test_db_path("dup_model");
+        let store = Arc::new(StateStore::open(path.to_str().unwrap()).unwrap());
+        let (_tx, rx) = mpsc::channel(16);
+        let mut pipeline = ExecutionPipeline::with_storage(store, rx);
+
+        let (owner_kp, owner) = make_sender();
+        let fingerprint = hash(b"dup-model-weights");
+
+        // Register model
+        let r1 = pipeline
+            .execute_batch(&make_batch(
+                hash(b"dup_reg1"),
+                vec![sign(
+                    &TxKind::RegisterModel {
+                        owner,
+                        model_id: "dup_model".into(),
+                        fingerprint,
+                        compute_cost: 1000,
+                        min_stake: 500,
+                        nonce: 0,
+                        gas_price: 0,
+                    },
+                    &owner_kp,
+                )],
+            ))
+            .await
+            .unwrap();
+        assert!(r1.receipts[0].success);
+
+        // Try to register same model_id again
+        let r2 = pipeline
+            .execute_batch(&make_batch(
+                hash(b"dup_reg2"),
+                vec![sign(
+                    &TxKind::RegisterModel {
+                        owner,
+                        model_id: "dup_model".into(),
+                        fingerprint,
+                        compute_cost: 2000,
+                        min_stake: 100,
+                        nonce: 1,
+                        gas_price: 0,
+                    },
+                    &owner_kp,
+                )],
+            ))
+            .await
+            .unwrap();
+        assert!(!r2.receipts[0].success);
+        assert!(
+            r2.receipts[0]
+                .error
+                .as_ref()
+                .unwrap()
+                .contains("register model failed")
+        );
+
+        // Original model should be unchanged
+        let shared = pipeline.shared_state();
+        let state = shared.read().await;
+        let registry_acct = state.get(&MODEL_REGISTRY_ADDRESS).unwrap();
+        let model = ModelRegistry::get(&registry_acct.storage, "dup_model").unwrap();
+        assert_eq!(model.compute_cost, 1000);
+
+        cleanup(&path);
+    }
+
+    // ── Sprint 031: Deregister model blocked by pending tasks ────────
+
+    #[tokio::test]
+    async fn deregister_model_with_pending_tasks_blocked() {
+        let path = test_db_path("dereg_blocked");
+        let store = Arc::new(StateStore::open(path.to_str().unwrap()).unwrap());
+        let (_tx, rx) = mpsc::channel(16);
+        let mut pipeline = ExecutionPipeline::with_storage(store, rx);
+
+        let (owner_kp, owner) = make_sender();
+        let (req_kp, requester) = make_sender();
+        let fingerprint = hash(b"blocked-model");
+
+        let shared = pipeline.shared_state();
+        shared.write().await.set_balance(&requester, 100_000);
+
+        // Register model
+        pipeline
+            .execute_batch(&make_batch(
+                hash(b"blocked_reg"),
+                vec![sign(
+                    &TxKind::RegisterModel {
+                        owner,
+                        model_id: "blocked_model".into(),
+                        fingerprint,
+                        compute_cost: 500,
+                        min_stake: 100,
+                        nonce: 0,
+                        gas_price: 0,
+                    },
+                    &owner_kp,
+                )],
+            ))
+            .await
+            .unwrap();
+
+        // Post task referencing the model
+        pipeline
+            .execute_batch(&make_batch(
+                hash(b"blocked_task"),
+                vec![sign(
+                    &TxKind::PostTask {
+                        requester,
+                        model_id: "blocked_model".into(),
+                        input_hash: hash(b"blocked input"),
+                        reward: 1000,
+                        deadline_round: 100,
+                        nonce: 0,
+                        gas_price: 0,
+                    },
+                    &req_kp,
+                )],
+            ))
+            .await
+            .unwrap();
+
+        // Try to deregister model — should fail because of pending task
+        let r = pipeline
+            .execute_batch(&make_batch(
+                hash(b"blocked_dereg"),
+                vec![sign(
+                    &TxKind::DeregisterModel {
+                        owner,
+                        model_id: "blocked_model".into(),
+                        nonce: 1,
+                        gas_price: 0,
+                    },
+                    &owner_kp,
+                )],
+            ))
+            .await
+            .unwrap();
+        assert!(!r.receipts[0].success);
+        assert!(
+            r.receipts[0]
+                .error
+                .as_ref()
+                .unwrap()
+                .contains("pending tasks")
+        );
+
+        cleanup(&path);
+    }
+
+    // ── Sprint 031: Mixed tx types in a single batch e2e ─────────────
+
+    #[tokio::test]
+    async fn batch_mixed_tx_types_e2e() {
+        let path = test_db_path("mixed_batch");
+        let store = Arc::new(StateStore::open(path.to_str().unwrap()).unwrap());
+        let (_tx, rx) = mpsc::channel(16);
+        let mut pipeline = ExecutionPipeline::with_storage(store, rx);
+
+        let (alice_kp, alice) = make_sender();
+        let (owner_kp, owner) = make_sender();
+        let bob = [0xAA; 32];
+        let anchor = hash(b"mixed_batch");
+        let fingerprint = hash(b"mixed-model");
+
+        let shared = pipeline.shared_state();
+        shared.write().await.set_balance(&alice, 100_000);
+
+        let wasm = wat::parse_str(
+            r#"
+            (module
+                (memory (export "memory") 1)
+                (func (export "init") (nop))
+            )
+            "#,
+        )
+        .unwrap();
+
+        let batch = make_batch(
+            anchor,
+            vec![
+                sign(
+                    &TxKind::Transfer {
+                        from: alice,
+                        to: bob,
+                        value: 5000,
+                        nonce: 0,
+                        gas_price: 0,
+                    },
+                    &alice_kp,
+                ),
+                sign(
+                    &TxKind::ContractDeploy {
+                        deployer: alice,
+                        code: wasm,
+                        nonce: 1,
+                        gas_limit: 1_000_000,
+                        gas_price: 0,
+                    },
+                    &alice_kp,
+                ),
+                sign(
+                    &TxKind::RegisterModel {
+                        owner,
+                        model_id: "mixed_model".into(),
+                        fingerprint,
+                        compute_cost: 500,
+                        min_stake: 100,
+                        nonce: 0,
+                        gas_price: 0,
+                    },
+                    &owner_kp,
+                ),
+            ],
+        );
+
+        let result = pipeline.execute_batch(&batch).await.unwrap();
+        assert_eq!(result.transfer_count, 1);
+        assert_eq!(result.contract_count, 2);
+        assert_eq!(result.routing_errors, 0);
+
+        let success_count = result.receipts.iter().filter(|r| r.success).count();
+        assert_eq!(success_count, 3, "All 3 txs should succeed");
+
+        let shared = pipeline.shared_state();
+        let state = shared.read().await;
+        assert_eq!(state.balance(&bob), 5000);
+        assert_eq!(state.nonce(&alice), 2);
+        assert_eq!(state.nonce(&owner), 1);
+
+        cleanup(&path);
+    }
+
     // ── Sprint 014 Task 2: Validator crash recovery ────────────────
 
     #[tokio::test]

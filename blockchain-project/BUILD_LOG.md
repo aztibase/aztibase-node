@@ -21,6 +21,20 @@ Entries are prepended (newest first).
 
 ## Entries
 
+### 2026-03-09 -- node-engineer / ai-integration-engineer -- Sprint 031 Complete (M8 Sprint 6: End-to-End Smoke Tests & Integration Testing)
+**Task:** Sprint 031: 13 new e2e integration tests, attestation signature verification bug fix
+**Sprint:** Sprint 031, Phases 1-4
+**Git Ref:** pending
+**Files Changed:**
+- crates/aztibase-execution/src/tx.rs: `verify_and_route_with_pubkey()`, `verify_and_route_batch_with_pubkeys()`, `BatchWithPubkeys` type alias
+- crates/aztibase-execution/src/lib.rs: updated exports for new functions
+- crates/aztibase-node/src/pipeline.rs: BUG FIX — attestation sig verification now uses raw Ed25519 pubkey from envelope instead of BLAKE3-hashed address
+- crates/aztibase-node/src/integration.rs: 13 new e2e tests (fee market, multi-transfer stress, nonce gaps, insufficient balance, RegisterModel, CommitCompute, PostTask, SubmitAttestation, full AI lifecycle, DeregisterCompute, duplicate model, deregister with pending tasks, mixed batch)
+**Review Notes:** Discovered production bug: `address_from_pubkey()` = BLAKE3(pubkey) is irreversible, so attestation sig verification was using a hash as an Ed25519 key (always invalid). Fixed by threading raw pubkeys through batch routing. 161 tests pass (13 new), clippy 0 warnings, fmt clean.
+**Security Flags:** 0 ELEVATED, 0 MEDIUM. BUG FIX: attestation signature verification was non-functional through signed tx flow (SEC-ATT-PUBKEY-001 — CRITICAL, now FIXED)
+
+---
+
 ### 2026-03-08 -- p2p-network-engineer -- Sprint 030 Complete (M8 Sprint 5: WebRTC Direct Transport & DCUtR Hole Punching)
 **Task:** Sprint 030: DCUtR hole punching, WebRTC direct transport (feature-gated), NAT traversal pipeline integration
 **Sprint:** Sprint 030, Phases 1-4
