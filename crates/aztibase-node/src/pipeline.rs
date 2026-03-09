@@ -1,4 +1,4 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::sync::Arc;
 
 use aztibase_consensus::{
@@ -20,6 +20,10 @@ use tokio::sync::{RwLock, mpsc};
 
 use crate::task_pool::{SettlementResult, TaskAssigner, TaskPool, TaskSettlement};
 
+const MAX_EXECUTED_ANCHORS: usize = 10_000;
+const MAX_ATTESTATIONS_PER_TASK: usize = 32;
+const MAX_ATTESTATION_BUFFER_TASKS: usize = 2048;
+
 /// Result of executing a single committed batch.
 #[derive(Clone, Debug)]
 pub struct PipelineResult {
@@ -39,7 +43,8 @@ pub struct ExecutionPipeline {
     store: Option<Arc<StateStore>>,
     rx: mpsc::Receiver<CommittedBatch>,
     batch_count: Arc<std::sync::atomic::AtomicU64>,
-    executed_anchors: HashSet<[u8; 32]>,
+    executed_anchors_set: HashSet<[u8; 32]>,
+    executed_anchors_queue: VecDeque<[u8; 32]>,
     result_tx: Option<mpsc::Sender<PipelineResult>>,
     ai_runtime: Option<Arc<dyn AIRuntime>>,
     base_fee: Arc<std::sync::atomic::AtomicU64>,
@@ -80,7 +85,8 @@ impl ExecutionPipeline {
             store: Some(store),
             rx,
             batch_count: Arc::new(std::sync::atomic::AtomicU64::new(0)),
-            executed_anchors: HashSet::new(),
+            executed_anchors_set: HashSet::new(),
+            executed_anchors_queue: VecDeque::new(),
             result_tx: None,
             ai_runtime: None,
             base_fee,
@@ -133,12 +139,19 @@ impl ExecutionPipeline {
     /// Run the pipeline loop, processing committed batches until the channel closes.
     pub async fn run(mut self) {
         while let Some(batch) = self.rx.recv().await {
-            if !self.executed_anchors.insert(batch.anchor_hash) {
+            if self.executed_anchors_set.contains(&batch.anchor_hash) {
                 tracing::warn!(
                     anchor = %short_hex(&batch.anchor_hash),
                     "Duplicate batch skipped"
                 );
                 continue;
+            }
+            self.executed_anchors_set.insert(batch.anchor_hash);
+            self.executed_anchors_queue.push_back(batch.anchor_hash);
+            if self.executed_anchors_queue.len() > MAX_EXECUTED_ANCHORS
+                && let Some(oldest) = self.executed_anchors_queue.pop_front()
+            {
+                self.executed_anchors_set.remove(&oldest);
             }
             match self.execute_batch(&batch).await {
                 Ok(result) => {
@@ -933,10 +946,31 @@ impl ExecutionPipeline {
                 }
             }
 
-            self.attestation_buffer
-                .entry(*task_id)
-                .or_default()
-                .push(att);
+            // Per-task attestation cap
+            let task_atts = self.attestation_buffer.entry(*task_id).or_default();
+            if task_atts.len() >= MAX_ATTESTATIONS_PER_TASK {
+                state.increment_nonce(validator);
+                exec_receipts.push(ExecutionReceipt {
+                    tx_hash,
+                    success: false,
+                    gas_used: 25_000,
+                    contract_address: None,
+                    error: Some("attestation buffer full for task".to_string()),
+                    inference_hash: None,
+                    anomaly_score: 0.0,
+                });
+                continue;
+            }
+            task_atts.push(att);
+
+            // Total buffer cap: evict oldest task entries
+            if self.attestation_buffer.len() > MAX_ATTESTATION_BUFFER_TASKS {
+                let oldest_key = self.attestation_buffer.keys().next().copied();
+                if let Some(key) = oldest_key {
+                    self.attestation_buffer.remove(&key);
+                }
+            }
+
             state.increment_nonce(validator);
 
             // Check quorum via TaskSettlement
@@ -1313,6 +1347,11 @@ impl ExecutionPipeline {
                 .map_err(|e| anyhow::anyhow!("fatal: store_receipts failed: {e}"))?;
             store_base_fee(store, self.base_fee_calculator.base_fee())
                 .map_err(|e| anyhow::anyhow!("fatal: store_base_fee failed: {e}"))?;
+
+            // Best-effort eviction of old entries (non-fatal if it fails)
+            let _ = aztibase_execution::evict_old_receipts(store);
+            let _ = aztibase_execution::evict_old_transactions(store);
+            let _ = aztibase_execution::evict_old_batch_roots(store);
         }
 
         Ok(PipelineResult {
@@ -1511,7 +1550,8 @@ mod tests {
             store: None,
             rx,
             batch_count: Arc::new(std::sync::atomic::AtomicU64::new(0)),
-            executed_anchors: HashSet::new(),
+            executed_anchors_set: HashSet::new(),
+            executed_anchors_queue: VecDeque::new(),
             result_tx: None,
             ai_runtime: None,
             base_fee: Arc::new(std::sync::atomic::AtomicU64::new(calculator.base_fee())),
@@ -2026,7 +2066,8 @@ mod tests {
             store: None,
             rx,
             batch_count: Arc::new(std::sync::atomic::AtomicU64::new(0)),
-            executed_anchors: HashSet::new(),
+            executed_anchors_set: HashSet::new(),
+            executed_anchors_queue: VecDeque::new(),
             result_tx: None,
             ai_runtime: Some(rt),
             base_fee: Arc::new(std::sync::atomic::AtomicU64::new(calculator.base_fee())),

@@ -1,9 +1,9 @@
 # PROJECT STATUS: Aztibase Network
 
 **Last Updated:** 2026-03-09
-**Updated By:** consensus-engineer
-**Current Phase:** M8 -- Public Testnet (Sprint 7 COMPLETE)
-**Current Sprint:** Sprint 032 -- COMPLETE (Adversarial Consensus Testing)
+**Updated By:** node-engineer
+**Current Phase:** M8 -- Public Testnet (Sprint 8 COMPLETE)
+**Current Sprint:** Sprint 033 -- COMPLETE (State Pruning & Bounded Growth)
 
 ---
 
@@ -77,16 +77,17 @@
 | aztibase-wasm | PARTIAL | p2p-network-engineer | NO | YES |
 
 ### In Progress
-- Nothing currently in progress — Sprint 032 complete, Sprint 033 next
+- Nothing currently in progress — Sprint 033 complete, Sprint 034 next
 
 ### Blocked
 - Nothing currently blocked
 
 ### Recently Completed
+- Sprint 033 Phase 4: Security review — 455+ tests (105 consensus + 175 execution + 175 node), 0 ELEVATED, 0 MEDIUM, clippy 0 warnings, fmt clean
+- Sprint 033 Phase 3: Disk table eviction — StateStore::delete_batch(), TX_TABLE eviction (500K), BATCH_ROOTS_TABLE eviction (100K), 3 new tests
+- Sprint 033 Phase 2: Pipeline memory caps — bounded executed_anchors (VecDeque+HashSet, 10K), per-task attestation cap (32), total attestation buffer cap (2048), disk eviction wired after batch
+- Sprint 033 Phase 1: DagStore pruning — prune_before() removes old rounds from index + disk, 16-round retention buffer, 5 new tests
 - Sprint 032 Phase 4: Security review — 175 node tests (14 new), 0 ELEVATED, 0 MEDIUM, clippy 0 warnings, fmt clean
-- Sprint 032 Phase 3: Liveness/safety — network partition + heal, minority stall, finality cert forgery (6 vectors), buffer exhaustion, message reordering convergence
-- Sprint 032 Phase 2: Byzantine scenarios — leader equivocation, multi-Byzantine (2 of 7), vertex flood, invalid parents, duplicate vertex idempotency
-- Sprint 032 Phase 1: Fault injection harness — FaultRouter (drop/partition/reorder), AdversarialTestbed (multi-node with injected faults)
 - Sprint 031 Phase 4: Security review — 161 node tests, 0 ELEVATED, 0 MEDIUM, clippy 0 warnings, fmt clean
 - Sprint 031 Phase 3: Edge case tests — duplicate model registration, deregister with pending tasks, mixed batch types
 - Sprint 031 Phase 2: AI compute market e2e — RegisterModel, CommitCompute, PostTask, SubmitAttestation, full lifecycle, DeregisterCompute
@@ -188,7 +189,7 @@
 - Sprint 005 Phase 1: Consensus-to-execution wiring, TxKind routing, ExecutionPipeline
 
 ### Next Up
-1. Sprint 033: TBD — state pruning, ecosystem tooling, or L2 primitives
+1. Sprint 034: TBD — ecosystem tooling, archive node mode, or L2 primitives
 
 ### M8 Scope: Monitoring Infrastructure (Planned)
 - **Prometheus**: `prometheus-client` crate (pure Rust), `/metrics` endpoint in Prometheus text format

@@ -318,4 +318,28 @@ impl StateStore {
         }
         Ok(removed)
     }
+
+    /// Atomically delete a batch of keys from a table.
+    /// Returns the number of keys actually removed (skips missing keys).
+    pub fn delete_batch(
+        &self,
+        table: TableDefinition<&[u8], &[u8]>,
+        keys: &[Vec<u8>],
+    ) -> StorageResult<u64> {
+        if keys.is_empty() {
+            return Ok(0);
+        }
+        let write_txn = self.db.begin_write()?;
+        let mut removed = 0u64;
+        {
+            let mut tbl = write_txn.open_table(table)?;
+            for key in keys {
+                if tbl.remove(key.as_slice())?.is_some() {
+                    removed += 1;
+                }
+            }
+        }
+        write_txn.commit()?;
+        Ok(removed)
+    }
 }

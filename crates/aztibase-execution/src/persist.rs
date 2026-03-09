@@ -1,6 +1,6 @@
 use aztibase_storage::{
     ACCOUNTS_TABLE, BATCH_ROOTS_TABLE, CONTRACT_CODE_TABLE, CONTRACT_STORAGE_TABLE, STATE_TABLE,
-    StateStore, StorageResult, TableDef,
+    StateStore, StorageResult, TX_TABLE, TableDef,
 };
 
 use crate::state::{AccountState, AccountType};
@@ -187,6 +187,19 @@ pub fn load_base_fee(store: &StateStore) -> StorageResult<Option<u64>> {
     }
 }
 
+const MAX_STORED_TXS: u64 = 500_000;
+const MAX_STORED_BATCH_ROOTS: u64 = 100_000;
+
+/// Evict old transactions if the store exceeds `MAX_STORED_TXS`.
+pub fn evict_old_transactions(store: &StateStore) -> StorageResult<u64> {
+    store.evict_oldest(TX_TABLE, MAX_STORED_TXS)
+}
+
+/// Evict old batch roots if the store exceeds `MAX_STORED_BATCH_ROOTS`.
+pub fn evict_old_batch_roots(store: &StateStore) -> StorageResult<u64> {
+    store.evict_oldest(BATCH_ROOTS_TABLE, MAX_STORED_BATCH_ROOTS)
+}
+
 /// Retrieve the state root for a committed batch by anchor hash.
 pub fn get_batch_root(
     store: &StateStore,
@@ -324,6 +337,58 @@ mod tests {
         let loaded = load_state(&store).unwrap();
         assert_eq!(loaded.account_count(), 0);
         assert_eq!(loaded.state_root(), [0u8; 32]);
+
+        cleanup(&path);
+    }
+
+    #[test]
+    fn delete_batch_removes_keys_atomically() {
+        let path = test_db_path();
+        let store = StateStore::open(path.to_str().unwrap()).unwrap();
+
+        for i in 0..5u8 {
+            store.put(BATCH_ROOTS_TABLE, &[i; 32], &[0xAA; 32]).unwrap();
+        }
+        assert_eq!(store.len(BATCH_ROOTS_TABLE).unwrap(), 5);
+
+        let keys: Vec<Vec<u8>> = (0..3u8).map(|i| [i; 32].to_vec()).collect();
+        let removed = store.delete_batch(BATCH_ROOTS_TABLE, &keys).unwrap();
+        assert_eq!(removed, 3);
+        assert_eq!(store.len(BATCH_ROOTS_TABLE).unwrap(), 2);
+
+        cleanup(&path);
+    }
+
+    #[test]
+    fn evict_old_transactions_caps_table() {
+        let path = test_db_path();
+        let store = StateStore::open(path.to_str().unwrap()).unwrap();
+
+        for i in 0..10u8 {
+            let key = aztibase_core::hash(&[i]);
+            store.put(TX_TABLE, &key, b"tx-data").unwrap();
+        }
+        assert_eq!(store.len(TX_TABLE).unwrap(), 10);
+
+        let removed = store.evict_oldest(TX_TABLE, 5).unwrap();
+        assert_eq!(removed, 5);
+        assert_eq!(store.len(TX_TABLE).unwrap(), 5);
+
+        cleanup(&path);
+    }
+
+    #[test]
+    fn evict_old_batch_roots_caps_table() {
+        let path = test_db_path();
+        let store = StateStore::open(path.to_str().unwrap()).unwrap();
+
+        for i in 0..8u8 {
+            store.put(BATCH_ROOTS_TABLE, &[i; 32], &[0xBB; 32]).unwrap();
+        }
+
+        let removed = store.evict_oldest(BATCH_ROOTS_TABLE, 3).unwrap();
+        assert_eq!(removed, 5);
+        assert_eq!(store.len(BATCH_ROOTS_TABLE).unwrap(), 3);
 
         cleanup(&path);
     }

@@ -2,6 +2,7 @@ use std::collections::{HashMap, HashSet, VecDeque};
 
 use aztibase_core::BlockHash;
 use aztibase_storage::{BLOCKS_TABLE, StateStore, StorageError};
+use tracing::debug;
 
 use crate::dag::{DagBlock, DagError};
 
@@ -41,10 +42,15 @@ struct DagEntry {
 /// Blocks are serialized to `BLOCKS_TABLE` via `StateStore`. An in-memory index
 /// tracks parent/child edges, round membership, and enables efficient traversal
 /// without deserializing from disk on every query.
+/// Minimum number of rounds to retain below the prune target.
+/// Must be ≥ 2 × wave_length to avoid pruning blocks needed by the commit rule.
+const DAG_RETENTION_BUFFER: u64 = 16;
+
 pub struct DagStore {
     store: StateStore,
     index: HashMap<BlockHash, DagEntry>,
     rounds: HashMap<u64, Vec<BlockHash>>,
+    pruned_through: u64,
 }
 
 impl DagStore {
@@ -55,6 +61,7 @@ impl DagStore {
             store,
             index: HashMap::new(),
             rounds: HashMap::new(),
+            pruned_through: 0,
         };
         dag.rebuild_index()?;
         Ok(dag)
@@ -242,6 +249,54 @@ impl DagStore {
         Ok(result)
     }
 
+    /// Remove blocks in rounds older than `committed_round - DAG_RETENTION_BUFFER`
+    /// from both the in-memory index and on-disk BLOCKS_TABLE.
+    pub fn prune_before(&mut self, committed_round: u64) -> DagStoreResult<u64> {
+        let cutoff = committed_round.saturating_sub(DAG_RETENTION_BUFFER);
+        if cutoff <= self.pruned_through {
+            return Ok(0);
+        }
+
+        let mut pruned_hashes: HashSet<BlockHash> = HashSet::new();
+        let mut keys_to_delete: Vec<Vec<u8>> = Vec::new();
+        for round in self.pruned_through..cutoff {
+            if let Some(hashes) = self.rounds.remove(&round) {
+                for hash in &hashes {
+                    keys_to_delete.push(hash.to_vec());
+                    pruned_hashes.insert(*hash);
+                    self.index.remove(hash);
+                }
+            }
+        }
+
+        // Clean up stale child references in retained entries.
+        if !pruned_hashes.is_empty() {
+            for entry in self.index.values_mut() {
+                entry.children.retain(|c| !pruned_hashes.contains(c));
+            }
+        }
+
+        let removed = if !keys_to_delete.is_empty() {
+            self.store.delete_batch(BLOCKS_TABLE, &keys_to_delete)?
+        } else {
+            0
+        };
+
+        debug!(
+            old_horizon = self.pruned_through,
+            new_horizon = cutoff,
+            removed,
+            "DAG pruned"
+        );
+        self.pruned_through = cutoff;
+        Ok(removed)
+    }
+
+    /// The lowest round still retained in the store.
+    pub fn pruned_through(&self) -> u64 {
+        self.pruned_through
+    }
+
     /// Total number of blocks in the store.
     pub fn len(&self) -> usize {
         self.index.len()
@@ -313,5 +368,163 @@ impl DagStore {
         }
 
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::dag::DagBlock;
+    use aztibase_storage::StateStore;
+    use std::sync::atomic::{AtomicU32, Ordering};
+
+    static TEST_COUNTER: AtomicU32 = AtomicU32::new(0);
+
+    fn test_db_path() -> std::path::PathBuf {
+        let id = TEST_COUNTER.fetch_add(1, Ordering::SeqCst);
+        let pid = std::process::id();
+        std::env::temp_dir().join(format!("aztibase_dagstore_test_{}_{}", pid, id))
+    }
+
+    fn cleanup(path: &std::path::Path) {
+        let _ = std::fs::remove_file(path);
+        let lock = path.with_extension("lock");
+        let _ = std::fs::remove_file(lock);
+    }
+
+    fn build_dag(dag: &mut DagStore, rounds: u64, validators: &[[u8; 32]]) {
+        for v in validators {
+            let genesis = DagBlock::genesis(*v, 1000);
+            dag.insert(genesis).unwrap();
+        }
+        for round in 1..=rounds {
+            let parents: Vec<BlockHash> = dag.blocks_at_round(round - 1).to_vec();
+            for v in validators {
+                let block =
+                    DagBlock::new(round, *v, parents.clone(), vec![], 1000 + round).unwrap();
+                dag.insert(block).unwrap();
+            }
+        }
+    }
+
+    #[test]
+    fn prune_removes_old_rounds_from_index_and_disk() {
+        let path = test_db_path();
+        let store = StateStore::open(path.to_str().unwrap()).unwrap();
+        let mut dag = DagStore::new(store).unwrap();
+
+        let v1 = [1u8; 32];
+        let v2 = [2u8; 32];
+        build_dag(&mut dag, 30, &[v1, v2]);
+
+        // 31 rounds (0-30), 2 validators = 62 blocks
+        assert_eq!(dag.len(), 62);
+
+        // Prune with committed_round=30 → cutoff = 30-16 = 14
+        let removed = dag.prune_before(30).unwrap();
+        assert!(removed > 0);
+
+        // Rounds 0..14 should be gone
+        assert!(dag.blocks_at_round(0).is_empty());
+        assert!(dag.blocks_at_round(13).is_empty());
+        // Round 14+ should remain
+        assert!(!dag.blocks_at_round(14).is_empty());
+        assert!(!dag.blocks_at_round(30).is_empty());
+
+        assert_eq!(dag.pruned_through(), 14);
+
+        cleanup(&path);
+    }
+
+    #[test]
+    fn pruned_blocks_return_not_found() {
+        let path = test_db_path();
+        let store = StateStore::open(path.to_str().unwrap()).unwrap();
+        let mut dag = DagStore::new(store).unwrap();
+
+        let v1 = [1u8; 32];
+        build_dag(&mut dag, 30, &[v1]);
+
+        let old_hashes: Vec<BlockHash> = dag.blocks_at_round(0).to_vec();
+        assert!(!old_hashes.is_empty());
+
+        dag.prune_before(30).unwrap();
+
+        for hash in &old_hashes {
+            assert!(!dag.contains(hash));
+            assert!(dag.get(hash).is_err());
+        }
+
+        cleanup(&path);
+    }
+
+    #[test]
+    fn is_ancestor_handles_pruned_range() {
+        let path = test_db_path();
+        let store = StateStore::open(path.to_str().unwrap()).unwrap();
+        let mut dag = DagStore::new(store).unwrap();
+
+        let v1 = [1u8; 32];
+        build_dag(&mut dag, 30, &[v1]);
+
+        let old_hash = dag.blocks_at_round(0)[0];
+        let tip = dag.blocks_at_round(30)[0];
+
+        // Before prune: old_hash is ancestor of tip
+        assert!(dag.is_ancestor(&old_hash, &tip));
+
+        dag.prune_before(30).unwrap();
+
+        // After prune: gracefully returns false (pruned ancestor not in index)
+        assert!(!dag.is_ancestor(&old_hash, &tip));
+
+        cleanup(&path);
+    }
+
+    #[test]
+    fn rebuild_index_after_prune_loads_only_retained() {
+        let path = test_db_path();
+        let path_str = path.to_str().unwrap().to_string();
+
+        {
+            let store = StateStore::open(&path_str).unwrap();
+            let mut dag = DagStore::new(store).unwrap();
+            let v1 = [1u8; 32];
+            build_dag(&mut dag, 30, &[v1]);
+            dag.prune_before(30).unwrap();
+            // 31 blocks originally, pruned rounds 0..14 = 15 blocks removed
+            let remaining = dag.len();
+            assert!(remaining < 31);
+        }
+
+        // Reopen and rebuild
+        let store2 = StateStore::open(&path_str).unwrap();
+        let dag2 = DagStore::new(store2).unwrap();
+
+        // Should only have the retained blocks
+        assert!(dag2.blocks_at_round(0).is_empty());
+        assert!(!dag2.blocks_at_round(30).is_empty());
+
+        cleanup(&path);
+    }
+
+    #[test]
+    fn prune_is_idempotent() {
+        let path = test_db_path();
+        let store = StateStore::open(path.to_str().unwrap()).unwrap();
+        let mut dag = DagStore::new(store).unwrap();
+
+        let v1 = [1u8; 32];
+        build_dag(&mut dag, 30, &[v1]);
+
+        let first = dag.prune_before(30).unwrap();
+        let count_after = dag.len();
+        let second = dag.prune_before(30).unwrap();
+
+        assert!(first > 0);
+        assert_eq!(second, 0);
+        assert_eq!(dag.len(), count_after);
+
+        cleanup(&path);
     }
 }

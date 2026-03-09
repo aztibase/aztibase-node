@@ -474,49 +474,62 @@ impl ConsensusEngine {
             wave_length: wave_len,
             vrf_seed: Some(self.vrf_seed),
         };
-        let rule = CommitRule::new(&self.dag, &self.validators, commit_config);
 
-        for wave in start_wave..current_wave {
-            let status = rule.try_direct_commit(wave);
-            match status {
-                LeaderStatus::Commit(hash) => {
-                    let latency = self.round_start.elapsed();
-                    info!(wave, hash = %short_hex(&hash), "Block committed (direct)");
-                    self.metrics.commits.fetch_add(1, AtomicOrdering::Relaxed);
-                    self.metrics
-                        .last_commit_latency_us
-                        .store(latency.as_micros() as u64, AtomicOrdering::Relaxed);
-                    self.state.record_commit(hash);
-                    self.state.last_committed_wave = Some(wave);
-                    self.state.prune_before(wave * wave_len);
-                    self.vrf_seed = aztibase_core::hash(&hash);
-                    match crate::ordering::extract_committed_batch(
-                        &self.dag,
-                        hash,
-                        self.state.committed_blocks(),
-                    ) {
-                        Ok(batch) => {
-                            if let Err(e) =
-                                self.outbox.try_send(ConsensusOutput::BatchCommitted(batch))
-                            {
-                                tracing::error!(
-                                    "Failed to send committed batch to execution: {e} — batch may be lost"
-                                );
+        let mut last_prune_round = None;
+
+        {
+            let rule = CommitRule::new(&self.dag, &self.validators, commit_config);
+
+            for wave in start_wave..current_wave {
+                let status = rule.try_direct_commit(wave);
+                match status {
+                    LeaderStatus::Commit(hash) => {
+                        let latency = self.round_start.elapsed();
+                        info!(wave, hash = %short_hex(&hash), "Block committed (direct)");
+                        self.metrics.commits.fetch_add(1, AtomicOrdering::Relaxed);
+                        self.metrics
+                            .last_commit_latency_us
+                            .store(latency.as_micros() as u64, AtomicOrdering::Relaxed);
+                        self.state.record_commit(hash);
+                        self.state.last_committed_wave = Some(wave);
+                        self.state.prune_before(wave * wave_len);
+                        last_prune_round = Some(wave * wave_len);
+                        self.vrf_seed = aztibase_core::hash(&hash);
+                        match crate::ordering::extract_committed_batch(
+                            &self.dag,
+                            hash,
+                            self.state.committed_blocks(),
+                        ) {
+                            Ok(batch) => {
+                                if let Err(e) =
+                                    self.outbox.try_send(ConsensusOutput::BatchCommitted(batch))
+                                {
+                                    tracing::error!(
+                                        "Failed to send committed batch to execution: {e} — batch may be lost"
+                                    );
+                                }
+                            }
+                            Err(e) => {
+                                tracing::warn!("Failed to extract committed batch: {e}");
                             }
                         }
-                        Err(e) => {
-                            tracing::warn!("Failed to extract committed batch: {e}");
-                        }
+                    }
+                    LeaderStatus::Skip(r) => {
+                        debug!(wave, round = r, "Leader skipped");
+                        self.state.last_committed_wave = Some(wave);
+                    }
+                    LeaderStatus::Undecided(_) => {
+                        break;
                     }
                 }
-                LeaderStatus::Skip(r) => {
-                    debug!(wave, round = r, "Leader skipped");
-                    self.state.last_committed_wave = Some(wave);
-                }
-                LeaderStatus::Undecided(_) => {
-                    break;
-                }
             }
+        }
+
+        // Prune DAG after releasing the CommitRule borrow
+        if let Some(prune_round) = last_prune_round
+            && let Err(e) = self.dag.prune_before(prune_round)
+        {
+            tracing::warn!("DAG prune failed: {e}");
         }
 
         Ok(())

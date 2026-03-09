@@ -21,6 +21,23 @@ Entries are prepended (newest first).
 
 ## Entries
 
+### 2026-03-09 -- consensus-engineer / node-engineer / security-engineer -- Sprint 033 Complete (M8 Sprint 8: State Pruning & Bounded Growth)
+**Task:** Sprint 033: DagStore round-based pruning, pipeline memory caps, disk table eviction
+**Sprint:** Sprint 033, Phases 1-4
+**Git Ref:** pending
+**Files Changed:**
+- crates/aztibase-consensus/src/dag_store.rs: `DAG_RETENTION_BUFFER`, `pruned_through` field, `prune_before()`, `pruned_through()`, 5 new tests
+- crates/aztibase-consensus/src/engine.rs: `evaluate_commits()` calls `dag.prune_before()` after commit loop
+- crates/aztibase-node/src/pipeline.rs: bounded `executed_anchors` (VecDeque+HashSet ring buffer), per-task + total attestation buffer caps, disk eviction calls after batch
+- crates/aztibase-execution/src/persist.rs: `evict_old_transactions()`, `evict_old_batch_roots()`, 3 new tests
+- crates/aztibase-execution/src/lib.rs: re-exports for eviction functions
+- crates/aztibase-storage/src/store.rs: `delete_batch()` method
+- blockchain-project/sprints/SPRINT-033.md (NEW: sprint plan)
+**Review Notes:** Phase 1: DagStore prune_before() removes rounds from in-memory index + on-disk BLOCKS_TABLE, retention buffer of 16 rounds, orphaned children refs cleaned. Phase 2: executed_anchors converted to bounded VecDeque+HashSet (10K cap), attestation_buffer per-task cap (32) + total cap (2048), disk eviction wired after batch persistence. Phase 3: StateStore::delete_batch() for atomic multi-key deletion, TX_TABLE eviction (500K cap), BATCH_ROOTS_TABLE eviction (100K cap). 455+ tests pass (105 consensus + 175 execution + 175 node), clippy 0 warnings, fmt clean.
+**Security Flags:** 0 ELEVATED, 0 MEDIUM. DAG retention buffer (16) exceeds 2× wave_length, preventing data loss for in-flight consensus. Ring buffer eviction still rejects recent duplicate anchors within window.
+
+---
+
 ### 2026-03-09 -- consensus-engineer / security-engineer -- Sprint 032 Complete (M8 Sprint 7: Adversarial Consensus Testing)
 **Task:** Sprint 032: Fault injection harness, Byzantine fault tolerance verification, liveness/safety tests
 **Sprint:** Sprint 032, Phases 1-4

@@ -5,6 +5,23 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ---
 
+## [M8-S8] -- State Pruning & Bounded Growth (Sprint 033)
+
+### Added
+- `DagStore::prune_before(committed_round)`: round-based pruning removes old blocks from in-memory index + on-disk BLOCKS_TABLE, with `DAG_RETENTION_BUFFER = 16` rounds (2026-03-09)
+- `StateStore::delete_batch()`: atomic multi-key deletion in a single write transaction (2026-03-09)
+- `evict_old_transactions()`: count-based TX_TABLE eviction capped at 500K entries (2026-03-09)
+- `evict_old_batch_roots()`: count-based BATCH_ROOTS_TABLE eviction capped at 100K entries (2026-03-09)
+- 8 new unit tests: 5 DagStore pruning + 3 disk eviction (2026-03-09)
+
+### Changed
+- `ConsensusEngine::evaluate_commits()`: auto-prunes DAG after successful commit wave (2026-03-09)
+- `executed_anchors`: converted from unbounded `HashSet` to bounded VecDeque+HashSet ring buffer (`MAX_EXECUTED_ANCHORS = 10_000`) with FIFO eviction (2026-03-09)
+- `attestation_buffer`: per-task cap (`MAX_ATTESTATIONS_PER_TASK = 32`) and total cap (`MAX_ATTESTATION_BUFFER_TASKS = 2048`) with oldest-task eviction (2026-03-09)
+- Pipeline batch persistence: now triggers best-effort eviction of receipts, transactions, and batch roots tables (2026-03-09)
+
+---
+
 ## [M8-S7] -- Adversarial Consensus Testing (Sprint 032)
 
 ### Added
