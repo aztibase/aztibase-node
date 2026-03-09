@@ -883,3 +883,190 @@ Key milestones:
 | **Aztibase** | **3 (dev)** | **TBD (20-50 target)** | **$0 (bootstrapped)** |
 
 Lean launches are viable. Solana and Cosmos both started with modest resources relative to later-stage projects.
+
+---
+
+## FP-006: Privacy Layer — TEE + Encrypted Inference
+
+**Status:** PLANNED — M9+ (post-mainnet hardening)
+**Priority:** HIGH — required before "private AI" can be claimed
+**Estimated effort:** 3-4 sprints
+**Author:** Project Lead
+**Date:** 2026-03-09
+**Code status:** ZERO CODE — design only
+
+### Problem
+
+All inference requests and results are currently transparent on-chain. Anyone can see what model was called, what input was sent, and what output was returned. This makes the "private AI" value proposition undeliverable today.
+
+### What Needs to Be Built
+
+#### Phase 1: Encrypted Inference Requests (1 sprint)
+- `EncryptedInferenceRequest`: input encrypted with validator's public key (X25519 or similar)
+- Validator decrypts in-memory, runs inference, returns encrypted result
+- Only requester + assigned validator see plaintext
+- New TxKind or extension to existing AiInfer with encrypted payload
+- Key exchange protocol between requester and validator
+
+#### Phase 2: TEE Integration (1-2 sprints)
+- Intel SGX / AMD SEV / ARM TrustZone enclave support for validators
+- Model loaded inside enclave, inference runs inside enclave
+- Remote attestation: validator proves to network that they're running genuine code in a genuine enclave
+- Attestation certificate posted on-chain (verifiable by light clients)
+- Neither model weights nor input data are exposed to the validator's host OS
+
+#### Phase 3: ZK Inference Verification (1 sprint, research-heavy)
+- ZK proof that inference was computed correctly without revealing input/output
+- Likely requires specialized ZK circuits per model architecture (expensive to build)
+- Alternative: optimistic verification with fraud proofs (cheaper, weaker guarantees)
+- Evaluate: RISC Zero, SP1, or Jolt for general-purpose ZK-VM approach
+
+### Dependencies
+- Mature Rust TEE libraries (gramine-rs, fortanix-edp, or similar)
+- ZK proof system selection (no pure-Rust production ZK-VM exists today that handles ML inference)
+- Validator hardware requirements increase (TEE-capable CPUs)
+
+### Risk
+- TEE adds hardware requirements — conflicts with "consumer hardware" validator target
+- ZK inference proofs are cutting-edge research — may not be production-ready for 1-2 years
+- Mitigation: TEE is optional (validators opt in for premium tasks), non-TEE validators handle public inference
+
+---
+
+## FP-007: Selective Disclosure Identity
+
+**Status:** PLANNED — M9+ (post-privacy layer)
+**Priority:** MEDIUM — enterprise adoption driver
+**Estimated effort:** 2-3 sprints
+**Author:** Project Lead
+**Date:** 2026-03-09
+**Code status:** ZERO CODE — design only
+
+### Problem
+
+Proving attributes (age, KYC status, nationality) currently requires exposing full identity documents. No on-chain primitive exists for "prove X without revealing Y."
+
+### What Needs to Be Built
+
+#### Phase 1: Credential Schema + Issuance (1 sprint)
+- `CredentialSchema`: defines what attributes a credential contains (e.g., "age", "country", "kyc_level")
+- `IssuedCredential`: signed by an issuer (KYC provider, government, etc.), stored off-chain (user's device)
+- `CredentialIssuer` registry on-chain: trusted issuers with public keys
+- W3C Verifiable Credentials alignment for interop
+
+#### Phase 2: ZK Selective Disclosure (1-2 sprints)
+- User generates a ZK proof: "I hold a credential from issuer X that says attribute Y satisfies condition Z"
+- Example: "I have a KYC credential from Issuer A that says my age >= 18" — without revealing name, DOB, or anything else
+- On-chain verifier contract or protocol-level verification
+- Proof system: BBS+ signatures (privacy-preserving, supports selective disclosure natively) or Groth16/PLONK circuits
+
+#### Phase 3: Protocol Integration (1 sprint)
+- `TxKind::PresentCredential`: attach a ZK proof to any transaction as authorization
+- Smart contracts can require credential proofs as preconditions (e.g., "only KYC-verified addresses can use this DEX pool")
+- Governance: proposals can require credential proofs from voters
+
+### Dependencies
+- FP-006 (privacy layer) for encrypted credential storage
+- BBS+ or similar ZK-friendly signature scheme (Rust crate maturity TBD)
+- Credential issuer ecosystem (third-party KYC providers, identity platforms)
+
+### Risk
+- Chicken-and-egg: credentials need issuers, issuers need users, users need utility
+- Mitigation: start with self-issued credentials (prove ownership of another chain's address, prove testnet participation) before external issuers
+
+---
+
+## FP-008: Autonomous AI Agent Transactions
+
+**Status:** PLANNED — M9 (pre-mainnet)
+**Priority:** HIGH — core to "agent economy" pitch
+**Estimated effort:** 1-2 sprints
+**Author:** Project Lead
+**Date:** 2026-03-09
+**Code status:** 20% — AIAgent account type exists, no autonomous execution
+
+### Current State
+
+- `TxKind::CreateAgent` (0x07) creates an AIAgent account on-chain
+- Agent has balance, nonce, model_id
+- BUT: agents cannot initiate transactions — they are passive accounts
+- No spending limits, no authorization delegation, no agent-to-agent payments
+
+### What Needs to Be Built
+
+#### Phase 1: Agent Authorization Framework (1 sprint)
+- `AgentPolicy`: spending cap (per-tx, per-epoch), allowed TxKinds, allowed recipients, expiry round
+- `TxKind::SetAgentPolicy`: human principal sets/updates agent constraints
+- `TxKind::AgentExecute`: agent-initiated transaction, validated against policy before execution
+- Agent signing: agent has its own keypair (derived at creation), can sign txs within policy bounds
+- Pipeline: validate AgentExecute against stored policy, reject if over budget or unauthorized
+
+#### Phase 2: Agent-to-Agent Communication (1 sprint)
+- `TxKind::AgentMessage`: lightweight on-chain message between agents (structured data, not free-form)
+- Agent discovery: query agents by model_id or capability
+- Payment channels: agents can open micro-payment channels for high-frequency interactions
+- Composability: agent can call another agent's inference endpoint and pay automatically
+
+### Dependencies
+- Sprint 038 staking (agents may need to stake for certain operations)
+- FP-006 privacy layer (agents handling sensitive data need encrypted communication)
+
+### Risk
+- Autonomous spending by AI agents is a regulatory grey area
+- Mitigation: human principal always sets policy; agent cannot exceed policy bounds; policy revocation is immediate
+
+---
+
+## FP-009: ZK Proof System Integration
+
+**Status:** PLANNED — M9+ (research-dependent)
+**Priority:** MEDIUM — enables FP-006, FP-007, and future scaling
+**Estimated effort:** 2-3 sprints
+**Author:** Project Lead
+**Date:** 2026-03-09
+**Code status:** ZERO CODE — only a placeholder StateCommitment trait exists
+
+### Problem
+
+Multiple features depend on ZK proofs (private inference verification, selective disclosure, potential ZK rollup support), but no ZK proof system is integrated.
+
+### Options Under Evaluation
+
+| System | Approach | Rust Support | Maturity | Fit |
+|--------|----------|-------------|----------|-----|
+| **RISC Zero** | ZK-VM (runs arbitrary RISC-V programs in ZK) | Yes (pure Rust guest programs) | Production | Best general-purpose fit |
+| **SP1** (Succinct) | ZK-VM (RISC-V, optimized prover) | Yes | Production | Faster proofs than RISC Zero |
+| **Jolt** (a16z) | ZK-VM (RISC-V, lookup-based) | Yes | Early | Promising, less mature |
+| **Halo2** (PSE/Zcash) | Custom circuits | Yes | Production | Flexible but complex |
+| **Groth16** (arkworks) | Custom circuits, trusted setup | Yes (arkworks) | Mature | Fast verification, setup ceremony needed |
+| **BBS+** | Selective disclosure signatures | Partial | Research | Best for FP-007 identity specifically |
+
+### Recommended Approach
+1. Start with **RISC Zero** or **SP1** for general-purpose ZK-VM (can prove arbitrary Rust code)
+2. Add **BBS+** for identity-specific selective disclosure (FP-007)
+3. Evaluate custom circuits (Halo2) only if ZK-VM performance is insufficient for inference verification
+
+### What Needs to Be Built
+- `ZkVerifier` trait in aztibase-core (verify proof against public inputs)
+- `TxKind::SubmitZkProof`: post a ZK proof on-chain for verification
+- Proof storage: receipts include proof verification status
+- Precompile or native opcode for ZK verification in WASM/EVM contracts
+
+### Dependencies
+- Pure Rust requirement: RISC Zero and SP1 both have C/C++ dependencies in their provers. Verification can be pure Rust. ADR needed (similar to ADR-004 for blst).
+
+---
+
+## Future Planning Index
+
+| FP | Title | Status | Priority | Code Status |
+|----|-------|--------|----------|-------------|
+| FP-001 | Community Task Layer (L1 proposal → see FP-004) | PROPOSAL | HIGH | 0% |
+| FP-002 | Delegation / Staking | SUPERSEDED by Sprint 038 | — | Sprint 038 |
+| FP-003 | Mobile Light Client App | PROPOSAL | HIGH | 0% |
+| FP-004 | L2 Community Task Chain (sovereign rollup) | PROPOSAL | HIGH | 0% |
+| FP-005 | Project Assessment & Launch Roadmap | REFERENCE | HIGH | N/A |
+| FP-006 | Privacy Layer — TEE + Encrypted Inference | PLANNED (M9+) | HIGH | 0% |
+| FP-007 | Selective Disclosure Identity | PLANNED (M9+) | MEDIUM | 0% |
+| FP-008 | Autonomous AI Agent Transactions | PLANNED (M9) | HIGH | 20% |
+| FP-009 | ZK Proof System Integration | PLANNED (M9+) | MEDIUM | 0% |

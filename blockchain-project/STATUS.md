@@ -204,7 +204,26 @@
 - Sprint 005 Phase 1: Consensus-to-execution wiring, TxKind routing, ExecutionPipeline
 
 ### Next Up
-1. Sprint 038: TBD — Staking/delegation, slashing, privacy foundations, or load testing
+1. Sprint 038: Validator Staking, Delegation & Slashing (M8-S13) — PLANNED
+
+### Deferred to M9+ (Locked in FUTURE_PLANNING.md)
+
+| Feature | FP # | Code Status | Why Deferred |
+|---------|------|-------------|-------------|
+| Privacy / TEE / Encrypted Inference | FP-006 | 0% | Requires TEE libraries + validator hardware changes |
+| Selective Disclosure Identity | FP-007 | 0% | Depends on FP-006 + BBS+ signature maturity |
+| Autonomous AI Agent Transactions | FP-008 | 20% (account type only) | Needs staking (Sprint 038) + privacy layer |
+| ZK Proof System Integration | FP-009 | 0% | Research-dependent, evaluating RISC Zero / SP1 |
+| L2 Community Task Chain | FP-004 | 0% | Needs L1 bridge primitives + sequencer design |
+| Mobile Light Client App | FP-003 | 0% | Needs WASM tx signing exports |
+
+### What CAN Be Claimed Today (Code-Backed)
+- AI inference as native protocol operation (TxKind::AiInfer, TractRuntime, 13 e2e tests)
+- Multi-metric PoUW scoring (accuracy 40% + latency 30% + availability 30%)
+- Model royalties via on-chain registry (RegisterModel, 5% royalty on inference)
+- Server-independent browser nodes (WebRTC + WASM light client)
+- EIP-1559 fee burning (governance-controlled)
+- Full tokenomics (emission, vesting, APY curves, 726 tests)
 
 ### M8 Scope: Monitoring Infrastructure (Planned)
 - **Prometheus**: `prometheus-client` crate (pure Rust), `/metrics` endpoint in Prometheus text format
