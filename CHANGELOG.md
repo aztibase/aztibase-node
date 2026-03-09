@@ -5,6 +5,21 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ---
 
+## [M8-S7] -- Adversarial Consensus Testing (Sprint 032)
+
+### Added
+- `FaultRouter`: configurable fault injection harness with drop rate, network partitions, and message reordering (2026-03-09)
+- `AdversarialTestbed`: multi-node consensus test runner using FaultRouter for injected-fault scenarios (2026-03-09)
+- 14 new adversarial consensus tests — 175 total node tests (2026-03-09)
+- Tests: fault_router_drop_rate, fault_router_partition_isolation, fault_router_no_partition_reaches_all, fault_router_reorder_changes_delivery_order (2026-03-09)
+- Tests: leader_equivocation_rejected, multi_byzantine_below_threshold, conflicting_vertex_flood_capped, invalid_parent_hash_rejected, duplicate_vertex_ignored (2026-03-09)
+- Tests: network_partition_and_heal, consensus_stall_minority_online, finality_cert_forgery_rejected, buffer_exhaustion_graceful, message_reordering_convergence (2026-03-09)
+
+### Changed
+- `ConsensusEngine`: `state`, `insert_genesis()`, `handle_input()`, `handle_received_vertex()` made public for external test access (2026-03-09)
+
+---
+
 ## [M8-S6] -- End-to-End Smoke Tests & Integration Testing (Sprint 031)
 
 ### Added

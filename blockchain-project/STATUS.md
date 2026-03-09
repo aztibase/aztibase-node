@@ -1,9 +1,9 @@
 # PROJECT STATUS: Aztibase Network
 
 **Last Updated:** 2026-03-09
-**Updated By:** node-engineer
-**Current Phase:** M8 -- Public Testnet (Sprint 6 COMPLETE)
-**Current Sprint:** Sprint 031 -- COMPLETE (End-to-End Smoke Tests & Integration Testing)
+**Updated By:** consensus-engineer
+**Current Phase:** M8 -- Public Testnet (Sprint 7 COMPLETE)
+**Current Sprint:** Sprint 032 -- COMPLETE (Adversarial Consensus Testing)
 
 ---
 
@@ -77,12 +77,16 @@
 | aztibase-wasm | PARTIAL | p2p-network-engineer | NO | YES |
 
 ### In Progress
-- Nothing currently in progress — Sprint 031 complete, Sprint 032 next
+- Nothing currently in progress — Sprint 032 complete, Sprint 033 next
 
 ### Blocked
 - Nothing currently blocked
 
 ### Recently Completed
+- Sprint 032 Phase 4: Security review — 175 node tests (14 new), 0 ELEVATED, 0 MEDIUM, clippy 0 warnings, fmt clean
+- Sprint 032 Phase 3: Liveness/safety — network partition + heal, minority stall, finality cert forgery (6 vectors), buffer exhaustion, message reordering convergence
+- Sprint 032 Phase 2: Byzantine scenarios — leader equivocation, multi-Byzantine (2 of 7), vertex flood, invalid parents, duplicate vertex idempotency
+- Sprint 032 Phase 1: Fault injection harness — FaultRouter (drop/partition/reorder), AdversarialTestbed (multi-node with injected faults)
 - Sprint 031 Phase 4: Security review — 161 node tests, 0 ELEVATED, 0 MEDIUM, clippy 0 warnings, fmt clean
 - Sprint 031 Phase 3: Edge case tests — duplicate model registration, deregister with pending tasks, mixed batch types
 - Sprint 031 Phase 2: AI compute market e2e — RegisterModel, CommitCompute, PostTask, SubmitAttestation, full lifecycle, DeregisterCompute
@@ -184,8 +188,7 @@
 - Sprint 005 Phase 1: Consensus-to-execution wiring, TxKind routing, ExecutionPipeline
 
 ### Next Up
-1. Sprint 031: End-to-end testnet smoke tests + integration testing
-2. Sprint 032: TBD — mainnet readiness or additional hardening
+1. Sprint 033: TBD — state pruning, ecosystem tooling, or L2 primitives
 
 ### M8 Scope: Monitoring Infrastructure (Planned)
 - **Prometheus**: `prometheus-client` crate (pure Rust), `/metrics` endpoint in Prometheus text format

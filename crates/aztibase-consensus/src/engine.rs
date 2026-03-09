@@ -182,7 +182,7 @@ pub struct ConsensusEngine {
     identity: ValidatorId,
     dag: DagStore,
     validators: ValidatorSet,
-    state: RoundState,
+    pub state: RoundState,
     pending_txs: Vec<Vec<u8>>,
     vrf_seed: [u8; 32],
     inbox: mpsc::Receiver<ConsensusInput>,
@@ -256,7 +256,7 @@ impl ConsensusEngine {
         Ok(())
     }
 
-    fn insert_genesis(&mut self) -> Result<()> {
+    pub fn insert_genesis(&mut self) -> Result<()> {
         if self.dag.is_empty() {
             for (id, _) in self.validators.iter() {
                 let genesis = DagBlock::genesis(*id, now_ms());
@@ -352,7 +352,7 @@ impl ConsensusEngine {
         Ok(())
     }
 
-    fn handle_input(&mut self, input: ConsensusInput) -> Result<()> {
+    pub fn handle_input(&mut self, input: ConsensusInput) -> Result<()> {
         match input {
             ConsensusInput::ReceivedVertex(data) => {
                 self.handle_received_vertex(&data)?;
@@ -368,7 +368,7 @@ impl ConsensusEngine {
         Ok(())
     }
 
-    fn handle_received_vertex(&mut self, data: &[u8]) -> Result<()> {
+    pub fn handle_received_vertex(&mut self, data: &[u8]) -> Result<()> {
         let block = match wire::decode_vertex(data, &self.validators, self.state.current_round) {
             Ok(b) => b,
             Err(e) => {

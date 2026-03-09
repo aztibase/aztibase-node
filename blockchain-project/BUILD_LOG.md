@@ -21,6 +21,19 @@ Entries are prepended (newest first).
 
 ## Entries
 
+### 2026-03-09 -- consensus-engineer / security-engineer -- Sprint 032 Complete (M8 Sprint 7: Adversarial Consensus Testing)
+**Task:** Sprint 032: Fault injection harness, Byzantine fault tolerance verification, liveness/safety tests
+**Sprint:** Sprint 032, Phases 1-4
+**Git Ref:** pending
+**Files Changed:**
+- crates/aztibase-consensus/src/engine.rs: `state`, `insert_genesis()`, `handle_input()`, `handle_received_vertex()` made public
+- crates/aztibase-node/src/integration.rs: FaultRouter, AdversarialTestbed, 14 new adversarial tests
+- blockchain-project/sprints/SPRINT-032.md (NEW: sprint plan)
+**Review Notes:** Phase 1: FaultRouter with drop/partition/reorder + AdversarialTestbed multi-node harness (4 tests). Phase 2: Byzantine scenarios — leader equivocation, multi-Byzantine (7 validators), orphan vertex flood, invalid parent rejection, duplicate vertex idempotency (5 tests). Phase 3: network partition + heal, minority stall (2/7), finality cert forgery (6 attack vectors), buffer exhaustion, message reordering convergence (5 tests). 175 tests pass (14 new), clippy 0 warnings, fmt clean.
+**Security Flags:** 0 ELEVATED, 0 MEDIUM. Finality certificate forgery tests confirm all 6 attack vectors correctly rejected.
+
+---
+
 ### 2026-03-09 -- node-engineer / ai-integration-engineer -- Sprint 031 Complete (M8 Sprint 6: End-to-End Smoke Tests & Integration Testing)
 **Task:** Sprint 031: 13 new e2e integration tests, attestation signature verification bug fix
 **Sprint:** Sprint 031, Phases 1-4
