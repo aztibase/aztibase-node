@@ -1,9 +1,9 @@
 # PROJECT STATUS: Aztibase Network
 
 **Last Updated:** 2026-03-09
-**Updated By:** node-engineer
-**Current Phase:** M8 -- Public Testnet (Sprint 9 COMPLETE)
-**Current Sprint:** Sprint 034 -- COMPLETE (Archive Node & Historical Queries)
+**Updated By:** smart-contract-engineer
+**Current Phase:** M8 -- Public Testnet (Sprint 10 COMPLETE)
+**Current Sprint:** Sprint 035 -- COMPLETE (On-Chain Governance Foundations)
 
 ---
 
@@ -33,7 +33,7 @@
 - Build-phase tracking infrastructure (5 documents)
 - Implementation depth audit (Sprint 001, Task 7)
 - Reference repos cloned (MystiCeti, Sui, Lighthouse, rust-libp2p, redb)
-- cargo build + cargo test pass (666 tests, 0 failures)
+- cargo build + cargo test pass (674 tests, 0 failures)
 - Sprint 001 closed with retrospective
 - Sprint 002 closed: 24/24 tasks, 5 phases complete
 - Sprint 003 closed: 18/18 tasks, 4 phases complete
@@ -77,12 +77,16 @@
 | aztibase-wasm | PARTIAL | p2p-network-engineer | NO | YES |
 
 ### In Progress
-- Nothing currently in progress — Sprint 034 complete, Sprint 035 next
+- Nothing currently in progress — Sprint 035 complete, Sprint 036 next
 
 ### Blocked
 - Nothing currently blocked
 
 ### Recently Completed
+- Sprint 035 Phase 4: Security review — clippy 0 warnings, fmt clean, 674 tests pass (8 new), 0 ELEVATED, 0 MEDIUM
+- Sprint 035 Phase 3: Governance RPCs — aztb_getProposal (with tally), aztb_listProposals (status filter), proposal finalization in batch loop
+- Sprint 035 Phase 2: Governance TxKinds — CreateProposal (0x0E), CastVote (0x0F), pipeline routing + execution, stake-weighted voting
+- Sprint 035 Phase 1: GovernanceStore — Proposal/Vote/VoteTally types, create_proposal/cast_vote/finalize_expired, quorum (≥2 voters, >50% approve weight), 6 unit tests
 - Sprint 034 Phase 4: Security review — clippy 0 warnings, fmt clean, all tests pass, 0 ELEVATED, 0 MEDIUM
 - Sprint 034 Phase 3: Block range & explorer RPCs — getBlockRange (MAX_BLOCK_RANGE=100 pagination), getTransactionsByBatch, getReceiptsByBatch
 - Sprint 034 Phase 2: Historical query RPCs — getBlockByNumber, getBlockByHash, getTransactionByHash, getBatchRoot, BATCH_INDEX_TABLE, BATCH_TXS_TABLE, 4 persist tests
@@ -193,7 +197,7 @@
 - Sprint 005 Phase 1: Consensus-to-execution wiring, TxKind routing, ExecutionPipeline
 
 ### Next Up
-1. Sprint 035: TBD — RPC test coverage, L2 primitives, or ecosystem tooling
+1. Sprint 036: TBD — Proposal execution (parameter changes), privacy foundations, or load testing
 
 ### M8 Scope: Monitoring Infrastructure (Planned)
 - **Prometheus**: `prometheus-client` crate (pure Rust), `/metrics` endpoint in Prometheus text format

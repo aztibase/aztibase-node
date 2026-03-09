@@ -18,6 +18,7 @@ use tracing::{debug, info};
 
 use aztibase_consensus::ComputeCommitmentStore;
 use aztibase_execution::AccountState;
+use aztibase_execution::GovernanceStore;
 use aztibase_execution::model_registry::{MODEL_REGISTRY_ADDRESS, ModelMetadata, ModelRegistry};
 use aztibase_storage::StateStore;
 
@@ -102,6 +103,7 @@ pub struct RpcState {
     ip_tracker: IpConnectionTracker,
     pub pending_task_count: Arc<AtomicU64>,
     pub compute_commitments: Option<Arc<RwLock<ComputeCommitmentStore>>>,
+    pub governance: Option<Arc<RwLock<GovernanceStore>>>,
     pub chain_id: u64,
     pub genesis_hash: Option<[u8; 32]>,
     faucet_tracker: Arc<std::sync::Mutex<HashMap<[u8; 32], std::time::Instant>>>,
@@ -121,6 +123,7 @@ impl Clone for RpcState {
             ip_tracker: self.ip_tracker.clone(),
             pending_task_count: Arc::clone(&self.pending_task_count),
             compute_commitments: self.compute_commitments.clone(),
+            governance: self.governance.clone(),
             chain_id: self.chain_id,
             genesis_hash: self.genesis_hash,
             faucet_tracker: Arc::clone(&self.faucet_tracker),
@@ -232,6 +235,7 @@ impl RpcServer {
                 ip_tracker: IpConnectionTracker::new(),
                 pending_task_count: Arc::new(AtomicU64::new(0)),
                 compute_commitments: None,
+                governance: None,
                 chain_id: TESTNET_CHAIN_ID,
                 genesis_hash: None,
                 faucet_tracker: Arc::new(std::sync::Mutex::new(HashMap::new())),
@@ -266,6 +270,11 @@ impl RpcServer {
 
     pub fn with_compute_commitments(mut self, store: Arc<RwLock<ComputeCommitmentStore>>) -> Self {
         self.state.compute_commitments = Some(store);
+        self
+    }
+
+    pub fn with_governance(mut self, store: Arc<RwLock<GovernanceStore>>) -> Self {
+        self.state.governance = Some(store);
         self
     }
 
@@ -375,6 +384,8 @@ async fn dispatch(state: &RpcState, req: &JsonRpcRequest) -> JsonRpcResponse {
         "aztb_getBlockRange" => handle_get_block_range(state, req).await,
         "aztb_getTransactionsByBatch" => handle_get_transactions_by_batch(state, req).await,
         "aztb_getReceiptsByBatch" => handle_get_receipts_by_batch(state, req).await,
+        "aztb_getProposal" => handle_get_proposal(state, req).await,
+        "aztb_listProposals" => handle_list_proposals(state, req).await,
         _ => JsonRpcResponse::error(
             req.id.clone(),
             METHOD_NOT_FOUND,
@@ -1379,6 +1390,94 @@ async fn handle_get_receipts_by_batch(state: &RpcState, req: &JsonRpcRequest) ->
     JsonRpcResponse::success(req.id.clone(), serde_json::json!(receipts))
 }
 
+async fn handle_get_proposal(state: &RpcState, req: &JsonRpcRequest) -> JsonRpcResponse {
+    let proposal_id = match parse_hash_param(&req.params, 0) {
+        Ok(h) => h,
+        Err(e) => return JsonRpcResponse::error(req.id.clone(), INVALID_PARAMS, e),
+    };
+
+    let gov = match &state.governance {
+        Some(g) => g,
+        None => {
+            return JsonRpcResponse::error(
+                req.id.clone(),
+                -32000,
+                "governance not available".into(),
+            );
+        }
+    };
+
+    let gov_guard = gov.read().await;
+    match gov_guard.get(&proposal_id) {
+        Some(proposal) => {
+            let tally = gov_guard.tally(&proposal_id);
+            let mut entry = serde_json::json!({
+                "id": format!("0x{}", hex::encode(proposal.id)),
+                "proposer": format!("0x{}", hex::encode(proposal.proposer)),
+                "description": proposal.description,
+                "paramKey": proposal.param_key,
+                "paramValue": proposal.param_value,
+                "startRound": proposal.start_round,
+                "endRound": proposal.end_round,
+                "status": format!("{:?}", proposal.status),
+            });
+            if let Some(t) = tally {
+                entry["approveWeight"] = serde_json::json!(format!("0x{:x}", t.approve_weight));
+                entry["rejectWeight"] = serde_json::json!(format!("0x{:x}", t.reject_weight));
+                entry["voterCount"] = serde_json::json!(t.voter_count);
+            }
+            JsonRpcResponse::success(req.id.clone(), entry)
+        }
+        None => JsonRpcResponse::success(req.id.clone(), serde_json::Value::Null),
+    }
+}
+
+async fn handle_list_proposals(state: &RpcState, req: &JsonRpcRequest) -> JsonRpcResponse {
+    let gov = match &state.governance {
+        Some(g) => g,
+        None => {
+            return JsonRpcResponse::error(
+                req.id.clone(),
+                -32000,
+                "governance not available".into(),
+            );
+        }
+    };
+
+    let status_filter = req
+        .params
+        .get(0)
+        .and_then(|v| v.as_str())
+        .and_then(|s| match s {
+            "Active" => Some(aztibase_execution::ProposalStatus::Active),
+            "Passed" => Some(aztibase_execution::ProposalStatus::Passed),
+            "Rejected" => Some(aztibase_execution::ProposalStatus::Rejected),
+            "Executed" => Some(aztibase_execution::ProposalStatus::Executed),
+            _ => None,
+        });
+
+    let gov_guard = gov.read().await;
+    let proposals = gov_guard.list(status_filter.as_ref());
+
+    let result: Vec<serde_json::Value> = proposals
+        .iter()
+        .map(|p| {
+            serde_json::json!({
+                "id": format!("0x{}", hex::encode(p.id)),
+                "proposer": format!("0x{}", hex::encode(p.proposer)),
+                "description": p.description,
+                "paramKey": p.param_key,
+                "paramValue": p.param_value,
+                "startRound": p.start_round,
+                "endRound": p.end_round,
+                "status": format!("{:?}", p.status),
+            })
+        })
+        .collect();
+
+    JsonRpcResponse::success(req.id.clone(), serde_json::json!(result))
+}
+
 fn parse_u64_param(params: &serde_json::Value, index: usize) -> Result<u64, String> {
     let val = params
         .get(index)
@@ -1468,6 +1567,7 @@ mod tests {
             ip_tracker: IpConnectionTracker::new(),
             pending_task_count: Arc::new(AtomicU64::new(0)),
             compute_commitments: None,
+            governance: None,
             chain_id: TESTNET_CHAIN_ID,
             genesis_hash: None,
             faucet_tracker: Arc::new(std::sync::Mutex::new(HashMap::new())),
@@ -1495,6 +1595,7 @@ mod tests {
             ip_tracker: IpConnectionTracker::new(),
             pending_task_count: Arc::new(AtomicU64::new(0)),
             compute_commitments: None,
+            governance: None,
             chain_id: TESTNET_CHAIN_ID,
             genesis_hash: None,
             faucet_tracker: Arc::new(std::sync::Mutex::new(HashMap::new())),
@@ -1731,6 +1832,7 @@ mod tests {
             ip_tracker: IpConnectionTracker::new(),
             pending_task_count: Arc::new(AtomicU64::new(0)),
             compute_commitments: None,
+            governance: None,
             chain_id: TESTNET_CHAIN_ID,
             genesis_hash: None,
             faucet_tracker: Arc::new(std::sync::Mutex::new(HashMap::new())),
@@ -2109,6 +2211,7 @@ mod tests {
             ip_tracker: IpConnectionTracker::new(),
             pending_task_count: Arc::new(AtomicU64::new(0)),
             compute_commitments: None,
+            governance: None,
             chain_id: TESTNET_CHAIN_ID,
             genesis_hash: None,
             faucet_tracker: Arc::new(std::sync::Mutex::new(HashMap::new())),
@@ -2196,6 +2299,7 @@ mod tests {
             ip_tracker: IpConnectionTracker::new(),
             pending_task_count: Arc::new(AtomicU64::new(0)),
             compute_commitments: None,
+            governance: None,
             chain_id: TESTNET_CHAIN_ID,
             genesis_hash: None,
             faucet_tracker: Arc::new(std::sync::Mutex::new(HashMap::new())),

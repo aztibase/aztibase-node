@@ -6,7 +6,8 @@ use aztibase_consensus::{
 };
 use aztibase_core::{Hash, hash};
 use aztibase_execution::{
-    AccountState, BaseFeeCalculator, ContractTx, ExecutionReceipt, FeeEscrow, TransferTx, TxKind,
+    AccountState, BaseFeeCalculator, ContractTx, CreateProposalParams, ExecutionReceipt, FeeEscrow,
+    GovernanceStore, TransferTx, TxKind,
     block_stm::{BlockSTMExecutor, apply_block_stm_to_state},
     escrow_fee, evm, execute_contract_txs, flush_state, load_base_fee, load_state,
     model_registry::{MODEL_REGISTRY_ADDRESS, ModelRegistry},
@@ -56,6 +57,7 @@ pub struct ExecutionPipeline {
     attestation_buffer: HashMap<Hash, Vec<InferenceAttestation>>,
     attestation_aggregator: AttestationAggregator,
     compute_commitments: Arc<RwLock<ComputeCommitmentStore>>,
+    governance: Arc<RwLock<GovernanceStore>>,
     archive: bool,
 }
 
@@ -99,6 +101,7 @@ impl ExecutionPipeline {
             attestation_buffer: HashMap::new(),
             attestation_aggregator: AttestationAggregator::new(2),
             compute_commitments: Arc::new(RwLock::new(ComputeCommitmentStore::new())),
+            governance: Arc::new(RwLock::new(GovernanceStore::new())),
             archive: false,
         }
     }
@@ -111,6 +114,11 @@ impl ExecutionPipeline {
     /// Shared compute commitment store (for RPC server).
     pub fn shared_compute_commitments(&self) -> Arc<RwLock<ComputeCommitmentStore>> {
         Arc::clone(&self.compute_commitments)
+    }
+
+    /// Shared governance store (for RPC server).
+    pub fn shared_governance(&self) -> Arc<RwLock<GovernanceStore>> {
+        Arc::clone(&self.governance)
     }
 
     /// Attach an AI runtime for inference transaction execution.
@@ -328,6 +336,8 @@ impl ExecutionPipeline {
         let mut commit_computes = Vec::new();
         let mut deregister_computes = Vec::new();
         let mut deregister_models = Vec::new();
+        let mut create_proposals = Vec::new();
+        let mut cast_votes = Vec::new();
 
         for tx in &executable {
             match tx {
@@ -521,6 +531,33 @@ impl ExecutionPipeline {
                 } => {
                     deregister_models.push((*owner, model_id.clone(), *nonce));
                 }
+                TxKind::CreateProposal {
+                    proposer,
+                    description,
+                    param_key,
+                    param_value,
+                    voting_period,
+                    nonce,
+                    ..
+                } => {
+                    create_proposals.push((
+                        *proposer,
+                        description.clone(),
+                        param_key.clone(),
+                        param_value.clone(),
+                        *voting_period,
+                        *nonce,
+                    ));
+                }
+                TxKind::CastVote {
+                    voter,
+                    proposal_id,
+                    approve,
+                    nonce,
+                    ..
+                } => {
+                    cast_votes.push((*voter, *proposal_id, *approve, *nonce));
+                }
             }
         }
 
@@ -535,7 +572,9 @@ impl ExecutionPipeline {
             + submit_attestations.len()
             + commit_computes.len()
             + deregister_computes.len()
-            + deregister_models.len();
+            + deregister_models.len()
+            + create_proposals.len()
+            + cast_votes.len();
 
         // Phase 2: Execute transactions.
         let mut exec_receipts = Vec::new();
@@ -1310,6 +1349,143 @@ impl ExecutionPipeline {
             }
         }
 
+        // Execute CreateProposal transactions.
+        for (proposer, description, param_key, param_value, voting_period, nonce) in
+            &create_proposals
+        {
+            let mut preimage = Vec::new();
+            preimage.extend_from_slice(proposer);
+            preimage.extend_from_slice(param_key.as_bytes());
+            preimage.extend_from_slice(&nonce.to_le_bytes());
+            let tx_hash = hash(&preimage);
+
+            let proposer_nonce = state.nonce(proposer);
+            if *nonce != proposer_nonce {
+                state.increment_nonce(proposer);
+                exec_receipts.push(ExecutionReceipt {
+                    tx_hash,
+                    success: false,
+                    gas_used: 21_000,
+                    contract_address: None,
+                    error: Some(format!(
+                        "nonce mismatch: expected {proposer_nonce}, got {nonce}"
+                    )),
+                    inference_hash: None,
+                    anomaly_score: 0.0,
+                });
+                continue;
+            }
+
+            let proposal_id = hash(&preimage);
+            let mut gov = self.governance.write().await;
+            let result = gov.create_proposal(CreateProposalParams {
+                id: proposal_id,
+                proposer: *proposer,
+                description: description.clone(),
+                param_key: param_key.clone(),
+                param_value: param_value.clone(),
+                current_round: self.current_round,
+                voting_period: *voting_period,
+            });
+            drop(gov);
+            state.increment_nonce(proposer);
+
+            match result {
+                Ok(()) => {
+                    exec_receipts.push(ExecutionReceipt {
+                        tx_hash,
+                        success: true,
+                        gas_used: 100_000,
+                        contract_address: None,
+                        error: None,
+                        inference_hash: Some(proposal_id),
+                        anomaly_score: 0.0,
+                    });
+                }
+                Err(e) => {
+                    exec_receipts.push(ExecutionReceipt {
+                        tx_hash,
+                        success: false,
+                        gas_used: 21_000,
+                        contract_address: None,
+                        error: Some(format!("create proposal failed: {e}")),
+                        inference_hash: None,
+                        anomaly_score: 0.0,
+                    });
+                }
+            }
+        }
+
+        // Execute CastVote transactions.
+        for (voter, proposal_id, approve, nonce) in &cast_votes {
+            let mut preimage = Vec::new();
+            preimage.extend_from_slice(voter);
+            preimage.extend_from_slice(proposal_id);
+            let tx_hash = hash(&preimage);
+
+            let voter_nonce = state.nonce(voter);
+            if *nonce != voter_nonce {
+                state.increment_nonce(voter);
+                exec_receipts.push(ExecutionReceipt {
+                    tx_hash,
+                    success: false,
+                    gas_used: 21_000,
+                    contract_address: None,
+                    error: Some(format!(
+                        "nonce mismatch: expected {voter_nonce}, got {nonce}"
+                    )),
+                    inference_hash: None,
+                    anomaly_score: 0.0,
+                });
+                continue;
+            }
+
+            let stake_weight = state.balance(voter);
+            let mut gov = self.governance.write().await;
+            let result = gov.cast_vote(*voter, *proposal_id, *approve, stake_weight);
+            drop(gov);
+            state.increment_nonce(voter);
+
+            match result {
+                Ok(()) => {
+                    exec_receipts.push(ExecutionReceipt {
+                        tx_hash,
+                        success: true,
+                        gas_used: 40_000,
+                        contract_address: None,
+                        error: None,
+                        inference_hash: Some(*proposal_id),
+                        anomaly_score: 0.0,
+                    });
+                }
+                Err(e) => {
+                    exec_receipts.push(ExecutionReceipt {
+                        tx_hash,
+                        success: false,
+                        gas_used: 21_000,
+                        contract_address: None,
+                        error: Some(format!("cast vote failed: {e}")),
+                        inference_hash: None,
+                        anomaly_score: 0.0,
+                    });
+                }
+            }
+        }
+
+        // Finalize expired proposals at the end of each batch.
+        {
+            let mut gov = self.governance.write().await;
+            let finalized = gov.finalize_expired(self.current_round);
+            for proposal in &finalized {
+                tracing::info!(
+                    proposal_id = %short_hex(&proposal.id),
+                    status = ?proposal.status,
+                    param_key = %proposal.param_key,
+                    "Proposal finalized"
+                );
+            }
+        }
+
         // Phase 2.5: Score each executed tx for anomalous behavior.
         for (i, tx) in executable.iter().enumerate() {
             if i >= exec_receipts.len() {
@@ -1492,6 +1668,26 @@ fn compute_tx_hash(tx: &TxKind) -> [u8; 32] {
             buf.extend_from_slice(b"deregister");
             hash(&buf)
         }
+        TxKind::CreateProposal {
+            proposer,
+            param_key,
+            nonce,
+            ..
+        } => {
+            let mut buf = Vec::new();
+            buf.extend_from_slice(proposer);
+            buf.extend_from_slice(param_key.as_bytes());
+            buf.extend_from_slice(&nonce.to_le_bytes());
+            hash(&buf)
+        }
+        TxKind::CastVote {
+            voter, proposal_id, ..
+        } => {
+            let mut buf = Vec::new();
+            buf.extend_from_slice(voter);
+            buf.extend_from_slice(proposal_id);
+            hash(&buf)
+        }
     }
 }
 
@@ -1584,6 +1780,7 @@ mod tests {
             attestation_buffer: HashMap::new(),
             attestation_aggregator: AttestationAggregator::new(2),
             compute_commitments: Arc::new(RwLock::new(ComputeCommitmentStore::new())),
+            governance: Arc::new(RwLock::new(GovernanceStore::new())),
             archive: false,
         }
     }
@@ -2101,6 +2298,7 @@ mod tests {
             attestation_buffer: HashMap::new(),
             attestation_aggregator: AttestationAggregator::new(2),
             compute_commitments: Arc::new(RwLock::new(ComputeCommitmentStore::new())),
+            governance: Arc::new(RwLock::new(GovernanceStore::new())),
             archive: false,
         }
     }

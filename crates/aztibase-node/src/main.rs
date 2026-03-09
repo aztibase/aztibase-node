@@ -640,7 +640,8 @@ async fn main() -> Result<()> {
     )
     .with_event_bus(Arc::clone(&event_bus))
     .with_pending_task_count(exec_pipeline.shared_pending_task_count())
-    .with_compute_commitments(exec_pipeline.shared_compute_commitments());
+    .with_compute_commitments(exec_pipeline.shared_compute_commitments())
+    .with_governance(exec_pipeline.shared_governance());
 
     if let Some(ref gen_cfg) = genesis_config {
         rpc_server = rpc_server.with_genesis_hash(genesis::genesis_hash(gen_cfg));

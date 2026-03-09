@@ -5,6 +5,25 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ---
 
+## [M8-S10] -- On-Chain Governance Foundations (Sprint 035)
+
+### Added
+- `GovernanceStore`: in-memory proposal store with stake-weighted voting, quorum threshold (>50% approve, ≥2 voters), and automatic finalization (2026-03-09)
+- `Proposal`, `Vote`, `VoteTally`, `ProposalStatus` types in `aztibase-execution::governance` (2026-03-09)
+- `TxKind::CreateProposal` (0x0E): proposer, description, param_key, param_value, voting_period, nonce, gas_price (2026-03-09)
+- `TxKind::CastVote` (0x0F): voter, proposal_id, approve, nonce, gas_price (2026-03-09)
+- Pipeline: CreateProposal validation (description length, param bounds, voting period), CastVote uses voter balance as stake weight (2026-03-09)
+- Pipeline: automatic proposal finalization at `end_round` after each batch execution (2026-03-09)
+- `aztb_getProposal(proposal_id)` RPC: returns proposal details + vote tally (2026-03-09)
+- `aztb_listProposals(status_filter?)` RPC: returns proposals filtered by Active/Passed/Rejected/Executed (2026-03-09)
+- 8 new tests: 6 governance unit tests + 2 routing roundtrip tests — 674 total (2026-03-09)
+
+### Changed
+- `RpcState`: added `governance: Option<Arc<RwLock<GovernanceStore>>>` field (2026-03-09)
+- `ExecutionPipeline`: added `governance` field, `shared_governance()` method (2026-03-09)
+
+---
+
 ## [M8-S9] -- Archive Node & Historical Queries (Sprint 034)
 
 ### Added

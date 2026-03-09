@@ -15,6 +15,8 @@ const PREFIX_SUBMIT_ATTESTATION: u8 = 0x0A;
 const PREFIX_COMMIT_COMPUTE: u8 = 0x0B;
 const PREFIX_DEREGISTER_COMPUTE: u8 = 0x0C;
 const PREFIX_DEREGISTER_MODEL: u8 = 0x0D;
+const PREFIX_CREATE_PROPOSAL: u8 = 0x0E;
+const PREFIX_CAST_VOTE: u8 = 0x0F;
 
 /// Maximum encoded transaction size (1 MB). Rejects oversized payloads before
 /// deserialization to prevent memory-bomb attacks via oversized payloads.
@@ -122,6 +124,22 @@ pub enum TxKind {
         nonce: u64,
         gas_price: u64,
     },
+    CreateProposal {
+        proposer: Address,
+        description: String,
+        param_key: String,
+        param_value: String,
+        voting_period: u64,
+        nonce: u64,
+        gas_price: u64,
+    },
+    CastVote {
+        voter: Address,
+        proposal_id: [u8; 32],
+        approve: bool,
+        nonce: u64,
+        gas_price: u64,
+    },
 }
 
 impl TxKind {
@@ -141,6 +159,8 @@ impl TxKind {
             TxKind::CommitCompute { .. } => PREFIX_COMMIT_COMPUTE,
             TxKind::DeregisterCompute { .. } => PREFIX_DEREGISTER_COMPUTE,
             TxKind::DeregisterModel { .. } => PREFIX_DEREGISTER_MODEL,
+            TxKind::CreateProposal { .. } => PREFIX_CREATE_PROPOSAL,
+            TxKind::CastVote { .. } => PREFIX_CAST_VOTE,
         };
         let payload = postcard::to_allocvec(self).expect("TxKind serialization cannot fail");
         let mut buf = Vec::with_capacity(1 + payload.len());
@@ -163,7 +183,9 @@ impl TxKind {
             | TxKind::SubmitAttestation { nonce, .. }
             | TxKind::CommitCompute { nonce, .. }
             | TxKind::DeregisterCompute { nonce, .. }
-            | TxKind::DeregisterModel { nonce, .. } => *nonce,
+            | TxKind::DeregisterModel { nonce, .. }
+            | TxKind::CreateProposal { nonce, .. }
+            | TxKind::CastVote { nonce, .. } => *nonce,
         }
     }
 
@@ -181,7 +203,9 @@ impl TxKind {
             | TxKind::SubmitAttestation { gas_price, .. }
             | TxKind::CommitCompute { gas_price, .. }
             | TxKind::DeregisterCompute { gas_price, .. }
-            | TxKind::DeregisterModel { gas_price, .. } => *gas_price,
+            | TxKind::DeregisterModel { gas_price, .. }
+            | TxKind::CreateProposal { gas_price, .. }
+            | TxKind::CastVote { gas_price, .. } => *gas_price,
         }
     }
 
@@ -202,6 +226,8 @@ impl TxKind {
             TxKind::CommitCompute { .. } => 75_000,
             TxKind::DeregisterCompute { .. } => 50_000,
             TxKind::DeregisterModel { .. } => 60_000,
+            TxKind::CreateProposal { .. } => 100_000,
+            TxKind::CastVote { .. } => 40_000,
         }
     }
 
@@ -220,6 +246,8 @@ impl TxKind {
             TxKind::CommitCompute { validator, .. } => validator,
             TxKind::DeregisterCompute { validator, .. } => validator,
             TxKind::DeregisterModel { owner, .. } => owner,
+            TxKind::CreateProposal { proposer, .. } => proposer,
+            TxKind::CastVote { voter, .. } => voter,
         }
     }
 
@@ -238,6 +266,8 @@ impl TxKind {
             TxKind::CommitCompute { .. } => PREFIX_COMMIT_COMPUTE,
             TxKind::DeregisterCompute { .. } => PREFIX_DEREGISTER_COMPUTE,
             TxKind::DeregisterModel { .. } => PREFIX_DEREGISTER_MODEL,
+            TxKind::CreateProposal { .. } => PREFIX_CREATE_PROPOSAL,
+            TxKind::CastVote { .. } => PREFIX_CAST_VOTE,
         }
     }
 }
@@ -308,7 +338,9 @@ pub fn route_tx(raw: &[u8]) -> Result<TxKind, RoutingError> {
         | PREFIX_SUBMIT_ATTESTATION
         | PREFIX_COMMIT_COMPUTE
         | PREFIX_DEREGISTER_COMPUTE
-        | PREFIX_DEREGISTER_MODEL => {}
+        | PREFIX_DEREGISTER_MODEL
+        | PREFIX_CREATE_PROPOSAL
+        | PREFIX_CAST_VOTE => {}
         other => return Err(RoutingError::UnknownPrefix(other)),
     }
     let (decoded, remaining): (TxKind, &[u8]) =
@@ -355,6 +387,15 @@ pub fn route_tx(raw: &[u8]) -> Result<TxKind, RoutingError> {
         && !is_valid_func_name(model_id)
     {
         return Err(RoutingError::InvalidFuncName(model_id.clone()));
+    }
+    if let TxKind::CreateProposal {
+        ref description, ..
+    } = decoded
+        && description.is_empty()
+    {
+        return Err(RoutingError::DecodeFailed(
+            "empty proposal description".into(),
+        ));
     }
     Ok(decoded)
 }
@@ -750,6 +791,42 @@ mod tests {
         assert_eq!(decoded.nonce(), 8);
         assert_eq!(decoded.gas_price(), 2);
         assert_eq!(*decoded.sender(), [0xE0; 32]);
+    }
+
+    #[test]
+    fn create_proposal_roundtrip() {
+        let tx = TxKind::CreateProposal {
+            proposer: [0xD1; 32],
+            description: "Increase base fee floor".into(),
+            param_key: "base_fee_floor".into(),
+            param_value: "5".into(),
+            voting_period: 100,
+            nonce: 2,
+            gas_price: 1,
+        };
+        let encoded = tx.encode();
+        assert_eq!(encoded[0], PREFIX_CREATE_PROPOSAL);
+        let decoded = route_tx(&encoded).unwrap();
+        assert_eq!(decoded.nonce(), 2);
+        assert_eq!(decoded.gas_price(), 1);
+        assert_eq!(*decoded.sender(), [0xD1; 32]);
+    }
+
+    #[test]
+    fn cast_vote_roundtrip() {
+        let tx = TxKind::CastVote {
+            voter: [0xD2; 32],
+            proposal_id: [0xAA; 32],
+            approve: true,
+            nonce: 5,
+            gas_price: 2,
+        };
+        let encoded = tx.encode();
+        assert_eq!(encoded[0], PREFIX_CAST_VOTE);
+        let decoded = route_tx(&encoded).unwrap();
+        assert_eq!(decoded.nonce(), 5);
+        assert_eq!(decoded.gas_price(), 2);
+        assert_eq!(*decoded.sender(), [0xD2; 32]);
     }
 
     #[test]

@@ -21,6 +21,23 @@ Entries are prepended (newest first).
 
 ## Entries
 
+### 2026-03-09 -- smart-contract-engineer / node-engineer / security-engineer -- Sprint 035 Complete (M8 Sprint 10: On-Chain Governance Foundations)
+**Task:** Sprint 035: On-chain governance module — proposal creation, stake-weighted voting, proposal finalization, 2 new TxKinds, 2 governance RPCs
+**Sprint:** Sprint 035, Phases 1-4
+**Git Ref:** pending
+**Files Changed:**
+- crates/aztibase-execution/src/governance.rs (NEW): GovernanceStore, Proposal, Vote, VoteTally, CreateProposalParams, ProposalStatus enum, create_proposal/cast_vote/finalize_expired/mark_executed, 6 unit tests
+- crates/aztibase-execution/src/routing.rs: TxKind::CreateProposal (0x0E), TxKind::CastVote (0x0F), PREFIX constants, all match arms updated, 2 roundtrip tests
+- crates/aztibase-execution/src/lib.rs: governance module + re-exports
+- crates/aztibase-node/src/pipeline.rs: GovernanceStore field, shared_governance(), CreateProposal/CastVote sorting + execution, proposal finalization after batch, compute_tx_hash for new variants
+- crates/aztibase-node/src/main.rs: .with_governance() wired into RPC server
+- crates/aztibase-rpc/src/server.rs: GovernanceStore in RpcState, with_governance() builder, aztb_getProposal + aztb_listProposals handlers, all test RpcState instances updated
+- blockchain-project/sprints/SPRINT-035.md (NEW: sprint plan)
+**Review Notes:** Phase 1: GovernanceStore with proposal lifecycle, stake-weighted vote tallying, quorum threshold (>50% approve weight, ≥2 voters). Phase 2: 2 new TxKinds wired through routing (encode/decode/nonce/gas_price/sender/gas_limit), pipeline creates proposals and records votes using voter's balance as stake weight. Phase 3: Proposal finalization at end_round in batch loop, 2 RPC endpoints (getProposal with tally, listProposals with status filter). Phase 4: clippy 0 warnings, fmt clean, 674 tests pass (8 new: 6 governance + 2 routing).
+**Security Flags:** 0 ELEVATED, 0 MEDIUM. Double-vote prevention enforced. MAX_ACTIVE_PROPOSALS=64 caps proposal spam. Voting period bounded (10-10000 rounds). Description/param_key/param_value length-capped. Zero-stake votes rejected.
+
+---
+
 ### 2026-03-09 -- node-engineer / consensus-engineer / security-engineer -- Sprint 034 Complete (M8 Sprint 9: Archive Node & Historical Queries)
 **Task:** Sprint 034: Archive node mode (--archive flag), 7 historical query RPC methods, batch index/txs storage, block explorer support
 **Sprint:** Sprint 034, Phases 1-4
