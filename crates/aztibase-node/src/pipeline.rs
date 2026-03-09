@@ -7,7 +7,7 @@ use aztibase_consensus::{
 use aztibase_core::{Hash, hash};
 use aztibase_execution::{
     AccountState, BaseFeeCalculator, ChainParams, ContractTx, CreateProposalParams,
-    ExecutionReceipt, FeeEscrow, GovernanceStore, TransferTx, TxKind,
+    EmissionTracker, ExecutionReceipt, FeeEscrow, GovernanceStore, TransferTx, TxKind,
     block_stm::{BlockSTMExecutor, apply_block_stm_to_state},
     escrow_fee, evm, execute_contract_txs, flush_state, load_base_fee, load_state,
     model_registry::{MODEL_REGISTRY_ADDRESS, ModelRegistry},
@@ -59,6 +59,7 @@ pub struct ExecutionPipeline {
     compute_commitments: Arc<RwLock<ComputeCommitmentStore>>,
     governance: Arc<RwLock<GovernanceStore>>,
     chain_params: Arc<RwLock<ChainParams>>,
+    emission_tracker: Arc<RwLock<EmissionTracker>>,
     archive: bool,
 }
 
@@ -104,6 +105,9 @@ impl ExecutionPipeline {
             compute_commitments: Arc::new(RwLock::new(ComputeCommitmentStore::new())),
             governance: Arc::new(RwLock::new(GovernanceStore::new())),
             chain_params: Arc::new(RwLock::new(ChainParams::defaults())),
+            emission_tracker: Arc::new(RwLock::new(EmissionTracker::new(
+                aztibase_execution::tokenomics::DEFAULT_EPOCH_LENGTH,
+            ))),
             archive: false,
         }
     }
@@ -126,6 +130,11 @@ impl ExecutionPipeline {
     /// Shared chain parameters (for RPC server and fee calculator).
     pub fn shared_chain_params(&self) -> Arc<RwLock<ChainParams>> {
         Arc::clone(&self.chain_params)
+    }
+
+    /// Shared emission tracker (for RPC server).
+    pub fn shared_emission_tracker(&self) -> Arc<RwLock<EmissionTracker>> {
+        Arc::clone(&self.emission_tracker)
     }
 
     /// Attach an AI runtime for inference transaction execution.
@@ -1832,6 +1841,9 @@ mod tests {
             compute_commitments: Arc::new(RwLock::new(ComputeCommitmentStore::new())),
             governance: Arc::new(RwLock::new(GovernanceStore::new())),
             chain_params: Arc::new(RwLock::new(ChainParams::defaults())),
+            emission_tracker: Arc::new(RwLock::new(EmissionTracker::new(
+                aztibase_execution::tokenomics::DEFAULT_EPOCH_LENGTH,
+            ))),
             archive: false,
         }
     }
@@ -2351,6 +2363,9 @@ mod tests {
             compute_commitments: Arc::new(RwLock::new(ComputeCommitmentStore::new())),
             governance: Arc::new(RwLock::new(GovernanceStore::new())),
             chain_params: Arc::new(RwLock::new(ChainParams::defaults())),
+            emission_tracker: Arc::new(RwLock::new(EmissionTracker::new(
+                aztibase_execution::tokenomics::DEFAULT_EPOCH_LENGTH,
+            ))),
             archive: false,
         }
     }

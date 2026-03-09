@@ -21,6 +21,7 @@ Every non-obvious technical decision is recorded here. Each ADR is immutable onc
 | ADR-011 | Attestation signature scheme and settlement flow | 2026-03-07 | ACCEPTED | blockchain-architect + security-engineer |
 | ADR-012 | Packed SignerBitmap for finality certificates | 2026-03-08 | ACCEPTED | security-engineer + blockchain-architect |
 | ADR-013 | Retain BLAKE3 Verkle placeholder over IPA polynomial commitments | 2026-03-08 | ACCEPTED | blockchain-architect + security-engineer |
+| ADR-014 | u128 tokenomics with deferred u64→u128 balance migration | 2026-03-09 | ACCEPTED | blockchain-architect + tokenomics-engineer |
 
 ---
 
@@ -407,6 +408,32 @@ Retain BLAKE3 domain-separated commitments (option 4). The tree structure (width
 - Verkle proofs are large (256 × 32 bytes per level) compared to IPA proofs (~500 bytes)
 - No hiding property (all commitments are deterministic) — acceptable for a public blockchain
 - Future: when a mature pure-Rust IPA crate emerges, swap commitment functions only
+
+---
+
+## ADR-014: u128 tokenomics with deferred u64→u128 balance migration
+
+**Date:** 2026-03-09
+**Status:** ACCEPTED
+**Decided By:** blockchain-architect + tokenomics-engineer
+**Git Ref:** pending
+
+### Context
+MASTER_DESIGN.md Section 3.1.3 requires u128 for all balance calculations and u256 for intermediate reward math. Current account balances use u64 throughout the codebase (Account.balance, fee escrow, RPC responses, ~100+ call sites across 8 crates).
+
+### Decision
+Build tokenomics types (EmissionTracker, VestingSchedule, EpochDistribution, StakingAPY) using u128 internally. Defer the full u64→u128 balance migration to a dedicated sprint before M9 (mainnet).
+
+### Rationale
+- u64 max is ~18.4×10^18. Without 18-decimal base units, u64 comfortably holds billions of tokens for testnet operations.
+- Migrating Account.balance to u128 touches AccountState, fee.rs, routing.rs, persist.rs, state_root hashing, snapshot serialization, Block-STM, RPC responses, and all test assertions — a cross-cutting change requiring its own sprint.
+- Tokenomics u128 types can track emission/vesting/rewards independently and convert to u64 at account-credit boundaries during the testnet phase.
+- The migration path is clear: replace `balance: u64` with `balance: u128` in Account, update serialization formats, adjust all call sites.
+
+### Consequences
+- Tokenomics emission amounts are in "whole token" units (not 18-decimal base units) during testnet
+- Account balances remain u64 — sufficient for testnet but must be migrated before mainnet
+- Conversion overflow is impossible since total supply (1B) fits in u64 without 18 decimals
 
 ---
 

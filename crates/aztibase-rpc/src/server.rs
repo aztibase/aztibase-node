@@ -19,7 +19,7 @@ use tracing::{debug, info};
 use aztibase_consensus::ComputeCommitmentStore;
 use aztibase_execution::AccountState;
 use aztibase_execution::model_registry::{MODEL_REGISTRY_ADDRESS, ModelMetadata, ModelRegistry};
-use aztibase_execution::{ChainParams, GovernanceStore};
+use aztibase_execution::{ChainParams, EmissionTracker, GovernanceStore};
 use aztibase_storage::StateStore;
 
 // ── JSON-RPC 2.0 Types ─────────────────────────────────────────────
@@ -105,6 +105,7 @@ pub struct RpcState {
     pub compute_commitments: Option<Arc<RwLock<ComputeCommitmentStore>>>,
     pub governance: Option<Arc<RwLock<GovernanceStore>>>,
     pub chain_params: Option<Arc<RwLock<ChainParams>>>,
+    pub emission_tracker: Option<Arc<RwLock<EmissionTracker>>>,
     pub chain_id: u64,
     pub genesis_hash: Option<[u8; 32]>,
     faucet_tracker: Arc<std::sync::Mutex<HashMap<[u8; 32], std::time::Instant>>>,
@@ -126,6 +127,7 @@ impl Clone for RpcState {
             compute_commitments: self.compute_commitments.clone(),
             governance: self.governance.clone(),
             chain_params: self.chain_params.clone(),
+            emission_tracker: self.emission_tracker.clone(),
             chain_id: self.chain_id,
             genesis_hash: self.genesis_hash,
             faucet_tracker: Arc::clone(&self.faucet_tracker),
@@ -239,6 +241,7 @@ impl RpcServer {
                 compute_commitments: None,
                 governance: None,
                 chain_params: None,
+                emission_tracker: None,
                 chain_id: TESTNET_CHAIN_ID,
                 genesis_hash: None,
                 faucet_tracker: Arc::new(std::sync::Mutex::new(HashMap::new())),
@@ -283,6 +286,11 @@ impl RpcServer {
 
     pub fn with_chain_params(mut self, params: Arc<RwLock<ChainParams>>) -> Self {
         self.state.chain_params = Some(params);
+        self
+    }
+
+    pub fn with_emission_tracker(mut self, tracker: Arc<RwLock<EmissionTracker>>) -> Self {
+        self.state.emission_tracker = Some(tracker);
         self
     }
 
@@ -396,6 +404,8 @@ async fn dispatch(state: &RpcState, req: &JsonRpcRequest) -> JsonRpcResponse {
         "aztb_listProposals" => handle_list_proposals(state, req).await,
         "aztb_getChainParam" => handle_get_chain_param(state, req).await,
         "aztb_listChainParams" => handle_list_chain_params(state, req).await,
+        "aztb_getEmissionInfo" => handle_get_emission_info(state, req).await,
+        "aztb_getVestingStatus" => handle_get_vesting_status(state, req).await,
         _ => JsonRpcResponse::error(
             req.id.clone(),
             METHOD_NOT_FOUND,
@@ -1557,6 +1567,87 @@ async fn handle_list_chain_params(state: &RpcState, req: &JsonRpcRequest) -> Jso
     JsonRpcResponse::success(req.id.clone(), serde_json::json!(result))
 }
 
+async fn handle_get_emission_info(state: &RpcState, req: &JsonRpcRequest) -> JsonRpcResponse {
+    let tracker = match &state.emission_tracker {
+        Some(t) => t,
+        None => {
+            return JsonRpcResponse::error(
+                req.id.clone(),
+                -32000,
+                "emission tracker not available".into(),
+            );
+        }
+    };
+
+    let et = tracker.read().await;
+    JsonRpcResponse::success(
+        req.id.clone(),
+        serde_json::json!({
+            "current_epoch": et.current_epoch,
+            "total_emitted": et.total_emitted.to_string(),
+            "total_supply_in_existence": et.total_supply_in_existence().to_string(),
+            "remaining_emission": et.remaining_emission().to_string(),
+            "hard_cap": aztibase_execution::tokenomics::TOTAL_SUPPLY.to_string(),
+            "genesis_mint": aztibase_execution::tokenomics::GENESIS_MINT.to_string(),
+            "epoch_length": et.epoch_length,
+            "treasury_balance": et.treasury_balance.to_string(),
+            "insurance_balance": et.insurance_balance.to_string(),
+        }),
+    )
+}
+
+async fn handle_get_vesting_status(state: &RpcState, req: &JsonRpcRequest) -> JsonRpcResponse {
+    let category_str = match req.params.get(0).and_then(|v| v.as_str()) {
+        Some(s) => s,
+        None => {
+            return JsonRpcResponse::error(
+                req.id.clone(),
+                INVALID_PARAMS,
+                "missing allocation category parameter".into(),
+            );
+        }
+    };
+
+    let current_round = state.batch_count.load(Ordering::Relaxed);
+    let allocs = aztibase_execution::genesis_allocations(0);
+
+    let entry = allocs
+        .iter()
+        .find(|a| a.category.to_string() == category_str);
+    match entry {
+        Some(alloc) => {
+            let vested = alloc.vesting.vested_at(current_round);
+            let locked = alloc.vesting.locked_at(current_round);
+            JsonRpcResponse::success(
+                req.id.clone(),
+                serde_json::json!({
+                    "category": category_str,
+                    "total": alloc.amount.to_string(),
+                    "vested": vested.to_string(),
+                    "locked": locked.to_string(),
+                    "cliff_end_round": alloc.vesting.cliff_end_round(),
+                    "end_round": alloc.vesting.end_round(),
+                    "description": alloc.description,
+                }),
+            )
+        }
+        None => {
+            let valid: Vec<String> = aztibase_execution::AllocationCategory::ALL
+                .iter()
+                .map(|c| c.to_string())
+                .collect();
+            JsonRpcResponse::error(
+                req.id.clone(),
+                INVALID_PARAMS,
+                format!(
+                    "unknown category '{category_str}', valid: {}",
+                    valid.join(", ")
+                ),
+            )
+        }
+    }
+}
+
 fn parse_u64_param(params: &serde_json::Value, index: usize) -> Result<u64, String> {
     let val = params
         .get(index)
@@ -1648,6 +1739,7 @@ mod tests {
             compute_commitments: None,
             governance: None,
             chain_params: None,
+            emission_tracker: None,
             chain_id: TESTNET_CHAIN_ID,
             genesis_hash: None,
             faucet_tracker: Arc::new(std::sync::Mutex::new(HashMap::new())),
@@ -1677,6 +1769,7 @@ mod tests {
             compute_commitments: None,
             governance: None,
             chain_params: None,
+            emission_tracker: None,
             chain_id: TESTNET_CHAIN_ID,
             genesis_hash: None,
             faucet_tracker: Arc::new(std::sync::Mutex::new(HashMap::new())),
@@ -1915,6 +2008,7 @@ mod tests {
             compute_commitments: None,
             governance: None,
             chain_params: None,
+            emission_tracker: None,
             chain_id: TESTNET_CHAIN_ID,
             genesis_hash: None,
             faucet_tracker: Arc::new(std::sync::Mutex::new(HashMap::new())),
@@ -2295,6 +2389,7 @@ mod tests {
             compute_commitments: None,
             governance: None,
             chain_params: None,
+            emission_tracker: None,
             chain_id: TESTNET_CHAIN_ID,
             genesis_hash: None,
             faucet_tracker: Arc::new(std::sync::Mutex::new(HashMap::new())),
@@ -2384,6 +2479,7 @@ mod tests {
             compute_commitments: None,
             governance: None,
             chain_params: None,
+            emission_tracker: None,
             chain_id: TESTNET_CHAIN_ID,
             genesis_hash: None,
             faucet_tracker: Arc::new(std::sync::Mutex::new(HashMap::new())),
@@ -2647,5 +2743,54 @@ mod tests {
         let keys: Vec<&str> = result.iter().filter_map(|e| e["key"].as_str()).collect();
         assert!(keys.contains(&"base_fee_floor"));
         assert!(keys.contains(&"max_stored_txs"));
+    }
+
+    #[tokio::test]
+    async fn get_emission_info_returns_data() {
+        let (mut state, _rx) = test_state();
+        state.emission_tracker = Some(Arc::new(RwLock::new(
+            aztibase_execution::EmissionTracker::new(1000),
+        )));
+
+        let resp = rpc_call(
+            &state,
+            r#"{"jsonrpc":"2.0","method":"aztb_getEmissionInfo","params":[],"id":1}"#,
+        )
+        .await;
+        assert!(resp["error"].is_null());
+        assert_eq!(resp["result"]["hard_cap"], "1000000000");
+        assert_eq!(resp["result"]["genesis_mint"], "400000000");
+        assert_eq!(resp["result"]["total_emitted"], "0");
+        assert_eq!(resp["result"]["current_epoch"], 0);
+    }
+
+    #[tokio::test]
+    async fn get_vesting_status_returns_allocation() {
+        let (state, _rx) = test_state();
+
+        let resp = rpc_call(
+            &state,
+            r#"{"jsonrpc":"2.0","method":"aztb_getVestingStatus","params":["core_team"],"id":1}"#,
+        )
+        .await;
+        assert!(resp["error"].is_null());
+        assert_eq!(resp["result"]["category"], "core_team");
+        assert_eq!(resp["result"]["total"], "60000000");
+        assert_eq!(resp["result"]["vested"], "0");
+        assert_eq!(resp["result"]["locked"], "60000000");
+    }
+
+    #[tokio::test]
+    async fn get_vesting_status_invalid_category() {
+        let (state, _rx) = test_state();
+
+        let resp = rpc_call(
+            &state,
+            r#"{"jsonrpc":"2.0","method":"aztb_getVestingStatus","params":["nonexistent"],"id":1}"#,
+        )
+        .await;
+        assert!(!resp["error"].is_null());
+        let msg = resp["error"]["message"].as_str().unwrap();
+        assert!(msg.contains("unknown category"));
     }
 }

@@ -21,6 +21,23 @@ Entries are prepended (newest first).
 
 ## Entries
 
+### 2026-03-09 -- tokenomics-engineer / node-engineer / security-engineer -- Sprint 037 Complete (M8 Sprint 12: Token Supply, Emission & Vesting)
+**Task:** Sprint 037: Token supply hard cap, disinflationary emission schedule, genesis allocations with vesting, epoch reward distribution, 2 new RPCs
+**Sprint:** Sprint 037, Phases 1-4
+**Git Ref:** pending
+**Files Changed:**
+- crates/aztibase-execution/src/tokenomics.rs (NEW): EmissionSchedule, VestingSchedule, GenesisAllocation (8 categories), EmissionTracker, StakingAPY curve, EpochDistribution, validator_epoch_reward, 36 unit tests
+- crates/aztibase-execution/src/lib.rs: tokenomics module + re-exports
+- crates/aztibase-node/src/pipeline.rs: EmissionTracker field, shared_emission_tracker() accessor
+- crates/aztibase-node/src/main.rs: .with_emission_tracker() wired into RPC server
+- crates/aztibase-rpc/src/server.rs: EmissionTracker in RpcState, with_emission_tracker() builder, aztb_getEmissionInfo + aztb_getVestingStatus handlers, 3 RPC tests
+- blockchain-project/sprints/SPRINT-037.md (NEW: sprint plan)
+- blockchain-project/DECISIONS.md: ADR-014 (u128 tokenomics with deferred balance migration)
+**Review Notes:** Phase 1-2: Full tokenomics module — 1B hard cap, 2-year halving emission (120M→7.5M over 10 years, 3.75M tail), 4-pool distribution (70% validator, 15% PoUW, 10% treasury, 5% insurance), piecewise linear APY curve (3-12%), 8 genesis allocations totaling 400M with vesting cliffs. Phase 3: EmissionTracker wired into pipeline, 2 new RPCs (getEmissionInfo, getVestingStatus). Phase 4: clippy 0 warnings, fmt clean, all tests pass (39 new: 36 tokenomics + 3 RPC).
+**Security Flags:** 0 ELEVATED, 0 MEDIUM. All u128 arithmetic checked for overflow. Hard cap enforced in emission_per_epoch(). No floating-point. Floor division only. Division-by-zero guarded.
+
+---
+
 ### 2026-03-09 -- smart-contract-engineer / node-engineer / security-engineer -- Sprint 036 Complete (M8 Sprint 11: Governance Execution & Chain Parameters)
 **Task:** Sprint 036: ChainParams runtime registry, governance proposal execution, dynamic fee/eviction params, 2 new RPCs
 **Sprint:** Sprint 036, Phases 1-4

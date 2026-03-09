@@ -642,7 +642,8 @@ async fn main() -> Result<()> {
     .with_pending_task_count(exec_pipeline.shared_pending_task_count())
     .with_compute_commitments(exec_pipeline.shared_compute_commitments())
     .with_governance(exec_pipeline.shared_governance())
-    .with_chain_params(exec_pipeline.shared_chain_params());
+    .with_chain_params(exec_pipeline.shared_chain_params())
+    .with_emission_tracker(exec_pipeline.shared_emission_tracker());
 
     if let Some(ref gen_cfg) = genesis_config {
         rpc_server = rpc_server.with_genesis_hash(genesis::genesis_hash(gen_cfg));

@@ -14,6 +14,7 @@ pub mod receipt;
 pub mod routing;
 pub mod snapshot;
 pub mod state;
+pub mod tokenomics;
 pub mod tx;
 pub mod verkle;
 pub mod vm;
@@ -43,6 +44,12 @@ pub use snapshot::{
     deserialize_snapshot, serialize_snapshot, snapshot_hash, snapshot_header_hash,
 };
 pub use state::{AccountState, AccountType, MerkleCommitment};
+pub use tokenomics::{
+    AllocationCategory, EmissionTracker, EpochDistribution, GenesisAllocationEntry,
+    VestingSchedule, calculate_apy_bps, cumulative_emission, distribute_emission,
+    emission_for_year, emission_per_epoch, genesis_allocations, validate_genesis_allocations,
+    validator_epoch_reward,
+};
 pub use tx::{
     SignedTx, TxError, verify_and_route, verify_and_route_batch,
     verify_and_route_batch_with_pubkeys, verify_and_route_with_pubkey,

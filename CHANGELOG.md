@@ -5,6 +5,28 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ---
 
+## [M8-S12] -- Token Supply, Emission & Vesting (Sprint 037)
+
+### Added
+- `tokenomics` module in aztibase-execution: token supply constants, emission schedule, vesting, genesis allocations, epoch reward distribution (2026-03-09)
+- `EmissionSchedule`: 2-year halving curve (120M→7.5M over 10 years, 3.75M/year tail), `emission_for_year()`, `emission_per_epoch()`, `cumulative_emission()` (2026-03-09)
+- `EmissionDistribution`: 4-pool split — 70% validators, 15% PoUW, 10% treasury, 5% insurance (2026-03-09)
+- `StakingAPY`: piecewise linear curve (12% max at <20% staking → 3% floor at >70%), `calculate_apy_bps()` (2026-03-09)
+- `VestingSchedule`: cliff + linear unlock, `vested_at()`, `locked_at()`, `cliff_end_round()`, `end_round()` (2026-03-09)
+- `GenesisAllocation`: 8 categories (Treasury 100M, EcoDev 80M, Team 60M, Foundation 40M, Airdrop 40M, Validator Bootstrap 40M, AI Fund 20M, Liquidity 20M) totaling 400M genesis mint (2026-03-09)
+- `EmissionTracker`: runtime state tracking current_epoch, total_emitted, treasury/insurance balances, hard cap enforcement (2026-03-09)
+- `validator_epoch_reward()`: per-validator reward based on stake × participation ratio (2026-03-09)
+- `aztb_getEmissionInfo` RPC: current epoch, total emitted/remaining, hard cap, treasury/insurance balances (2026-03-09)
+- `aztb_getVestingStatus(category)` RPC: total/vested/locked amounts, cliff/end rounds for any genesis allocation (2026-03-09)
+- ADR-014: u128 tokenomics with deferred u64→u128 balance migration strategy (2026-03-09)
+- 39 new tests: 36 tokenomics unit + 3 RPC (2026-03-09)
+
+### Changed
+- `ExecutionPipeline`: added `emission_tracker` field, `shared_emission_tracker()` method (2026-03-09)
+- `RpcState`: added `emission_tracker: Option<Arc<RwLock<EmissionTracker>>>` field (2026-03-09)
+
+---
+
 ## [M8-S11] -- Governance Execution & Chain Parameters (Sprint 036)
 
 ### Added
