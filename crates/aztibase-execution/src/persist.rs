@@ -1,6 +1,6 @@
 use aztibase_storage::{
-    ACCOUNTS_TABLE, BATCH_ROOTS_TABLE, CONTRACT_CODE_TABLE, CONTRACT_STORAGE_TABLE, STATE_TABLE,
-    StateStore, StorageResult, TX_TABLE, TableDef,
+    ACCOUNTS_TABLE, BATCH_INDEX_TABLE, BATCH_ROOTS_TABLE, BATCH_TXS_TABLE, CONTRACT_CODE_TABLE,
+    CONTRACT_STORAGE_TABLE, STATE_TABLE, StateStore, StorageResult, TX_TABLE, TableDef,
 };
 
 use crate::state::{AccountState, AccountType};
@@ -213,6 +213,95 @@ pub fn get_batch_root(
     }
 }
 
+/// Store the batch number → anchor hash mapping for sequential block queries.
+pub fn store_batch_index(
+    store: &StateStore,
+    batch_number: u64,
+    anchor_hash: &[u8; 32],
+) -> StorageResult<()> {
+    store.put(BATCH_INDEX_TABLE, &batch_number.to_be_bytes(), anchor_hash)
+}
+
+/// Look up the anchor hash for a given batch number.
+pub fn get_batch_by_number(
+    store: &StateStore,
+    batch_number: u64,
+) -> StorageResult<Option<[u8; 32]>> {
+    match store.get(BATCH_INDEX_TABLE, &batch_number.to_be_bytes())? {
+        Some(bytes) if bytes.len() == 32 => {
+            Ok(Some(bytes.as_slice().try_into().unwrap_or([0u8; 32])))
+        }
+        _ => Ok(None),
+    }
+}
+
+/// Store the list of transaction hashes for a committed batch.
+pub fn store_batch_txs(
+    store: &StateStore,
+    anchor_hash: &[u8; 32],
+    tx_hashes: &[[u8; 32]],
+) -> StorageResult<()> {
+    let Ok(data) = postcard::to_allocvec(tx_hashes) else {
+        return Ok(());
+    };
+    store.put(BATCH_TXS_TABLE, anchor_hash, &data)
+}
+
+/// Retrieve the list of transaction hashes for a committed batch.
+pub fn get_batch_txs(
+    store: &StateStore,
+    anchor_hash: &[u8; 32],
+) -> StorageResult<Option<Vec<[u8; 32]>>> {
+    match store.get(BATCH_TXS_TABLE, anchor_hash)? {
+        Some(bytes) => match postcard::from_bytes::<Vec<[u8; 32]>>(&bytes) {
+            Ok(hashes) => Ok(Some(hashes)),
+            Err(_) => Ok(None),
+        },
+        None => Ok(None),
+    }
+}
+
+/// Store a raw transaction keyed by its hash.
+pub fn store_transaction(
+    store: &StateStore,
+    tx_hash: &[u8; 32],
+    tx_data: &[u8],
+) -> StorageResult<()> {
+    store.put(TX_TABLE, tx_hash, tx_data)
+}
+
+/// Retrieve a raw transaction by its hash.
+pub fn get_transaction(store: &StateStore, tx_hash: &[u8; 32]) -> StorageResult<Option<Vec<u8>>> {
+    store.get(TX_TABLE, tx_hash)
+}
+
+/// Query a range of batch numbers, returning (batch_number, anchor_hash) pairs.
+/// Enforces a hard limit of `max_results` entries per call.
+pub fn get_batch_range(
+    store: &StateStore,
+    from: u64,
+    to: u64,
+    max_results: usize,
+) -> StorageResult<Vec<(u64, [u8; 32])>> {
+    let start = from.to_be_bytes();
+    let end = to.saturating_add(1).to_be_bytes();
+    let raw = store.range(BATCH_INDEX_TABLE, &start, &end)?;
+    let results: Vec<(u64, [u8; 32])> = raw
+        .into_iter()
+        .take(max_results)
+        .filter_map(|(k, v)| {
+            if k.len() == 8 && v.len() == 32 {
+                let num = u64::from_be_bytes(k.as_slice().try_into().ok()?);
+                let hash: [u8; 32] = v.as_slice().try_into().ok()?;
+                Some((num, hash))
+            } else {
+                None
+            }
+        })
+        .collect();
+    Ok(results)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -405,6 +494,81 @@ mod tests {
 
         store_base_fee(&store, 1000).unwrap();
         assert_eq!(load_base_fee(&store).unwrap(), Some(1000));
+
+        cleanup(&path);
+    }
+
+    #[test]
+    fn batch_index_store_and_retrieve() {
+        let path = test_db_path();
+        let store = StateStore::open(path.to_str().unwrap()).unwrap();
+
+        let anchor_0 = [0xAA; 32];
+        let anchor_1 = [0xBB; 32];
+
+        store_batch_index(&store, 0, &anchor_0).unwrap();
+        store_batch_index(&store, 1, &anchor_1).unwrap();
+
+        assert_eq!(get_batch_by_number(&store, 0).unwrap(), Some(anchor_0));
+        assert_eq!(get_batch_by_number(&store, 1).unwrap(), Some(anchor_1));
+        assert_eq!(get_batch_by_number(&store, 99).unwrap(), None);
+
+        cleanup(&path);
+    }
+
+    #[test]
+    fn batch_txs_roundtrip() {
+        let path = test_db_path();
+        let store = StateStore::open(path.to_str().unwrap()).unwrap();
+
+        let anchor = [0xCC; 32];
+        let tx_hashes = vec![[1u8; 32], [2u8; 32], [3u8; 32]];
+
+        store_batch_txs(&store, &anchor, &tx_hashes).unwrap();
+        let loaded = get_batch_txs(&store, &anchor).unwrap().unwrap();
+        assert_eq!(loaded, tx_hashes);
+
+        assert!(get_batch_txs(&store, &[0xFF; 32]).unwrap().is_none());
+
+        cleanup(&path);
+    }
+
+    #[test]
+    fn transaction_store_and_retrieve() {
+        let path = test_db_path();
+        let store = StateStore::open(path.to_str().unwrap()).unwrap();
+
+        let tx_hash = [0xDD; 32];
+        let tx_data = b"serialized-tx-data";
+
+        store_transaction(&store, &tx_hash, tx_data).unwrap();
+        let loaded = get_transaction(&store, &tx_hash).unwrap().unwrap();
+        assert_eq!(loaded, tx_data);
+
+        assert!(get_transaction(&store, &[0xEE; 32]).unwrap().is_none());
+
+        cleanup(&path);
+    }
+
+    #[test]
+    fn batch_range_query() {
+        let path = test_db_path();
+        let store = StateStore::open(path.to_str().unwrap()).unwrap();
+
+        for i in 0..10u64 {
+            store_batch_index(&store, i, &[(i as u8); 32]).unwrap();
+        }
+
+        let range = get_batch_range(&store, 3, 7, 100).unwrap();
+        assert_eq!(range.len(), 5);
+        assert_eq!(range[0].0, 3);
+        assert_eq!(range[4].0, 7);
+
+        let limited = get_batch_range(&store, 0, 9, 3).unwrap();
+        assert_eq!(limited.len(), 3);
+
+        let empty = get_batch_range(&store, 50, 60, 100).unwrap();
+        assert!(empty.is_empty());
 
         cleanup(&path);
     }

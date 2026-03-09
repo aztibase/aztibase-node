@@ -368,6 +368,13 @@ async fn dispatch(state: &RpcState, req: &JsonRpcRequest) -> JsonRpcResponse {
         "aztb_nodeInfo" => handle_node_info(state, req).await,
         "aztb_chainId" => handle_chain_id(state, req).await,
         "aztb_genesisHash" => handle_genesis_hash(state, req).await,
+        "aztb_getBlockByNumber" => handle_get_block_by_number(state, req).await,
+        "aztb_getBlockByHash" => handle_get_block_by_hash(state, req).await,
+        "aztb_getTransactionByHash" => handle_get_transaction_by_hash(state, req).await,
+        "aztb_getBatchRoot" => handle_get_batch_root(state, req).await,
+        "aztb_getBlockRange" => handle_get_block_range(state, req).await,
+        "aztb_getTransactionsByBatch" => handle_get_transactions_by_batch(state, req).await,
+        "aztb_getReceiptsByBatch" => handle_get_receipts_by_batch(state, req).await,
         _ => JsonRpcResponse::error(
             req.id.clone(),
             METHOD_NOT_FOUND,
@@ -1110,6 +1117,294 @@ async fn handle_genesis_hash(state: &RpcState, req: &JsonRpcRequest) -> JsonRpcR
         }
         None => JsonRpcResponse::error(req.id.clone(), INTERNAL_ERROR, "No genesis loaded".into()),
     }
+}
+
+// ── Historical Query Endpoints ─────────────────────────────────────
+
+const MAX_BLOCK_RANGE: usize = 100;
+
+async fn handle_get_block_by_number(state: &RpcState, req: &JsonRpcRequest) -> JsonRpcResponse {
+    let num = match parse_u64_param(&req.params, 0) {
+        Ok(n) => n,
+        Err(e) => return JsonRpcResponse::error(req.id.clone(), INVALID_PARAMS, e),
+    };
+
+    let store = match &state.receipt_store {
+        Some(s) => s,
+        None => {
+            return JsonRpcResponse::error(req.id.clone(), -32000, "store not available".into());
+        }
+    };
+
+    match aztibase_execution::get_batch_by_number(store, num) {
+        Ok(Some(anchor_hash)) => {
+            let state_root = aztibase_execution::get_batch_root(store, &anchor_hash)
+                .ok()
+                .flatten();
+            let tx_hashes = aztibase_execution::get_batch_txs(store, &anchor_hash)
+                .ok()
+                .flatten()
+                .unwrap_or_default();
+            let txs: Vec<String> = tx_hashes
+                .iter()
+                .map(|h| format!("0x{}", hex::encode(h)))
+                .collect();
+            let mut result = serde_json::json!({
+                "number": format!("0x{num:x}"),
+                "hash": format!("0x{}", hex::encode(anchor_hash)),
+                "transactions": txs,
+            });
+            if let Some(sr) = state_root {
+                result["stateRoot"] = serde_json::json!(format!("0x{}", hex::encode(sr)));
+            }
+            JsonRpcResponse::success(req.id.clone(), result)
+        }
+        Ok(None) => JsonRpcResponse::success(req.id.clone(), serde_json::Value::Null),
+        Err(e) => JsonRpcResponse::error(req.id.clone(), -32000, format!("storage error: {e}")),
+    }
+}
+
+async fn handle_get_block_by_hash(state: &RpcState, req: &JsonRpcRequest) -> JsonRpcResponse {
+    let hash = match parse_hash_param(&req.params, 0) {
+        Ok(h) => h,
+        Err(e) => return JsonRpcResponse::error(req.id.clone(), INVALID_PARAMS, e),
+    };
+
+    let store = match &state.receipt_store {
+        Some(s) => s,
+        None => {
+            return JsonRpcResponse::error(req.id.clone(), -32000, "store not available".into());
+        }
+    };
+
+    match aztibase_execution::get_batch_root(store, &hash) {
+        Ok(Some(state_root)) => {
+            let tx_hashes = aztibase_execution::get_batch_txs(store, &hash)
+                .ok()
+                .flatten()
+                .unwrap_or_default();
+            let txs: Vec<String> = tx_hashes
+                .iter()
+                .map(|h| format!("0x{}", hex::encode(h)))
+                .collect();
+            JsonRpcResponse::success(
+                req.id.clone(),
+                serde_json::json!({
+                    "hash": format!("0x{}", hex::encode(hash)),
+                    "stateRoot": format!("0x{}", hex::encode(state_root)),
+                    "transactions": txs,
+                }),
+            )
+        }
+        Ok(None) => JsonRpcResponse::success(req.id.clone(), serde_json::Value::Null),
+        Err(e) => JsonRpcResponse::error(req.id.clone(), -32000, format!("storage error: {e}")),
+    }
+}
+
+async fn handle_get_transaction_by_hash(state: &RpcState, req: &JsonRpcRequest) -> JsonRpcResponse {
+    let hash = match parse_hash_param(&req.params, 0) {
+        Ok(h) => h,
+        Err(e) => return JsonRpcResponse::error(req.id.clone(), INVALID_PARAMS, e),
+    };
+
+    let store = match &state.receipt_store {
+        Some(s) => s,
+        None => {
+            return JsonRpcResponse::error(req.id.clone(), -32000, "store not available".into());
+        }
+    };
+
+    match aztibase_execution::get_transaction(store, &hash) {
+        Ok(Some(data)) => {
+            let mut result = serde_json::json!({
+                "hash": format!("0x{}", hex::encode(hash)),
+                "raw": format!("0x{}", hex::encode(&data)),
+            });
+            if let Ok(Some(r)) = aztibase_execution::get_receipt(store, &hash) {
+                result["receipt"] = serde_json::json!({
+                    "success": r.success,
+                    "gasUsed": format!("0x{:x}", r.gas_used),
+                });
+                if let Some(err) = &r.error {
+                    result["receipt"]["error"] = serde_json::json!(err);
+                }
+            }
+            JsonRpcResponse::success(req.id.clone(), result)
+        }
+        Ok(None) => JsonRpcResponse::success(req.id.clone(), serde_json::Value::Null),
+        Err(e) => JsonRpcResponse::error(req.id.clone(), -32000, format!("storage error: {e}")),
+    }
+}
+
+async fn handle_get_batch_root(state: &RpcState, req: &JsonRpcRequest) -> JsonRpcResponse {
+    let hash = match parse_hash_param(&req.params, 0) {
+        Ok(h) => h,
+        Err(e) => return JsonRpcResponse::error(req.id.clone(), INVALID_PARAMS, e),
+    };
+
+    let store = match &state.receipt_store {
+        Some(s) => s,
+        None => {
+            return JsonRpcResponse::error(req.id.clone(), -32000, "store not available".into());
+        }
+    };
+
+    match aztibase_execution::get_batch_root(store, &hash) {
+        Ok(Some(root)) => JsonRpcResponse::success(
+            req.id.clone(),
+            serde_json::json!(format!("0x{}", hex::encode(root))),
+        ),
+        Ok(None) => JsonRpcResponse::success(req.id.clone(), serde_json::Value::Null),
+        Err(e) => JsonRpcResponse::error(req.id.clone(), -32000, format!("storage error: {e}")),
+    }
+}
+
+async fn handle_get_block_range(state: &RpcState, req: &JsonRpcRequest) -> JsonRpcResponse {
+    let from = match parse_u64_param(&req.params, 0) {
+        Ok(n) => n,
+        Err(e) => return JsonRpcResponse::error(req.id.clone(), INVALID_PARAMS, e),
+    };
+    let to = match parse_u64_param(&req.params, 1) {
+        Ok(n) => n,
+        Err(e) => return JsonRpcResponse::error(req.id.clone(), INVALID_PARAMS, e),
+    };
+
+    if to < from {
+        return JsonRpcResponse::error(
+            req.id.clone(),
+            INVALID_PARAMS,
+            "'to' must be >= 'from'".into(),
+        );
+    }
+
+    let store = match &state.receipt_store {
+        Some(s) => s,
+        None => {
+            return JsonRpcResponse::error(req.id.clone(), -32000, "store not available".into());
+        }
+    };
+
+    match aztibase_execution::get_batch_range(store, from, to, MAX_BLOCK_RANGE) {
+        Ok(entries) => {
+            let blocks: Vec<serde_json::Value> = entries
+                .iter()
+                .map(|(num, hash)| {
+                    serde_json::json!({
+                        "number": format!("0x{num:x}"),
+                        "hash": format!("0x{}", hex::encode(hash)),
+                    })
+                })
+                .collect();
+            JsonRpcResponse::success(req.id.clone(), serde_json::json!(blocks))
+        }
+        Err(e) => JsonRpcResponse::error(req.id.clone(), -32000, format!("storage error: {e}")),
+    }
+}
+
+async fn handle_get_transactions_by_batch(
+    state: &RpcState,
+    req: &JsonRpcRequest,
+) -> JsonRpcResponse {
+    let hash = match parse_hash_param(&req.params, 0) {
+        Ok(h) => h,
+        Err(e) => return JsonRpcResponse::error(req.id.clone(), INVALID_PARAMS, e),
+    };
+
+    let store = match &state.receipt_store {
+        Some(s) => s,
+        None => {
+            return JsonRpcResponse::error(req.id.clone(), -32000, "store not available".into());
+        }
+    };
+
+    match aztibase_execution::get_batch_txs(store, &hash) {
+        Ok(Some(tx_hashes)) => {
+            let txs: Vec<String> = tx_hashes
+                .iter()
+                .map(|h| format!("0x{}", hex::encode(h)))
+                .collect();
+            JsonRpcResponse::success(req.id.clone(), serde_json::json!(txs))
+        }
+        Ok(None) => JsonRpcResponse::success(req.id.clone(), serde_json::Value::Null),
+        Err(e) => JsonRpcResponse::error(req.id.clone(), -32000, format!("storage error: {e}")),
+    }
+}
+
+async fn handle_get_receipts_by_batch(state: &RpcState, req: &JsonRpcRequest) -> JsonRpcResponse {
+    let hash = match parse_hash_param(&req.params, 0) {
+        Ok(h) => h,
+        Err(e) => return JsonRpcResponse::error(req.id.clone(), INVALID_PARAMS, e),
+    };
+
+    let store = match &state.receipt_store {
+        Some(s) => s,
+        None => {
+            return JsonRpcResponse::error(req.id.clone(), -32000, "store not available".into());
+        }
+    };
+
+    let tx_hashes = match aztibase_execution::get_batch_txs(store, &hash) {
+        Ok(Some(h)) => h,
+        Ok(None) => {
+            return JsonRpcResponse::success(req.id.clone(), serde_json::Value::Null);
+        }
+        Err(e) => {
+            return JsonRpcResponse::error(req.id.clone(), -32000, format!("storage error: {e}"));
+        }
+    };
+
+    let mut receipts = Vec::with_capacity(tx_hashes.len());
+    for tx_hash in &tx_hashes {
+        match aztibase_execution::get_receipt(store, tx_hash) {
+            Ok(Some(r)) => {
+                let mut entry = serde_json::json!({
+                    "txHash": format!("0x{}", hex::encode(r.tx_hash)),
+                    "success": r.success,
+                    "gasUsed": format!("0x{:x}", r.gas_used),
+                });
+                if let Some(err) = &r.error {
+                    entry["error"] = serde_json::json!(err);
+                }
+                receipts.push(entry);
+            }
+            _ => {
+                receipts.push(serde_json::json!({
+                    "txHash": format!("0x{}", hex::encode(tx_hash)),
+                    "error": "receipt not found",
+                }));
+            }
+        }
+    }
+
+    JsonRpcResponse::success(req.id.clone(), serde_json::json!(receipts))
+}
+
+fn parse_u64_param(params: &serde_json::Value, index: usize) -> Result<u64, String> {
+    let val = params
+        .get(index)
+        .ok_or_else(|| format!("missing parameter at index {index}"))?;
+    if let Some(n) = val.as_u64() {
+        return Ok(n);
+    }
+    if let Some(s) = val.as_str() {
+        let s = s.strip_prefix("0x").unwrap_or(s);
+        return u64::from_str_radix(s, 16).map_err(|e| format!("invalid number: {e}"));
+    }
+    Err(format!(
+        "parameter at index {index} must be a number or hex string"
+    ))
+}
+
+fn parse_hash_param(params: &serde_json::Value, index: usize) -> Result<[u8; 32], String> {
+    let hex_str = params
+        .get(index)
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| format!("missing hash parameter at index {index}"))?;
+    let hex_str = hex_str.strip_prefix("0x").unwrap_or(hex_str);
+    let bytes = hex::decode(hex_str).map_err(|e| format!("invalid hex: {e}"))?;
+    bytes
+        .try_into()
+        .map_err(|_| "hash must be 32 bytes".to_string())
 }
 
 // ── Health Endpoint ────────────────────────────────────────────────

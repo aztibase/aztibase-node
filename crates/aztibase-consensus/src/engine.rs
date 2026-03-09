@@ -59,6 +59,7 @@ pub struct ConsensusConfig {
     pub wave_length: u64,
     pub max_parents: usize,
     pub max_pending_txs: usize,
+    pub archive: bool,
 }
 
 impl Default for ConsensusConfig {
@@ -68,6 +69,7 @@ impl Default for ConsensusConfig {
             wave_length: 4,
             max_parents: 20,
             max_pending_txs: 4096,
+            archive: false,
         }
     }
 }
@@ -492,8 +494,10 @@ impl ConsensusEngine {
                             .store(latency.as_micros() as u64, AtomicOrdering::Relaxed);
                         self.state.record_commit(hash);
                         self.state.last_committed_wave = Some(wave);
-                        self.state.prune_before(wave * wave_len);
-                        last_prune_round = Some(wave * wave_len);
+                        if !self.config.archive {
+                            self.state.prune_before(wave * wave_len);
+                            last_prune_round = Some(wave * wave_len);
+                        }
                         self.vrf_seed = aztibase_core::hash(&hash);
                         match crate::ordering::extract_committed_batch(
                             &self.dag,
@@ -525,8 +529,9 @@ impl ConsensusEngine {
             }
         }
 
-        // Prune DAG after releasing the CommitRule borrow
-        if let Some(prune_round) = last_prune_round
+        // Prune DAG after releasing the CommitRule borrow (skip in archive mode)
+        if !self.config.archive
+            && let Some(prune_round) = last_prune_round
             && let Err(e) = self.dag.prune_before(prune_round)
         {
             tracing::warn!("DAG prune failed: {e}");
@@ -655,6 +660,7 @@ mod tests {
             wave_length: 2,
             max_parents: 10,
             max_pending_txs: 4096,
+            archive: false,
         };
 
         let (in_tx, in_rx) = mpsc::channel(64);

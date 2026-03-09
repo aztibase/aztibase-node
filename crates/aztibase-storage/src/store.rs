@@ -40,8 +40,14 @@ pub const CONTRACT_STORAGE_TABLE: TableDefinition<&[u8], &[u8]> =
 /// Committed batch state roots keyed by anchor hash (32 bytes).
 pub const BATCH_ROOTS_TABLE: TableDefinition<&[u8], &[u8]> = TableDefinition::new("batch_roots");
 
+/// Batch index: batch number (u64 big-endian) → anchor hash (32 bytes).
+pub const BATCH_INDEX_TABLE: TableDefinition<&[u8], &[u8]> = TableDefinition::new("batch_index");
+
+/// Batch transaction list: anchor hash (32 bytes) → postcard(Vec<[u8; 32]>).
+pub const BATCH_TXS_TABLE: TableDefinition<&[u8], &[u8]> = TableDefinition::new("batch_txs");
+
 /// All table definitions for batch initialization.
-const ALL_TABLES: [TableDefinition<&[u8], &[u8]>; 10] = [
+const ALL_TABLES: [TableDefinition<&[u8], &[u8]>; 12] = [
     BLOCKS_TABLE,
     STATE_TABLE,
     TX_TABLE,
@@ -52,6 +58,8 @@ const ALL_TABLES: [TableDefinition<&[u8], &[u8]>; 10] = [
     CONTRACT_CODE_TABLE,
     CONTRACT_STORAGE_TABLE,
     BATCH_ROOTS_TABLE,
+    BATCH_INDEX_TABLE,
+    BATCH_TXS_TABLE,
 ];
 
 // ── Error Type ─────────────────────────────────────────────────────

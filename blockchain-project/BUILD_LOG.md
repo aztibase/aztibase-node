@@ -21,6 +21,27 @@ Entries are prepended (newest first).
 
 ## Entries
 
+### 2026-03-09 -- node-engineer / consensus-engineer / security-engineer -- Sprint 034 Complete (M8 Sprint 9: Archive Node & Historical Queries)
+**Task:** Sprint 034: Archive node mode (--archive flag), 7 historical query RPC methods, batch index/txs storage, block explorer support
+**Sprint:** Sprint 034, Phases 1-4
+**Git Ref:** pending
+**Files Changed:**
+- crates/aztibase-node/src/config.rs: `archive: bool` field in NodeConfig
+- crates/aztibase-node/src/main.rs: `--archive` CLI flag, consensus + pipeline archive wiring
+- crates/aztibase-node/src/pipeline.rs: `archive` field, `set_archive()`, gated eviction, batch index/txs/tx storage
+- crates/aztibase-consensus/src/engine.rs: `archive: bool` in ConsensusConfig, gated DAG + state pruning
+- crates/aztibase-storage/src/store.rs: BATCH_INDEX_TABLE, BATCH_TXS_TABLE, ALL_TABLES 10→12
+- crates/aztibase-storage/src/lib.rs: re-exports for new tables
+- crates/aztibase-execution/src/persist.rs: store_batch_index, get_batch_by_number, store_batch_txs, get_batch_txs, store_transaction, get_transaction, get_batch_range, 4 new tests
+- crates/aztibase-execution/src/lib.rs: re-exports for new persist functions
+- crates/aztibase-rpc/src/server.rs: 7 new RPC methods (getBlockByNumber, getBlockByHash, getTransactionByHash, getBatchRoot, getBlockRange, getTransactionsByBatch, getReceiptsByBatch), MAX_BLOCK_RANGE=100, parse_u64_param, parse_hash_param helpers
+- crates/aztibase-node/src/integration.rs: ConsensusConfig archive field added to all test instances
+- blockchain-project/sprints/SPRINT-034.md (NEW: sprint plan)
+**Review Notes:** Phase 1: Archive mode gates eviction (receipts/txs/batch_roots) and DAG+state pruning via --archive CLI flag. Phase 2: 4 historical query RPCs (getBlockByNumber, getBlockByHash, getTransactionByHash, getBatchRoot) with new BATCH_INDEX_TABLE and BATCH_TXS_TABLE. Phase 3: 3 explorer RPCs (getBlockRange with MAX_BLOCK_RANGE=100 pagination, getTransactionsByBatch, getReceiptsByBatch). Phase 4: clippy 0 warnings, fmt clean, all tests pass.
+**Security Flags:** 0 ELEVATED, 0 MEDIUM. Range queries bounded by MAX_BLOCK_RANGE=100. Archive mode only disables eviction — no extra data exposure through RPC.
+
+---
+
 ### 2026-03-09 -- consensus-engineer / node-engineer / security-engineer -- Sprint 033 Complete (M8 Sprint 8: State Pruning & Bounded Growth)
 **Task:** Sprint 033: DagStore round-based pruning, pipeline memory caps, disk table eviction
 **Sprint:** Sprint 033, Phases 1-4

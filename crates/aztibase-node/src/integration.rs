@@ -373,6 +373,7 @@ mod tests {
             wave_length: 2,
             max_parents: 10,
             max_pending_txs: 4096,
+            archive: false,
         };
 
         let genesis_ts = 1000u64;
@@ -612,6 +613,7 @@ mod tests {
             wave_length: 2,
             max_parents: 10,
             max_pending_txs: 4096,
+            archive: false,
         };
 
         let genesis_ts = generated.config.timestamp;
@@ -797,6 +799,7 @@ mod tests {
             wave_length: 2,
             max_parents: 10,
             max_pending_txs: 4096,
+            archive: false,
         };
 
         let genesis_ts = 1000u64;
@@ -2023,6 +2026,7 @@ mod tests {
             wave_length: 2,
             max_parents: 10,
             max_pending_txs: 4096,
+            archive: false,
         };
 
         let genesis_ts = 1000u64;
@@ -2240,6 +2244,7 @@ mod tests {
             wave_length: 2,
             max_parents: 10,
             max_pending_txs: 4096,
+            archive: false,
         };
 
         let genesis_blocks: Vec<DagBlock> = validator_ids
@@ -2520,6 +2525,7 @@ mod tests {
             wave_length: 2,
             max_parents: 10,
             max_pending_txs: 4096,
+            archive: false,
         };
 
         let (_in_tx, in_rx) = mpsc::channel::<ConsensusInput>(64);
@@ -2591,6 +2597,7 @@ mod tests {
             wave_length: 2,
             max_parents: 10,
             max_pending_txs: 4096,
+            archive: false,
         };
 
         let (_in_tx, in_rx) = mpsc::channel::<ConsensusInput>(64);
@@ -2648,6 +2655,7 @@ mod tests {
             wave_length: 2,
             max_parents: 10,
             max_pending_txs: 4096,
+            archive: false,
         };
 
         let (_in_tx, in_rx) = mpsc::channel::<ConsensusInput>(64);
@@ -2763,6 +2771,7 @@ mod tests {
             wave_length: 2,
             max_parents: 10,
             max_pending_txs: 4096,
+            archive: false,
         };
 
         let genesis_blocks: Vec<DagBlock> =
@@ -2950,6 +2959,7 @@ mod tests {
             wave_length: 2,
             max_parents: 10,
             max_pending_txs: 4096,
+            archive: false,
         };
 
         let (_in_tx, in_rx) = mpsc::channel::<ConsensusInput>(64);

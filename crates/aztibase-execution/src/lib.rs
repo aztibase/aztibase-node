@@ -23,8 +23,9 @@ pub use light_client::{build_light_client_proof, verify_light_client_proof};
 pub use model_registry::{MODEL_REGISTRY_ADDRESS, ModelMetadata, ModelRegistry, RegistryError};
 pub use parallel::{BatchResult, TransferTx, TxReceipt, TxStatus, execute_transfers};
 pub use persist::{
-    evict_old_batch_roots, evict_old_transactions, flush_state, get_batch_root, load_base_fee,
-    load_state, store_base_fee, store_batch_root,
+    evict_old_batch_roots, evict_old_transactions, flush_state, get_batch_by_number,
+    get_batch_range, get_batch_root, get_batch_txs, get_transaction, load_base_fee, load_state,
+    store_base_fee, store_batch_index, store_batch_root, store_batch_txs, store_transaction,
 };
 pub use receipt::{ExecutionReceipt, evict_old_receipts, get_receipt, store_receipts};
 pub use routing::{RoutingError, TxKind, route_batch, route_tx};

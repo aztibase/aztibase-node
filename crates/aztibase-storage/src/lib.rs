@@ -5,9 +5,9 @@ pub mod verkle;
 pub use light::{CachedProof, LightFinalityCert, LightHeader, LightStore, LocalWalletState};
 pub use redb::TableDefinition;
 pub use store::{
-    ACCOUNTS_TABLE, BATCH_ROOTS_TABLE, BLOCKS_TABLE, CONTRACT_CODE_TABLE, CONTRACT_STORAGE_TABLE,
-    RECEIPTS_TABLE, STATE_TABLE, StateStore, StorageError, StorageResult, TX_TABLE,
-    VALIDATORS_TABLE, VERKLE_TABLE,
+    ACCOUNTS_TABLE, BATCH_INDEX_TABLE, BATCH_ROOTS_TABLE, BATCH_TXS_TABLE, BLOCKS_TABLE,
+    CONTRACT_CODE_TABLE, CONTRACT_STORAGE_TABLE, RECEIPTS_TABLE, STATE_TABLE, StateStore,
+    StorageError, StorageResult, TX_TABLE, VALIDATORS_TABLE, VERKLE_TABLE,
 };
 
 pub type TableDef = TableDefinition<'static, &'static [u8], &'static [u8]>;

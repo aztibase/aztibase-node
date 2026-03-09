@@ -14,6 +14,7 @@ pub struct NodeConfig {
     pub log: LogConfig,
     pub ai: AiConfig,
     pub metrics: MetricsConfig,
+    pub archive: bool,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -70,6 +71,7 @@ impl Default for NodeConfig {
             log: LogConfig::default(),
             ai: AiConfig::default(),
             metrics: MetricsConfig::default(),
+            archive: false,
         }
     }
 }

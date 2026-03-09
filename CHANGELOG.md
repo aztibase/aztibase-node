@@ -5,6 +5,25 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ---
 
+## [M8-S9] -- Archive Node & Historical Queries (Sprint 034)
+
+### Added
+- `--archive` CLI flag and `archive: bool` config field: disables all eviction and DAG pruning for full history retention (2026-03-09)
+- `BATCH_INDEX_TABLE`: maps batch number (u64 BE) → anchor hash for sequential block lookups (2026-03-09)
+- `BATCH_TXS_TABLE`: maps anchor hash → postcard(Vec<[u8; 32]>) for batch→transaction associations (2026-03-09)
+- 7 new JSON-RPC methods: `aztb_getBlockByNumber`, `aztb_getBlockByHash`, `aztb_getTransactionByHash`, `aztb_getBatchRoot`, `aztb_getBlockRange`, `aztb_getTransactionsByBatch`, `aztb_getReceiptsByBatch` (2026-03-09)
+- `MAX_BLOCK_RANGE = 100` pagination limit on `aztb_getBlockRange` to prevent unbounded reads (2026-03-09)
+- 6 new persist functions: `store_batch_index`, `get_batch_by_number`, `store_batch_txs`, `get_batch_txs`, `store_transaction`, `get_batch_range` (2026-03-09)
+- 4 new persist tests: batch index roundtrip, batch txs roundtrip, transaction store/retrieve, batch range query (2026-03-09)
+
+### Changed
+- `ConsensusConfig`: added `archive: bool` field, gates `prune_before()` and state pruning (2026-03-09)
+- `ExecutionPipeline`: added `archive` field and `set_archive()`, gates eviction of receipts/txs/batch_roots (2026-03-09)
+- Pipeline batch persistence: now stores batch index, batch txs, and individual transactions in TX_TABLE (2026-03-09)
+- `ALL_TABLES` array in storage: expanded from 10 to 12 tables (2026-03-09)
+
+---
+
 ## [M8-S8] -- State Pruning & Bounded Growth (Sprint 033)
 
 ### Added

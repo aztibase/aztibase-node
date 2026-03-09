@@ -2,8 +2,8 @@
 
 **Last Updated:** 2026-03-09
 **Updated By:** node-engineer
-**Current Phase:** M8 -- Public Testnet (Sprint 8 COMPLETE)
-**Current Sprint:** Sprint 033 -- COMPLETE (State Pruning & Bounded Growth)
+**Current Phase:** M8 -- Public Testnet (Sprint 9 COMPLETE)
+**Current Sprint:** Sprint 034 -- COMPLETE (Archive Node & Historical Queries)
 
 ---
 
@@ -33,7 +33,7 @@
 - Build-phase tracking infrastructure (5 documents)
 - Implementation depth audit (Sprint 001, Task 7)
 - Reference repos cloned (MystiCeti, Sui, Lighthouse, rust-libp2p, redb)
-- cargo build + cargo test pass (500+ tests, 0 failures)
+- cargo build + cargo test pass (666 tests, 0 failures)
 - Sprint 001 closed with retrospective
 - Sprint 002 closed: 24/24 tasks, 5 phases complete
 - Sprint 003 closed: 18/18 tasks, 4 phases complete
@@ -77,12 +77,16 @@
 | aztibase-wasm | PARTIAL | p2p-network-engineer | NO | YES |
 
 ### In Progress
-- Nothing currently in progress — Sprint 033 complete, Sprint 034 next
+- Nothing currently in progress — Sprint 034 complete, Sprint 035 next
 
 ### Blocked
 - Nothing currently blocked
 
 ### Recently Completed
+- Sprint 034 Phase 4: Security review — clippy 0 warnings, fmt clean, all tests pass, 0 ELEVATED, 0 MEDIUM
+- Sprint 034 Phase 3: Block range & explorer RPCs — getBlockRange (MAX_BLOCK_RANGE=100 pagination), getTransactionsByBatch, getReceiptsByBatch
+- Sprint 034 Phase 2: Historical query RPCs — getBlockByNumber, getBlockByHash, getTransactionByHash, getBatchRoot, BATCH_INDEX_TABLE, BATCH_TXS_TABLE, 4 persist tests
+- Sprint 034 Phase 1: Archive mode — --archive CLI flag, gated eviction in pipeline, gated DAG+state pruning in consensus engine
 - Sprint 033 Phase 4: Security review — 455+ tests (105 consensus + 175 execution + 175 node), 0 ELEVATED, 0 MEDIUM, clippy 0 warnings, fmt clean
 - Sprint 033 Phase 3: Disk table eviction — StateStore::delete_batch(), TX_TABLE eviction (500K), BATCH_ROOTS_TABLE eviction (100K), 3 new tests
 - Sprint 033 Phase 2: Pipeline memory caps — bounded executed_anchors (VecDeque+HashSet, 10K), per-task attestation cap (32), total attestation buffer cap (2048), disk eviction wired after batch
@@ -189,7 +193,7 @@
 - Sprint 005 Phase 1: Consensus-to-execution wiring, TxKind routing, ExecutionPipeline
 
 ### Next Up
-1. Sprint 034: TBD — ecosystem tooling, archive node mode, or L2 primitives
+1. Sprint 035: TBD — RPC test coverage, L2 primitives, or ecosystem tooling
 
 ### M8 Scope: Monitoring Infrastructure (Planned)
 - **Prometheus**: `prometheus-client` crate (pure Rust), `/metrics` endpoint in Prometheus text format

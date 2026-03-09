@@ -56,6 +56,7 @@ pub struct ExecutionPipeline {
     attestation_buffer: HashMap<Hash, Vec<InferenceAttestation>>,
     attestation_aggregator: AttestationAggregator,
     compute_commitments: Arc<RwLock<ComputeCommitmentStore>>,
+    archive: bool,
 }
 
 impl ExecutionPipeline {
@@ -98,7 +99,13 @@ impl ExecutionPipeline {
             attestation_buffer: HashMap::new(),
             attestation_aggregator: AttestationAggregator::new(2),
             compute_commitments: Arc::new(RwLock::new(ComputeCommitmentStore::new())),
+            archive: false,
         }
+    }
+
+    /// Enable archive mode (disables eviction of old data).
+    pub fn set_archive(&mut self, archive: bool) {
+        self.archive = archive;
     }
 
     /// Shared compute commitment store (for RPC server).
@@ -1348,10 +1355,24 @@ impl ExecutionPipeline {
             store_base_fee(store, self.base_fee_calculator.base_fee())
                 .map_err(|e| anyhow::anyhow!("fatal: store_base_fee failed: {e}"))?;
 
-            // Best-effort eviction of old entries (non-fatal if it fails)
-            let _ = aztibase_execution::evict_old_receipts(store);
-            let _ = aztibase_execution::evict_old_transactions(store);
-            let _ = aztibase_execution::evict_old_batch_roots(store);
+            let batch_number = self.batch_count.load(std::sync::atomic::Ordering::Relaxed);
+            let _ = aztibase_execution::store_batch_index(store, batch_number, &batch.anchor_hash);
+
+            let tx_hashes: Vec<[u8; 32]> = receipts.iter().map(|r| r.tx_hash).collect();
+            let _ = aztibase_execution::store_batch_txs(store, &batch.anchor_hash, &tx_hashes);
+
+            for tx in &routed {
+                let h = compute_tx_hash(tx);
+                if let Ok(data) = postcard::to_allocvec(tx) {
+                    let _ = aztibase_execution::store_transaction(store, &h, &data);
+                }
+            }
+
+            if !self.archive {
+                let _ = aztibase_execution::evict_old_receipts(store);
+                let _ = aztibase_execution::evict_old_transactions(store);
+                let _ = aztibase_execution::evict_old_batch_roots(store);
+            }
         }
 
         Ok(PipelineResult {
@@ -1563,6 +1584,7 @@ mod tests {
             attestation_buffer: HashMap::new(),
             attestation_aggregator: AttestationAggregator::new(2),
             compute_commitments: Arc::new(RwLock::new(ComputeCommitmentStore::new())),
+            archive: false,
         }
     }
 
@@ -2079,6 +2101,7 @@ mod tests {
             attestation_buffer: HashMap::new(),
             attestation_aggregator: AttestationAggregator::new(2),
             compute_commitments: Arc::new(RwLock::new(ComputeCommitmentStore::new())),
+            archive: false,
         }
     }
 

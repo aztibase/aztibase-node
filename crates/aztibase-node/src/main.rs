@@ -87,6 +87,10 @@ struct Cli {
     /// Enable WebRTC direct transport for browser-node connectivity (feature-gated)
     #[arg(long)]
     webrtc: bool,
+
+    /// Run as an archive node (retain full history, disable eviction and DAG pruning)
+    #[arg(long)]
+    archive: bool,
 }
 
 #[derive(clap::Subcommand, Debug)]
@@ -237,6 +241,9 @@ impl Cli {
         }
         if self.metrics {
             cfg.metrics.enabled = true;
+        }
+        if self.archive {
+            cfg.archive = true;
         }
         cfg
     }
@@ -506,7 +513,10 @@ async fn main() -> Result<()> {
         ([cli.validator_index; 32], vs)
     };
 
-    let consensus_config = ConsensusConfig::default();
+    let consensus_config = ConsensusConfig {
+        archive: config.archive,
+        ..ConsensusConfig::default()
+    };
     let (consensus_tx, consensus_rx) = tokio::sync::mpsc::channel::<ConsensusInput>(256);
     let (output_tx, mut output_rx) = tokio::sync::mpsc::channel::<ConsensusOutput>(256);
 
@@ -540,6 +550,10 @@ async fn main() -> Result<()> {
     let mut exec_pipeline =
         pipeline::ExecutionPipeline::with_storage(Arc::clone(&exec_store), pipeline_rx);
     exec_pipeline.set_result_sender(result_tx);
+    if config.archive {
+        exec_pipeline.set_archive(true);
+        tracing::info!("Archive mode enabled — eviction disabled, full history retained");
+    }
     let ai_runtime = Arc::new(TractRuntime::new());
     let models_dir = config.data_dir.join("models");
     if config.ai.enabled {
@@ -1278,6 +1292,7 @@ mod tests {
             metrics: false,
             light: false,
             webrtc: false,
+            archive: false,
         };
         let config = cli.apply_overrides(NodeConfig::default());
         assert_eq!(config.data_dir, PathBuf::from("/tmp/test"));
@@ -1299,6 +1314,7 @@ mod tests {
             metrics: false,
             light: false,
             webrtc: false,
+            archive: false,
         };
         let config = cli.apply_overrides(NodeConfig::default());
         assert_eq!(config.network.listen_addresses.len(), 1);
@@ -1385,6 +1401,7 @@ mod tests {
             metrics: false,
             light: false,
             webrtc: false,
+            archive: false,
         };
         let result = cli.apply_overrides(config);
 
