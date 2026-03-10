@@ -438,6 +438,11 @@ mod tests {
             .await
             .unwrap();
 
+        // Simulate peer connections so engines start proposing.
+        for tx in &engine_inputs {
+            let _ = tx.send(ConsensusInput::PeerCountChanged(2)).await;
+        }
+
         let mut committed: Vec<Vec<CommittedBatch>> = vec![Vec::new(), Vec::new(), Vec::new()];
         let deadline = tokio::time::Instant::now() + Duration::from_secs(10);
 
@@ -664,6 +669,11 @@ mod tests {
         }
         drop(router_tx);
 
+        // Simulate peer connections so engines start proposing.
+        for tx in &engine_inputs {
+            let _ = tx.send(ConsensusInput::PeerCountChanged(2)).await;
+        }
+
         let mut committed = false;
         let deadline = tokio::time::Instant::now() + Duration::from_secs(10);
 
@@ -869,6 +879,11 @@ mod tests {
         for tx in &engine_inputs {
             let _ = tx.try_send(ConsensusInput::ReceivedVertex(data_a.clone()));
             let _ = tx.try_send(ConsensusInput::ReceivedVertex(data_b.clone()));
+        }
+
+        // Simulate peer connections so engines start proposing.
+        for tx in &engine_inputs {
+            let _ = tx.send(ConsensusInput::PeerCountChanged(2)).await;
         }
 
         // Wait for honest nodes to commit — they should succeed despite the equivocation
@@ -2112,6 +2127,11 @@ mod tests {
         }
         drop(router_tx);
 
+        // Simulate peer connections so engines start proposing.
+        for tx in &engine_inputs {
+            let _ = tx.send(ConsensusInput::PeerCountChanged(2)).await;
+        }
+
         // v4 never runs — simulates a crash. 3 out of 4 = 75% > 2/3 threshold.
         let mut committed: Vec<Vec<CommittedBatch>> = vec![Vec::new(), Vec::new(), Vec::new()];
         let deadline = tokio::time::Instant::now() + Duration::from_secs(10);
@@ -2334,6 +2354,11 @@ mod tests {
             });
         }
         drop(router_tx);
+
+        // Simulate peer connections so engines start proposing.
+        for tx in &engine_inputs {
+            let _ = tx.send(ConsensusInput::PeerCountChanged(2)).await;
+        }
 
         let mut committed: Vec<Vec<CommittedBatch>> = (0..n).map(|_| Vec::new()).collect();
         let deadline = tokio::time::Instant::now() + Duration::from_secs(deadline_secs);
@@ -2665,8 +2690,10 @@ mod tests {
         bad_block.hash = [0xDE; 32];
         let mut bad_data = vec![1u8]; // wire version
         bad_data.extend_from_slice(&postcard::to_allocvec(&bad_block).unwrap());
+        let before = engine.state.vertices_at_round(1).len();
         engine.handle_received_vertex(&bad_data).unwrap();
-        assert_eq!(engine.state.vertices_at_round(1).len(), 0);
+        // Tampered hash vertex should be rejected — count unchanged.
+        assert_eq!(engine.state.vertices_at_round(1).len(), before);
 
         cleanup(&path);
     }
