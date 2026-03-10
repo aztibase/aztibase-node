@@ -116,15 +116,15 @@ impl TaskSettlement {
     ) -> SettlementResult {
         match aggregator.aggregate(attestations) {
             Some((result_hash, matching)) => {
-                let count = matching.len() as u64;
+                let count = matching.len() as u128;
                 let per_validator = task.reward / count;
                 let remainder = task.reward % count;
 
-                let payouts: Vec<([u8; 32], u64)> = matching
+                let payouts: Vec<([u8; 32], u128)> = matching
                     .iter()
                     .enumerate()
                     .map(|(i, att)| {
-                        let bonus = if (i as u64) < remainder { 1 } else { 0 };
+                        let bonus = if (i as u128) < remainder { 1 } else { 0 };
                         (att.validator_id, per_validator + bonus)
                     })
                     .collect();
@@ -147,7 +147,7 @@ pub enum SettlementResult {
     Settled {
         task_id: Hash,
         result_hash: Hash,
-        payouts: Vec<([u8; 32], u64)>,
+        payouts: Vec<([u8; 32], u128)>,
     },
     NoQuorum {
         task_id: Hash,
@@ -281,7 +281,7 @@ mod tests {
         match result {
             SettlementResult::Settled { payouts, .. } => {
                 assert_eq!(payouts.len(), 2);
-                let total: u64 = payouts.iter().map(|(_, v)| v).sum();
+                let total: u128 = payouts.iter().map(|(_, v)| v).sum();
                 assert_eq!(total, task.reward);
             }
             _ => panic!("Expected Settled"),
@@ -318,7 +318,7 @@ mod tests {
 
         match result {
             SettlementResult::Settled { payouts, .. } => {
-                let total: u64 = payouts.iter().map(|(_, v)| v).sum();
+                let total: u128 = payouts.iter().map(|(_, v)| v).sum();
                 assert_eq!(total, 1001);
                 assert_eq!(payouts[0].1, 501);
                 assert_eq!(payouts[1].1, 500);

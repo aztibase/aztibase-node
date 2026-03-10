@@ -9,7 +9,7 @@ pub struct ValidatorInfo {
     /// Unique identifier (public key bytes).
     pub id: ValidatorId,
     /// Stake in the smallest token unit.
-    pub stake: u64,
+    pub stake: u128,
     /// Optional BLS public key for finality signatures.
     #[serde(skip)]
     pub bls_pubkey: Option<BlsPublicKey>,
@@ -17,7 +17,7 @@ pub struct ValidatorInfo {
 
 #[derive(Clone, Debug)]
 struct ValidatorRecord {
-    stake: u64,
+    stake: u128,
     bls_pubkey: Option<BlsPublicKey>,
 }
 
@@ -29,7 +29,7 @@ struct ValidatorRecord {
 #[derive(Clone, Debug, Default)]
 pub struct ValidatorSet {
     validators: HashMap<ValidatorId, ValidatorRecord>,
-    total_stake: u64,
+    total_stake: u128,
 }
 
 impl ValidatorSet {
@@ -40,7 +40,7 @@ impl ValidatorSet {
 
     /// Add a validator or update their stake.
     /// Returns the previous stake if the validator was already present.
-    pub fn add(&mut self, id: ValidatorId, stake: u64) -> Option<u64> {
+    pub fn add(&mut self, id: ValidatorId, stake: u128) -> Option<u128> {
         self.add_with_bls(id, stake, None)
     }
 
@@ -48,9 +48,9 @@ impl ValidatorSet {
     pub fn add_with_bls(
         &mut self,
         id: ValidatorId,
-        stake: u64,
+        stake: u128,
         bls_pubkey: Option<BlsPublicKey>,
-    ) -> Option<u64> {
+    ) -> Option<u128> {
         let old = self
             .validators
             .insert(id, ValidatorRecord { stake, bls_pubkey });
@@ -63,7 +63,7 @@ impl ValidatorSet {
     }
 
     /// Remove a validator. Returns their stake if they existed.
-    pub fn remove(&mut self, id: &ValidatorId) -> Option<u64> {
+    pub fn remove(&mut self, id: &ValidatorId) -> Option<u128> {
         if let Some(rec) = self.validators.remove(id) {
             self.total_stake -= rec.stake;
             Some(rec.stake)
@@ -73,7 +73,7 @@ impl ValidatorSet {
     }
 
     /// Look up a validator's stake. Returns `None` if not in the set.
-    pub fn get(&self, id: &ValidatorId) -> Option<u64> {
+    pub fn get(&self, id: &ValidatorId) -> Option<u128> {
         self.validators.get(id).map(|r| r.stake)
     }
 
@@ -110,14 +110,14 @@ impl ValidatorSet {
     }
 
     /// Total stake across all validators.
-    pub fn total_stake(&self) -> u64 {
+    pub fn total_stake(&self) -> u128 {
         self.total_stake
     }
 
     /// Check if a set of validators holds a supermajority (>2/3 of total stake).
     /// This is the BFT threshold for consensus.
     pub fn has_supermajority(&self, voter_ids: &[ValidatorId]) -> bool {
-        let voting_stake: u64 = voter_ids
+        let voting_stake: u128 = voter_ids
             .iter()
             .filter_map(|id| self.validators.get(id).map(|r| r.stake))
             .sum();
@@ -133,7 +133,7 @@ impl ValidatorSet {
         }
 
         // Sort validators by ID for deterministic ordering.
-        let mut sorted: Vec<(ValidatorId, u64)> = self
+        let mut sorted: Vec<(ValidatorId, u128)> = self
             .validators
             .iter()
             .map(|(id, rec)| (*id, rec.stake))
@@ -141,8 +141,8 @@ impl ValidatorSet {
         sorted.sort_by_key(|(id, _)| *id);
 
         // Stake-weighted round-robin: map round to a position in [0, total_stake).
-        let position = round % self.total_stake;
-        let mut cumulative = 0u64;
+        let position = round as u128 % self.total_stake;
+        let mut cumulative = 0u128;
         for (id, stake) in &sorted {
             cumulative += stake;
             if position < cumulative {
@@ -178,15 +178,15 @@ impl ValidatorSet {
         preimage.extend_from_slice(seed);
         let vrf_hash = hash(&preimage);
 
-        let mut sorted: Vec<(ValidatorId, u64)> = self
+        let mut sorted: Vec<(ValidatorId, u128)> = self
             .validators
             .iter()
             .map(|(id, rec)| (*id, rec.stake))
             .collect();
         sorted.sort_by_key(|(id, _)| *id);
 
-        let position = u64::from_le_bytes(vrf_hash[..8].try_into().unwrap()) % self.total_stake;
-        let mut cumulative = 0u64;
+        let position = u128::from_le_bytes(vrf_hash[..16].try_into().unwrap()) % self.total_stake;
+        let mut cumulative = 0u128;
         for (id, stake) in &sorted {
             cumulative += stake;
             if position < cumulative {
@@ -198,7 +198,7 @@ impl ValidatorSet {
     }
 
     /// Iterate over all validators as (id, stake) pairs.
-    pub fn iter(&self) -> impl Iterator<Item = (&ValidatorId, u64)> + '_ {
+    pub fn iter(&self) -> impl Iterator<Item = (&ValidatorId, u128)> + '_ {
         self.validators.iter().map(|(id, rec)| (id, rec.stake))
     }
 }

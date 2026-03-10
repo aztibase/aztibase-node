@@ -4,7 +4,7 @@ use aztibase_core::hash;
 /// Uses a fixed-width representation so the scorer can work with
 /// either a real ML model or the built-in heuristic.
 pub struct TxFeatures {
-    pub value: u64,
+    pub value: u128,
     pub gas_price: u64,
     pub gas_limit: u64,
     pub payload_size: u32,
@@ -35,7 +35,7 @@ impl TxFeatures {
 /// higher scores for unusual patterns (extreme gas, very large payloads,
 /// zero-value deploys). This is advisory only — never blocks execution.
 pub struct AnomalyScorer {
-    high_value_threshold: u64,
+    high_value_threshold: u128,
     high_gas_threshold: u64,
     large_payload_threshold: u32,
 }
@@ -164,7 +164,7 @@ mod tests {
     fn score_clamped_to_unit() {
         let scorer = AnomalyScorer::new();
         let features = TxFeatures {
-            value: u64::MAX,
+            value: u128::MAX,
             gas_price: u64::MAX,
             gas_limit: u64::MAX,
             payload_size: u32::MAX,

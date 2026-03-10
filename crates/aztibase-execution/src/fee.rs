@@ -11,7 +11,7 @@ const BASE_FEE_CHANGE_DENOMINATOR: u64 = 8;
 /// Escrow result: the maximum fee that was locked.
 pub struct FeeEscrow {
     pub sender: Address,
-    pub max_fee: u64,
+    pub max_fee: u128,
     pub gas_limit: u64,
     pub gas_price: u64,
 }
@@ -23,9 +23,9 @@ pub fn escrow_fee(
     sender: &Address,
     gas_limit: u64,
     gas_price: u64,
-    value: u64,
+    value: u128,
 ) -> Option<FeeEscrow> {
-    let max_fee = gas_limit.checked_mul(gas_price)?;
+    let max_fee = (gas_limit as u128).checked_mul(gas_price as u128)?;
     let total_cost = max_fee.checked_add(value)?;
     let balance = state.balance(sender);
     if balance < total_cost {
@@ -41,9 +41,9 @@ pub fn escrow_fee(
 }
 
 /// Refund unused gas after execution. Returns the actual fee paid.
-pub fn refund_unused(state: &mut AccountState, escrow: &FeeEscrow, gas_used: u64) -> u64 {
+pub fn refund_unused(state: &mut AccountState, escrow: &FeeEscrow, gas_used: u64) -> u128 {
     let capped_used = gas_used.min(escrow.gas_limit);
-    let actual_fee = capped_used.saturating_mul(escrow.gas_price);
+    let actual_fee = (capped_used as u128).saturating_mul(escrow.gas_price as u128);
     let refund = escrow.max_fee.saturating_sub(actual_fee);
     if refund > 0 {
         let balance = state.balance(&escrow.sender);
@@ -258,8 +258,8 @@ mod tests {
     fn escrow_overflow_protection() {
         let mut state = AccountState::new();
         let sender = [1u8; 32];
-        state.set_balance(&sender, u64::MAX);
+        state.set_balance(&sender, u128::MAX);
 
-        assert!(escrow_fee(&mut state, &sender, u64::MAX, u64::MAX, 0).is_none());
+        assert!(escrow_fee(&mut state, &sender, u64::MAX, u64::MAX, u128::MAX).is_none());
     }
 }

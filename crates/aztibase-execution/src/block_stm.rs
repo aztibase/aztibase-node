@@ -14,7 +14,7 @@ pub enum StateKey {
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum StateValue {
-    Balance(u64),
+    Balance(u128),
     Nonce(u64),
     Code(Vec<u8>),
     StorageSlot(Vec<u8>),
@@ -105,7 +105,7 @@ impl<'a> MVView<'a> {
         }
     }
 
-    pub fn read_balance(&mut self, addr: &Address) -> u64 {
+    pub fn read_balance(&mut self, addr: &Address) -> u128 {
         let key = StateKey::Balance(*addr);
         match self.mv.read(&key, self.tx_index) {
             Some((version, StateValue::Balance(b))) => {
@@ -572,7 +572,7 @@ mod tests {
     use crate::state::AccountState;
     use aztibase_core::hash;
 
-    fn make_tx(from: Address, to: Address, value: u64, nonce: u64) -> TransferTx {
+    fn make_tx(from: Address, to: Address, value: u128, nonce: u64) -> TransferTx {
         let mut preimage = Vec::new();
         preimage.extend_from_slice(&from);
         preimage.extend_from_slice(&to);
@@ -908,7 +908,7 @@ mod tests {
                 make_tx(
                     accounts[i % 3],
                     accounts[3 + (i % 5)],
-                    100 * (i as u64 + 1),
+                    100 * (i as u128 + 1),
                     i as u64 / 3,
                 )
             })

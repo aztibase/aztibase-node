@@ -57,8 +57,8 @@ fn apply_state_changes(state: &mut AccountState, evm_state: revm::state::EvmStat
         let addr = from_evm_address(evm_addr);
         let info = &account.info;
 
-        let balance_u64 = info.balance.try_into().unwrap_or(u64::MAX);
-        state.set_balance(&addr, balance_u64);
+        let balance_u128: u128 = info.balance.try_into().unwrap_or(u128::MAX);
+        state.set_balance(&addr, balance_u128);
         state.get_mut(&addr).nonce = info.nonce;
 
         if let Some(ref code) = info.code {
@@ -193,7 +193,7 @@ pub fn evm_call(
     calldata: &[u8],
     nonce: u64,
     gas_limit: u64,
-    value: u64,
+    value: u128,
 ) -> ContractReceipt {
     let sender_nonce = state.nonce(caller);
     if nonce != sender_nonce {

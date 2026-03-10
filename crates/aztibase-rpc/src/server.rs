@@ -87,7 +87,7 @@ pub struct SubscriptionEvent {
 // ── Shared State ────────────────────────────────────────────────────
 
 const TESTNET_CHAIN_ID: u64 = 0xA27B;
-const FAUCET_DRIP_AMOUNT: u64 = 10;
+const FAUCET_DRIP_AMOUNT: u128 = 10;
 const FAUCET_COOLDOWN_SECS: u64 = 60;
 const NODE_VERSION: &str = env!("CARGO_PKG_VERSION");
 
@@ -2793,8 +2793,14 @@ mod tests {
         );
         let resp = rpc_call(&state, &body).await;
         assert!(resp.get("error").is_none(), "unexpected error: {resp}");
-        assert_eq!(resp["result"]["amount"], FAUCET_DRIP_AMOUNT);
-        assert_eq!(resp["result"]["balance"], FAUCET_DRIP_AMOUNT);
+        assert_eq!(
+            resp["result"]["amount"].as_u64().unwrap(),
+            FAUCET_DRIP_AMOUNT as u64
+        );
+        assert_eq!(
+            resp["result"]["balance"].as_u64().unwrap(),
+            FAUCET_DRIP_AMOUNT as u64
+        );
 
         let balance = state.accounts.read().await.balance(&addr);
         assert_eq!(balance, FAUCET_DRIP_AMOUNT);
@@ -2956,10 +2962,10 @@ mod tests {
         let mut store = StakingStore::new();
         let vid = [0xAAu8; 32];
         store
-            .register_validator(vid, 100_000, 1, u64::MAX, 1)
+            .register_validator(vid, 100_000, 1, u128::MAX, 1)
             .expect("register");
         store
-            .delegate([0xBBu8; 32], vid, 50_000, u64::MAX, 2)
+            .delegate([0xBBu8; 32], vid, 50_000, u128::MAX, 2)
             .expect("delegate");
         store
             .begin_unstake(vid, 10_000, 1, 100, 4_536_000)

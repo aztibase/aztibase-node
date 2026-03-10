@@ -9,7 +9,7 @@ pub struct TransferTx {
     pub hash: TxHash,
     pub from: Address,
     pub to: Address,
-    pub value: u64,
+    pub value: u128,
     pub nonce: u64,
 }
 
@@ -89,7 +89,7 @@ mod tests {
     use super::*;
     use aztibase_core::hash;
 
-    fn make_tx(from: Address, to: Address, value: u64, nonce: u64) -> TransferTx {
+    fn make_tx(from: Address, to: Address, value: u128, nonce: u64) -> TransferTx {
         let mut preimage = Vec::new();
         preimage.extend_from_slice(&from);
         preimage.extend_from_slice(&to);

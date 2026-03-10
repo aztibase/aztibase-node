@@ -21,6 +21,40 @@ Entries are prepended (newest first).
 
 ## Entries
 
+### 2026-03-10 -- blockchain-architect / smart-contract-engineer / node-engineer / security-engineer -- Sprint 040 Complete (M9-S1: u64→u128 Balance Migration)
+**Task:** Sprint 040: Migrate all monetary values (balance, stake, fee, value, amount, reward) from u64 to u128 across entire codebase
+**Sprint:** Sprint 040, Phases 1-4
+**Git Ref:** pending
+**Files Changed:**
+- crates/aztibase-execution/src/state.rs: Account.balance u64→u128, balance()/set_balance() return/take u128, state_root() emits 16-byte balance
+- crates/aztibase-core/src/types.rs: Transaction.value u64→u128
+- crates/aztibase-execution/src/fee.rs: FeeEscrow.max_fee u64→u128, escrow_fee/refund_unused u128 arithmetic, checked_mul for gas overflow
+- crates/aztibase-execution/src/routing.rs: Transfer/EvmCall value, RegisterModel compute_cost/min_stake, PostTask reward, CommitCompute committed_stake, Stake/Unstake/Delegate amount → u128
+- crates/aztibase-execution/src/staking.rs: ValidatorStake/Delegation/UnbondingEntry/SlashRecord monetary fields → u128, all methods updated
+- crates/aztibase-consensus/src/validator.rs: ValidatorInfo/ValidatorRecord stake, total_stake → u128, leader_for_round/vrf_leader_for_round u128 position
+- crates/aztibase-consensus/src/pouw.rs: InferenceTask.reward, ComputeCommitment.committed_stake → u128
+- crates/aztibase-execution/src/block_stm.rs: StateValue::Balance(u128), read_balance → u128
+- crates/aztibase-execution/src/parallel.rs: TransferTx.value → u128
+- crates/aztibase-execution/src/persist.rs: AccountRecord.balance u64→u128, byte offsets shifted (nonce 8..16→16..24, etc.), min record 16→24 bytes
+- crates/aztibase-execution/src/snapshot.rs: AccountEntry.balance → u128
+- crates/aztibase-execution/src/evm.rs: apply_state_changes u128::MAX fallback, evm_call value → u128
+- crates/aztibase-execution/src/model_registry.rs: compute_cost, min_stake → u128
+- crates/aztibase-execution/src/governance.rs: Vote.weight, VoteTally approve/reject_weight → u128
+- crates/aztibase-storage/src/light.rs: LocalWalletState.balance → u128
+- crates/aztibase-runtime/src/anomaly.rs: TxFeatures.value, high_value_threshold → u128
+- crates/aztibase-node/src/genesis.rs: ValidatorEntry.stake, AccountEntry.balance → u128, serde_u128_as_string module for TOML
+- crates/aztibase-node/src/pipeline.rs: MIN_VALIDATOR_STAKE_CAP, bootstrap_genesis_validators, PipelineResult.total_fees_burned → u128
+- crates/aztibase-node/src/task_pool.rs: SettlementResult.payouts → u128
+- crates/aztibase-node/src/wallet.rs: sign_transfer/build_signed_transfer value → u128
+- crates/aztibase-node/src/main.rs: CLI value arg, genesis_validators type → u128
+- crates/aztibase-node/src/integration.rs: test literals → u128
+- crates/aztibase-rpc/src/server.rs: FAUCET_DRIP_AMOUNT → u128
+- crates/aztibase-rpc/src/metrics.rs: update_staking total_staked → u128 with saturating i64 cast
+**Review Notes:** ~20 files across 6 crates. All monetary fields (balance, stake, value, amount, reward, committed_stake, compute_cost, min_stake, fees) changed to u128. Non-monetary values (gas_price, gas_limit, gas_used, nonce, round, slot, timestamp) remain u64. persist.rs byte offsets shifted for 16-byte balance. VRF leader selection uses 16 bytes of hash. TOML u128 via serde string module. Prometheus saturating i64 cast.
+**Security Flags:** 0 ELEVATED, 0 MEDIUM. No u64 truncation in monetary paths. Fee calculation uses checked_mul. Prometheus uses saturating cast. persist.rs byte offsets verified. EVM uses u128::MAX fallback for U256 overflow.
+
+---
+
 ### 2026-03-10 -- consensus-engineer / node-engineer / security-engineer -- Sprint 039 Complete (M8 Sprint 14: Full-Node Integration Wiring & M8 Close)
 **Task:** Sprint 039: Wire staking/slashing/governance/tokenomics into main.rs, consensus-pipeline bridges, genesis staking bootstrap, staking metrics
 **Sprint:** Sprint 039, Phases 1-4

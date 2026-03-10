@@ -50,7 +50,7 @@ pub struct Transaction {
     pub hash: TxHash,
     pub from: [u8; 32],
     pub to: [u8; 32],
-    pub value: u64,
+    pub value: u128,
     pub nonce: u64,
     pub data: Vec<u8>,
     pub gas_limit: u64,

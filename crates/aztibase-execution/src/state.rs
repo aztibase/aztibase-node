@@ -33,7 +33,7 @@ impl AccountType {
 
 #[derive(Clone, Debug, Default)]
 pub struct Account {
-    pub balance: u64,
+    pub balance: u128,
     pub nonce: u64,
     pub code: Vec<u8>,
     pub storage: BTreeMap<Vec<u8>, Vec<u8>>,
@@ -65,7 +65,7 @@ impl AccountState {
         self.accounts.entry(*address).or_default()
     }
 
-    pub fn balance(&self, address: &Address) -> u64 {
+    pub fn balance(&self, address: &Address) -> u128 {
         self.accounts.get(address).map_or(0, |a| a.balance)
     }
 
@@ -73,7 +73,7 @@ impl AccountState {
         self.accounts.get(address).map_or(0, |a| a.nonce)
     }
 
-    pub fn set_balance(&mut self, address: &Address, balance: u64) {
+    pub fn set_balance(&mut self, address: &Address, balance: u128) {
         self.get_mut(address).balance = balance;
     }
 

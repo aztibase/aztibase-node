@@ -941,9 +941,9 @@ mod tests {
         shared.write().await.set_balance(&alice, 1_000_000);
 
         let gas_price = 2u64;
-        let transfer_value = 5000u64;
+        let transfer_value = 5000u128;
         let gas_limit = 21_000u64;
-        let expected_fee = gas_limit * gas_price;
+        let expected_fee = gas_limit as u128 * gas_price as u128;
 
         let batch = make_batch(
             anchor,
@@ -990,13 +990,13 @@ mod tests {
         let bob = [0xCC; 32];
         let anchor = hash(b"multi_xfer_batch");
         let transfer_count = 20u64;
-        let per_transfer = 100u64;
+        let per_transfer = 100u128;
 
         let shared = pipeline.shared_state();
         shared
             .write()
             .await
-            .set_balance(&alice, transfer_count * per_transfer + 10_000);
+            .set_balance(&alice, transfer_count as u128 * per_transfer + 10_000);
 
         let txs: Vec<Vec<u8>> = (0..transfer_count)
             .map(|i| {
@@ -1022,7 +1022,7 @@ mod tests {
         let shared = pipeline.shared_state();
         let state = shared.read().await;
         assert_eq!(state.balance(&alice), 10_000);
-        assert_eq!(state.balance(&bob), transfer_count * per_transfer);
+        assert_eq!(state.balance(&bob), transfer_count as u128 * per_transfer);
         assert_eq!(state.nonce(&alice), transfer_count);
 
         cleanup(&path);
@@ -1230,7 +1230,7 @@ mod tests {
 
         // Commit compute
         let commit_anchor = hash(b"commit_compute_batch");
-        let committed_stake = 5000u64;
+        let committed_stake = 5000u128;
         let batch = make_batch(
             commit_anchor,
             vec![sign(
@@ -1307,7 +1307,7 @@ mod tests {
         // Post task
         let task_anchor = hash(b"post_task_batch");
         let input_hash = hash(b"inference input data");
-        let reward = 10_000u64;
+        let reward = 10_000u128;
         let batch = make_batch(
             task_anchor,
             vec![sign(
@@ -1493,7 +1493,7 @@ mod tests {
         let bls1 = BlsKeypair::generate();
         let bls2 = BlsKeypair::generate();
         let fingerprint = hash(b"lifecycle-model");
-        let reward = 10_000u64;
+        let reward = 10_000u128;
 
         let shared = pipeline.shared_state();
         {
@@ -1685,7 +1685,7 @@ mod tests {
         let (val_kp, val_addr) = make_sender();
         let bls_kp = BlsKeypair::generate();
         let fingerprint = hash(b"dereg-model");
-        let committed_stake = 5000u64;
+        let committed_stake = 5000u128;
 
         let shared = pipeline.shared_state();
         shared.write().await.set_balance(&val_addr, 50_000);

@@ -11,7 +11,7 @@ type Address = [u8; 32];
 #[derive(Clone, Debug, Serialize, Deserialize)]
 struct AccountEntry {
     address: Address,
-    balance: u64,
+    balance: u128,
     nonce: u64,
     code: Vec<u8>,
     storage: Vec<(Vec<u8>, Vec<u8>)>,

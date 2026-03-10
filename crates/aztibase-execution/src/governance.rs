@@ -38,13 +38,13 @@ pub struct Vote {
     pub voter: Address,
     pub proposal_id: [u8; 32],
     pub approve: bool,
-    pub weight: u64,
+    pub weight: u128,
 }
 
 #[derive(Clone, Debug)]
 pub struct VoteTally {
-    pub approve_weight: u64,
-    pub reject_weight: u64,
+    pub approve_weight: u128,
+    pub reject_weight: u128,
     pub voter_count: usize,
 }
 
@@ -165,7 +165,7 @@ impl GovernanceStore {
         voter: Address,
         proposal_id: [u8; 32],
         approve: bool,
-        stake_weight: u64,
+        stake_weight: u128,
     ) -> Result<(), GovernanceError> {
         let proposal = self
             .proposals
@@ -207,8 +207,8 @@ impl GovernanceStore {
 
     pub fn tally(&self, proposal_id: &[u8; 32]) -> Option<VoteTally> {
         let votes = self.votes.get(proposal_id)?;
-        let mut approve_weight = 0u64;
-        let mut reject_weight = 0u64;
+        let mut approve_weight = 0u128;
+        let mut reject_weight = 0u128;
         for v in votes {
             if v.approve {
                 approve_weight += v.weight;

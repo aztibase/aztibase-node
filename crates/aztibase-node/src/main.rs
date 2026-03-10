@@ -203,7 +203,7 @@ enum WalletAction {
         to: String,
         /// Transfer amount
         #[arg(long)]
-        value: u64,
+        value: u128,
         /// Sender nonce
         #[arg(long)]
         nonce: u64,
@@ -619,7 +619,7 @@ async fn main() -> Result<()> {
             );
 
             // Bootstrap staking store from genesis validators.
-            let genesis_validators: Vec<([u8; 32], u64)> = gen_cfg
+            let genesis_validators: Vec<([u8; 32], u128)> = gen_cfg
                 .validators
                 .iter()
                 .filter_map(|v| {

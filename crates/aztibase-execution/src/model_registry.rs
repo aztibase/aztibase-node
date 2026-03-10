@@ -10,8 +10,8 @@ pub struct ModelMetadata {
     pub model_id: String,
     pub owner: Address,
     pub fingerprint: Hash,
-    pub compute_cost: u64,
-    pub min_stake: u64,
+    pub compute_cost: u128,
+    pub min_stake: u128,
     pub registered_round: u64,
     pub active: bool,
 }
@@ -44,8 +44,8 @@ impl ModelRegistry {
         model_id: String,
         owner: Address,
         fingerprint: Hash,
-        compute_cost: u64,
-        min_stake: u64,
+        compute_cost: u128,
+        min_stake: u128,
         current_round: u64,
     ) -> Result<ModelMetadata, RegistryError> {
         if model_id.is_empty() || model_id.len() > 128 {

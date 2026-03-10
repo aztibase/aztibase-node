@@ -311,7 +311,7 @@ pub async fn query_balance(rpc_url: &str, address_hex: &str) -> Result<(String, 
         .unwrap_or("0x0")
         .strip_prefix("0x")
         .unwrap_or("0");
-    let balance = u64::from_str_radix(balance_hex, 16).unwrap_or(0);
+    let balance = u128::from_str_radix(balance_hex, 16).unwrap_or(0);
 
     let nonce_body = serde_json::json!({
         "jsonrpc": "2.0",
@@ -346,7 +346,7 @@ pub fn show_key(path: &Path) -> Result<()> {
 pub fn sign_transfer(
     keyfile_path: &Path,
     to_hex: &str,
-    value: u64,
+    value: u128,
     nonce: u64,
     gas_price: u64,
 ) -> Result<Vec<u8>> {
@@ -358,7 +358,7 @@ pub fn sign_transfer_encrypted(
     keyfile_path: &Path,
     passphrase: &str,
     to_hex: &str,
-    value: u64,
+    value: u128,
     nonce: u64,
     gas_price: u64,
 ) -> Result<Vec<u8>> {
@@ -371,7 +371,7 @@ fn build_signed_transfer(
     kp: &Keypair,
     sender: [u8; 32],
     to_hex: &str,
-    value: u64,
+    value: u128,
     nonce: u64,
     gas_price: u64,
 ) -> Result<Vec<u8>> {

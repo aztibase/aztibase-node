@@ -11,6 +11,25 @@ type Address = [u8; 32];
 
 const CHAIN_ID: u64 = 0xA27B;
 
+mod serde_u128_as_string {
+    use serde::{self, Deserialize, Deserializer, Serializer};
+
+    pub fn serialize<S>(value: &u128, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        serializer.serialize_str(&value.to_string())
+    }
+
+    pub fn deserialize<'de, D>(deserializer: D) -> Result<u128, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let s = String::deserialize(deserializer)?;
+        s.parse::<u128>().map_err(serde::de::Error::custom)
+    }
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct GenesisConfig {
     pub chain_id: u64,
@@ -23,14 +42,16 @@ pub struct GenesisConfig {
 pub struct ValidatorEntry {
     pub name: String,
     pub address: String,
-    pub stake: u64,
+    #[serde(with = "serde_u128_as_string")]
+    pub stake: u128,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub bls_public_key: Option<String>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct AccountEntry {
-    pub balance: u64,
+    #[serde(with = "serde_u128_as_string")]
+    pub balance: u128,
 }
 
 pub fn hex_encode(bytes: &[u8]) -> String {

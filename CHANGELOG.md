@@ -5,6 +5,24 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ---
 
+## [M9-S1] -- u64→u128 Balance Migration (Sprint 040)
+
+### Changed
+- **BREAKING**: All monetary values migrated from u64 to u128 across entire codebase (~20 files, 6 crates) (2026-03-10)
+- `Account.balance`, `Transaction.value`, `FeeEscrow.max_fee` → u128 (2026-03-10)
+- `ValidatorStake`, `Delegation`, `UnbondingEntry`, `SlashRecord` monetary fields → u128 (2026-03-10)
+- `ValidatorInfo.stake`, `ValidatorRecord.stake`, `ValidatorSet.total_stake` → u128 (2026-03-10)
+- `InferenceTask.reward`, `ComputeCommitment.committed_stake` → u128 (2026-03-10)
+- `ModelRegistry` compute_cost/min_stake, `GovernanceStore` vote weights → u128 (2026-03-10)
+- `StateValue::Balance(u128)`, `read_balance()` → u128 in Block-STM (2026-03-10)
+- `AccountRecord` persist.rs: 16-byte balance, shifted byte offsets (min record 24 bytes) (2026-03-10)
+- VRF leader selection: 16-byte hash slice for u128 stake-weighted position (2026-03-10)
+- Genesis TOML: `serde_u128_as_string` module for u128 stake/balance fields (2026-03-10)
+- Prometheus: saturating i64 cast for u128 total_staked metric (2026-03-10)
+- 766 tests pass, 0 clippy warnings, fmt clean (2026-03-10)
+
+---
+
 ## [M8-S14] -- Full-Node Integration Wiring & M8 Close (Sprint 039)
 
 ### Added

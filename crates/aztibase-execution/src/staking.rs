@@ -12,14 +12,14 @@ pub const DEFAULT_COMMISSION_BPS: u32 = 1000;
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ValidatorStake {
     pub validator_id: Address,
-    pub self_stake: u64,
-    pub total_delegated: u64,
+    pub self_stake: u128,
+    pub total_delegated: u128,
     pub active: bool,
     pub registered_round: u64,
 }
 
 impl ValidatorStake {
-    pub fn effective_stake(&self) -> u64 {
+    pub fn effective_stake(&self) -> u128 {
         self.self_stake.saturating_add(self.total_delegated)
     }
 }
@@ -28,14 +28,14 @@ impl ValidatorStake {
 pub struct Delegation {
     pub delegator: Address,
     pub validator_id: Address,
-    pub amount: u64,
+    pub amount: u128,
     pub round_delegated: u64,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct UnbondingEntry {
     pub owner: Address,
-    pub amount: u64,
+    pub amount: u128,
     pub available_round: u64,
 }
 
@@ -51,7 +51,7 @@ pub struct SlashRecord {
     pub offense_type: OffenseType,
     pub slash_bps: u32,
     pub round: u64,
-    pub amount_slashed: u64,
+    pub amount_slashed: u128,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -103,9 +103,9 @@ impl StakingStore {
     pub fn register_validator(
         &mut self,
         validator_id: Address,
-        self_stake: u64,
-        min_stake: u64,
-        max_cap: u64,
+        self_stake: u128,
+        min_stake: u128,
+        max_cap: u128,
         round: u64,
     ) -> Result<(), StakingError> {
         if self_stake == 0 {
@@ -136,8 +136,8 @@ impl StakingStore {
     pub fn add_stake(
         &mut self,
         validator_id: Address,
-        amount: u64,
-        max_cap: u64,
+        amount: u128,
+        max_cap: u128,
     ) -> Result<(), StakingError> {
         if amount == 0 {
             return Err(StakingError::ZeroAmount);
@@ -157,8 +157,8 @@ impl StakingStore {
     pub fn begin_unstake(
         &mut self,
         validator_id: Address,
-        amount: u64,
-        min_stake: u64,
+        amount: u128,
+        min_stake: u128,
         current_round: u64,
         unbonding_rounds: u64,
     ) -> Result<(), StakingError> {
@@ -195,8 +195,8 @@ impl StakingStore {
         &mut self,
         delegator: Address,
         validator_id: Address,
-        amount: u64,
-        max_cap: u64,
+        amount: u128,
+        max_cap: u128,
         round: u64,
     ) -> Result<(), StakingError> {
         if amount == 0 {
@@ -234,7 +234,7 @@ impl StakingStore {
         delegator: Address,
         current_round: u64,
         unbonding_rounds: u64,
-    ) -> Result<u64, StakingError> {
+    ) -> Result<u128, StakingError> {
         if self.unbonding_queue.len() >= MAX_UNBONDING_ENTRIES {
             return Err(StakingError::UnbondingQueueFull);
         }
@@ -254,7 +254,7 @@ impl StakingStore {
         Ok(amount)
     }
 
-    pub fn process_unbonding(&mut self, current_round: u64) -> Vec<(Address, u64)> {
+    pub fn process_unbonding(&mut self, current_round: u64) -> Vec<(Address, u128)> {
         let mut released = Vec::new();
         while let Some(front) = self.unbonding_queue.front() {
             if front.available_round > current_round {
@@ -272,12 +272,12 @@ impl StakingStore {
         slash_bps: u32,
         offense_type: OffenseType,
         round: u64,
-    ) -> Result<u64, StakingError> {
+    ) -> Result<u128, StakingError> {
         let v = self
             .validators
             .get_mut(&validator_id)
             .ok_or(StakingError::ValidatorNotFound)?;
-        let self_slash = (v.self_stake as u128 * slash_bps as u128 / 10_000) as u64;
+        let self_slash = v.self_stake * slash_bps as u128 / 10_000;
         v.self_stake = v.self_stake.saturating_sub(self_slash);
 
         let mut total_slashed = self_slash;
@@ -291,14 +291,14 @@ impl StakingStore {
 
         for addr in delegator_addrs {
             if let Some(d) = self.delegations.get_mut(&addr) {
-                let d_slash = (d.amount as u128 * slash_bps as u128 / 10_000) as u64;
+                let d_slash = d.amount * slash_bps as u128 / 10_000;
                 d.amount = d.amount.saturating_sub(d_slash);
                 total_slashed = total_slashed.saturating_add(d_slash);
             }
         }
 
         if let Some(v) = self.validators.get_mut(&validator_id) {
-            let new_delegated: u64 = self
+            let new_delegated: u128 = self
                 .delegations
                 .values()
                 .filter(|d| d.validator_id == validator_id)
@@ -365,14 +365,14 @@ impl StakingStore {
         self.validators.values().filter(|v| v.active).count()
     }
 
-    pub fn total_staked(&self) -> u64 {
+    pub fn total_staked(&self) -> u128 {
         self.validators.values().map(|v| v.effective_stake()).sum()
     }
 
     /// Build the active validator set as (validator_id, effective_stake) pairs.
     /// Only validators with effective_stake >= min_stake are included.
     /// Sorted by effective_stake descending for deterministic ordering.
-    pub fn active_set_snapshot(&self, min_stake: u64) -> Vec<([u8; 32], u64)> {
+    pub fn active_set_snapshot(&self, min_stake: u128) -> Vec<([u8; 32], u128)> {
         let mut set: Vec<_> = self
             .validators
             .values()
@@ -391,28 +391,28 @@ impl StakingStore {
         &mut self,
         validator_pool: u128,
         commission_bps: u32,
-    ) -> Vec<(Address, u64)> {
+    ) -> Vec<(Address, u128)> {
         if validator_pool == 0 {
             return Vec::new();
         }
 
-        let active: Vec<(Address, u64, u64)> = self
+        let active: Vec<(Address, u128, u128)> = self
             .validators
             .values()
             .filter(|v| v.active)
             .map(|v| (v.validator_id, v.self_stake, v.total_delegated))
             .collect();
 
-        let total_active_stake: u128 = active.iter().map(|(_, s, d)| *s as u128 + *d as u128).sum();
+        let total_active_stake: u128 = active.iter().map(|(_, s, d)| *s + *d).sum();
 
         if total_active_stake == 0 {
             return Vec::new();
         }
 
-        let mut credits: Vec<(Address, u64)> = Vec::new();
+        let mut credits: Vec<(Address, u128)> = Vec::new();
 
         for (vid, self_stake, total_delegated) in &active {
-            let effective = *self_stake as u128 + *total_delegated as u128;
+            let effective = *self_stake + *total_delegated;
             let validator_total_reward = validator_pool * effective / total_active_stake;
 
             if validator_total_reward == 0 {
@@ -420,23 +420,20 @@ impl StakingStore {
             }
 
             if *total_delegated == 0 {
-                credits.push((vid.to_owned(), validator_total_reward as u64));
+                credits.push((vid.to_owned(), validator_total_reward));
                 continue;
             }
 
-            // Split reward between self-stake and delegations proportionally
-            let self_share = validator_total_reward * *self_stake as u128 / effective;
+            let self_share = validator_total_reward * *self_stake / effective;
             let delegation_share = validator_total_reward - self_share;
 
-            // Commission on delegation rewards goes to the validator
             let commission = delegation_share * commission_bps as u128 / 10_000;
             let validator_reward = self_share + commission;
             let delegator_pool = delegation_share - commission;
 
-            credits.push((vid.to_owned(), validator_reward as u64));
+            credits.push((vid.to_owned(), validator_reward));
 
-            // Distribute to individual delegators proportionally
-            let delegators: Vec<(Address, u64)> = self
+            let delegators: Vec<(Address, u128)> = self
                 .delegations
                 .values()
                 .filter(|d| d.validator_id == *vid)
@@ -444,9 +441,9 @@ impl StakingStore {
                 .collect();
 
             for (delegator, amount) in &delegators {
-                let d_reward = delegator_pool * *amount as u128 / *total_delegated as u128;
+                let d_reward = delegator_pool * *amount / *total_delegated;
                 if d_reward > 0 {
-                    credits.push((*delegator, d_reward as u64));
+                    credits.push((*delegator, d_reward));
                 }
             }
         }
@@ -460,8 +457,8 @@ mod tests {
     use super::*;
     use crate::tokenomics::{DEFAULT_MIN_STAKE, MAX_STAKE_CAP, UNBONDING_ROUNDS};
 
-    const MIN_STAKE: u64 = DEFAULT_MIN_STAKE as u64;
-    const MAX_CAP: u64 = MAX_STAKE_CAP as u64;
+    const MIN_STAKE: u128 = DEFAULT_MIN_STAKE;
+    const MAX_CAP: u128 = MAX_STAKE_CAP;
     const ROUND: u64 = 100;
 
     fn addr(n: u8) -> Address {
@@ -773,12 +770,12 @@ mod tests {
             .register_validator(addr(2), MIN_STAKE * 3, MIN_STAKE, MAX_CAP, ROUND)
             .unwrap();
         let credits = store.distribute_epoch_rewards(400_000, DEFAULT_COMMISSION_BPS);
-        let v1_reward: u64 = credits
+        let v1_reward: u128 = credits
             .iter()
             .filter(|(a, _)| *a == addr(1))
             .map(|(_, r)| r)
             .sum();
-        let v2_reward: u64 = credits
+        let v2_reward: u128 = credits
             .iter()
             .filter(|(a, _)| *a == addr(2))
             .map(|(_, r)| r)
@@ -801,12 +798,12 @@ mod tests {
         // Commission 10% of delegation_share: 10_000 * 10% = 1_000 to validator
         // Delegator gets: 10_000 - 1_000 = 9_000
         let credits = store.distribute_epoch_rewards(100_000, DEFAULT_COMMISSION_BPS);
-        let v1_reward: u64 = credits
+        let v1_reward: u128 = credits
             .iter()
             .filter(|(a, _)| *a == addr(1))
             .map(|(_, r)| r)
             .sum();
-        let d_reward: u64 = credits
+        let d_reward: u128 = credits
             .iter()
             .filter(|(a, _)| *a == addr(2))
             .map(|(_, r)| r)

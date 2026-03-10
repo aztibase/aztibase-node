@@ -40,7 +40,7 @@ pub struct CachedProof {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct LocalWalletState {
-    pub balance: u64,
+    pub balance: u128,
     pub nonce: u64,
     pub pending_tx_hashes: Vec<[u8; 32]>,
 }

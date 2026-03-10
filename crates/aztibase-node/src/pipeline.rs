@@ -26,8 +26,8 @@ const MAX_EXECUTED_ANCHORS: usize = 10_000;
 const MAX_ATTESTATIONS_PER_TASK: usize = 32;
 const MAX_ATTESTATION_BUFFER_TASKS: usize = 2048;
 
-const MIN_VALIDATOR_STAKE: u64 = 50_000_000_000_000;
-const MAX_VALIDATOR_STAKE_CAP: u64 = 50_000_000_000_000_000;
+const MIN_VALIDATOR_STAKE: u128 = 50_000_000_000_000;
+const MAX_VALIDATOR_STAKE_CAP: u128 = 50_000_000_000_000_000;
 const UNBONDING_ROUNDS: u64 = 4_536_000;
 
 /// Event emitted by consensus when a validator offense is detected.
@@ -47,7 +47,7 @@ pub struct PipelineResult {
     pub contract_count: usize,
     pub routing_errors: usize,
     pub receipts: Vec<ExecutionReceipt>,
-    pub total_fees_burned: u64,
+    pub total_fees_burned: u128,
 }
 
 /// Owns account state and executes committed batches received from consensus.
@@ -178,7 +178,7 @@ impl ExecutionPipeline {
 
     /// Register genesis validators in the StakingStore so staking RPCs return
     /// data from round 0. Call after `apply_genesis()`.
-    pub async fn bootstrap_genesis_validators(&self, validators: &[([u8; 32], u64)]) {
+    pub async fn bootstrap_genesis_validators(&self, validators: &[([u8; 32], u128)]) {
         let mut staking = self.staking_store.write().await;
         for &(vid, stake) in validators {
             if staking
@@ -361,7 +361,7 @@ impl ExecutionPipeline {
         let mut escrows: Vec<Option<FeeEscrow>> = Vec::with_capacity(routed.len());
         let mut escrowed_indices: Vec<usize> = Vec::new();
         let mut receipts = Vec::new();
-        let mut total_fees_burned: u64 = 0;
+        let mut total_fees_burned: u128 = 0;
 
         for (i, tx) in routed.iter().enumerate() {
             let gas_price = tx.gas_price();
@@ -415,9 +415,9 @@ impl ExecutionPipeline {
         let mut deregister_models = Vec::new();
         let mut create_proposals = Vec::new();
         let mut cast_votes = Vec::new();
-        let mut stakes: Vec<([u8; 32], u64, u64)> = Vec::new();
-        let mut unstakes: Vec<([u8; 32], u64, u64)> = Vec::new();
-        let mut delegates: Vec<([u8; 32], [u8; 32], u64, u64)> = Vec::new();
+        let mut stakes: Vec<([u8; 32], u128, u64)> = Vec::new();
+        let mut unstakes: Vec<([u8; 32], u128, u64)> = Vec::new();
+        let mut delegates: Vec<([u8; 32], [u8; 32], u128, u64)> = Vec::new();
         let mut undelegates: Vec<([u8; 32], u64)> = Vec::new();
 
         for tx in &executable {
@@ -3180,7 +3180,7 @@ mod tests {
 
         assert!(result.receipts[0].success);
         let gas_used = result.receipts[0].gas_used;
-        let fee = gas_used * 10;
+        let fee = gas_used as u128 * 10;
 
         let state = pipeline.state.read().await;
         assert_eq!(state.balance(&alice), 1_000_000 - 300 - fee);
@@ -3270,7 +3270,7 @@ mod tests {
 
         assert!(result.receipts[0].success);
         let gas_used = result.receipts[0].gas_used;
-        let actual_fee = gas_used * 10;
+        let actual_fee = gas_used as u128 * 10;
 
         // Net deduction should be exactly gas_used * gas_price (escrow - refund)
         let state = pipeline.state.read().await;
@@ -3300,7 +3300,7 @@ mod tests {
         let result = pipeline.execute_batch(&batch).await.unwrap();
 
         let gas_used = result.receipts[0].gas_used;
-        assert_eq!(result.total_fees_burned, gas_used * 5);
+        assert_eq!(result.total_fees_burned, gas_used as u128 * 5);
     }
 
     #[tokio::test]
@@ -4673,7 +4673,7 @@ mod tests {
     async fn genesis_bootstrap_registers_validators() {
         let (_tx, rx) = mpsc::channel(1);
         let pipeline = make_pipeline(rx);
-        let validators = vec![([1u8; 32], 100_000u64), ([2u8; 32], 200_000u64)];
+        let validators = vec![([1u8; 32], 100_000u128), ([2u8; 32], 200_000u128)];
         pipeline.bootstrap_genesis_validators(&validators).await;
 
         let staking = pipeline.staking_store.read().await;

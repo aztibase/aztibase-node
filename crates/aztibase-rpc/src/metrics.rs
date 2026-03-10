@@ -201,9 +201,11 @@ impl NodeMetrics {
         self.inner.peer_count.set(count as i64);
     }
 
-    pub fn update_staking(&self, active_validators: u64, total_staked: u64) {
+    pub fn update_staking(&self, active_validators: u64, total_staked: u128) {
         self.inner.active_validators.set(active_validators as i64);
-        self.inner.total_staked.set(total_staked as i64);
+        self.inner
+            .total_staked
+            .set(total_staked.min(i64::MAX as u128) as i64);
     }
 
     pub fn inc_slashes(&self, count: u64) {

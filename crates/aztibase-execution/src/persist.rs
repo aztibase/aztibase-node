@@ -8,7 +8,7 @@ use crate::state::{AccountState, AccountType};
 type Address = [u8; 32];
 
 fn serialize_account_record(
-    balance: u64,
+    balance: u128,
     nonce: u64,
     account_type: &AccountType,
     model_id: &Option<String>,
@@ -31,21 +31,21 @@ fn serialize_account_record(
 }
 
 struct AccountRecord {
-    balance: u64,
+    balance: u128,
     nonce: u64,
     account_type: AccountType,
     model_id: Option<String>,
 }
 
 fn deserialize_account_record(data: &[u8]) -> Option<AccountRecord> {
-    if data.len() < 16 {
+    if data.len() < 24 {
         return None;
     }
-    let balance = u64::from_le_bytes(data[..8].try_into().ok()?);
-    let nonce = u64::from_le_bytes(data[8..16].try_into().ok()?);
+    let balance = u128::from_le_bytes(data[..16].try_into().ok()?);
+    let nonce = u64::from_le_bytes(data[16..24].try_into().ok()?);
 
-    let account_type = if data.len() > 16 {
-        match data[16] {
+    let account_type = if data.len() > 24 {
+        match data[24] {
             0 => AccountType::EOA,
             1 => AccountType::Contract,
             2 => AccountType::AIAgent,
@@ -55,10 +55,10 @@ fn deserialize_account_record(data: &[u8]) -> Option<AccountRecord> {
         AccountType::EOA
     };
 
-    let model_id = if data.len() > 19 {
-        let mid_len = u16::from_le_bytes(data[17..19].try_into().ok()?) as usize;
-        if mid_len > 0 && data.len() >= 19 + mid_len {
-            Some(String::from_utf8_lossy(&data[19..19 + mid_len]).into_owned())
+    let model_id = if data.len() > 27 {
+        let mid_len = u16::from_le_bytes(data[25..27].try_into().ok()?) as usize;
+        if mid_len > 0 && data.len() >= 27 + mid_len {
+            Some(String::from_utf8_lossy(&data[27..27 + mid_len]).into_owned())
         } else {
             None
         }

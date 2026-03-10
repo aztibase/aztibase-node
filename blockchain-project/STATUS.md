@@ -2,8 +2,8 @@
 
 **Last Updated:** 2026-03-10
 **Updated By:** consensus-engineer / node-engineer
-**Current Phase:** M8 -- Public Testnet (Sprint 14 COMPLETE)
-**Current Sprint:** Sprint 039 -- COMPLETE (Full-Node Integration Wiring & M8 Close)
+**Current Phase:** M9 -- Mainnet Prep (Sprint 1 COMPLETE)
+**Current Sprint:** Sprint 040 -- COMPLETE (u64→u128 Balance Migration)
 
 ---
 
@@ -19,8 +19,8 @@
 | M5 | Light/browser nodes + wallet | DONE | 2026-03-07 | 2026-03-07 |
 | M6 | AI compute market + PoUW | DONE | 2026-03-07 | 2026-03-07 |
 | M7 | Security audit + hardening | DONE | 2026-03-08 | 2026-03-08 |
-| M8 | Public testnet | IN PROGRESS | 2026-03-08 | -- |
-| M9 | Mainnet launch | NOT STARTED | -- | -- |
+| M8 | Public testnet | DONE | 2026-03-08 | 2026-03-10 |
+| M9 | Mainnet launch | IN PROGRESS | 2026-03-10 | -- |
 
 ---
 

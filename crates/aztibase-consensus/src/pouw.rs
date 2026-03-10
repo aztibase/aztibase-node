@@ -9,7 +9,7 @@ pub struct InferenceTask {
     pub model_id: String,
     pub input_hash: Hash,
     pub requester: [u8; 32],
-    pub reward: u64,
+    pub reward: u128,
     pub deadline_round: u64,
     pub assigned_validator: Option<[u8; 32]>,
 }
@@ -19,7 +19,7 @@ impl InferenceTask {
         model_id: String,
         input_hash: Hash,
         requester: [u8; 32],
-        reward: u64,
+        reward: u128,
         deadline_round: u64,
     ) -> Self {
         let task_id = compute_task_id(&model_id, &input_hash, &requester);
@@ -101,7 +101,7 @@ impl PoUWScore for StubPoUWScore {
 pub struct ComputeCommitment {
     pub validator_id: ValidatorId,
     pub supported_models: Vec<String>,
-    pub committed_stake: u64,
+    pub committed_stake: u128,
     pub bls_pubkey: Vec<u8>,
     pub registered_round: u64,
     pub active: bool,
@@ -111,7 +111,7 @@ impl ComputeCommitment {
     pub fn new(
         validator_id: ValidatorId,
         supported_models: Vec<String>,
-        committed_stake: u64,
+        committed_stake: u128,
         bls_pubkey: Vec<u8>,
         current_round: u64,
     ) -> Self {
@@ -177,7 +177,7 @@ impl ComputeCommitmentStore {
         self.commitments.values().filter(|c| c.active).count()
     }
 
-    pub fn total_committed_stake(&self) -> u64 {
+    pub fn total_committed_stake(&self) -> u128 {
         self.commitments
             .values()
             .filter(|c| c.active)
