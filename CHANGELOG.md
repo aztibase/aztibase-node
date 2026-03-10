@@ -5,6 +5,20 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ---
 
+## [M9-S6] -- Ed25519 Strict Verification & Attestation Domain Separation (Sprint 045)
+
+### Changed
+- `PublicKey::verify()` now uses `verify_strict()` — rejects malleable signatures (S >= L) and weak/small-order keys (2026-03-10)
+- Removed `Verifier` trait import from crypto.rs (no longer needed) (2026-03-10)
+
+### Security
+- **S0-1 RESOLVED**: Ed25519 strict verification enforced across all signature paths (2026-03-10)
+- Attestation domain separation confirmed already present (`AZTB_ATTESTATION_V1\0` prefix in `attestation_hash()`) (2026-03-10)
+- 4 new tests: strict_verify_rejects_short_signature, strict_verify_rejects_tampered_signature, strict_verify_rejects_all_zeros_signature, strict_verify_rejects_malleable_s (2026-03-10)
+- 804 tests pass, 0 clippy warnings, fmt clean (2026-03-10)
+
+---
+
 ## [M9-S5] -- Genesis Hash P2P Enforcement (Sprint 044)
 
 ### Added

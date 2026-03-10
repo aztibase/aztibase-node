@@ -21,6 +21,18 @@ Entries are prepended (newest first).
 
 ## Entries
 
+### 2026-03-10 -- security-engineer / blockchain-architect -- Sprint 045 Complete (M9-S6: Ed25519 Strict Verification & Attestation Domain Separation)
+**Task:** Sprint 045: Switch PublicKey::verify() to verify_strict(), rejecting malleable signatures and weak keys. Confirmed attestation domain separation already present (AZTB_ATTESTATION_V1\0 prefix). Security flag S0-1 RESOLVED.
+**Sprint:** Sprint 045, Phases 1-4
+**Git Ref:** pending
+**Files Changed:**
+- crates/aztibase-core/src/crypto.rs: verify() → verify_strict(), removed Verifier trait import, 4 new tests (strict_verify_rejects_short_signature, strict_verify_rejects_tampered_signature, strict_verify_rejects_all_zeros_signature, strict_verify_rejects_malleable_s)
+- blockchain-project/sprints/SPRINT-045.md: sprint plan marked COMPLETE with retrospective
+**Review Notes:** verify_strict() rejects both malleable S values (S >= L) and weak/small-order keys, closing two attack surfaces. Attestation domain separation was already implemented in attestation_hash() from Sprint 022/031 work — no additional code changes needed. 804 tests pass.
+**Security Flags:** S0-1 RESOLVED. 0 ELEVATED remaining, 0 MEDIUM.
+
+---
+
 ### 2026-03-10 -- p2p-network-engineer / node-engineer / security-engineer -- Sprint 044 Complete (M9-S5: Genesis Hash P2P Enforcement)
 **Task:** Sprint 044: Embed genesis hash into all P2P protocol identifiers — chain-scoped gossipsub topics, chain-scoped Kademlia protocol, TransportConfig wiring, main.rs genesis pass-through
 **Sprint:** Sprint 044, Phases 1-4

@@ -202,6 +202,68 @@ mod tests {
     }
 
     #[test]
+    fn strict_verify_rejects_short_signature() {
+        let kp = Keypair::generate();
+        assert!(!kp.public_key().verify(b"msg", &[0u8; 63]));
+        assert!(!kp.public_key().verify(b"msg", &[0u8; 65]));
+        assert!(!kp.public_key().verify(b"msg", &[]));
+    }
+
+    #[test]
+    fn strict_verify_rejects_tampered_signature() {
+        let kp = Keypair::generate();
+        let msg = b"strict verification test";
+        let mut sig = kp.sign(msg);
+        sig[63] ^= 0x01;
+        assert!(!kp.public_key().verify(msg, &sig));
+    }
+
+    #[test]
+    fn strict_verify_rejects_all_zeros_signature() {
+        let kp = Keypair::generate();
+        assert!(!kp.public_key().verify(b"msg", &[0u8; 64]));
+    }
+
+    #[test]
+    fn strict_verify_rejects_malleable_s() {
+        // Ed25519 group order L
+        let l: [u8; 32] = [
+            0xed, 0xd3, 0xf5, 0x5c, 0x1a, 0x63, 0x12, 0x58, 0xd6, 0x9c, 0xf7, 0xa2, 0xde, 0xf9,
+            0xde, 0x14, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0x10,
+        ];
+
+        let kp = Keypair::generate();
+        let msg = b"malleability test";
+        let sig = kp.sign(msg);
+        assert!(kp.public_key().verify(msg, &sig));
+
+        // Extract S (second 32 bytes) and compute S' = L - S (mod L)
+        let mut s_bytes = [0u8; 32];
+        s_bytes.copy_from_slice(&sig[32..64]);
+
+        // Add L to S to create S' = S + L (which is congruent to S mod L)
+        let mut s_prime = [0u8; 32];
+        let mut carry: u16 = 0;
+        for i in 0..32 {
+            let sum = s_bytes[i] as u16 + l[i] as u16 + carry;
+            s_prime[i] = sum as u8;
+            carry = sum >> 8;
+        }
+
+        // If S + L didn't overflow (S was already canonical), the malleable
+        // signature should be rejected by verify_strict
+        if carry == 0 {
+            let mut malleable_sig = sig.clone();
+            malleable_sig[32..64].copy_from_slice(&s_prime);
+            assert!(
+                !kp.public_key().verify(msg, &malleable_sig),
+                "malleable signature with S + L should be rejected by strict verification"
+            );
+        }
+    }
+
+    #[test]
     fn test_block_header_serialization() {
         let header = BlockHeader {
             version: 1,

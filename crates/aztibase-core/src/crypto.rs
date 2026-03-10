@@ -1,4 +1,4 @@
-use ed25519_dalek::{Signature, Signer, SigningKey, Verifier, VerifyingKey};
+use ed25519_dalek::{Signature, Signer, SigningKey, VerifyingKey};
 use rand::rngs::OsRng;
 use serde::{Deserialize, Serialize};
 
@@ -52,14 +52,15 @@ impl Keypair {
 pub struct PublicKey(#[serde(with = "pub_key_serde")] VerifyingKey);
 
 impl PublicKey {
-    /// Verify a signature against this public key.
+    /// Verify a signature against this public key using strict mode.
+    /// Rejects malleable signatures (S >= L) and weak keys.
     pub fn verify(&self, message: &[u8], signature: &[u8]) -> bool {
         if signature.len() != 64 {
             return false;
         }
         let sig_bytes: [u8; 64] = signature.try_into().unwrap();
         let sig = Signature::from_bytes(&sig_bytes);
-        self.0.verify(message, &sig).is_ok()
+        self.0.verify_strict(message, &sig).is_ok()
     }
 
     /// Get the raw bytes of this public key.
