@@ -5,6 +5,16 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ---
 
+## Sprint 047 — Testnet Validation (M9-S8) (2026-03-10)
+- First successful 3-node testnet: all validators committing blocks
+- Peer-aware proposal gating: engine waits for peers before first proposal
+- Relaxed DAG insert: accept vertices with missing parents (enables async delivery)
+- Fixed causal_order panic when parent blocks are missing from local DAG
+- Verified RPC: nodeInfo, chainId, getBalance, gasPrice, health endpoints working
+- Tests: 113 consensus + 194 node = 307 pass (was 306 before, +1 new test)
+
+---
+
 ## [M9-S7] -- Weak Subjectivity Checkpoints (Sprint 046)
 
 ### Added

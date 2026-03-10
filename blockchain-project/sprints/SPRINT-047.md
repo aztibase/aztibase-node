@@ -130,9 +130,21 @@ Infrastructure exists (Dockerfile, docker-compose, Makefile, scripts, genesis co
 - [x] Single node starts and responds to RPC
 - [x] 3-node testnet runs with P2P connectivity
 - [x] Consensus produces blocks (round progression visible)
-- [ ] At least one transaction submitted and confirmed
+- [x] At least one transaction submitted and confirmed
 - [x] Prometheus metrics endpoint works
 - [x] All bugs found are documented and fixed
+
+---
+
+## Key Architectural Fixes
+
+1. **Relaxed DAG insert** (`dag_store.rs: insert_relaxed()`): Accept vertices even when parents are not yet in local DAG. Required for real-world async P2P delivery where vertices arrive out of causal order. Unit tests always delivered in order; production gossipsub does not.
+
+2. **Peer-aware proposal gating** (`engine.rs: PeerCountChanged`): Engine waits until at least 1 peer is connected before emitting the first proposal. Prevents wasted solo-proposals that no one receives, which polluted the DAG with unreferenced vertices.
+
+3. **causal_order safety** (`dag_store.rs`): Fixed panic when `causal_order()` encountered vertices whose parents were missing from the local DAG. Now gracefully skips missing parents instead of crashing.
+
+4. **Removed re-broadcast buffer** (`main.rs`): The vertex re-broadcast buffer was resending stale vertices to newly connected peers, causing duplicate processing and DAG confusion. Removed entirely — gossipsub mesh handles relay.
 
 ---
 

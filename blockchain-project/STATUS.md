@@ -1,9 +1,9 @@
 # PROJECT STATUS: Aztibase Network
 
 **Last Updated:** 2026-03-10
-**Updated By:** node-engineer / consensus-engineer
-**Current Phase:** M9 -- Mainnet Prep (Sprint 7 COMPLETE)
-**Current Sprint:** Sprint 046 -- COMPLETE (Weak Subjectivity Checkpoints)
+**Updated By:** node-engineer / consensus-engineer / p2p-network-engineer
+**Current Phase:** M9 -- Mainnet Prep (Sprint 8 COMPLETE)
+**Current Sprint:** Sprint 047 -- COMPLETE (Testnet Validation — First Successful Multi-Node Run)
 
 ---
 
@@ -77,12 +77,17 @@
 | aztibase-wasm | PARTIAL | p2p-network-engineer | NO | YES |
 
 ### In Progress
-- Nothing currently in progress — Sprint 046 complete, Sprint 047 next
+- Nothing currently in progress — Sprint 047 complete, Sprint 048 next
 
 ### Blocked
 - Nothing currently blocked
 
 ### Recently Completed
+- Sprint 047 Phase 6: Docs — BUILD_LOG, STATUS, CHANGELOG, sprint plan updated
+- Sprint 047 Phase 4: Monitoring — Prometheus JSON metrics verified on all 3 nodes
+- Sprint 047 Phase 3: Core functionality — RPC verified (nodeInfo, chainId, getBalance, gasPrice, health), consensus producing blocks (56-81 commits in 40s), 2 transfers confirmed (500 + 1000 tokens)
+- Sprint 047 Phase 2: Local testnet — 3-node local testnet running, full mesh P2P (2 peers each), 13 bugs found and fixed
+- Sprint 047 Phase 1: Release build — cargo build --release (~28 min clean), 47MB binary
 - Sprint 046 Phase 5: Docs — BUILD_LOG, STATUS, CHANGELOG, sprint plan updated
 - Sprint 046 Phase 4: Tests & validation — 0 clippy warnings, fmt clean, 811 tests pass (4 new), 0 ELEVATED, 0 MEDIUM
 - Sprint 046 Phase 3: CLI & RPC — --checkpoint startup validation, aztb_getCheckpoint + aztb_latestCheckpoint endpoints
@@ -230,7 +235,7 @@
 - Sprint 005 Phase 1: Consensus-to-execution wiring, TxKind routing, ExecutionPipeline
 
 ### Next Up
-1. Sprint 047 — Next M9 mainnet prep item
+1. Sprint 048 — Next M9 mainnet prep item (Docker Compose testnet, or next priority)
 
 ### Deferred to M9+ (Locked in FUTURE_PLANNING.md)
 

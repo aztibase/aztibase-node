@@ -21,7 +21,18 @@ Entries are prepended (newest first).
 
 ## Entries
 
-### 2026-03-10 -- node-engineer / p2p-network-engineer / consensus-engineer -- Sprint 047 Testnet Validation (M9-S8)
+### Sprint 047 — Testnet Validation (M9-S8)
+- **Date**: 2026-03-10
+- **Commit**: (pending)
+- **Files changed**:
+  - `crates/aztibase-consensus/src/engine.rs` — Peer-aware proposal gating (PeerCountChanged), removed vertex buffering, threshold clock seeded from genesis
+  - `crates/aztibase-consensus/src/dag_store.rs` — Added insert_relaxed() for out-of-order vertex delivery, fixed causal_order panic with missing parents
+  - `crates/aztibase-node/src/main.rs` — Send PeerCountChanged on connect/disconnect, removed broken re-broadcast buffer
+  - `crates/aztibase-node/src/integration.rs` — Updated tests for relaxed insert + PeerCountChanged
+  - `Cargo.toml` — Release profile adjusted for Windows PDB limits
+- **Review**: First 3-node testnet: all nodes committing (56-81 commits in 40s), 2 peers each, RPC verified (nodeInfo, chainId, getBalance, gasPrice, health)
+
+### 2026-03-10 -- node-engineer / p2p-network-engineer / consensus-engineer -- Sprint 047 Testnet Validation (M9-S8) [Phase 1-3]
 **Task:** First real multi-node testnet run. Debugged and fixed critical issues preventing block production in 3-node local testnet.
 **Sprint:** Sprint 047, Phases 1-3
 **Git Ref:** b18a6d6
