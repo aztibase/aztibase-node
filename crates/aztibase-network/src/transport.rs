@@ -48,6 +48,7 @@ pub struct TransportConfig {
     pub autonat_probe_interval_secs: u64,
     pub enable_webrtc: bool,
     pub webrtc_listen_port: u16,
+    pub genesis_hash: Option<[u8; 32]>,
 }
 
 impl Default for TransportConfig {
@@ -61,6 +62,7 @@ impl Default for TransportConfig {
             autonat_probe_interval_secs: AUTONAT_PROBE_INTERVAL_SECS,
             enable_webrtc: false,
             webrtc_listen_port: DEFAULT_WEBRTC_PORT,
+            genesis_hash: None,
         }
     }
 }
@@ -111,12 +113,14 @@ pub struct Libp2pTransport {
     relay_servers: Vec<Multiaddr>,
     kad_bootstrapped: bool,
     nat_traversal_stats: NatTraversalStats,
+    genesis_hex: Option<String>,
 }
 
 impl Libp2pTransport {
     pub fn new(config: TransportConfig) -> Result<Self> {
         let probe_interval = Duration::from_secs(config.autonat_probe_interval_secs);
         let relay_servers = config.relay_servers.clone();
+        let genesis_hex = config.genesis_hash.as_ref().map(gossip::genesis_hex_prefix);
 
         let swarm = libp2p::SwarmBuilder::with_new_identity()
             .with_tokio()
@@ -140,10 +144,12 @@ impl Libp2pTransport {
                 )
                 .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
 
-                gs.with_peer_score(gossip::peer_score_params(), gossip::peer_score_thresholds())
+                let score_params = gossip::peer_score_params_scoped(genesis_hex.as_deref());
+                gs.with_peer_score(score_params, gossip::peer_score_thresholds())
                     .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
 
-                let kademlia = discovery::kademlia_behaviour(peer_id);
+                let kademlia =
+                    discovery::kademlia_behaviour_scoped(peer_id, genesis_hex.as_deref());
                 let mdns = discovery::mdns_behaviour(peer_id)?;
 
                 let conn_limits = connection_limits::ConnectionLimits::default()
@@ -193,6 +199,7 @@ impl Libp2pTransport {
             relay_servers,
             kad_bootstrapped: false,
             nat_traversal_stats: NatTraversalStats::default(),
+            genesis_hex,
         };
 
         transport.subscribe_all()?;
@@ -213,7 +220,7 @@ impl Libp2pTransport {
     }
 
     fn subscribe_all(&mut self) -> Result<()> {
-        for topic in gossip::aztibase_topics() {
+        for topic in gossip::aztibase_topics_scoped(self.genesis_hex.as_deref()) {
             let topic_str = topic.to_string();
             self.swarm
                 .behaviour_mut()

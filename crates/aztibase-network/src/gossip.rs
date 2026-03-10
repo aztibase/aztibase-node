@@ -20,15 +20,48 @@ pub const ALL_TOPICS: &[&str] = &[
     TOPIC_VALIDATOR_ANNOUNCE,
 ];
 
+const TOPIC_BASE_NAMES: &[&str] = &[
+    "blocks",
+    "transactions",
+    "consensus",
+    "state-sync",
+    "ai-proofs",
+    "validator-announce",
+];
+
 pub const MAX_TRANSMIT_SIZE: usize = 2 * 1024 * 1024; // 2 MiB
 pub const MAX_MESSAGES_PER_RPC: usize = 100;
 pub const HEARTBEAT_MS: u64 = 500;
 pub const DUPLICATE_CACHE_SECS: u64 = 120; // 2 minutes
 
+pub fn genesis_hex_prefix(genesis_hash: &[u8; 32]) -> String {
+    format!(
+        "{:02x}{:02x}{:02x}{:02x}",
+        genesis_hash[0], genesis_hash[1], genesis_hash[2], genesis_hash[3]
+    )
+}
+
+pub fn chain_scoped_topics(genesis_hex: Option<&str>) -> Vec<String> {
+    TOPIC_BASE_NAMES
+        .iter()
+        .map(|name| match genesis_hex {
+            Some(hex) => format!("/aztibase/{name}/1.0.0/{hex}"),
+            None => format!("/aztibase/{name}/1.0.0"),
+        })
+        .collect()
+}
+
 pub fn aztibase_topics() -> Vec<gossipsub::IdentTopic> {
     ALL_TOPICS
         .iter()
         .map(|t| gossipsub::IdentTopic::new(*t))
+        .collect()
+}
+
+pub fn aztibase_topics_scoped(genesis_hex: Option<&str>) -> Vec<gossipsub::IdentTopic> {
+    chain_scoped_topics(genesis_hex)
+        .into_iter()
+        .map(gossipsub::IdentTopic::new)
         .collect()
 }
 
@@ -88,11 +121,16 @@ fn base_topic_params() -> gossipsub::TopicScoreParams {
 }
 
 pub fn peer_score_params() -> gossipsub::PeerScoreParams {
+    peer_score_params_scoped(None)
+}
+
+pub fn peer_score_params_scoped(genesis_hex: Option<&str>) -> gossipsub::PeerScoreParams {
     let mut params = gossipsub::PeerScoreParams::default();
-    for topic_str in ALL_TOPICS {
+    let topics = chain_scoped_topics(genesis_hex);
+    for topic_str in &topics {
         let mut tp = base_topic_params();
         tp.topic_weight = topic_weight(topic_str);
-        let topic = gossipsub::IdentTopic::new(*topic_str);
+        let topic = gossipsub::IdentTopic::new(topic_str);
         params.topics.insert(topic.hash(), tp);
     }
     params.behaviour_penalty_weight = -10.0;
@@ -140,5 +178,68 @@ pub fn peer_score_thresholds() -> gossipsub::PeerScoreThresholds {
         graylist_threshold: -60.0,
         accept_px_threshold: 10.0,
         opportunistic_graft_threshold: 20.0,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn genesis_hex_prefix_format() {
+        let mut h = [0u8; 32];
+        h[0] = 0xAB;
+        h[1] = 0xCD;
+        h[2] = 0x12;
+        h[3] = 0x34;
+        assert_eq!(genesis_hex_prefix(&h), "abcd1234");
+    }
+
+    #[test]
+    fn chain_scoped_topics_with_genesis() {
+        let topics = chain_scoped_topics(Some("deadbeef"));
+        assert_eq!(topics.len(), 6);
+        for t in &topics {
+            assert!(t.ends_with("/deadbeef"), "missing genesis suffix: {t}");
+            assert!(t.starts_with("/aztibase/"));
+        }
+        assert_eq!(topics[0], "/aztibase/blocks/1.0.0/deadbeef");
+        assert_eq!(topics[2], "/aztibase/consensus/1.0.0/deadbeef");
+    }
+
+    #[test]
+    fn chain_scoped_topics_without_genesis() {
+        let topics = chain_scoped_topics(None);
+        assert_eq!(topics.len(), 6);
+        assert_eq!(topics[0], "/aztibase/blocks/1.0.0");
+        assert_eq!(topics[1], "/aztibase/transactions/1.0.0");
+        for t in &topics {
+            assert!(!t.ends_with('/'), "trailing slash: {t}");
+        }
+    }
+
+    #[test]
+    fn different_genesis_produces_different_topics() {
+        let a = chain_scoped_topics(Some("aaaaaaaa"));
+        let b = chain_scoped_topics(Some("bbbbbbbb"));
+        for (ta, tb) in a.iter().zip(b.iter()) {
+            assert_ne!(ta, tb);
+        }
+    }
+
+    #[test]
+    fn scoped_topics_returns_ident_topics() {
+        let topics = aztibase_topics_scoped(Some("cafe0123"));
+        assert_eq!(topics.len(), 6);
+        let first = topics[0].to_string();
+        assert!(first.contains("cafe0123"));
+    }
+
+    #[test]
+    fn default_topics_unchanged() {
+        let default = aztibase_topics();
+        assert_eq!(default.len(), 6);
+        let first = default[0].to_string();
+        assert_eq!(first, TOPIC_BLOCKS);
     }
 }

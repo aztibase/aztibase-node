@@ -3099,7 +3099,7 @@ mod tests {
             let mut s = store.write().await;
             s.set_policy(
                 agent,
-                AgentPolicy {
+                aztibase_execution::AgentPolicy {
                     owner,
                     per_tx_limit: 1_000,
                     per_epoch_limit: 5_000,

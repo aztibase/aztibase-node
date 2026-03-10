@@ -717,6 +717,7 @@ async fn main() -> Result<()> {
         .iter()
         .filter_map(|s| s.parse().ok())
         .collect();
+    let transport_genesis_hash = genesis_config.as_ref().map(genesis::genesis_hash);
     let transport_config = TransportConfig {
         idle_timeout_secs: config.network.idle_timeout_secs,
         reputation_store: Some(rep_store),
@@ -724,6 +725,7 @@ async fn main() -> Result<()> {
         relay_servers: boot_addrs,
         enable_webrtc: cli.webrtc || config.network.enable_webrtc,
         webrtc_listen_port: config.network.webrtc_listen_port,
+        genesis_hash: transport_genesis_hash,
         ..TransportConfig::default()
     };
     let mut transport =
@@ -1110,6 +1112,11 @@ async fn run_light_node(config: &NodeConfig) -> Result<()> {
         .iter()
         .filter_map(|s| s.parse().ok())
         .collect();
+    let light_genesis_hash = config
+        .genesis_path
+        .as_ref()
+        .and_then(|p| genesis::load_genesis(p).ok())
+        .map(|g| genesis::genesis_hash(&g));
     let transport_config = TransportConfig {
         idle_timeout_secs: config.network.idle_timeout_secs,
         reputation_store: Some(light_rep_store),
@@ -1117,6 +1124,7 @@ async fn run_light_node(config: &NodeConfig) -> Result<()> {
         relay_servers: light_boot_addrs,
         enable_webrtc: config.network.enable_webrtc,
         webrtc_listen_port: config.network.webrtc_listen_port,
+        genesis_hash: light_genesis_hash,
         ..TransportConfig::default()
     };
     let mut transport =

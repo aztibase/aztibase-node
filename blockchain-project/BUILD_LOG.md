@@ -21,6 +21,21 @@ Entries are prepended (newest first).
 
 ## Entries
 
+### 2026-03-10 -- p2p-network-engineer / node-engineer / security-engineer -- Sprint 044 Complete (M9-S5: Genesis Hash P2P Enforcement)
+**Task:** Sprint 044: Embed genesis hash into all P2P protocol identifiers — chain-scoped gossipsub topics, chain-scoped Kademlia protocol, TransportConfig wiring, main.rs genesis pass-through
+**Sprint:** Sprint 044, Phases 1-4
+**Git Ref:** pending
+**Files Changed:**
+- crates/aztibase-network/src/gossip.rs: genesis_hex_prefix(), chain_scoped_topics(), aztibase_topics_scoped(), peer_score_params_scoped(), TOPIC_BASE_NAMES, 6 new tests
+- crates/aztibase-network/src/discovery.rs: kademlia_protocol(), kademlia_config_scoped(), kademlia_behaviour_scoped(), 4 new tests
+- crates/aztibase-network/src/transport.rs: genesis_hash field in TransportConfig, wired through to gossipsub and kademlia
+- crates/aztibase-node/src/main.rs: genesis hash passed from genesis config to both full-node and light-node TransportConfig
+- blockchain-project/sprints/SPRINT-044.md: sprint plan
+**Review Notes:** Nodes with different genesis configs are now on completely separate P2P networks. Topic format: /aztibase/{topic}/1.0.0/{genesis_hex8}. Kademlia protocol: /aztibase/kad/1.0.0/{genesis_hex8}. Fallback to un-scoped topics when no genesis hash configured.
+**Security Flags:** 0 ELEVATED, 0 MEDIUM. Cross-chain message pollution prevented by protocol-level separation.
+
+---
+
 ### 2026-03-10 -- blockchain-architect / smart-contract-engineer / ai-integration-engineer / security-engineer -- Sprint 043 Complete (M9-S4: Autonomous AI Agent Transactions)
 **Task:** Sprint 043: Enable autonomous AI agent transactions within human-defined policy constraints — AgentPolicy store, SetAgentPolicy/AgentExecute TxKinds, pipeline execution with spend tracking
 **Sprint:** Sprint 043, Phases 1-5

@@ -5,6 +5,25 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ---
 
+## [M9-S5] -- Genesis Hash P2P Enforcement (Sprint 044)
+
+### Added
+- `genesis_hex_prefix()`: computes 8-char hex prefix from first 4 bytes of genesis hash (2026-03-10)
+- `chain_scoped_topics()`, `aztibase_topics_scoped()`: gossipsub topics parameterized by genesis hash prefix (2026-03-10)
+- `peer_score_params_scoped()`: per-topic scoring with chain-scoped topic names (2026-03-10)
+- `TOPIC_BASE_NAMES`: constant array of base topic names for DRY topic generation (2026-03-10)
+- `kademlia_protocol()`, `kademlia_config_scoped()`, `kademlia_behaviour_scoped()`: Kademlia protocol ID includes genesis hash prefix (2026-03-10)
+- `genesis_hash` field in `TransportConfig`: wired through to gossipsub and kademlia (2026-03-10)
+- main.rs: genesis hash passed from genesis config to both full-node and light-node TransportConfig (2026-03-10)
+- 10 new tests (6 gossip + 4 discovery), 796 total (2026-03-10)
+
+### Changed
+- Nodes with different genesis configs are now on completely separate P2P networks (2026-03-10)
+- Topic format: `/aztibase/{topic}/1.0.0/{genesis_hex8}` (2026-03-10)
+- Kademlia protocol format: `/aztibase/kad/1.0.0/{genesis_hex8}` (2026-03-10)
+
+---
+
 ## [M9-S4] -- Autonomous AI Agent Transactions (Sprint 043)
 
 ### Added

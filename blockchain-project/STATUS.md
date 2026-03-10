@@ -2,8 +2,8 @@
 
 **Last Updated:** 2026-03-10
 **Updated By:** consensus-engineer / node-engineer
-**Current Phase:** M9 -- Mainnet Prep (Sprint 4 COMPLETE)
-**Current Sprint:** Sprint 043 -- COMPLETE (Autonomous AI Agent Transactions)
+**Current Phase:** M9 -- Mainnet Prep (Sprint 5 COMPLETE)
+**Current Sprint:** Sprint 044 -- COMPLETE (Genesis Hash P2P Enforcement)
 
 ---
 
@@ -77,12 +77,15 @@
 | aztibase-wasm | PARTIAL | p2p-network-engineer | NO | YES |
 
 ### In Progress
-- Nothing currently in progress — Sprint 043 complete, Sprint 044 next
+- Nothing currently in progress — Sprint 044 complete, Sprint 045 next
 
 ### Blocked
 - Nothing currently blocked
 
 ### Recently Completed
+- Sprint 044 Phase 4: Docs + security review — clippy 0 warnings, fmt clean, 796 tests pass (10 new), 0 ELEVATED, 0 MEDIUM
+- Sprint 044 Phase 2-3: Genesis hash wiring — TransportConfig genesis_hash field, main.rs pass-through, 10 unit tests
+- Sprint 044 Phase 1: Chain-scoped protocol IDs — genesis_hex_prefix(), chain_scoped_topics(), kademlia_protocol(), TOPIC_BASE_NAMES
 - Sprint 043 Phase 5: Docs + security review — clippy 0 warnings, fmt clean, 786 tests pass (8 new), 0 ELEVATED, 0 MEDIUM
 - Sprint 043 Phase 3: Pipeline execution — SetAgentPolicy (owner auth, AIAgent check), AgentExecute (policy validation, spend tracking, transfer)
 - Sprint 043 Phase 1-2: AgentPolicy store, TxKind::SetAgentPolicy (0x14), TxKind::AgentExecute (0x15), aztb_getAgentPolicy RPC
@@ -218,7 +221,7 @@
 - Sprint 005 Phase 1: Consensus-to-execution wiring, TxKind routing, ExecutionPipeline
 
 ### Next Up
-1. Sprint 044 — Next M9 mainnet prep item
+1. Sprint 045 — Next M9 mainnet prep item
 
 ### Deferred to M9+ (Locked in FUTURE_PLANNING.md)
 
