@@ -1084,7 +1084,12 @@ async fn main() -> Result<()> {
                             snap.last_commit_latency_us,
                         );
                     }
-                    Some(ConsensusOutput::EquivocationDetected { author, round }) => {
+                    Some(ConsensusOutput::EquivocationDetected {
+                        author,
+                        round,
+                        existing_hash,
+                        duplicate_hash,
+                    }) => {
                         tracing::warn!(
                             author = %format!("{:02x}{:02x}{:02x}{:02x}",
                                 author[0], author[1], author[2], author[3]),
@@ -1095,6 +1100,8 @@ async fn main() -> Result<()> {
                             validator_id: author,
                             offense: aztibase_execution::OffenseType::Equivocation,
                             round,
+                            existing_hash: Some(existing_hash),
+                            duplicate_hash: Some(duplicate_hash),
                         };
                         let _ = slash_tx.send(event).await;
                     }

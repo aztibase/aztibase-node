@@ -40,6 +40,8 @@ pub struct SlashEvent {
     pub validator_id: [u8; 32],
     pub offense: OffenseType,
     pub round: u64,
+    pub existing_hash: Option<[u8; 32]>,
+    pub duplicate_hash: Option<[u8; 32]>,
 }
 
 /// Result of executing a single committed batch.
@@ -1559,6 +1561,11 @@ impl ExecutionPipeline {
             }
 
             let proposal_id = hash(&preimage);
+            let snapshot_balances: std::collections::HashMap<[u8; 32], u128> = state
+                .iter_accounts()
+                .filter(|(_, acct)| acct.balance > 0)
+                .map(|(addr, acct)| (*addr, acct.balance))
+                .collect();
             let mut gov = self.governance.write().await;
             let result = gov.create_proposal(CreateProposalParams {
                 id: proposal_id,
@@ -1568,6 +1575,7 @@ impl ExecutionPipeline {
                 param_value: param_value.clone(),
                 current_round: self.current_round,
                 voting_period: *voting_period,
+                snapshot_balances,
             });
             drop(gov);
             state.increment_nonce(proposer);
@@ -2280,6 +2288,19 @@ impl ExecutionPipeline {
                         OffenseType::Equivocation => aztibase_execution::EQUIVOCATION_SLASH_BPS,
                         OffenseType::Downtime => aztibase_execution::DOWNTIME_SLASH_BPS,
                     };
+                    if let (Some(store), Some(eh), Some(dh)) = (
+                        self.store.as_ref(),
+                        event.existing_hash,
+                        event.duplicate_hash,
+                    ) {
+                        let _ = aztibase_execution::store_equivocation_proof(
+                            store,
+                            event.round,
+                            &event.validator_id,
+                            &eh,
+                            &dh,
+                        );
+                    }
                     match staking.slash_validator(
                         event.validator_id,
                         slash_bps,

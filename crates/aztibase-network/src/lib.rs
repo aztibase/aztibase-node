@@ -1,5 +1,6 @@
 pub mod behaviour;
 pub mod connection_filter;
+pub mod dht_record;
 pub mod discovery;
 pub mod gossip;
 pub mod light_sync;
@@ -10,17 +11,22 @@ pub mod transport;
 pub mod webrtc;
 
 pub use connection_filter::{ConnectionFilter, FilterReason};
+pub use dht_record::{
+    DhtRecordKind, DhtRecordSignature, DhtValidationError, SignedDhtRecord, validate_dht_record,
+};
 pub use gossip::{
-    MessageAcceptance, TOPIC_CONSENSUS, TOPIC_STATE_SYNC, TOPIC_TRANSACTIONS, chain_scoped_topics,
-    genesis_hex_prefix, validate_gossip_message,
+    MessageAcceptance, TOPIC_CHECKPOINT_ANNOUNCE, TOPIC_CONSENSUS, TOPIC_STATE_SYNC,
+    TOPIC_TRANSACTIONS, chain_scoped_topics, genesis_hex_prefix, validate_gossip_message,
 };
 pub use libp2p::{Multiaddr, PeerId};
 pub use light_sync::{
-    LIGHT_SYNC_PROTOCOL, LightSyncCodec, LightSyncMessage, LightSyncProtocol, LightSyncRequest,
-    LightSyncResponse, MAX_HEADERS_PER_REQUEST, MultiPeerValidator, SyncFinalityCert, SyncHeader,
+    CheckpointAnnounce, LIGHT_SYNC_PROTOCOL, LightSyncCodec, LightSyncMessage, LightSyncProtocol,
+    LightSyncRequest, LightSyncResponse, MAX_HEADERS_PER_REQUEST, MultiPeerValidator,
+    SyncFinalityCert, SyncHeader, build_checkpoint_request, build_checkpoint_response,
     build_header_request, build_header_response, build_proof_request, build_proof_response,
-    decode_light_sync, decode_request, decode_response, encode_light_sync, encode_request,
-    encode_response, verify_header_chain,
+    decode_checkpoint_announce, decode_light_sync, decode_request, decode_response,
+    encode_checkpoint_announce, encode_light_sync, encode_request, encode_response,
+    verify_header_chain,
 };
 pub use peer_store::{PeerStore, StoredPeer};
 pub use reputation::{OffenseSeverity, PeerReputation, PeerReputationStore};
@@ -62,7 +68,7 @@ mod tests {
     #[test]
     fn aztibase_topics_count() {
         let topics = gossip::aztibase_topics();
-        assert_eq!(topics.len(), 6);
+        assert_eq!(topics.len(), 7);
     }
 
     #[test]
@@ -137,7 +143,7 @@ mod tests {
     #[tokio::test]
     async fn transport_subscribes_all_topics() {
         let transport = Libp2pTransport::new(TransportConfig::default()).unwrap();
-        assert_eq!(transport.subscribed_topics().len(), 6);
+        assert_eq!(transport.subscribed_topics().len(), 7);
     }
 
     #[tokio::test]

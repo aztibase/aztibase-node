@@ -2,8 +2,8 @@
 
 **Last Updated:** 2026-03-10
 **Updated By:** node-engineer / consensus-engineer / p2p-network-engineer
-**Current Phase:** M9 -- Mainnet Prep (Sprint 8 COMPLETE)
-**Current Sprint:** Sprint 047 -- COMPLETE (Testnet Validation — First Successful Multi-Node Run)
+**Current Phase:** M9 -- Mainnet Prep (Sprint 9 IN PROGRESS)
+**Current Sprint:** Sprint 048 -- COMPLETE (Security Flag Resolution — All 9 ELEVATED Flags Resolved)
 
 ---
 
@@ -77,12 +77,21 @@
 | aztibase-wasm | PARTIAL | p2p-network-engineer | NO | YES |
 
 ### In Progress
-- Nothing currently in progress — Sprint 047 complete, Sprint 048 next
+- Nothing currently in progress
 
 ### Blocked
 - Nothing currently blocked
 
 ### Recently Completed
+- Sprint 048 Phase 10: S8-1 — Quorum-signed DHT records (≥2 sigs, round freshness, 8 tests), ADR-020
+- Sprint 048 Phase 9: S4-1 — Browser wallet spending limits (per-tx 100 AZTB, session 10K, WASM exports, 5 tests), ADR-019
+- Sprint 048 Phase 8: S2-2 — RANDAO-style VRF seed accumulation from causal DAG history, ADR-018
+- Sprint 048 Phase 7: S1-2 — Quantum migration drill (Verkle↔Merkle swap proven, 2 tests), ADR-017
+- Sprint 048 Phase 6: S1-1 — MEV mitigation Phase 1 (MAX_TX_SIZE 256 KiB at mempool, 2 tests), ADR-016
+- Sprint 048 Phase 4: S2-1 — Equivocation window 20→100 rounds, persistent proofs in redb, ADR-015
+- Sprint 048 Phase 3: S3-1 — Flash-loan resistant governance: snapshot balances at proposal creation
+- Sprint 048 Phase 2: S1-3 — Agent spending pre-execution validation in mempool (defense-in-depth)
+- Sprint 048 Phase 1: S4-3 — Checkpoint P2P distribution (request/response + gossip announce topic)
 - Sprint 047 Phase 6: Docs — BUILD_LOG, STATUS, CHANGELOG, sprint plan updated
 - Sprint 047 Phase 4: Monitoring — Prometheus JSON metrics verified on all 3 nodes
 - Sprint 047 Phase 3: Core functionality — RPC verified (nodeInfo, chainId, getBalance, gasPrice, health), consensus producing blocks (56-81 commits in 40s), 2 transfers confirmed (500 + 1000 tokens)
@@ -235,7 +244,7 @@
 - Sprint 005 Phase 1: Consensus-to-execution wiring, TxKind routing, ExecutionPipeline
 
 ### Next Up
-1. Sprint 048 — Next M9 mainnet prep item (Docker Compose testnet, or next priority)
+1. Sprint 049 planning — All 9 ELEVATED flags resolved, mainnet prep continues
 
 ### Deferred to M9+ (Locked in FUTURE_PLANNING.md)
 

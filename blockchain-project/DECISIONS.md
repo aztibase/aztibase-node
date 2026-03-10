@@ -22,6 +22,12 @@ Every non-obvious technical decision is recorded here. Each ADR is immutable onc
 | ADR-012 | Packed SignerBitmap for finality certificates | 2026-03-08 | ACCEPTED | security-engineer + blockchain-architect |
 | ADR-013 | Retain BLAKE3 Verkle placeholder over IPA polynomial commitments | 2026-03-08 | ACCEPTED | blockchain-architect + security-engineer |
 | ADR-014 | u128 tokenomics with deferred u64→u128 balance migration | 2026-03-09 | ACCEPTED | blockchain-architect + tokenomics-engineer |
+| ADR-015 | Equivocation detection window: 100 rounds + persistent proofs | 2026-03-10 | ACCEPTED | consensus-engineer + security-engineer |
+| ADR-016 | Consensus-layer transaction size limits (MEV mitigation Phase 1) | 2026-03-10 | ACCEPTED | security-engineer + node-engineer |
+| ADR-017 | Quantum migration drill via StateCommitment trait | 2026-03-10 | ACCEPTED | blockchain-architect + security-engineer |
+| ADR-018 | RANDAO-style VRF seed accumulation (anti-last-revealer) | 2026-03-10 | ACCEPTED | consensus-engineer + security-engineer |
+| ADR-019 | Browser wallet spending limits in WASM | 2026-03-10 | ACCEPTED | security-engineer + p2p-network-engineer |
+| ADR-020 | Quorum-signed DHT records (anti-poisoning) | 2026-03-10 | ACCEPTED | p2p-network-engineer + security-engineer |
 
 ---
 
@@ -434,6 +440,172 @@ Build tokenomics types (EmissionTracker, VestingSchedule, EpochDistribution, Sta
 - Tokenomics emission amounts are in "whole token" units (not 18-decimal base units) during testnet
 - Account balances remain u64 — sufficient for testnet but must be migrated before mainnet
 - Conversion overflow is impossible since total supply (1B) fits in u64 without 18 decimals
+
+---
+
+## ADR-015: Equivocation detection window: 100 rounds + persistent proofs
+
+**Date:** 2026-03-10
+**Status:** ACCEPTED
+**Decided By:** consensus-engineer + security-engineer
+**Git Ref:** pending (Sprint 048)
+
+### Context
+The equivocation detection window was 20 rounds (~8 seconds at 400ms/round). This means equivocations older than 20 rounds were unprovable — the `seen_authors` tracker was pruned. During network partitions or high-latency conditions, an equivocator could evade detection by delaying duplicate vertex delivery past the 8-second window.
+
+### Decision
+1. Increase `EQUIVOCATION_PRUNE_DEPTH` from 20 to 100 rounds (~40 seconds).
+2. Store equivocation proofs (both conflicting vertex hashes) persistently in redb via `EQUIVOCATION_PROOFS_TABLE`.
+3. Pass equivocation evidence (existing_hash, duplicate_hash) through `ConsensusOutput::EquivocationDetected` to the execution pipeline for persistent storage.
+
+### Formal Bounds
+- **Detection window**: 100 rounds × 400ms = 40 seconds. A well-connected honest node will see equivocating vertices within this window.
+- **Memory overhead**: ~100 entries × (8 round + 32 author + 32 hash) = ~7.2KB per validator. For 200 validators: ~1.44MB. Negligible.
+- **Persistent proof**: Once detected, the proof survives node restart. Can be submitted to other validators for independent verification.
+- **Gap**: Equivocations delayed >40 seconds remain undetectable by the in-memory tracker, but the persistent proof store means once-caught equivocations are never lost.
+- **Finality certificate coverage**: Finality certs don't directly prove absence of equivocations. The slash mechanism is the enforcement layer.
+
+### Rationale
+- 100 rounds covers 5× the original window, handling realistic partition durations
+- Persistent proofs close the "restart amnesia" gap where a node could forget a detected equivocation
+- Memory cost is negligible even at maximum validator set size (400)
+
+### Consequences
+- Slightly more memory per node for equivocation tracking (~1.44MB vs ~0.29MB)
+- New `EQUIVOCATION_PROOFS_TABLE` in redb (14 tables total)
+- Future: proofs can be gossiped to enable cross-node equivocation verification
+
+---
+
+## ADR-016: Consensus-layer transaction size limits (MEV mitigation Phase 1)
+
+**Date:** 2026-03-10
+**Status:** ACCEPTED
+**Decided By:** security-engineer + node-engineer
+**Git Ref:** pending (Sprint 048)
+
+### Context
+MEV (Maximal Extractable Value) attacks often involve injecting large transactions to manipulate ordering or consume block space. A full encrypted mempool (commit-reveal) is the gold standard but requires significant protocol changes. As Phase 1 mitigation, a simpler approach was evaluated.
+
+### Decision
+Add a consensus-layer `MAX_TX_SIZE` constant (256 KiB) enforced at the mempool boundary. Transactions exceeding this limit are rejected before entering the mempool. Phase 2 (encrypted mempool with commit-reveal) is roadmapped for post-mainnet.
+
+### Rationale
+- 256 KiB covers all legitimate tx types (transfers ~100B, contract deploys ~100KB, AI tasks ~10KB)
+- Prevents bandwidth-based MEV attacks where oversized payloads starve honest transactions
+- Zero protocol complexity — a single size check in `insert_with_priority()`
+- Does not address ordering-based MEV (commit-reveal Phase 2 handles that)
+
+### Consequences
+- Oversized transactions are silently dropped at the mempool boundary
+- Contract deployments exceeding 256 KiB need chunked deployment (standard practice)
+- Phase 2 encrypted mempool remains the full MEV solution
+
+---
+
+## ADR-017: Quantum migration drill via StateCommitment trait
+
+**Date:** 2026-03-10
+**Status:** ACCEPTED
+**Decided By:** blockchain-architect + security-engineer
+**Git Ref:** pending (Sprint 048)
+
+### Context
+Post-quantum cryptography migration is a known future requirement. The state commitment scheme (currently Verkle with BLAKE3) must be swappable without chain halt. The `StateCommitment` trait (ADR-007) already provides the abstraction — but no tests existed proving the migration path actually works.
+
+### Decision
+Add migration drill tests that prove: (1) both `VerkleCommitment` and `MerkleCommitment` independently produce valid roots and proofs, (2) cross-scheme verification correctly fails (Verkle proof against Merkle root and vice versa), (3) the trait abstraction allows runtime scheme selection.
+
+### Rationale
+- The binary Merkle fallback path (`MerkleCommitment`) was already implemented but untested as a migration target
+- Migration drill tests are cheap insurance against "it should work" assumptions
+- No code changes needed — just tests proving the existing abstraction is sound
+- Documents the migration path: change `StateCommitment` impl at epoch boundary
+
+### Consequences
+- Confidence that commitment scheme migration is a configuration change, not a protocol change
+- Future quantum-safe hash functions (e.g., SPHINCS+) can be added as new `StateCommitment` impls
+- No runtime overhead — migration tests run only in CI
+
+---
+
+## ADR-018: RANDAO-style VRF seed accumulation (anti-last-revealer)
+
+**Date:** 2026-03-10
+**Status:** ACCEPTED
+**Decided By:** consensus-engineer + security-engineer
+**Git Ref:** pending (Sprint 048)
+
+### Context
+The VRF seed used for leader election was updated as `hash(anchor_hash)` — a single anchor vertex determined the next seed. A malicious last-revealer who controls the anchor can compute the resulting seed before publishing, allowing them to withhold if the outcome is unfavorable (last-revealer bias).
+
+### Decision
+Accumulate the VRF seed RANDAO-style: `new_seed = hash(prev_seed || anchor_hash || causal_vertex_hashes)`. The causal history of the anchor (all uncommitted vertices in its DAG cone) is mixed into the seed, making it dependent on contributions from multiple validators.
+
+### Rationale
+- Single-source seed (`hash(anchor)`) gives the anchor author full control of the next random value
+- Mixing `prev_seed` creates chain dependency — seed manipulation requires controlling multiple consecutive rounds
+- Mixing causal vertices adds randomness from every validator who published a vertex in the anchor's DAG cone
+- Cost: one `causal_order()` call per commit (already computed for execution ordering)
+
+### Consequences
+- Seed is now dependent on O(n) validator contributions per commit, not O(1)
+- A last-revealer must control the anchor AND predict all causal vertices to bias the seed — exponentially harder
+- Slight increase in seed computation cost (causal_order traversal), negligible vs. execution cost
+- Deterministic across all honest nodes (same DAG → same causal order → same seed)
+
+---
+
+## ADR-019: Browser wallet spending limits in WASM
+
+**Date:** 2026-03-10
+**Status:** ACCEPTED
+**Decided By:** security-engineer + p2p-network-engineer
+**Git Ref:** pending (Sprint 048)
+
+### Context
+Browser-based wallets (via aztibase-wasm) hold private keys in JavaScript/WASM memory, which is more vulnerable than hardware wallets or native apps. A compromised browser extension or XSS attack could drain funds instantly without any safety net.
+
+### Decision
+Add client-side spending limits in the browser wallet module: (1) `BROWSER_PER_TX_LIMIT` = 100 AZTB per transaction, (2) `BROWSER_SPENDING_LIMIT` = 10,000 AZTB total session cap, (3) `HIGH_VALUE_WARNING_THRESHOLD` = 1,000 AZTB balance warning. These are advisory — the WASM module exports `checkBrowserBalance()` and `checkBrowserTx()` for frontends to call before signing.
+
+### Rationale
+- Client-side limits are defense-in-depth — they don't prevent a determined attacker but raise the bar for opportunistic exploits
+- WASM-exported functions let any frontend framework integrate safety checks
+- Limits are constants, not hardcoded protocol rules — frontends can choose to enforce or ignore
+- No protocol changes needed — purely client-side advisory layer
+
+### Consequences
+- Frontends must call check functions before signing (not enforced at protocol level)
+- Power users can bypass limits by using CLI or direct RPC (acceptable — they accept the risk)
+- Future: hardware wallet integration would remove the need for client-side limits
+
+---
+
+## ADR-020: Quorum-signed DHT records (anti-poisoning)
+
+**Date:** 2026-03-10
+**Status:** ACCEPTED
+**Decided By:** p2p-network-engineer + security-engineer
+**Git Ref:** pending (Sprint 048)
+
+### Context
+Kademlia DHT records are used for validator set announcements, relay provider lists, and chain tip propagation. A single malicious node can poison the DHT by publishing false records (e.g., advertising non-existent validators or wrong chain tips). Standard Kademlia has no authentication mechanism.
+
+### Decision
+Introduce `SignedDhtRecord` — a wrapper around DHT values that includes: (1) `kind` enum (ValidatorSet/RelayProvider/ChainTip), (2) `round` for freshness, (3) `signatures` vec of `DhtRecordSignature` (pubkey + sig bytes), (4) `data` payload. Validation requires minimum quorum signatures (`MIN_QUORUM_SIGNATURES=2`), freshness within `MAX_RECORD_AGE_ROUNDS=10,000`, and callback-based signature verification.
+
+### Rationale
+- Quorum requirement (≥2 signatures) prevents single-node poisoning — an attacker must compromise multiple validators
+- Round-based freshness prevents replay of stale records (e.g., old validator sets)
+- Callback-based sig verification decouples DHT validation from specific crypto implementation
+- Kind enum enables per-type validation rules in the future (e.g., stricter quorum for ValidatorSet)
+
+### Consequences
+- DHT writes require coordinating signatures from ≥2 validators (adds latency to record publication)
+- Records older than 10,000 rounds (~67 minutes at 400ms) are rejected — ensures liveness
+- Unsigned legacy records are rejected — all DHT records must use the new format
+- Future: per-kind quorum thresholds (e.g., ValidatorSet requires ≥ f+1 signatures)
 
 ---
 

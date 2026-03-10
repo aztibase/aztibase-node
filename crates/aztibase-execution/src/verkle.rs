@@ -460,6 +460,49 @@ mod tests {
     }
 
     #[test]
+    fn verkle_to_merkle_migration_roundtrip() {
+        use crate::state::MerkleCommitment;
+
+        let leaves: Vec<[u8; 32]> = (0..16u8).map(|i| hash(&[i])).collect();
+
+        let verkle = VerkleCommitment;
+        let merkle = MerkleCommitment;
+
+        let v_root = verkle.commit(&leaves);
+        let m_root = merkle.commit(&leaves);
+        assert_ne!(v_root, m_root, "different schemes produce different roots");
+
+        for i in 0..leaves.len() {
+            let v_proof = verkle.prove(&leaves, i).unwrap();
+            assert!(verkle.verify(&v_root, &leaves[i], &v_proof));
+
+            let m_proof = merkle.prove(&leaves, i).unwrap();
+            assert!(merkle.verify(&m_root, &leaves[i], &m_proof));
+
+            assert!(!verkle.verify(&m_root, &leaves[i], &v_proof));
+            assert!(!merkle.verify(&v_root, &leaves[i], &m_proof));
+        }
+    }
+
+    #[test]
+    fn commitment_scheme_version_field_migration() {
+        use crate::state::MerkleCommitment;
+
+        let leaves: Vec<[u8; 32]> = (0..4u8).map(|i| hash(&[i])).collect();
+
+        let schemes: Vec<Box<dyn StateCommitment>> =
+            vec![Box::new(VerkleCommitment), Box::new(MerkleCommitment)];
+
+        let roots: Vec<[u8; 32]> = schemes.iter().map(|s| s.commit(&leaves)).collect();
+        assert_ne!(roots[0], roots[1]);
+
+        for (idx, scheme) in schemes.iter().enumerate() {
+            let proof = scheme.prove(&leaves, 0).unwrap();
+            assert!(scheme.verify(&roots[idx], &leaves[0], &proof));
+        }
+    }
+
+    #[test]
     fn verkle_empty_proof_rejects() {
         let proof = VerkleProof {
             leaf_hash: hash(b"x"),

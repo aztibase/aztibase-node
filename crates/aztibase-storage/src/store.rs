@@ -49,8 +49,12 @@ pub const BATCH_TXS_TABLE: TableDefinition<&[u8], &[u8]> = TableDefinition::new(
 /// Weak subjectivity checkpoints: batch index (u64 BE) → postcard(Checkpoint).
 pub const CHECKPOINTS_TABLE: TableDefinition<&[u8], &[u8]> = TableDefinition::new("checkpoints");
 
+/// Equivocation proofs: key = round(u64 BE) || author(32 bytes) → postcard(EquivocationProof).
+pub const EQUIVOCATION_PROOFS_TABLE: TableDefinition<&[u8], &[u8]> =
+    TableDefinition::new("equivocation_proofs");
+
 /// All table definitions for batch initialization.
-const ALL_TABLES: [TableDefinition<&[u8], &[u8]>; 13] = [
+const ALL_TABLES: [TableDefinition<&[u8], &[u8]>; 14] = [
     BLOCKS_TABLE,
     STATE_TABLE,
     TX_TABLE,
@@ -64,6 +68,7 @@ const ALL_TABLES: [TableDefinition<&[u8], &[u8]>; 13] = [
     BATCH_INDEX_TABLE,
     BATCH_TXS_TABLE,
     CHECKPOINTS_TABLE,
+    EQUIVOCATION_PROOFS_TABLE,
 ];
 
 // ── Error Type ─────────────────────────────────────────────────────

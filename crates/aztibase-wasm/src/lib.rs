@@ -1,3 +1,4 @@
+pub mod browser_wallet;
 mod proof;
 mod sync;
 

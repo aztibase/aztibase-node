@@ -10,6 +10,7 @@ pub const TOPIC_CONSENSUS: &str = "/aztibase/consensus/1.0.0";
 pub const TOPIC_STATE_SYNC: &str = "/aztibase/state-sync/1.0.0";
 pub const TOPIC_AI_PROOFS: &str = "/aztibase/ai-proofs/1.0.0";
 pub const TOPIC_VALIDATOR_ANNOUNCE: &str = "/aztibase/validator-announce/1.0.0";
+pub const TOPIC_CHECKPOINT_ANNOUNCE: &str = "/aztibase/checkpoint-announce/1.0.0";
 
 pub const ALL_TOPICS: &[&str] = &[
     TOPIC_BLOCKS,
@@ -18,6 +19,7 @@ pub const ALL_TOPICS: &[&str] = &[
     TOPIC_STATE_SYNC,
     TOPIC_AI_PROOFS,
     TOPIC_VALIDATOR_ANNOUNCE,
+    TOPIC_CHECKPOINT_ANNOUNCE,
 ];
 
 const TOPIC_BASE_NAMES: &[&str] = &[
@@ -27,6 +29,7 @@ const TOPIC_BASE_NAMES: &[&str] = &[
     "state-sync",
     "ai-proofs",
     "validator-announce",
+    "checkpoint-announce",
 ];
 
 pub const MAX_TRANSMIT_SIZE: usize = 2 * 1024 * 1024; // 2 MiB
@@ -95,6 +98,7 @@ fn topic_weight(topic: &str) -> f64 {
         TOPIC_TRANSACTIONS => 1.0,
         TOPIC_STATE_SYNC => 0.5,
         TOPIC_AI_PROOFS => 0.5,
+        TOPIC_CHECKPOINT_ANNOUNCE => 1.5,
         _ => 1.0,
     }
 }
@@ -199,7 +203,7 @@ mod tests {
     #[test]
     fn chain_scoped_topics_with_genesis() {
         let topics = chain_scoped_topics(Some("deadbeef"));
-        assert_eq!(topics.len(), 6);
+        assert_eq!(topics.len(), 7);
         for t in &topics {
             assert!(t.ends_with("/deadbeef"), "missing genesis suffix: {t}");
             assert!(t.starts_with("/aztibase/"));
@@ -211,7 +215,7 @@ mod tests {
     #[test]
     fn chain_scoped_topics_without_genesis() {
         let topics = chain_scoped_topics(None);
-        assert_eq!(topics.len(), 6);
+        assert_eq!(topics.len(), 7);
         assert_eq!(topics[0], "/aztibase/blocks/1.0.0");
         assert_eq!(topics[1], "/aztibase/transactions/1.0.0");
         for t in &topics {
@@ -231,7 +235,7 @@ mod tests {
     #[test]
     fn scoped_topics_returns_ident_topics() {
         let topics = aztibase_topics_scoped(Some("cafe0123"));
-        assert_eq!(topics.len(), 6);
+        assert_eq!(topics.len(), 7);
         let first = topics[0].to_string();
         assert!(first.contains("cafe0123"));
     }
@@ -239,7 +243,7 @@ mod tests {
     #[test]
     fn default_topics_unchanged() {
         let default = aztibase_topics();
-        assert_eq!(default.len(), 6);
+        assert_eq!(default.len(), 7);
         let first = default[0].to_string();
         assert_eq!(first, TOPIC_BLOCKS);
     }

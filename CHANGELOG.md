@@ -5,6 +5,37 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ---
 
+## Sprint 048 — Security Flag Resolution (M9-S9) (2026-03-10)
+
+### Security (9 ELEVATED flags resolved — ALL cleared)
+- **S4-3**: Checkpoint P2P distribution — RequestCheckpoint/ResponseCheckpoint in light-sync protocol, checkpoint-announce gossipsub topic (2026-03-10)
+- **S1-3**: Agent spending pre-execution — mempool rejects AgentExecute txs violating policy before consensus (2026-03-10)
+- **S3-1**: Flash-loan resistant governance — vote weights from balance snapshot at proposal creation, not live balances (2026-03-10)
+- **S2-1**: Equivocation window hardening — detection window 20→100 rounds, persistent proofs in redb, formal bounds in ADR-015 (2026-03-10)
+- **S1-1**: MEV mitigation Phase 1 — MAX_TX_SIZE (256 KiB) enforced at mempool boundary, ADR-016 (2026-03-10)
+- **S1-2**: Quantum migration drill — Verkle↔Merkle StateCommitment swap proven via migration tests, ADR-017 (2026-03-10)
+- **S2-2**: VRF last-revealer bias fix — RANDAO-style seed accumulation from causal DAG history, ADR-018 (2026-03-10)
+- **S4-1**: Browser wallet spending limits — per-tx cap (100 AZTB), session cap (10K AZTB), balance warnings via WASM exports, ADR-019 (2026-03-10)
+- **S8-1**: DHT poisoning resistance — quorum-signed records (≥2 sigs), round-based freshness (10K rounds), ADR-020 (2026-03-10)
+
+### Added
+- `CheckpointAnnounce` struct for gossip-based checkpoint notification (2026-03-10)
+- `TOPIC_CHECKPOINT_ANNOUNCE` gossipsub topic (7th topic, weight 1.5) (2026-03-10)
+- `AgentPolicyStore::check_spend()` — read-only policy validation for mempool gate (2026-03-10)
+- `Mempool::insert_checked_with_policy()` — pre-execution agent tx validation (2026-03-10)
+- `snapshot_balances` field on `Proposal` — captures balances at proposal creation (2026-03-10)
+- `EQUIVOCATION_PROOFS_TABLE` — persistent equivocation evidence in redb (14th table) (2026-03-10)
+- `store_equivocation_proof()` / `get_equivocation_proof()` — evidence persistence API (2026-03-10)
+- `MAX_TX_SIZE` constant (256 KiB) — consensus-layer tx size limit (2026-03-10)
+- `accumulate_vrf_seed()` — RANDAO-style VRF seed mixing from DAG causal history (2026-03-10)
+- `browser_wallet` module in aztibase-wasm — spending limits and WASM-exported safety checks (2026-03-10)
+- `SignedDhtRecord` + `validate_dht_record()` — quorum-signed DHT records with freshness validation (2026-03-10)
+- ADR-015: Equivocation detection window formal analysis (2026-03-10)
+- ADR-016 through ADR-020: MEV mitigation, quantum migration, VRF seed, browser wallet, DHT poisoning (2026-03-10)
+- 31 new tests across 6 crates (2026-03-10)
+
+---
+
 ## Sprint 047 — Testnet Validation (M9-S8) (2026-03-10)
 - First successful 3-node testnet: all validators committing blocks
 - Peer-aware proposal gating: engine waits for peers before first proposal

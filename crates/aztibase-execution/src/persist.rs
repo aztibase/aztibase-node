@@ -1,7 +1,7 @@
 use aztibase_storage::{
     ACCOUNTS_TABLE, BATCH_INDEX_TABLE, BATCH_ROOTS_TABLE, BATCH_TXS_TABLE, CHECKPOINTS_TABLE,
-    CONTRACT_CODE_TABLE, CONTRACT_STORAGE_TABLE, STATE_TABLE, StateStore, StorageResult, TX_TABLE,
-    TableDef,
+    CONTRACT_CODE_TABLE, CONTRACT_STORAGE_TABLE, EQUIVOCATION_PROOFS_TABLE, STATE_TABLE,
+    StateStore, StorageResult, TX_TABLE, TableDef,
 };
 
 use crate::state::{AccountState, AccountType};
@@ -294,6 +294,44 @@ pub fn get_checkpoint_raw(store: &StateStore, batch_index: u64) -> StorageResult
 pub fn latest_checkpoint_raw(store: &StateStore) -> StorageResult<Option<Vec<u8>>> {
     let entries = store.iter(CHECKPOINTS_TABLE)?;
     Ok(entries.last().map(|(_, v)| v.clone()))
+}
+
+/// Store an equivocation proof: both conflicting vertex hashes, round, and author.
+/// Key: round(u64 BE) || author(32 bytes). Survives node restart.
+pub fn store_equivocation_proof(
+    store: &StateStore,
+    round: u64,
+    author: &[u8; 32],
+    existing_hash: &[u8; 32],
+    duplicate_hash: &[u8; 32],
+) -> StorageResult<()> {
+    let mut key = Vec::with_capacity(40);
+    key.extend_from_slice(&round.to_be_bytes());
+    key.extend_from_slice(author);
+    let mut val = Vec::with_capacity(64);
+    val.extend_from_slice(existing_hash);
+    val.extend_from_slice(duplicate_hash);
+    store.put(EQUIVOCATION_PROOFS_TABLE, &key, &val)
+}
+
+/// Retrieve an equivocation proof by round and author.
+/// Returns Some((existing_hash, duplicate_hash)) if proof exists.
+pub fn get_equivocation_proof(
+    store: &StateStore,
+    round: u64,
+    author: &[u8; 32],
+) -> StorageResult<Option<([u8; 32], [u8; 32])>> {
+    let mut key = Vec::with_capacity(40);
+    key.extend_from_slice(&round.to_be_bytes());
+    key.extend_from_slice(author);
+    match store.get(EQUIVOCATION_PROOFS_TABLE, &key)? {
+        Some(val) if val.len() == 64 => {
+            let existing: [u8; 32] = val[..32].try_into().unwrap();
+            let duplicate: [u8; 32] = val[32..].try_into().unwrap();
+            Ok(Some((existing, duplicate)))
+        }
+        _ => Ok(None),
+    }
 }
 
 /// Query a range of batch numbers, returning (batch_number, anchor_hash) pairs.
@@ -623,6 +661,72 @@ mod tests {
 
         let empty = get_batch_range(&store, 50, 60, 100).unwrap();
         assert!(empty.is_empty());
+
+        cleanup(&path);
+    }
+
+    #[test]
+    fn equivocation_proof_store_and_retrieve() {
+        let path = test_db_path();
+        let store = StateStore::open(path.to_str().unwrap()).unwrap();
+
+        let author = [0xAA; 32];
+        let existing = [0x11; 32];
+        let duplicate = [0x22; 32];
+
+        assert!(
+            get_equivocation_proof(&store, 42, &author)
+                .unwrap()
+                .is_none()
+        );
+
+        store_equivocation_proof(&store, 42, &author, &existing, &duplicate).unwrap();
+
+        let proof = get_equivocation_proof(&store, 42, &author)
+            .unwrap()
+            .unwrap();
+        assert_eq!(proof.0, existing);
+        assert_eq!(proof.1, duplicate);
+
+        assert!(
+            get_equivocation_proof(&store, 43, &author)
+                .unwrap()
+                .is_none()
+        );
+
+        cleanup(&path);
+    }
+
+    #[test]
+    fn equivocation_proof_survives_multiple_rounds() {
+        let path = test_db_path();
+        let store = StateStore::open(path.to_str().unwrap()).unwrap();
+
+        for round in [10u64, 50, 99] {
+            store_equivocation_proof(&store, round, &[0xBB; 32], &[round as u8; 32], &[0xFF; 32])
+                .unwrap();
+        }
+
+        assert!(
+            get_equivocation_proof(&store, 10, &[0xBB; 32])
+                .unwrap()
+                .is_some()
+        );
+        assert!(
+            get_equivocation_proof(&store, 50, &[0xBB; 32])
+                .unwrap()
+                .is_some()
+        );
+        assert!(
+            get_equivocation_proof(&store, 99, &[0xBB; 32])
+                .unwrap()
+                .is_some()
+        );
+        assert!(
+            get_equivocation_proof(&store, 100, &[0xBB; 32])
+                .unwrap()
+                .is_none()
+        );
 
         cleanup(&path);
     }

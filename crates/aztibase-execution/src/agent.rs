@@ -124,6 +124,45 @@ impl AgentPolicyStore {
         Ok(())
     }
 
+    /// Read-only policy check without recording the spend.
+    /// Used for pre-execution validation (mempool gate).
+    pub fn check_spend(
+        &self,
+        agent: &Address,
+        amount: u128,
+        tx_kind_prefix: u8,
+        current_epoch: u64,
+    ) -> Result<(), AgentError> {
+        let policy = self.policies.get(agent).ok_or(AgentError::PolicyNotSet)?;
+
+        if current_epoch >= policy.expiry_epoch {
+            return Err(AgentError::PolicyExpired(
+                policy.expiry_epoch,
+                current_epoch,
+            ));
+        }
+
+        if !policy.allowed_tx_kinds.contains(&tx_kind_prefix) {
+            return Err(AgentError::TxKindNotAllowed(tx_kind_prefix));
+        }
+
+        if amount > policy.per_tx_limit {
+            return Err(AgentError::PerTxCapExceeded(amount, policy.per_tx_limit));
+        }
+
+        let current_spent = self.epoch_spend(agent, current_epoch);
+        let new_total = current_spent.saturating_add(amount);
+        if new_total > policy.per_epoch_limit {
+            return Err(AgentError::PerEpochCapExceeded(
+                current_spent,
+                amount,
+                policy.per_epoch_limit,
+            ));
+        }
+
+        Ok(())
+    }
+
     pub fn epoch_spend(&self, agent: &Address, current_epoch: u64) -> u128 {
         self.spend_tracker
             .get(agent)
@@ -249,6 +288,29 @@ mod tests {
         assert!(store.validate_spend(&agent, 3_000, 0x01, 2).is_ok());
         assert_eq!(store.epoch_spend(&agent, 2), 3_000);
         assert_eq!(store.epoch_spend(&agent, 1), 0);
+    }
+
+    #[test]
+    fn check_spend_read_only_does_not_record() {
+        let mut store = AgentPolicyStore::new();
+        let agent = [1u8; 32];
+        store.set_policy(agent, test_policy([2u8; 32]));
+
+        assert!(store.check_spend(&agent, 500, 0x01, 1).is_ok());
+        assert_eq!(store.epoch_spend(&agent, 1), 0);
+        assert!(store.check_spend(&agent, 500, 0x01, 1).is_ok());
+        assert_eq!(store.epoch_spend(&agent, 1), 0);
+    }
+
+    #[test]
+    fn check_spend_rejects_same_as_validate() {
+        let mut store = AgentPolicyStore::new();
+        let agent = [1u8; 32];
+        store.set_policy(agent, test_policy([2u8; 32]));
+
+        assert!(store.check_spend(&agent, 1_001, 0x01, 1).is_err());
+        assert!(store.check_spend(&agent, 100, 0x06, 1).is_err());
+        assert!(store.check_spend(&agent, 100, 0x01, 100).is_err());
     }
 
     #[test]

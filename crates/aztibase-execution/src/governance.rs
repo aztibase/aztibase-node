@@ -31,6 +31,10 @@ pub struct Proposal {
     pub start_round: u64,
     pub end_round: u64,
     pub status: ProposalStatus,
+    /// Balance snapshot taken at proposal creation. Voters are weighted
+    /// by their balance at this point, preventing flash-loan attacks (S3-1).
+    #[serde(default)]
+    pub snapshot_balances: HashMap<Address, u128>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -104,6 +108,9 @@ pub struct CreateProposalParams {
     pub param_value: String,
     pub current_round: u64,
     pub voting_period: u64,
+    /// Balance snapshot at proposal creation time. Voters are weighted
+    /// by this snapshot rather than live balances.
+    pub snapshot_balances: HashMap<Address, u128>,
 }
 
 pub struct GovernanceStore {
@@ -154,18 +161,21 @@ impl GovernanceStore {
             start_round: params.current_round,
             end_round: params.current_round + params.voting_period,
             status: ProposalStatus::Active,
+            snapshot_balances: params.snapshot_balances,
         };
         self.proposals.insert(params.id, proposal);
         self.votes.insert(params.id, Vec::new());
         Ok(())
     }
 
+    /// Cast a vote. Weight is determined from the proposal's balance snapshot,
+    /// not the caller-provided live balance. This prevents flash-loan attacks.
     pub fn cast_vote(
         &mut self,
         voter: Address,
         proposal_id: [u8; 32],
         approve: bool,
-        stake_weight: u128,
+        _stake_weight: u128,
     ) -> Result<(), GovernanceError> {
         let proposal = self
             .proposals
@@ -176,7 +186,8 @@ impl GovernanceStore {
             return Err(GovernanceError::ProposalNotActive);
         }
 
-        if stake_weight == 0 {
+        let snapshot_weight = proposal.snapshot_balances.get(&voter).copied().unwrap_or(0);
+        if snapshot_weight == 0 {
             return Err(GovernanceError::ZeroStakeWeight);
         }
 
@@ -189,7 +200,7 @@ impl GovernanceStore {
             voter,
             proposal_id,
             approve,
-            weight: stake_weight,
+            weight: snapshot_weight,
         });
         Ok(())
     }
@@ -297,6 +308,14 @@ mod tests {
         [n; 32]
     }
 
+    fn default_snapshot() -> HashMap<Address, u128> {
+        let mut snap = HashMap::new();
+        snap.insert(test_addr(0xB0), 1000);
+        snap.insert(test_addr(0xB1), 500);
+        snap.insert(test_addr(0xB2), 300);
+        snap
+    }
+
     fn test_proposal(id: [u8; 32], desc: &str, key: &str, val: &str) -> CreateProposalParams {
         CreateProposalParams {
             id,
@@ -306,6 +325,7 @@ mod tests {
             param_value: val.to_string(),
             current_round: 100,
             voting_period: 50,
+            snapshot_balances: default_snapshot(),
         }
     }
 
@@ -420,6 +440,67 @@ mod tests {
 
         assert!(store.mark_executed(&id));
         assert_eq!(store.get(&id).unwrap().status, ProposalStatus::Executed);
+    }
+
+    #[test]
+    fn snapshot_weight_used_not_live_balance() {
+        let mut store = GovernanceStore::new();
+        let id = test_id(10);
+
+        store
+            .create_proposal(test_proposal(
+                id,
+                "Snapshot weight test proposal",
+                "param",
+                "val",
+            ))
+            .unwrap();
+
+        // B0 has 1000 in snapshot — passing 9999 as live weight should be ignored
+        store.cast_vote(test_addr(0xB0), id, true, 9999).unwrap();
+        let tally = store.tally(&id).unwrap();
+        assert_eq!(tally.approve_weight, 1000); // snapshot weight, not 9999
+    }
+
+    #[test]
+    fn voter_not_in_snapshot_rejected() {
+        let mut store = GovernanceStore::new();
+        let id = test_id(11);
+
+        store
+            .create_proposal(test_proposal(
+                id,
+                "No-snapshot voter test proposal",
+                "param",
+                "val",
+            ))
+            .unwrap();
+
+        // 0xCC is not in the snapshot
+        let err = store
+            .cast_vote(test_addr(0xCC), id, true, 5000)
+            .unwrap_err();
+        assert_eq!(err, GovernanceError::ZeroStakeWeight);
+    }
+
+    #[test]
+    fn voter_retains_original_snapshot_weight() {
+        let mut store = GovernanceStore::new();
+        let id = test_id(12);
+
+        store
+            .create_proposal(test_proposal(
+                id,
+                "Retained weight test proposal",
+                "param",
+                "val",
+            ))
+            .unwrap();
+
+        // B1 had 500 at snapshot — even if live balance changes, vote uses 500
+        store.cast_vote(test_addr(0xB1), id, true, 0).unwrap();
+        let tally = store.tally(&id).unwrap();
+        assert_eq!(tally.approve_weight, 500);
     }
 
     #[test]

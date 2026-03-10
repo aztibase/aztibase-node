@@ -15,7 +15,7 @@ use crate::dag_store::DagStore;
 use crate::validator::ValidatorSet;
 use crate::wire;
 
-const EQUIVOCATION_PRUNE_DEPTH: u64 = 20;
+const EQUIVOCATION_PRUNE_DEPTH: u64 = 100;
 const MAX_CATCHUP_ROUNDS: usize = 100;
 
 /// Message-driven threshold clock for DAG-BFT round advancement.
@@ -242,7 +242,12 @@ pub enum ConsensusOutput {
     /// A batch of transactions was committed via DAG consensus.
     BatchCommitted(crate::ordering::CommittedBatch),
     /// A validator produced conflicting vertices in the same round.
-    EquivocationDetected { author: [u8; 32], round: u64 },
+    EquivocationDetected {
+        author: [u8; 32],
+        round: u64,
+        existing_hash: [u8; 32],
+        duplicate_hash: [u8; 32],
+    },
 }
 
 /// State root announcement broadcast to peers after executing a committed batch.
@@ -452,6 +457,32 @@ impl ConsensusEngine {
         Ok(())
     }
 
+    /// RANDAO-style VRF seed accumulation (S2-2).
+    /// Mixes the previous seed with the anchor hash AND all vertex hashes
+    /// in the committed batch's causal history. This prevents a single
+    /// last-revealer from biasing the next seed by withholding their anchor,
+    /// since randomness from multiple validators is already mixed in.
+    fn accumulate_vrf_seed(
+        prev_seed: &[u8; 32],
+        anchor_hash: &BlockHash,
+        dag: &DagStore,
+        committed: &HashSet<BlockHash>,
+    ) -> [u8; 32] {
+        let mut buf = Vec::with_capacity(64 + 32 * 4);
+        buf.extend_from_slice(prev_seed);
+        buf.extend_from_slice(anchor_hash);
+
+        if let Ok(causal) = dag.causal_order(&[*anchor_hash]) {
+            for h in &causal {
+                if !committed.contains(h) {
+                    buf.extend_from_slice(h);
+                }
+            }
+        }
+
+        aztibase_core::hash(&buf)
+    }
+
     pub fn insert_genesis(&mut self) -> Result<()> {
         if self.dag.is_empty() {
             for (id, _) in self.validators.iter() {
@@ -610,6 +641,8 @@ impl ConsensusEngine {
             let _ = self.outbox.try_send(ConsensusOutput::EquivocationDetected {
                 author: block.author,
                 round: block.round,
+                existing_hash: existing,
+                duplicate_hash: block.hash,
             });
             return true;
         }
@@ -681,7 +714,12 @@ impl ConsensusEngine {
                             self.state.prune_before(wave * wave_len);
                             last_prune_round = Some(wave * wave_len);
                         }
-                        self.vrf_seed = aztibase_core::hash(&hash);
+                        self.vrf_seed = Self::accumulate_vrf_seed(
+                            &self.vrf_seed,
+                            &hash,
+                            &self.dag,
+                            self.state.committed_blocks(),
+                        );
                         match crate::ordering::extract_committed_batch(
                             &self.dag,
                             hash,
@@ -1150,9 +1188,15 @@ mod tests {
 
         let output = out_rx.try_recv().unwrap();
         match output {
-            ConsensusOutput::EquivocationDetected { author, round } => {
+            ConsensusOutput::EquivocationDetected {
+                author,
+                round,
+                existing_hash,
+                duplicate_hash,
+            } => {
                 assert_eq!(author, [2u8; 32]);
                 assert_eq!(round, 1);
+                assert_ne!(existing_hash, duplicate_hash);
             }
             other => panic!("Expected EquivocationDetected, got {other:?}"),
         }
@@ -1228,6 +1272,43 @@ mod tests {
         );
 
         handle.abort();
+        cleanup(&path);
+    }
+
+    #[test]
+    fn vrf_seed_accumulates_from_multiple_hashes() {
+        let path = test_db_path();
+        let store = StateStore::open(path.to_str().unwrap()).unwrap();
+        let mut dag = DagStore::new(store).unwrap();
+
+        let g1 = DagBlock::genesis([1u8; 32], 1000);
+        let g2 = DagBlock::genesis([2u8; 32], 1000);
+        let g1h = g1.hash;
+        let g2h = g2.hash;
+        dag.insert(g1).unwrap();
+        dag.insert(g2).unwrap();
+
+        let child = DagBlock::new(1, [1u8; 32], vec![g1h, g2h], vec![], 2000).unwrap();
+        let ch = child.hash;
+        dag.insert(child).unwrap();
+
+        let prev_seed = [42u8; 32];
+        let committed = HashSet::new();
+
+        let seed = ConsensusEngine::accumulate_vrf_seed(&prev_seed, &ch, &dag, &committed);
+
+        // Seed is not just hash(anchor) — it incorporates causal history
+        let naive_seed = aztibase_core::hash(&ch);
+        assert_ne!(seed, naive_seed);
+
+        // Deterministic
+        let seed2 = ConsensusEngine::accumulate_vrf_seed(&prev_seed, &ch, &dag, &committed);
+        assert_eq!(seed, seed2);
+
+        // Different prev_seed → different output
+        let seed3 = ConsensusEngine::accumulate_vrf_seed(&[99u8; 32], &ch, &dag, &committed);
+        assert_ne!(seed, seed3);
+
         cleanup(&path);
     }
 }

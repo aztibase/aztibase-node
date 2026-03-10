@@ -142,6 +142,14 @@ pub enum LightSyncMessage {
         proof_data: Vec<u8>,
         at_round: u64,
     },
+    RequestCheckpoint {
+        version: u8,
+        batch_index: Option<u64>,
+    },
+    ResponseCheckpoint {
+        version: u8,
+        data: Vec<u8>,
+    },
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -172,7 +180,9 @@ pub fn decode_light_sync(data: &[u8]) -> Result<LightSyncMessage, String> {
         LightSyncMessage::RequestHeaders { version, .. }
         | LightSyncMessage::ResponseHeaders { version, .. }
         | LightSyncMessage::RequestProof { version, .. }
-        | LightSyncMessage::ResponseProof { version, .. } => *version,
+        | LightSyncMessage::ResponseProof { version, .. }
+        | LightSyncMessage::RequestCheckpoint { version, .. }
+        | LightSyncMessage::ResponseCheckpoint { version, .. } => *version,
     };
     if version != LIGHT_SYNC_VERSION {
         return Err(format!("unsupported light sync version: {version}"));
@@ -217,6 +227,36 @@ pub fn build_proof_response(
         state_key,
         proof_data,
         at_round,
+    }
+}
+
+/// Compact gossip announcement for a newly stored checkpoint.
+/// Peers receiving this can request the full checkpoint via light-sync.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct CheckpointAnnounce {
+    pub batch_index: u64,
+    pub state_root: [u8; 32],
+}
+
+pub fn encode_checkpoint_announce(ann: &CheckpointAnnounce) -> Result<Vec<u8>, String> {
+    postcard::to_allocvec(ann).map_err(|e| e.to_string())
+}
+
+pub fn decode_checkpoint_announce(data: &[u8]) -> Result<CheckpointAnnounce, String> {
+    postcard::from_bytes(data).map_err(|e| e.to_string())
+}
+
+pub fn build_checkpoint_request(batch_index: Option<u64>) -> LightSyncMessage {
+    LightSyncMessage::RequestCheckpoint {
+        version: LIGHT_SYNC_VERSION,
+        batch_index,
+    }
+}
+
+pub fn build_checkpoint_response(data: Vec<u8>) -> LightSyncMessage {
+    LightSyncMessage::ResponseCheckpoint {
+        version: LIGHT_SYNC_VERSION,
+        data,
     }
 }
 
@@ -643,6 +683,51 @@ mod tests {
 
         let validator = MultiPeerValidator::new(2);
         assert!(validator.validate_responses(&responses).is_ok());
+    }
+
+    #[test]
+    fn checkpoint_request_response_roundtrip() {
+        let req = build_checkpoint_request(Some(1000));
+        let encoded = encode_light_sync(&req).unwrap();
+        let decoded = decode_light_sync(&encoded).unwrap();
+        match decoded {
+            LightSyncMessage::RequestCheckpoint { batch_index, .. } => {
+                assert_eq!(batch_index, Some(1000));
+            }
+            _ => panic!("expected RequestCheckpoint"),
+        }
+
+        let req_latest = build_checkpoint_request(None);
+        let encoded = encode_light_sync(&req_latest).unwrap();
+        let decoded = decode_light_sync(&encoded).unwrap();
+        match decoded {
+            LightSyncMessage::RequestCheckpoint { batch_index, .. } => {
+                assert_eq!(batch_index, None);
+            }
+            _ => panic!("expected RequestCheckpoint"),
+        }
+
+        let resp = build_checkpoint_response(vec![1, 2, 3, 4, 5]);
+        let encoded = encode_light_sync(&resp).unwrap();
+        let decoded = decode_light_sync(&encoded).unwrap();
+        match decoded {
+            LightSyncMessage::ResponseCheckpoint { data, .. } => {
+                assert_eq!(data, vec![1, 2, 3, 4, 5]);
+            }
+            _ => panic!("expected ResponseCheckpoint"),
+        }
+    }
+
+    #[test]
+    fn checkpoint_announce_serde_roundtrip() {
+        let ann = CheckpointAnnounce {
+            batch_index: 2000,
+            state_root: [0xAA; 32],
+        };
+        let encoded = encode_checkpoint_announce(&ann).unwrap();
+        let decoded = decode_checkpoint_announce(&encoded).unwrap();
+        assert_eq!(decoded.batch_index, 2000);
+        assert_eq!(decoded.state_root, [0xAA; 32]);
     }
 
     #[test]

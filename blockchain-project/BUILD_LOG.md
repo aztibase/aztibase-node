@@ -21,6 +21,40 @@ Entries are prepended (newest first).
 
 ## Entries
 
+### Sprint 048 — Security Flag Resolution (M9-S9) — Bottom 5 Flags
+- **Date**: 2026-03-10
+- **Commit**: (pending)
+- **Files changed**:
+  - `crates/aztibase-node/src/mempool.rs` — MAX_TX_SIZE (256 KiB), size check in insert_with_priority(), 2 tests (S1-1)
+  - `crates/aztibase-execution/src/verkle.rs` — 2 migration drill tests proving Verkle↔Merkle scheme swap (S1-2)
+  - `crates/aztibase-consensus/src/engine.rs` — accumulate_vrf_seed() RANDAO-style mixing, 1 test (S2-2)
+  - `crates/aztibase-wasm/src/browser_wallet.rs` — NEW: browser spending limits, per-tx caps, balance warnings, WASM exports, 5 tests (S4-1)
+  - `crates/aztibase-wasm/src/lib.rs` — browser_wallet module declaration
+  - `crates/aztibase-network/src/dht_record.rs` — NEW: SignedDhtRecord, quorum validation, freshness check, 8 tests (S8-1)
+  - `crates/aztibase-network/src/lib.rs` — dht_record module + exports
+  - `blockchain-project/DECISIONS.md` — ADR-016 through ADR-020
+- **Review**: 5 SECURITY-ELEVATED flags resolved (S1-1, S1-2, S2-2, S4-1, S8-1). 700 tests pass, 0 clippy warnings, fmt clean.
+- **Security Flags**: S1-1 RESOLVED, S1-2 RESOLVED, S2-2 RESOLVED, S4-1 RESOLVED, S8-1 RESOLVED
+
+### Sprint 048 — Security Flag Resolution (M9-S9) — Top 4 Flags
+- **Date**: 2026-03-10
+- **Commit**: (pending)
+- **Files changed**:
+  - `crates/aztibase-network/src/light_sync.rs` — RequestCheckpoint/ResponseCheckpoint variants, CheckpointAnnounce struct, encode/decode helpers, 2 tests
+  - `crates/aztibase-network/src/gossip.rs` — TOPIC_CHECKPOINT_ANNOUNCE (7th topic), weight 1.5
+  - `crates/aztibase-network/src/lib.rs` — Checkpoint exports, topic count 6→7
+  - `crates/aztibase-execution/src/agent.rs` — check_spend() read-only policy validation, 2 tests
+  - `crates/aztibase-node/src/mempool.rs` — insert_checked_with_policy() pre-execution agent validation, decode_tx_kind(), 4 tests
+  - `crates/aztibase-execution/src/governance.rs` — snapshot_balances on Proposal, cast_vote uses snapshot weight (flash-loan fix), 3 tests
+  - `crates/aztibase-consensus/src/engine.rs` — EQUIVOCATION_PRUNE_DEPTH 20→100, EquivocationDetected carries hashes
+  - `crates/aztibase-storage/src/store.rs` — EQUIVOCATION_PROOFS_TABLE (14th table)
+  - `crates/aztibase-execution/src/persist.rs` — store/get_equivocation_proof(), 2 tests
+  - `crates/aztibase-node/src/pipeline.rs` — Balance snapshot at proposal creation, persistent equivocation proof storage, SlashEvent extended
+  - `crates/aztibase-node/src/main.rs` — EquivocationDetected hash pass-through
+  - `blockchain-project/DECISIONS.md` — ADR-015: Equivocation detection window analysis
+- **Review**: 4 SECURITY-ELEVATED flags resolved (S4-3, S1-3, S3-1, S2-1). 684 tests pass, 0 clippy warnings, fmt clean.
+- **Security Flags**: S4-3 RESOLVED, S1-3 RESOLVED, S3-1 RESOLVED, S2-1 RESOLVED
+
 ### Sprint 047 — Testnet Validation (M9-S8)
 - **Date**: 2026-03-10
 - **Commit**: (pending)

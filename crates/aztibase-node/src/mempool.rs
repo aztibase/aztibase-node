@@ -2,11 +2,16 @@ use std::cmp::Reverse;
 use std::collections::{BTreeMap, HashMap, HashSet};
 
 use aztibase_core::hash;
-use aztibase_execution::{SignedTx, routing::route_tx};
+use aztibase_execution::{AgentPolicyStore, SignedTx, routing::TxKind, routing::route_tx};
 
 type TxHash = [u8; 32];
 
 const MAX_NONCE_GAP: u64 = 16;
+
+/// Maximum transaction size in bytes (S1-1).
+/// Transactions larger than this are rejected at the mempool boundary,
+/// preventing oversized payloads from consuming consensus bandwidth.
+pub const MAX_TX_SIZE: usize = 256 * 1024; // 256 KiB
 
 /// Priority key for BTreeMap ordering: highest priority first, then by hash for determinism.
 type PriorityKey = (Reverse<u64>, TxHash);
@@ -39,9 +44,14 @@ impl Mempool {
     }
 
     /// Insert a transaction with a given priority.
-    /// Returns false if already seen. If the pool is full, evicts the lowest-priority
-    /// entry when the new transaction has higher priority; rejects otherwise.
+    /// Returns false if already seen or exceeds MAX_TX_SIZE (S1-1).
+    /// If the pool is full, evicts the lowest-priority entry when the new
+    /// transaction has higher priority; rejects otherwise.
     pub fn insert_with_priority(&mut self, tx: Vec<u8>, priority: u64) -> bool {
+        if tx.len() > MAX_TX_SIZE {
+            return false;
+        }
+
         let tx_hash = hash(&tx);
 
         if self.seen.contains(&tx_hash) {
@@ -90,6 +100,23 @@ impl Mempool {
     where
         F: Fn(&[u8; 32]) -> u64,
     {
+        self.insert_checked_with_policy(tx, nonce_lookup, min_gas_price, None, 0)
+    }
+
+    /// Insert with full validation including agent policy enforcement.
+    /// AgentExecute transactions are rejected if the policy check fails,
+    /// enforcing spending limits before consensus inclusion (S1-3).
+    pub fn insert_checked_with_policy<F>(
+        &mut self,
+        tx: Vec<u8>,
+        nonce_lookup: F,
+        min_gas_price: u64,
+        agent_policy: Option<&AgentPolicyStore>,
+        current_epoch: u64,
+    ) -> bool
+    where
+        F: Fn(&[u8; 32]) -> u64,
+    {
         let (sender, tx_nonce, gas_price) = match decode_sender_nonce_gas(&tx) {
             Some(t) => t,
             None => return false,
@@ -101,6 +128,21 @@ impl Mempool {
         if tx_nonce < current || tx_nonce > current + MAX_NONCE_GAP {
             return false;
         }
+
+        if let Some(aps) = agent_policy
+            && let Some(TxKind::AgentExecute {
+                agent,
+                inner_tx_kind,
+                value,
+                ..
+            }) = decode_tx_kind(&tx)
+            && aps
+                .check_spend(&agent, value, inner_tx_kind, current_epoch)
+                .is_err()
+        {
+            return false;
+        }
+
         self.insert(tx)
     }
 
@@ -176,6 +218,12 @@ fn decode_sender_nonce_gas(raw: &[u8]) -> Option<([u8; 32], u64, u64)> {
     let signed = SignedTx::decode(raw).ok()?;
     let tx = route_tx(&signed.payload).ok()?;
     Some((signed.sender_address(), tx.nonce(), tx.gas_price()))
+}
+
+/// Decode a signed envelope to extract the inner TxKind.
+fn decode_tx_kind(raw: &[u8]) -> Option<TxKind> {
+    let signed = SignedTx::decode(raw).ok()?;
+    route_tx(&signed.payload).ok()
 }
 
 /// Extract priority from raw transaction bytes.
@@ -485,6 +533,105 @@ mod tests {
         };
         let signed = SignedTx::new(tx.encode(), &kp).encode();
         assert!(pool.insert_checked(signed, |_| 0, 5));
+    }
+
+    fn make_signed_agent_execute(kp: &Keypair, value: u128, inner_kind: u8) -> Vec<u8> {
+        let agent = address_from_pubkey(kp.public_key().as_bytes());
+        let tx = TxKind::AgentExecute {
+            agent,
+            inner_tx_kind: inner_kind,
+            to: [3u8; 32],
+            value,
+            data: vec![],
+            nonce: 0,
+            gas_price: 1,
+        };
+        SignedTx::new(tx.encode(), kp).encode()
+    }
+
+    #[test]
+    fn mempool_rejects_agent_execute_exceeding_per_tx_limit() {
+        let mut pool = Mempool::new(100);
+        let kp = Keypair::generate();
+        let agent = address_from_pubkey(kp.public_key().as_bytes());
+        let mut aps = aztibase_execution::AgentPolicyStore::new();
+        aps.set_policy(
+            agent,
+            aztibase_execution::AgentPolicy {
+                owner: [2u8; 32],
+                per_tx_limit: 500,
+                per_epoch_limit: 10_000,
+                allowed_tx_kinds: vec![0x01],
+                expiry_epoch: 100,
+            },
+        );
+        let tx = make_signed_agent_execute(&kp, 501, 0x01);
+        assert!(!pool.insert_checked_with_policy(tx, |_| 0, 0, Some(&aps), 1));
+    }
+
+    #[test]
+    fn mempool_rejects_agent_execute_with_expired_policy() {
+        let mut pool = Mempool::new(100);
+        let kp = Keypair::generate();
+        let agent = address_from_pubkey(kp.public_key().as_bytes());
+        let mut aps = aztibase_execution::AgentPolicyStore::new();
+        aps.set_policy(
+            agent,
+            aztibase_execution::AgentPolicy {
+                owner: [2u8; 32],
+                per_tx_limit: 1000,
+                per_epoch_limit: 10_000,
+                allowed_tx_kinds: vec![0x01],
+                expiry_epoch: 50,
+            },
+        );
+        let tx = make_signed_agent_execute(&kp, 100, 0x01);
+        assert!(!pool.insert_checked_with_policy(tx, |_| 0, 0, Some(&aps), 50));
+    }
+
+    #[test]
+    fn mempool_rejects_agent_execute_with_disallowed_tx_kind() {
+        let mut pool = Mempool::new(100);
+        let kp = Keypair::generate();
+        let agent = address_from_pubkey(kp.public_key().as_bytes());
+        let mut aps = aztibase_execution::AgentPolicyStore::new();
+        aps.set_policy(
+            agent,
+            aztibase_execution::AgentPolicy {
+                owner: [2u8; 32],
+                per_tx_limit: 1000,
+                per_epoch_limit: 10_000,
+                allowed_tx_kinds: vec![0x01],
+                expiry_epoch: 100,
+            },
+        );
+        let tx = make_signed_agent_execute(&kp, 100, 0x06);
+        assert!(!pool.insert_checked_with_policy(tx, |_| 0, 0, Some(&aps), 1));
+    }
+
+    #[test]
+    fn mempool_accepts_non_agent_tx_without_policy() {
+        let mut pool = Mempool::new(100);
+        let kp = Keypair::generate();
+        let tx = make_signed_transfer(&kp, 0);
+        let aps = aztibase_execution::AgentPolicyStore::new();
+        assert!(pool.insert_checked_with_policy(tx, |_| 0, 0, Some(&aps), 1));
+    }
+
+    #[test]
+    fn rejects_oversized_transaction() {
+        let mut pool = Mempool::new(100);
+        let oversized = vec![0u8; MAX_TX_SIZE + 1];
+        assert!(!pool.insert(oversized));
+        assert!(pool.is_empty());
+    }
+
+    #[test]
+    fn accepts_max_size_transaction() {
+        let mut pool = Mempool::new(100);
+        let max = vec![0u8; MAX_TX_SIZE];
+        assert!(pool.insert(max));
+        assert_eq!(pool.len(), 1);
     }
 
     #[test]
