@@ -460,6 +460,7 @@ mod tests {
                     ConsensusOutput::BatchCommitted(batch) => {
                         committed[node_idx].push(batch);
                     }
+                    ConsensusOutput::EquivocationDetected { .. } => {}
                 },
                 _ => break,
             }
@@ -681,6 +682,7 @@ mod tests {
                         committed = true;
                         break;
                     }
+                    ConsensusOutput::EquivocationDetected { .. } => {}
                 },
                 _ => break,
             }
@@ -890,6 +892,7 @@ mod tests {
                     ConsensusOutput::BatchCommitted(batch) => {
                         committed[node_idx].push(batch);
                     }
+                    ConsensusOutput::EquivocationDetected { .. } => {}
                 },
                 _ => break,
             }
@@ -2099,6 +2102,7 @@ mod tests {
                     ConsensusOutput::BatchCommitted(batch) => {
                         committed[node_idx].push(batch);
                     }
+                    ConsensusOutput::EquivocationDetected { .. } => {}
                 },
                 _ => break,
             }
@@ -2321,6 +2325,7 @@ mod tests {
                     ConsensusOutput::BatchCommitted(batch) => {
                         committed[node_idx].push(batch);
                     }
+                    ConsensusOutput::EquivocationDetected { .. } => {}
                 },
                 _ => break,
             }
@@ -2841,6 +2846,7 @@ mod tests {
                     ConsensusOutput::BatchCommitted(batch) => {
                         committed[node_idx].push(batch);
                     }
+                    ConsensusOutput::EquivocationDetected { .. } => {}
                 },
                 _ => break,
             }

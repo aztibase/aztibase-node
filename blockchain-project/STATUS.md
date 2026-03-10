@@ -1,9 +1,9 @@
 # PROJECT STATUS: Aztibase Network
 
 **Last Updated:** 2026-03-10
-**Updated By:** consensus-engineer / tokenomics-engineer
-**Current Phase:** M8 -- Public Testnet (Sprint 13 COMPLETE)
-**Current Sprint:** Sprint 038 -- COMPLETE (Validator Staking, Delegation & Slashing)
+**Updated By:** consensus-engineer / node-engineer
+**Current Phase:** M8 -- Public Testnet (Sprint 14 COMPLETE)
+**Current Sprint:** Sprint 039 -- COMPLETE (Full-Node Integration Wiring & M8 Close)
 
 ---
 
@@ -33,7 +33,7 @@
 - Build-phase tracking infrastructure (5 documents)
 - Implementation depth audit (Sprint 001, Task 7)
 - Reference repos cloned (MystiCeti, Sui, Lighthouse, rust-libp2p, redb)
-- cargo build + cargo test pass (759 tests, 0 failures)
+- cargo build + cargo test pass (770+ tests, 0 failures)
 - Sprint 001 closed with retrospective
 - Sprint 002 closed: 24/24 tasks, 5 phases complete
 - Sprint 003 closed: 18/18 tasks, 4 phases complete
@@ -77,12 +77,16 @@
 | aztibase-wasm | PARTIAL | p2p-network-engineer | NO | YES |
 
 ### In Progress
-- Nothing currently in progress — Sprint 038 complete, Sprint 039 next
+- Nothing currently in progress — Sprint 039 complete, Sprint 040 next
 
 ### Blocked
 - Nothing currently blocked
 
 ### Recently Completed
+- Sprint 039 Phase 4: Security review — clippy 0 warnings, fmt clean, 770+ tests pass (7+ new), 0 ELEVATED, 0 MEDIUM
+- Sprint 039 Phase 3: Staking metrics — active_validators, total_staked, slashes_applied in Prometheus + JSON
+- Sprint 039 Phase 2: Genesis bootstrap — genesis validators registered in StakingStore, epoch_length as ChainParam
+- Sprint 039 Phase 1: Consensus-pipeline bridge — EquivocationDetected output, SlashEvent wiring, ValidatorSet sync, StakingStore→RPC
 - Sprint 038 Phase 4: Security review — clippy 0 warnings, fmt clean, 759 tests pass (~34 new), 0 ELEVATED, 0 MEDIUM
 - Sprint 038 Phase 3: Staking RPCs + ChainParams — aztb_getValidatorStake, aztb_getDelegation, aztb_getActiveValidators, aztb_getUnbondingStatus; 3 new governance params (min_validator_stake, max_stake_cap, validator_commission_bps)
 - Sprint 038 Phase 2: Epoch rewards + validator set — distribute_epoch_rewards with 10% commission, active_set_snapshot, epoch_participation for downtime detection
@@ -208,7 +212,7 @@
 - Sprint 005 Phase 1: Consensus-to-execution wiring, TxKind routing, ExecutionPipeline
 
 ### Next Up
-1. Sprint 039 — next sprint to be planned
+1. Sprint 040 — M8 close assessment or M9 prep
 
 ### Deferred to M9+ (Locked in FUTURE_PLANNING.md)
 

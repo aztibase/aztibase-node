@@ -21,6 +21,23 @@ Entries are prepended (newest first).
 
 ## Entries
 
+### 2026-03-10 -- consensus-engineer / node-engineer / security-engineer -- Sprint 039 Complete (M8 Sprint 14: Full-Node Integration Wiring & M8 Close)
+**Task:** Sprint 039: Wire staking/slashing/governance/tokenomics into main.rs, consensus-pipeline bridges, genesis staking bootstrap, staking metrics
+**Sprint:** Sprint 039, Phases 1-4
+**Git Ref:** pending
+**Files Changed:**
+- crates/aztibase-consensus/src/engine.rs: ConsensusOutput::EquivocationDetected variant, ConsensusInput::UpdateValidatorSet variant, equivocation emits output, engine handles validator set update
+- crates/aztibase-node/src/main.rs: StakingStore wired to RPC, slash channel bridged from consensus, consensus_tx passed to pipeline, genesis validator bootstrap in StakingStore
+- crates/aztibase-node/src/pipeline.rs: set_consensus_tx(), bootstrap_genesis_validators(), consensus_tx field, epoch boundary sends UpdateValidatorSet, removed dead_code markers
+- crates/aztibase-node/src/integration.rs: all ConsensusOutput match arms updated for EquivocationDetected
+- crates/aztibase-execution/src/chain_params.rs: epoch_length governance param (bounds 1K-100K)
+- crates/aztibase-rpc/src/metrics.rs: active_validators, total_staked, slashes_applied gauges, update_staking()/inc_slashes() methods, staking JSON section
+- CHANGELOG.md, blockchain-project/sprints/SPRINT-039.md
+**Review Notes:** Phase 1: Consensus-pipeline bridge — equivocation detection emits ConsensusOutput, main.rs bridges to SlashEvent channel, validator set sync via ConsensusInput at epoch boundary. Phase 2: Genesis bootstrap — register_validator() for each genesis validator in StakingStore, epoch_length as governance ChainParam. Phase 3: Staking metrics in Prometheus (3 new counters/gauges), staking section in JSON metrics. Phase 4: 7+ new tests, clippy 0 warnings, fmt clean.
+**Security Flags:** 0 ELEVATED, 0 MEDIUM. Slash channel is internal mpsc (no external injection). ValidatorSet updates processed sequentially in consensus input queue (no mid-round mutation). Empty validator set guarded by staking min_stake threshold.
+
+---
+
 ### 2026-03-10 -- consensus-engineer / tokenomics-engineer / node-engineer / security-engineer -- Sprint 038 Complete (M8 Sprint 13: Validator Staking, Delegation & Slashing)
 **Task:** Sprint 038: StakingStore, 4 staking TxKinds, delegation, unbonding queue, epoch reward distribution, equivocation/downtime slashing, 4 staking RPCs, 3 governance params
 **Sprint:** Sprint 038, Phases 1-4

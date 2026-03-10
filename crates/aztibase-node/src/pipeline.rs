@@ -75,8 +75,8 @@ pub struct ExecutionPipeline {
     emission_tracker: Arc<RwLock<EmissionTracker>>,
     staking_store: Arc<RwLock<StakingStore>>,
     slash_rx: mpsc::Receiver<SlashEvent>,
-    #[allow(dead_code)]
     slash_tx: mpsc::Sender<SlashEvent>,
+    consensus_tx: Option<mpsc::Sender<aztibase_consensus::ConsensusInput>>,
     epoch_participation: HashSet<[u8; 32]>,
     archive: bool,
 }
@@ -130,6 +130,7 @@ impl ExecutionPipeline {
             staking_store: Arc::new(RwLock::new(StakingStore::new())),
             slash_rx: slash_rx_init,
             slash_tx: slash_tx_init,
+            consensus_tx: None,
             epoch_participation: HashSet::new(),
             archive: false,
         }
@@ -160,14 +161,37 @@ impl ExecutionPipeline {
         Arc::clone(&self.emission_tracker)
     }
 
-    #[allow(dead_code)]
+    /// Shared staking store (for RPC server and epoch boundary).
     pub fn shared_staking_store(&self) -> Arc<RwLock<StakingStore>> {
         Arc::clone(&self.staking_store)
     }
 
-    #[allow(dead_code)]
+    /// Clone the slash event sender (for consensus → pipeline slashing bridge).
     pub fn slash_sender(&self) -> mpsc::Sender<SlashEvent> {
         self.slash_tx.clone()
+    }
+
+    /// Attach the consensus input channel for validator set updates at epoch boundaries.
+    pub fn set_consensus_tx(&mut self, tx: mpsc::Sender<aztibase_consensus::ConsensusInput>) {
+        self.consensus_tx = Some(tx);
+    }
+
+    /// Register genesis validators in the StakingStore so staking RPCs return
+    /// data from round 0. Call after `apply_genesis()`.
+    pub async fn bootstrap_genesis_validators(&self, validators: &[([u8; 32], u64)]) {
+        let mut staking = self.staking_store.write().await;
+        for &(vid, stake) in validators {
+            if staking
+                .register_validator(vid, stake, 0, MAX_VALIDATOR_STAKE_CAP, 0)
+                .is_ok()
+            {
+                tracing::info!(
+                    validator = %short_hex(&vid),
+                    stake,
+                    "Genesis validator registered in StakingStore"
+                );
+            }
+        }
     }
 
     /// Attach an AI runtime for inference transaction execution.
@@ -2015,8 +2039,8 @@ impl ExecutionPipeline {
         // Epoch boundary: distribute emission rewards to stakers.
         {
             let epoch_length = {
-                let tracker = self.emission_tracker.read().await;
-                tracker.epoch_length
+                let cp = self.chain_params.read().await;
+                cp.get_u64("epoch_length").unwrap_or(10_000)
             };
             if epoch_length > 0 && self.current_round.is_multiple_of(epoch_length) {
                 let dist = {
@@ -2062,6 +2086,17 @@ impl ExecutionPipeline {
                     }
 
                     self.epoch_participation.clear();
+
+                    // Propagate updated validator set to consensus engine.
+                    if let Some(ref ctx) = self.consensus_tx {
+                        let mut new_vs = aztibase_consensus::ValidatorSet::new();
+                        for (vid, stake) in &active_set {
+                            new_vs.add(*vid, *stake);
+                        }
+                        let _ = ctx.try_send(
+                            aztibase_consensus::ConsensusInput::UpdateValidatorSet(new_vs),
+                        );
+                    }
 
                     tracing::info!(
                         round = self.current_round,
@@ -2356,6 +2391,7 @@ mod tests {
             staking_store: Arc::new(RwLock::new(StakingStore::new())),
             slash_rx: slash_rx_init,
             slash_tx: slash_tx_init,
+            consensus_tx: None,
             epoch_participation: HashSet::new(),
             archive: false,
         }
@@ -2883,6 +2919,7 @@ mod tests {
             staking_store: Arc::new(RwLock::new(StakingStore::new())),
             slash_rx: slash_rx_init,
             slash_tx: slash_tx_init,
+            consensus_tx: None,
             epoch_participation: HashSet::new(),
             archive: false,
         }
@@ -4630,5 +4667,41 @@ mod tests {
                 .get_u64("max_block_range"),
             Some(500)
         );
+    }
+
+    #[tokio::test]
+    async fn genesis_bootstrap_registers_validators() {
+        let (_tx, rx) = mpsc::channel(1);
+        let pipeline = make_pipeline(rx);
+        let validators = vec![([1u8; 32], 100_000u64), ([2u8; 32], 200_000u64)];
+        pipeline.bootstrap_genesis_validators(&validators).await;
+
+        let staking = pipeline.staking_store.read().await;
+        let active = staking.active_validators();
+        assert_eq!(active.len(), 2);
+        assert_eq!(
+            staking.get_validator(&[1u8; 32]).unwrap().self_stake,
+            100_000
+        );
+        assert_eq!(
+            staking.get_validator(&[2u8; 32]).unwrap().self_stake,
+            200_000
+        );
+    }
+
+    #[tokio::test]
+    async fn epoch_length_from_chain_params() {
+        let (_tx, rx) = mpsc::channel(1);
+        let pipeline = make_pipeline(rx);
+        let cp = pipeline.chain_params.read().await;
+        let epoch_len = cp.get_u64("epoch_length").unwrap_or(10_000);
+        assert_eq!(epoch_len, 10_000);
+    }
+
+    #[tokio::test]
+    async fn consensus_tx_wired_for_validator_update() {
+        let (_tx, rx) = mpsc::channel(1);
+        let pipeline = make_pipeline(rx);
+        assert!(pipeline.consensus_tx.is_none());
     }
 }

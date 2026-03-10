@@ -169,6 +169,14 @@ static PARAM_DEFS: &[ParamDef] = &[
         description: "Receipt store eviction cap",
     },
     ParamDef {
+        key: "epoch_length",
+        param_type: ParamType::U64,
+        default: ParamValue::U64(10_000),
+        min: Some(1_000),
+        max: Some(100_000),
+        description: "Rounds per epoch (controls reward distribution frequency)",
+    },
+    ParamDef {
         key: "min_validator_stake",
         param_type: ParamType::U64,
         default: ParamValue::U64(50_000_000_000_000),
@@ -384,6 +392,25 @@ mod tests {
 
         let err = params
             .set("validator_commission_bps", ParamValue::U64(5000))
+            .unwrap_err();
+        assert!(matches!(err, ChainParamError::OutOfBounds { .. }));
+    }
+
+    #[test]
+    fn epoch_length_param_defaults_and_bounds() {
+        let mut params = ChainParams::defaults();
+        assert_eq!(params.get_u64("epoch_length"), Some(10_000));
+
+        params.set("epoch_length", ParamValue::U64(5_000)).unwrap();
+        assert_eq!(params.get_u64("epoch_length"), Some(5_000));
+
+        let err = params
+            .set("epoch_length", ParamValue::U64(500))
+            .unwrap_err();
+        assert!(matches!(err, ChainParamError::OutOfBounds { .. }));
+
+        let err = params
+            .set("epoch_length", ParamValue::U64(200_000))
             .unwrap_err();
         assert!(matches!(err, ChainParamError::OutOfBounds { .. }));
     }

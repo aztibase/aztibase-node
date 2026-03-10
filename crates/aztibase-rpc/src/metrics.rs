@@ -33,6 +33,11 @@ struct Inner {
     pub mempool_size: Gauge,
     pub pending_tasks: Gauge,
     pub peer_count: Gauge,
+
+    // Staking gauges
+    pub active_validators: Gauge,
+    pub total_staked: Gauge,
+    pub slashes_applied: Counter,
 }
 
 impl NodeMetrics {
@@ -51,6 +56,9 @@ impl NodeMetrics {
         let mempool_size = Gauge::<i64, _>::default();
         let pending_tasks = Gauge::<i64, _>::default();
         let peer_count = Gauge::<i64, _>::default();
+        let active_validators = Gauge::<i64, _>::default();
+        let total_staked = Gauge::<i64, _>::default();
+        let slashes_applied = Counter::default();
 
         registry.register(
             "aztibase_consensus_vertices_proposed",
@@ -112,6 +120,21 @@ impl NodeMetrics {
             "Connected P2P peers",
             peer_count.clone(),
         );
+        registry.register(
+            "aztibase_staking_active_validators",
+            "Number of active validators in the current set",
+            active_validators.clone(),
+        );
+        registry.register(
+            "aztibase_staking_total_staked",
+            "Total amount staked across all validators",
+            total_staked.clone(),
+        );
+        registry.register(
+            "aztibase_staking_slashes_applied",
+            "Total slashing events applied",
+            slashes_applied.clone(),
+        );
 
         Self {
             inner: Arc::new(Inner {
@@ -128,6 +151,9 @@ impl NodeMetrics {
                 mempool_size,
                 pending_tasks,
                 peer_count,
+                active_validators,
+                total_staked,
+                slashes_applied,
             }),
         }
     }
@@ -175,6 +201,15 @@ impl NodeMetrics {
         self.inner.peer_count.set(count as i64);
     }
 
+    pub fn update_staking(&self, active_validators: u64, total_staked: u64) {
+        self.inner.active_validators.set(active_validators as i64);
+        self.inner.total_staked.set(total_staked as i64);
+    }
+
+    pub fn inc_slashes(&self, count: u64) {
+        self.inner.slashes_applied.inc_by(count);
+    }
+
     /// Encode all metrics in Prometheus text exposition format.
     pub fn encode_prometheus(&self) -> String {
         let mut buf = String::new();
@@ -204,6 +239,11 @@ impl NodeMetrics {
             },
             "ai": {
                 "pending_tasks": self.inner.pending_tasks.get(),
+            },
+            "staking": {
+                "active_validators": self.inner.active_validators.get(),
+                "total_staked": self.inner.total_staked.get(),
+                "slashes_applied": counter_value(&self.inner.slashes_applied),
             }
         })
     }
@@ -273,6 +313,22 @@ mod tests {
         let json = m.encode_json();
         assert_eq!(json["consensus"]["vertices_proposed"], 8);
         assert_eq!(json["consensus"]["commits"], 4);
+    }
+
+    #[test]
+    fn staking_metrics_tracked() {
+        let m = NodeMetrics::new();
+        m.update_staking(5, 1_000_000);
+        m.inc_slashes(2);
+
+        let json = m.encode_json();
+        assert_eq!(json["staking"]["active_validators"], 5);
+        assert_eq!(json["staking"]["total_staked"], 1_000_000);
+        assert_eq!(json["staking"]["slashes_applied"], 2);
+
+        let text = m.encode_prometheus();
+        assert!(text.contains("aztibase_staking_active_validators"));
+        assert!(text.contains("aztibase_staking_total_staked"));
     }
 
     #[test]

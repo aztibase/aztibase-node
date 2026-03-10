@@ -617,10 +617,25 @@ async fn main() -> Result<()> {
                 accounts = state_guard.account_count(),
                 "Genesis state applied"
             );
+
+            // Bootstrap staking store from genesis validators.
+            let genesis_validators: Vec<([u8; 32], u64)> = gen_cfg
+                .validators
+                .iter()
+                .filter_map(|v| {
+                    genesis::hex_decode(&v.address)
+                        .and_then(|b| <[u8; 32]>::try_from(b.as_slice()).ok())
+                        .map(|addr| (addr, v.stake))
+                })
+                .collect();
+            drop(state_guard);
+            exec_pipeline
+                .bootstrap_genesis_validators(&genesis_validators)
+                .await;
         } else {
             tracing::info!("State already populated, skipping genesis");
+            drop(state_guard);
         }
-        drop(state_guard);
     }
 
     // Prometheus metrics registry
@@ -643,7 +658,8 @@ async fn main() -> Result<()> {
     .with_compute_commitments(exec_pipeline.shared_compute_commitments())
     .with_governance(exec_pipeline.shared_governance())
     .with_chain_params(exec_pipeline.shared_chain_params())
-    .with_emission_tracker(exec_pipeline.shared_emission_tracker());
+    .with_emission_tracker(exec_pipeline.shared_emission_tracker())
+    .with_staking_store(exec_pipeline.shared_staking_store());
 
     if let Some(ref gen_cfg) = genesis_config {
         rpc_server = rpc_server.with_genesis_hash(genesis::genesis_hash(gen_cfg));
@@ -730,6 +746,10 @@ async fn main() -> Result<()> {
             tracing::error!(error = %e, "Consensus engine failed");
         }
     });
+
+    // Wire consensus ↔ pipeline bridges
+    let slash_tx = exec_pipeline.slash_sender();
+    exec_pipeline.set_consensus_tx(consensus_tx.clone());
 
     // Shared state for sync protocol + mempool gas price validation
     let shared_state = exec_pipeline.shared_state();
@@ -930,6 +950,20 @@ async fn main() -> Result<()> {
                         if let Err(e) = transport.publish(TOPIC_CONSENSUS, data) {
                             tracing::debug!(error = %e, "Failed to publish vertex");
                         }
+                    }
+                    Some(ConsensusOutput::EquivocationDetected { author, round }) => {
+                        tracing::warn!(
+                            author = %format!("{:02x}{:02x}{:02x}{:02x}",
+                                author[0], author[1], author[2], author[3]),
+                            round,
+                            "Equivocation detected — sending slash event to pipeline"
+                        );
+                        let event = pipeline::SlashEvent {
+                            validator_id: author,
+                            offense: aztibase_execution::OffenseType::Equivocation,
+                            round,
+                        };
+                        let _ = slash_tx.send(event).await;
                     }
                     Some(ConsensusOutput::BatchCommitted(batch)) => {
                         tracing::info!(

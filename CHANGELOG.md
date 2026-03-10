@@ -5,6 +5,29 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ---
 
+## [M8-S14] -- Full-Node Integration Wiring & M8 Close (Sprint 039)
+
+### Added
+- `ConsensusOutput::EquivocationDetected`: consensus emits equivocation events on outbox (2026-03-10)
+- `ConsensusInput::UpdateValidatorSet`: pipeline sends updated validator set to consensus at epoch boundaries (2026-03-10)
+- main.rs: equivocation events bridged to pipeline SlashEvent channel (2026-03-10)
+- main.rs: StakingStore wired to RPC server via `with_staking_store()` (2026-03-10)
+- main.rs: consensus_tx passed to pipeline for validator set sync (2026-03-10)
+- `ExecutionPipeline::bootstrap_genesis_validators()`: registers genesis validators in StakingStore at startup (2026-03-10)
+- `ExecutionPipeline::set_consensus_tx()`: attaches consensus input channel for epoch boundary updates (2026-03-10)
+- `epoch_length` governance-controllable ChainParam (bounds: 1,000-100,000, default: 10,000) (2026-03-10)
+- Staking Prometheus metrics: `active_validators`, `total_staked`, `slashes_applied` gauges (2026-03-10)
+- `NodeMetrics::update_staking()` and `inc_slashes()` for Prometheus export (2026-03-10)
+- 7+ new tests: equivocation output, validator set update, genesis bootstrap, epoch_length param, consensus_tx wiring, staking metrics (2026-03-10)
+
+### Changed
+- `ConsensusEngine`: handles `UpdateValidatorSet` input to replace live validator set (2026-03-10)
+- Pipeline: epoch boundary reads `epoch_length` from ChainParams instead of EmissionTracker (2026-03-10)
+- Removed `#[allow(dead_code)]` from `shared_staking_store()` and `slash_sender()` (2026-03-10)
+- Integration tests: all ConsensusOutput match arms updated for EquivocationDetected (2026-03-10)
+
+---
+
 ## [M8-S13] -- Validator Staking, Delegation & Slashing (Sprint 038)
 
 ### Added

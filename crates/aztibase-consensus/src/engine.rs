@@ -152,6 +152,8 @@ pub enum ConsensusInput {
     ReceivedVertex(Vec<u8>),
     /// A transaction to include in the next vertex payload.
     Transaction(Vec<u8>),
+    /// Replace the validator set (sent from pipeline at epoch boundaries).
+    UpdateValidatorSet(crate::validator::ValidatorSet),
 }
 
 /// Messages flowing out of the consensus engine.
@@ -161,6 +163,8 @@ pub enum ConsensusOutput {
     BroadcastVertex(Vec<u8>),
     /// A batch of transactions was committed via DAG consensus.
     BatchCommitted(crate::ordering::CommittedBatch),
+    /// A validator produced conflicting vertices in the same round.
+    EquivocationDetected { author: [u8; 32], round: u64 },
 }
 
 /// State root announcement broadcast to peers after executing a committed batch.
@@ -366,6 +370,13 @@ impl ConsensusEngine {
                     debug!("Pending tx queue full, dropping transaction");
                 }
             }
+            ConsensusInput::UpdateValidatorSet(new_set) => {
+                info!(
+                    validators = new_set.len(),
+                    "Validator set updated from staking epoch"
+                );
+                self.validators = new_set;
+            }
         }
         Ok(())
     }
@@ -410,6 +421,10 @@ impl ConsensusEngine {
                 total = self.equivocations_detected,
                 "Equivocation detected — dropping vertex"
             );
+            let _ = self.outbox.try_send(ConsensusOutput::EquivocationDetected {
+                author: block.author,
+                round: block.round,
+            });
             return true;
         }
         self.seen_authors.insert(key, block.hash);
@@ -974,6 +989,54 @@ mod tests {
         let snap_recv = metrics.snapshot();
         assert_eq!(snap_recv.vertices_received, 1);
 
+        cleanup(&path);
+    }
+
+    #[tokio::test]
+    async fn equivocation_emits_output() {
+        let (mut engine, _in_tx, mut out_rx, path) = make_test_engine();
+        engine.insert_genesis().unwrap();
+
+        let genesis_hashes: Vec<BlockHash> = engine.state.vertices_at_round(0).to_vec();
+
+        let block_a =
+            DagBlock::new(1, [2u8; 32], genesis_hashes.clone(), vec![1], now_ms()).unwrap();
+        let data_a = crate::wire::encode_vertex(&block_a).unwrap();
+        engine.handle_received_vertex(&data_a).unwrap();
+
+        // Drain the BroadcastVertex if any
+        while out_rx.try_recv().is_ok() {}
+
+        let block_b = DagBlock::new(1, [2u8; 32], genesis_hashes, vec![2], now_ms()).unwrap();
+        let data_b = crate::wire::encode_vertex(&block_b).unwrap();
+        engine.handle_received_vertex(&data_b).unwrap();
+
+        let output = out_rx.try_recv().unwrap();
+        match output {
+            ConsensusOutput::EquivocationDetected { author, round } => {
+                assert_eq!(author, [2u8; 32]);
+                assert_eq!(round, 1);
+            }
+            other => panic!("Expected EquivocationDetected, got {other:?}"),
+        }
+        cleanup(&path);
+    }
+
+    #[tokio::test]
+    async fn update_validator_set_replaces_validators() {
+        let (mut engine, _in_tx, _out_rx, path) = make_test_engine();
+        assert_eq!(engine.validators.len(), 3);
+
+        let mut new_set = ValidatorSet::new();
+        new_set.add([10u8; 32], 500);
+        new_set.add([20u8; 32], 500);
+        engine
+            .handle_input(ConsensusInput::UpdateValidatorSet(new_set))
+            .unwrap();
+
+        assert_eq!(engine.validators.len(), 2);
+        assert!(engine.validators.contains(&[10u8; 32]));
+        assert!(!engine.validators.contains(&[1u8; 32]));
         cleanup(&path);
     }
 }
