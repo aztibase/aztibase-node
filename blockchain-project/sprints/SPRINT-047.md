@@ -1,8 +1,8 @@
 # Sprint 047 — Testnet Validation (M9-S8)
 
-**Status:** IN PROGRESS
+**Status:** COMPLETE
 **Started:** 2026-03-10
-**Completed:** --
+**Completed:** 2026-03-10
 **Engineer(s):** node-engineer, p2p-network-engineer, consensus-engineer, security-engineer
 
 ---
@@ -65,10 +65,13 @@ Infrastructure exists (Dockerfile, docker-compose, Makefile, scripts, genesis co
 - **Status:** DONE
 
 ### Task 3.3 — Transaction submission
-- Use funded account keys (data/genesis/keys/) to sign and submit transfers
-- Verify balance changes via aztb_getBalance
-- Verify receipt via aztb_getTransactionByHash
-- **Status:** PENDING (next session)
+- Used `aztibase wallet transfer` CLI to submit 2 transfers via RPC
+- Transfer 1: 500 tokens from f939... to 5236..., nonce=0, TX hash 0xe049740f...
+- Transfer 2: 1000 tokens from f939... to 5236..., nonce=1, TX hash 0x828e2320...
+- Sender balance: 10,000,000 → 9,978,500 → 9,956,500 (value + 21,000 gas per tx)
+- Recipient balance: 10,000,000 → 10,000,500 → 10,001,500
+- Gas fee: 21,000 per transfer (deterministic)
+- **Status:** DONE
 
 ---
 
@@ -96,7 +99,7 @@ Infrastructure exists (Dockerfile, docker-compose, Makefile, scripts, genesis co
 ### Task 6.1 — Doc updates
 - BUILD_LOG.md, STATUS.md, CHANGELOG.md, sprint plan updated
 - Document all bugs found and fixed
-- **Status:** IN PROGRESS
+- **Status:** DONE
 
 ---
 

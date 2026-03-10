@@ -24,7 +24,7 @@ Entries are prepended (newest first).
 ### 2026-03-10 -- node-engineer / p2p-network-engineer / consensus-engineer -- Sprint 047 Testnet Validation (M9-S8)
 **Task:** First real multi-node testnet run. Debugged and fixed critical issues preventing block production in 3-node local testnet.
 **Sprint:** Sprint 047, Phases 1-3
-**Git Ref:** pending
+**Git Ref:** b18a6d6
 **Files Changed:**
 - crates/aztibase-network/src/transport.rs: removed add_explicit_peer() calls that prevented gossipsub mesh relay (Bug #10)
 - crates/aztibase-consensus/src/engine.rs: ThresholdClock per-round tracking, removed self-feed from propose_vertex (Bug #11), liveness timeout 10x→25x (Bug #13), peer-wait before first proposal, diagnostic logging, new integration test (run_produces_vertices_via_timeout)
@@ -37,7 +37,7 @@ Entries are prepended (newest first).
 - data/genesis/genesis.toml: stake/balance as strings (serde_u128_as_string)
 - data/node{1,2,3}/*.toml: full mesh boot_nodes for local testnet
 **Bugs Found & Fixed:** 4 new (Bug #10-#13), see sprint plan for details
-**Review Notes:** 3-node testnet now produces blocks continuously. 565 commits in ~45s, all nodes at block height 565, full mesh connectivity (2 peers each). 113 consensus tests pass, 0 clippy warnings.
+**Review Notes:** 3-node testnet produces blocks continuously (~660 blocks in 25s). Transfer transactions confirmed: 2 transfers (500 + 1000 tokens) via `aztibase wallet transfer` CLI, balances updated correctly, gas fee 21,000/tx deterministic. 113 consensus tests, 70 network tests pass, 0 clippy warnings.
 **Security Flags:** None
 
 ### 2026-03-10 -- node-engineer / consensus-engineer / security-engineer -- Sprint 046 Complete (M9-S7: Weak Subjectivity Checkpoints)
