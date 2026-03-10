@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashSet};
 use std::path::Path;
 
 use anyhow::{Context, Result};
@@ -10,6 +10,8 @@ use aztibase_execution::AccountState;
 type Address = [u8; 32];
 
 const CHAIN_ID: u64 = 0xA27B;
+const GENESIS_SUPPLY: u128 = 400_000_000;
+const DEFAULT_MIN_VALIDATOR_STAKE: u128 = 10_000;
 
 mod serde_u128_as_string {
     use serde::{self, Deserialize, Deserializer, Serializer};
@@ -334,6 +336,135 @@ pub fn load_keyfile_full(path: &Path) -> Result<(Keypair, Address, Option<BlsKey
     Ok((kp, addr, bls_kp))
 }
 
+#[derive(Debug, thiserror::Error)]
+pub enum GenesisValidationError {
+    #[error("no validators in genesis config")]
+    NoValidators,
+    #[error("duplicate validator address: {0}")]
+    DuplicateValidator(String),
+    #[error("duplicate account address: {0}")]
+    DuplicateAccount(String),
+    #[error("validator {name} has invalid address: {address}")]
+    InvalidValidatorAddress { name: String, address: String },
+    #[error("account has invalid address: {0}")]
+    InvalidAccountAddress(String),
+    #[error("validator {name} stake {stake} below minimum {min}")]
+    StakeBelowMinimum {
+        name: String,
+        stake: u128,
+        min: u128,
+    },
+    #[error("total genesis supply {total} exceeds cap {cap}")]
+    SupplyExceeded { total: u128, cap: u128 },
+    #[error("validator {name} has invalid BLS key length: {len} (expected 48 bytes)")]
+    InvalidBlsKeyLength { name: String, len: usize },
+    #[error("validator {name} has invalid BLS key hex")]
+    InvalidBlsKeyHex { name: String },
+    #[error("validator address also appears in accounts: {0}")]
+    ValidatorAccountOverlap(String),
+}
+
+pub fn validate_genesis(config: &GenesisConfig) -> Result<(), Vec<GenesisValidationError>> {
+    validate_genesis_with_min_stake(config, DEFAULT_MIN_VALIDATOR_STAKE)
+}
+
+pub fn validate_genesis_with_min_stake(
+    config: &GenesisConfig,
+    min_stake: u128,
+) -> Result<(), Vec<GenesisValidationError>> {
+    let mut errors = Vec::new();
+
+    if config.validators.is_empty() {
+        errors.push(GenesisValidationError::NoValidators);
+    }
+
+    let mut validator_addrs: HashSet<String> = HashSet::new();
+    for entry in &config.validators {
+        if !validator_addrs.insert(entry.address.clone()) {
+            errors.push(GenesisValidationError::DuplicateValidator(
+                entry.address.clone(),
+            ));
+        }
+
+        match hex_decode(&entry.address) {
+            Some(bytes) if bytes.len() == 32 => {}
+            _ => {
+                errors.push(GenesisValidationError::InvalidValidatorAddress {
+                    name: entry.name.clone(),
+                    address: entry.address.clone(),
+                });
+            }
+        }
+
+        if entry.stake < min_stake {
+            errors.push(GenesisValidationError::StakeBelowMinimum {
+                name: entry.name.clone(),
+                stake: entry.stake,
+                min: min_stake,
+            });
+        }
+
+        if let Some(ref bls_hex) = entry.bls_public_key {
+            match hex_decode(bls_hex) {
+                Some(bytes) if bytes.len() == 48 => {}
+                Some(bytes) => {
+                    errors.push(GenesisValidationError::InvalidBlsKeyLength {
+                        name: entry.name.clone(),
+                        len: bytes.len(),
+                    });
+                }
+                None => {
+                    errors.push(GenesisValidationError::InvalidBlsKeyHex {
+                        name: entry.name.clone(),
+                    });
+                }
+            }
+        }
+    }
+
+    let mut account_addrs: HashSet<String> = HashSet::new();
+    for hex_addr in config.accounts.keys() {
+        if !account_addrs.insert(hex_addr.clone()) {
+            errors.push(GenesisValidationError::DuplicateAccount(hex_addr.clone()));
+        }
+
+        match hex_decode(hex_addr) {
+            Some(bytes) if bytes.len() == 32 => {}
+            _ => {
+                errors.push(GenesisValidationError::InvalidAccountAddress(
+                    hex_addr.clone(),
+                ));
+            }
+        }
+
+        if validator_addrs.contains(hex_addr) {
+            errors.push(GenesisValidationError::ValidatorAccountOverlap(
+                hex_addr.clone(),
+            ));
+        }
+    }
+
+    let total_supply: u128 = config
+        .validators
+        .iter()
+        .map(|v| v.stake)
+        .chain(config.accounts.values().map(|a| a.balance))
+        .sum();
+
+    if total_supply > GENESIS_SUPPLY {
+        errors.push(GenesisValidationError::SupplyExceeded {
+            total: total_supply,
+            cap: GENESIS_SUPPLY,
+        });
+    }
+
+    if errors.is_empty() {
+        Ok(())
+    } else {
+        Err(errors)
+    }
+}
+
 pub fn load_genesis(path: &Path) -> Result<GenesisConfig> {
     let contents = std::fs::read_to_string(path)
         .with_context(|| format!("Failed to read genesis file: {}", path.display()))?;
@@ -345,6 +476,155 @@ pub fn load_genesis(path: &Path) -> Result<GenesisConfig> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn valid_genesis_config() -> GenesisConfig {
+        GenesisConfig {
+            chain_id: CHAIN_ID,
+            timestamp: 1000,
+            validators: vec![ValidatorEntry {
+                name: "v1".into(),
+                address: hex_encode(&[0x01; 32]),
+                stake: 100_000,
+                bls_public_key: Some(hex_encode(&[0xAA; 48])),
+            }],
+            accounts: BTreeMap::from([(hex_encode(&[0x02; 32]), AccountEntry { balance: 50_000 })]),
+        }
+    }
+
+    #[test]
+    fn validate_valid_genesis_passes() {
+        assert!(validate_genesis(&valid_genesis_config()).is_ok());
+    }
+
+    #[test]
+    fn validate_rejects_no_validators() {
+        let mut cfg = valid_genesis_config();
+        cfg.validators.clear();
+        let errs = validate_genesis(&cfg).unwrap_err();
+        assert!(
+            errs.iter()
+                .any(|e| matches!(e, GenesisValidationError::NoValidators))
+        );
+    }
+
+    #[test]
+    fn validate_rejects_duplicate_validator_address() {
+        let mut cfg = valid_genesis_config();
+        let dup = cfg.validators[0].clone();
+        cfg.validators.push(ValidatorEntry {
+            name: "v2".into(),
+            ..dup
+        });
+        let errs = validate_genesis(&cfg).unwrap_err();
+        assert!(
+            errs.iter()
+                .any(|e| matches!(e, GenesisValidationError::DuplicateValidator(_)))
+        );
+    }
+
+    #[test]
+    fn validate_rejects_duplicate_account_address() {
+        let mut cfg = valid_genesis_config();
+        let addr = hex_encode(&[0x03; 32]);
+        cfg.accounts
+            .insert(addr.clone(), AccountEntry { balance: 100 });
+        // BTreeMap deduplicates keys, so test a different way:
+        // accounts map uses String keys so can't have actual dups.
+        // Instead test validator-account overlap:
+        let val_addr = cfg.validators[0].address.clone();
+        cfg.accounts.insert(val_addr, AccountEntry { balance: 100 });
+        let errs = validate_genesis(&cfg).unwrap_err();
+        assert!(
+            errs.iter()
+                .any(|e| matches!(e, GenesisValidationError::ValidatorAccountOverlap(_)))
+        );
+    }
+
+    #[test]
+    fn validate_rejects_zero_stake() {
+        let mut cfg = valid_genesis_config();
+        cfg.validators[0].stake = 0;
+        let errs = validate_genesis(&cfg).unwrap_err();
+        assert!(
+            errs.iter()
+                .any(|e| matches!(e, GenesisValidationError::StakeBelowMinimum { .. }))
+        );
+    }
+
+    #[test]
+    fn validate_rejects_supply_exceeded() {
+        let mut cfg = valid_genesis_config();
+        cfg.validators[0].stake = GENESIS_SUPPLY;
+        cfg.accounts
+            .insert(hex_encode(&[0x02; 32]), AccountEntry { balance: 1 });
+        let errs = validate_genesis(&cfg).unwrap_err();
+        assert!(
+            errs.iter()
+                .any(|e| matches!(e, GenesisValidationError::SupplyExceeded { .. }))
+        );
+    }
+
+    #[test]
+    fn validate_rejects_invalid_address() {
+        let mut cfg = valid_genesis_config();
+        cfg.validators[0].address = "not_hex".into();
+        let errs = validate_genesis(&cfg).unwrap_err();
+        assert!(
+            errs.iter()
+                .any(|e| matches!(e, GenesisValidationError::InvalidValidatorAddress { .. }))
+        );
+    }
+
+    #[test]
+    fn validate_rejects_short_address() {
+        let mut cfg = valid_genesis_config();
+        cfg.validators[0].address = hex_encode(&[0x01; 16]); // 16 bytes, need 32
+        let errs = validate_genesis(&cfg).unwrap_err();
+        assert!(
+            errs.iter()
+                .any(|e| matches!(e, GenesisValidationError::InvalidValidatorAddress { .. }))
+        );
+    }
+
+    #[test]
+    fn validate_rejects_bad_bls_key_length() {
+        let mut cfg = valid_genesis_config();
+        cfg.validators[0].bls_public_key = Some(hex_encode(&[0xBB; 32])); // 32 bytes, need 48
+        let errs = validate_genesis(&cfg).unwrap_err();
+        assert!(
+            errs.iter()
+                .any(|e| matches!(e, GenesisValidationError::InvalidBlsKeyLength { .. }))
+        );
+    }
+
+    #[test]
+    fn validate_rejects_bad_bls_key_hex() {
+        let mut cfg = valid_genesis_config();
+        cfg.validators[0].bls_public_key = Some("not_valid_hex_zzz".into());
+        let errs = validate_genesis(&cfg).unwrap_err();
+        assert!(
+            errs.iter()
+                .any(|e| matches!(e, GenesisValidationError::InvalidBlsKeyHex { .. }))
+        );
+    }
+
+    #[test]
+    fn validate_collects_multiple_errors() {
+        let cfg = GenesisConfig {
+            chain_id: CHAIN_ID,
+            timestamp: 1000,
+            validators: vec![],
+            accounts: BTreeMap::from([("bad_hex".into(), AccountEntry { balance: 100 })]),
+        };
+        let errs = validate_genesis(&cfg).unwrap_err();
+        assert!(errs.len() >= 2); // NoValidators + InvalidAccountAddress
+    }
+
+    #[test]
+    fn validate_generated_genesis_passes() {
+        let generated = generate_genesis(3, 2, 1000);
+        assert!(validate_genesis(&generated.config).is_ok());
+    }
 
     #[test]
     fn genesis_applies_balances() {

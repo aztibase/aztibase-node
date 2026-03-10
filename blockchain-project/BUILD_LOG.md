@@ -21,6 +21,20 @@ Entries are prepended (newest first).
 
 ## Entries
 
+### 2026-03-10 -- blockchain-architect / node-engineer / security-engineer -- Sprint 042 Complete (M9-S3: Genesis Validation & Network Identity)
+**Task:** Sprint 042: Comprehensive genesis config validation — duplicate detection, bounds checking, supply cap enforcement, startup abort on invalid genesis
+**Sprint:** Sprint 042, Phases 1-4
+**Git Ref:** pending
+**Files Changed:**
+- crates/aztibase-node/src/genesis.rs: GenesisValidationError enum (10 variants), validate_genesis()/validate_genesis_with_min_stake(), GENESIS_SUPPLY=400M, DEFAULT_MIN_VALIDATOR_STAKE=10K, 12 new tests
+- crates/aztibase-node/src/main.rs: validate_genesis() call after genesis load, abort on error, log genesis hash on successful validation
+- crates/aztibase-node/Cargo.toml: added thiserror dependency
+- blockchain-project/sprints/SPRINT-042.md: sprint plan
+**Review Notes:** Validation checks: no validators, duplicate validator/account addresses, invalid hex addresses (length ≠ 32 bytes), stake below minimum, supply exceeds 400M cap, invalid BLS key length (≠ 48 bytes), invalid BLS hex, validator-account address overlap. Multiple errors collected and reported together. Startup aborts with detailed error messages.
+**Security Flags:** 0 ELEVATED, 0 MEDIUM. Prevents malformed genesis from causing consensus divergence.
+
+---
+
 ### 2026-03-10 -- blockchain-architect / smart-contract-engineer / security-engineer -- Sprint 041 Complete (M9-S2: Gas Price Enforcement & Transaction Validation)
 **Task:** Sprint 041: Close gas-price bypass vulnerability — enforce gas_price >= base_fee, reject sub-base-fee txs, add gas estimates for all 19 TxKind variants
 **Sprint:** Sprint 041, Phases 1-4

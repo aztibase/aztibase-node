@@ -459,6 +459,25 @@ async fn main() -> Result<()> {
     let genesis_path = cli.genesis.as_ref().or(config.genesis_path.as_ref());
     let genesis_config = genesis_path.map(|p| genesis::load_genesis(p)).transpose()?;
 
+    if let Some(ref gen_cfg) = genesis_config {
+        if let Err(errors) = genesis::validate_genesis(gen_cfg) {
+            for err in &errors {
+                tracing::error!(%err, "Genesis validation error");
+            }
+            anyhow::bail!(
+                "Genesis config has {} validation error(s) — aborting",
+                errors.len()
+            );
+        }
+        let ghash = genesis::genesis_hash(gen_cfg);
+        tracing::info!(
+            genesis_hash = %genesis::hex_encode(&ghash),
+            validators = gen_cfg.validators.len(),
+            accounts = gen_cfg.accounts.len(),
+            "Genesis config validated"
+        );
+    }
+
     // Load validator key file (CLI flag > config file > none)
     let key_path = cli.validator_key.as_ref().or(config.validator_key.as_ref());
     let validator_keypair = key_path.map(|p| genesis::load_keyfile(p)).transpose()?;

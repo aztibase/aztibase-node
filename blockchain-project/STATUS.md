@@ -2,8 +2,8 @@
 
 **Last Updated:** 2026-03-10
 **Updated By:** consensus-engineer / node-engineer
-**Current Phase:** M9 -- Mainnet Prep (Sprint 2 COMPLETE)
-**Current Sprint:** Sprint 041 -- COMPLETE (Gas Price Enforcement & Transaction Validation)
+**Current Phase:** M9 -- Mainnet Prep (Sprint 3 COMPLETE)
+**Current Sprint:** Sprint 042 -- COMPLETE (Genesis Validation & Network Identity)
 
 ---
 

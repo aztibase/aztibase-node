@@ -5,6 +5,19 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ---
 
+## [M9-S3] -- Genesis Validation & Network Identity (Sprint 042)
+
+### Added
+- `GenesisValidationError` enum with 10 structured error variants (2026-03-10)
+- `validate_genesis()`: comprehensive genesis config validation — duplicates, bounds, supply cap, address format, BLS key length (2026-03-10)
+- `validate_genesis_with_min_stake()`: configurable minimum stake threshold (2026-03-10)
+- Startup: validate genesis config before consensus initialization, abort on error (2026-03-10)
+- Startup: log genesis hash for operator verification on successful validation (2026-03-10)
+- 12 new genesis validation tests (2026-03-10)
+- 778 tests pass, 0 clippy warnings, fmt clean (2026-03-10)
+
+---
+
 ## [M9-S2] -- Gas Price Enforcement & Transaction Validation (Sprint 041)
 
 ### Fixed
