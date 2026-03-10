@@ -125,6 +125,8 @@ impl BaseFeeCalculator {
             0x11 => 60_000,  // Unstake
             0x12 => 60_000,  // Delegate
             0x13 => 60_000,  // Undelegate
+            0x14 => 60_000,  // SetAgentPolicy
+            0x15 => 80_000,  // AgentExecute
             _ => 21_000,
         }
     }

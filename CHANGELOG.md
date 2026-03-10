@@ -5,6 +5,23 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ---
 
+## [M9-S4] -- Autonomous AI Agent Transactions (Sprint 043)
+
+### Added
+- `AgentPolicy` store: per-agent spending constraints (per_tx_limit, per_epoch_limit, allowed_tx_kinds, expiry_epoch)
+- `AgentSpendTracker`: epoch-based cumulative spend tracking with automatic epoch reset
+- `TxKind::SetAgentPolicy` (0x14): owner-only policy configuration for AI agents
+- `TxKind::AgentExecute` (0x15): autonomous agent transactions validated against policy constraints
+- Pipeline: SetAgentPolicy execution (owner auth, AIAgent type check), AgentExecute (policy validation, balance check, transfer)
+- `aztb_getAgentPolicy` RPC method: query agent policy by address
+- 8 new unit tests (agent module), 786 total
+
+### Changed
+- `estimate_gas` expanded to 21 TxKind variants (added 0x14=60K, 0x15=80K)
+- `extract_tx_features` captures AgentExecute value for anomaly scoring
+
+---
+
 ## [M9-S3] -- Genesis Validation & Network Identity (Sprint 042)
 
 ### Added

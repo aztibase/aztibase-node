@@ -21,6 +21,23 @@ Entries are prepended (newest first).
 
 ## Entries
 
+### 2026-03-10 -- blockchain-architect / smart-contract-engineer / ai-integration-engineer / security-engineer -- Sprint 043 Complete (M9-S4: Autonomous AI Agent Transactions)
+**Task:** Sprint 043: Enable autonomous AI agent transactions within human-defined policy constraints — AgentPolicy store, SetAgentPolicy/AgentExecute TxKinds, pipeline execution with spend tracking
+**Sprint:** Sprint 043, Phases 1-5
+**Git Ref:** pending
+**Files Changed:**
+- crates/aztibase-execution/src/agent.rs (NEW): AgentPolicy, AgentPolicyStore, AgentSpendRecord, AgentError enum (7 variants), validate_spend with epoch tracking, 8 unit tests
+- crates/aztibase-execution/src/routing.rs: TxKind::SetAgentPolicy (0x14), TxKind::AgentExecute (0x15), all match arms updated (encode/nonce/gas_price/gas_limit/sender/expected_prefix/route_tx)
+- crates/aztibase-execution/src/fee.rs: estimate_gas 0x14→60K, 0x15→80K (21 TxKind variants total)
+- crates/aztibase-execution/src/lib.rs: pub mod agent, re-export key types
+- crates/aztibase-node/src/pipeline.rs: AgentPolicyStore field, SetAgentPolicy execution (owner-only, AIAgent check, policy set), AgentExecute execution (policy validation: expiry, allowed kinds, per-tx/per-epoch limits, balance check, transfer), SetAgentPolicyEntry/AgentExecuteEntry type aliases, compute_tx_hash/extract_tx_features match arms
+- crates/aztibase-rpc/src/server.rs: aztb_getAgentPolicy RPC method, AgentPolicyStore field in RpcState, with_agent_policy_store builder
+- crates/aztibase-node/src/main.rs: wire agent_policy_store to RPC
+**Review Notes:** Owner verification uses deterministic agent address derivation (compute_contract_address). Epoch-based spend tracking resets automatically. Per-tx and per-epoch limits enforced. Policy expiry prevents stale agent autonomy. Initially supports Transfer-type agent execution only.
+**Security Flags:** 0 ELEVATED, 0 MEDIUM. Spending capped per-tx and per-epoch, policy owner-only modification, expired policies rejected.
+
+---
+
 ### 2026-03-10 -- blockchain-architect / node-engineer / security-engineer -- Sprint 042 Complete (M9-S3: Genesis Validation & Network Identity)
 **Task:** Sprint 042: Comprehensive genesis config validation — duplicate detection, bounds checking, supply cap enforcement, startup abort on invalid genesis
 **Sprint:** Sprint 042, Phases 1-4

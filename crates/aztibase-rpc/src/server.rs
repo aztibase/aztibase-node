@@ -19,7 +19,9 @@ use tracing::{debug, info};
 use aztibase_consensus::ComputeCommitmentStore;
 use aztibase_execution::AccountState;
 use aztibase_execution::model_registry::{MODEL_REGISTRY_ADDRESS, ModelMetadata, ModelRegistry};
-use aztibase_execution::{ChainParams, EmissionTracker, GovernanceStore, StakingStore};
+use aztibase_execution::{
+    AgentPolicyStore, ChainParams, EmissionTracker, GovernanceStore, StakingStore,
+};
 use aztibase_storage::StateStore;
 
 // ── JSON-RPC 2.0 Types ─────────────────────────────────────────────
@@ -107,6 +109,7 @@ pub struct RpcState {
     pub chain_params: Option<Arc<RwLock<ChainParams>>>,
     pub emission_tracker: Option<Arc<RwLock<EmissionTracker>>>,
     pub staking_store: Option<Arc<RwLock<StakingStore>>>,
+    pub agent_policy_store: Option<Arc<RwLock<AgentPolicyStore>>>,
     pub chain_id: u64,
     pub genesis_hash: Option<[u8; 32]>,
     faucet_tracker: Arc<std::sync::Mutex<HashMap<[u8; 32], std::time::Instant>>>,
@@ -130,6 +133,7 @@ impl Clone for RpcState {
             chain_params: self.chain_params.clone(),
             emission_tracker: self.emission_tracker.clone(),
             staking_store: self.staking_store.clone(),
+            agent_policy_store: self.agent_policy_store.clone(),
             chain_id: self.chain_id,
             genesis_hash: self.genesis_hash,
             faucet_tracker: Arc::clone(&self.faucet_tracker),
@@ -245,6 +249,7 @@ impl RpcServer {
                 chain_params: None,
                 emission_tracker: None,
                 staking_store: None,
+                agent_policy_store: None,
                 chain_id: TESTNET_CHAIN_ID,
                 genesis_hash: None,
                 faucet_tracker: Arc::new(std::sync::Mutex::new(HashMap::new())),
@@ -299,6 +304,11 @@ impl RpcServer {
 
     pub fn with_staking_store(mut self, store: Arc<RwLock<StakingStore>>) -> Self {
         self.state.staking_store = Some(store);
+        self
+    }
+
+    pub fn with_agent_policy_store(mut self, store: Arc<RwLock<AgentPolicyStore>>) -> Self {
+        self.state.agent_policy_store = Some(store);
         self
     }
 
@@ -418,6 +428,7 @@ async fn dispatch(state: &RpcState, req: &JsonRpcRequest) -> JsonRpcResponse {
         "aztb_getDelegation" => handle_get_delegation(state, req).await,
         "aztb_getActiveValidators" => handle_get_active_validators(state, req).await,
         "aztb_getUnbondingStatus" => handle_get_unbonding_status(state, req).await,
+        "aztb_getAgentPolicy" => handle_get_agent_policy(state, req).await,
         _ => JsonRpcResponse::error(
             req.id.clone(),
             METHOD_NOT_FOUND,
@@ -1800,6 +1811,46 @@ async fn handle_get_unbonding_status(state: &RpcState, req: &JsonRpcRequest) -> 
     JsonRpcResponse::success(req.id.clone(), serde_json::json!(entries))
 }
 
+async fn handle_get_agent_policy(state: &RpcState, req: &JsonRpcRequest) -> JsonRpcResponse {
+    let store = match &state.agent_policy_store {
+        Some(s) => s,
+        None => {
+            return JsonRpcResponse::error(
+                req.id.clone(),
+                -32000,
+                "agent policy store not available".into(),
+            );
+        }
+    };
+
+    let agent_addr = match parse_hash_param(&req.params, 0) {
+        Ok(h) => h,
+        Err(e) => return JsonRpcResponse::error(req.id.clone(), INVALID_PARAMS, e),
+    };
+
+    let aps = store.read().await;
+    match aps.get_policy(&agent_addr) {
+        Some(policy) => {
+            let kinds: Vec<String> = policy
+                .allowed_tx_kinds
+                .iter()
+                .map(|k| format!("0x{k:02x}"))
+                .collect();
+            JsonRpcResponse::success(
+                req.id.clone(),
+                serde_json::json!({
+                    "owner": format!("0x{}", hex::encode(policy.owner)),
+                    "per_tx_limit": policy.per_tx_limit.to_string(),
+                    "per_epoch_limit": policy.per_epoch_limit.to_string(),
+                    "allowed_tx_kinds": kinds,
+                    "expiry_epoch": policy.expiry_epoch,
+                }),
+            )
+        }
+        None => JsonRpcResponse::success(req.id.clone(), serde_json::Value::Null),
+    }
+}
+
 fn parse_u64_param(params: &serde_json::Value, index: usize) -> Result<u64, String> {
     let val = params
         .get(index)
@@ -1893,6 +1944,7 @@ mod tests {
             chain_params: None,
             emission_tracker: None,
             staking_store: None,
+            agent_policy_store: None,
             chain_id: TESTNET_CHAIN_ID,
             genesis_hash: None,
             faucet_tracker: Arc::new(std::sync::Mutex::new(HashMap::new())),
@@ -1924,6 +1976,7 @@ mod tests {
             chain_params: None,
             emission_tracker: None,
             staking_store: None,
+            agent_policy_store: None,
             chain_id: TESTNET_CHAIN_ID,
             genesis_hash: None,
             faucet_tracker: Arc::new(std::sync::Mutex::new(HashMap::new())),
@@ -2164,6 +2217,7 @@ mod tests {
             chain_params: None,
             emission_tracker: None,
             staking_store: None,
+            agent_policy_store: None,
             chain_id: TESTNET_CHAIN_ID,
             genesis_hash: None,
             faucet_tracker: Arc::new(std::sync::Mutex::new(HashMap::new())),
@@ -2546,6 +2600,7 @@ mod tests {
             chain_params: None,
             emission_tracker: None,
             staking_store: None,
+            agent_policy_store: None,
             chain_id: TESTNET_CHAIN_ID,
             genesis_hash: None,
             faucet_tracker: Arc::new(std::sync::Mutex::new(HashMap::new())),
@@ -2637,6 +2692,7 @@ mod tests {
             chain_params: None,
             emission_tracker: None,
             staking_store: None,
+            agent_policy_store: None,
             chain_id: TESTNET_CHAIN_ID,
             genesis_hash: None,
             faucet_tracker: Arc::new(std::sync::Mutex::new(HashMap::new())),
@@ -3031,5 +3087,53 @@ mod tests {
         let entries = resp["result"].as_array().unwrap();
         assert_eq!(entries.len(), 1);
         assert_eq!(entries[0]["amount"], 10_000);
+    }
+
+    #[tokio::test]
+    async fn get_agent_policy_rpc() {
+        let (mut state, _rx) = test_state();
+        let store = Arc::new(RwLock::new(AgentPolicyStore::new()));
+        let agent = [0xCC; 32];
+        let owner = [0xDD; 32];
+        {
+            let mut s = store.write().await;
+            s.set_policy(
+                agent,
+                AgentPolicy {
+                    owner,
+                    per_tx_limit: 1_000,
+                    per_epoch_limit: 5_000,
+                    allowed_tx_kinds: vec![0x01, 0x06],
+                    expiry_epoch: 200,
+                },
+            );
+        }
+        state.agent_policy_store = Some(store);
+        let agent_hex = hex::encode(agent);
+        let body = format!(
+            r#"{{"jsonrpc":"2.0","method":"aztb_getAgentPolicy","params":["{}"],"id":1}}"#,
+            agent_hex
+        );
+        let resp = rpc_call(&state, &body).await;
+        assert!(resp["error"].is_null(), "unexpected error: {:?}", resp);
+        assert_eq!(resp["result"]["per_tx_limit"], "1000");
+        assert_eq!(resp["result"]["per_epoch_limit"], "5000");
+        assert_eq!(resp["result"]["expiry_epoch"], 200);
+        let kinds = resp["result"]["allowed_tx_kinds"].as_array().unwrap();
+        assert_eq!(kinds.len(), 2);
+    }
+
+    #[tokio::test]
+    async fn get_agent_policy_not_found() {
+        let (mut state, _rx) = test_state();
+        state.agent_policy_store = Some(Arc::new(RwLock::new(AgentPolicyStore::new())));
+        let agent_hex = hex::encode([0xFF; 32]);
+        let body = format!(
+            r#"{{"jsonrpc":"2.0","method":"aztb_getAgentPolicy","params":["{}"],"id":1}}"#,
+            agent_hex
+        );
+        let resp = rpc_call(&state, &body).await;
+        assert!(resp["error"].is_null());
+        assert!(resp["result"].is_null());
     }
 }

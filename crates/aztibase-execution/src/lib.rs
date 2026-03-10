@@ -1,3 +1,4 @@
+pub mod agent;
 pub mod block_stm;
 pub mod chain_params;
 pub mod contract;
@@ -20,6 +21,7 @@ pub mod tx;
 pub mod verkle;
 pub mod vm;
 
+pub use agent::{AgentError, AgentPolicy, AgentPolicyStore, AgentSpendRecord};
 pub use chain_params::{
     ChainParamError, ChainParams, ParamDef, ParamType, ParamValue, all_param_defs, param_def,
 };

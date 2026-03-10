@@ -21,6 +21,8 @@ const PREFIX_STAKE: u8 = 0x10;
 const PREFIX_UNSTAKE: u8 = 0x11;
 const PREFIX_DELEGATE: u8 = 0x12;
 const PREFIX_UNDELEGATE: u8 = 0x13;
+const PREFIX_SET_AGENT_POLICY: u8 = 0x14;
+const PREFIX_AGENT_EXECUTE: u8 = 0x15;
 
 /// Maximum encoded transaction size (1 MB). Rejects oversized payloads before
 /// deserialization to prevent memory-bomb attacks via oversized payloads.
@@ -168,6 +170,25 @@ pub enum TxKind {
         nonce: u64,
         gas_price: u64,
     },
+    SetAgentPolicy {
+        owner: Address,
+        agent: Address,
+        per_tx_limit: u128,
+        per_epoch_limit: u128,
+        allowed_tx_kinds: Vec<u8>,
+        expiry_epoch: u64,
+        nonce: u64,
+        gas_price: u64,
+    },
+    AgentExecute {
+        agent: Address,
+        inner_tx_kind: u8,
+        to: Address,
+        value: u128,
+        data: Vec<u8>,
+        nonce: u64,
+        gas_price: u64,
+    },
 }
 
 impl TxKind {
@@ -193,6 +214,8 @@ impl TxKind {
             TxKind::Unstake { .. } => PREFIX_UNSTAKE,
             TxKind::Delegate { .. } => PREFIX_DELEGATE,
             TxKind::Undelegate { .. } => PREFIX_UNDELEGATE,
+            TxKind::SetAgentPolicy { .. } => PREFIX_SET_AGENT_POLICY,
+            TxKind::AgentExecute { .. } => PREFIX_AGENT_EXECUTE,
         };
         let payload = postcard::to_allocvec(self).expect("TxKind serialization cannot fail");
         let mut buf = Vec::with_capacity(1 + payload.len());
@@ -221,7 +244,9 @@ impl TxKind {
             | TxKind::Stake { nonce, .. }
             | TxKind::Unstake { nonce, .. }
             | TxKind::Delegate { nonce, .. }
-            | TxKind::Undelegate { nonce, .. } => *nonce,
+            | TxKind::Undelegate { nonce, .. }
+            | TxKind::SetAgentPolicy { nonce, .. }
+            | TxKind::AgentExecute { nonce, .. } => *nonce,
         }
     }
 
@@ -245,7 +270,9 @@ impl TxKind {
             | TxKind::Stake { gas_price, .. }
             | TxKind::Unstake { gas_price, .. }
             | TxKind::Delegate { gas_price, .. }
-            | TxKind::Undelegate { gas_price, .. } => *gas_price,
+            | TxKind::Undelegate { gas_price, .. }
+            | TxKind::SetAgentPolicy { gas_price, .. }
+            | TxKind::AgentExecute { gas_price, .. } => *gas_price,
         }
     }
 
@@ -272,6 +299,8 @@ impl TxKind {
             TxKind::Unstake { .. } => 60_000,
             TxKind::Delegate { .. } => 60_000,
             TxKind::Undelegate { .. } => 60_000,
+            TxKind::SetAgentPolicy { .. } => 60_000,
+            TxKind::AgentExecute { .. } => 80_000,
         }
     }
 
@@ -296,6 +325,8 @@ impl TxKind {
             TxKind::Unstake { staker, .. } => staker,
             TxKind::Delegate { delegator, .. } => delegator,
             TxKind::Undelegate { delegator, .. } => delegator,
+            TxKind::SetAgentPolicy { owner, .. } => owner,
+            TxKind::AgentExecute { agent, .. } => agent,
         }
     }
 
@@ -320,6 +351,8 @@ impl TxKind {
             TxKind::Unstake { .. } => PREFIX_UNSTAKE,
             TxKind::Delegate { .. } => PREFIX_DELEGATE,
             TxKind::Undelegate { .. } => PREFIX_UNDELEGATE,
+            TxKind::SetAgentPolicy { .. } => PREFIX_SET_AGENT_POLICY,
+            TxKind::AgentExecute { .. } => PREFIX_AGENT_EXECUTE,
         }
     }
 }
@@ -396,7 +429,9 @@ pub fn route_tx(raw: &[u8]) -> Result<TxKind, RoutingError> {
         | PREFIX_STAKE
         | PREFIX_UNSTAKE
         | PREFIX_DELEGATE
-        | PREFIX_UNDELEGATE => {}
+        | PREFIX_UNDELEGATE
+        | PREFIX_SET_AGENT_POLICY
+        | PREFIX_AGENT_EXECUTE => {}
         other => return Err(RoutingError::UnknownPrefix(other)),
     }
     let (decoded, remaining): (TxKind, &[u8]) =
@@ -958,5 +993,44 @@ mod tests {
         assert_eq!(encoded[0], PREFIX_UNDELEGATE);
         let decoded = route_tx(&encoded).unwrap();
         assert_eq!(decoded, tx);
+    }
+
+    #[test]
+    fn set_agent_policy_roundtrip() {
+        let tx = TxKind::SetAgentPolicy {
+            owner: [0xA5; 32],
+            agent: [0xB5; 32],
+            per_tx_limit: 1_000_000,
+            per_epoch_limit: 10_000_000,
+            allowed_tx_kinds: vec![0x01, 0x06],
+            expiry_epoch: 500,
+            nonce: 4,
+            gas_price: 2,
+        };
+        let encoded = tx.encode();
+        assert_eq!(encoded[0], PREFIX_SET_AGENT_POLICY);
+        let decoded = route_tx(&encoded).unwrap();
+        assert_eq!(decoded, tx);
+        assert_eq!(decoded.gas_limit(), 60_000);
+        assert_eq!(*decoded.sender(), [0xA5; 32]);
+    }
+
+    #[test]
+    fn agent_execute_roundtrip() {
+        let tx = TxKind::AgentExecute {
+            agent: [0xA6; 32],
+            inner_tx_kind: 0x01,
+            to: [0xB6; 32],
+            value: 5_000,
+            data: vec![1, 2, 3],
+            nonce: 11,
+            gas_price: 3,
+        };
+        let encoded = tx.encode();
+        assert_eq!(encoded[0], PREFIX_AGENT_EXECUTE);
+        let decoded = route_tx(&encoded).unwrap();
+        assert_eq!(decoded, tx);
+        assert_eq!(decoded.gas_limit(), 80_000);
+        assert_eq!(*decoded.sender(), [0xA6; 32]);
     }
 }

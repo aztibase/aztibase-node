@@ -6,9 +6,9 @@ use aztibase_consensus::{
 };
 use aztibase_core::{Hash, hash};
 use aztibase_execution::{
-    AccountState, BaseFeeCalculator, ChainParams, ContractTx, CreateProposalParams,
-    EmissionTracker, ExecutionReceipt, FeeEscrow, GovernanceStore, OffenseType, StakingStore,
-    TransferTx, TxKind,
+    AccountState, AgentPolicyStore, BaseFeeCalculator, ChainParams, ContractTx,
+    CreateProposalParams, EmissionTracker, ExecutionReceipt, FeeEscrow, GovernanceStore,
+    OffenseType, StakingStore, TransferTx, TxKind,
     block_stm::{BlockSTMExecutor, apply_block_stm_to_state},
     escrow_fee, evm, execute_contract_txs, flush_state, load_base_fee, load_state,
     model_registry::{MODEL_REGISTRY_ADDRESS, ModelRegistry},
@@ -21,6 +21,9 @@ use aztibase_storage::StateStore;
 use tokio::sync::{RwLock, mpsc};
 
 use crate::task_pool::{SettlementResult, TaskAssigner, TaskPool, TaskSettlement};
+
+type SetAgentPolicyEntry = ([u8; 32], [u8; 32], u128, u128, Vec<u8>, u64, u64);
+type AgentExecuteEntry = ([u8; 32], u8, [u8; 32], u128, Vec<u8>, u64);
 
 const MAX_EXECUTED_ANCHORS: usize = 10_000;
 const MAX_ATTESTATIONS_PER_TASK: usize = 32;
@@ -78,6 +81,7 @@ pub struct ExecutionPipeline {
     slash_tx: mpsc::Sender<SlashEvent>,
     consensus_tx: Option<mpsc::Sender<aztibase_consensus::ConsensusInput>>,
     epoch_participation: HashSet<[u8; 32]>,
+    agent_policy_store: Arc<RwLock<AgentPolicyStore>>,
     archive: bool,
 }
 
@@ -132,6 +136,7 @@ impl ExecutionPipeline {
             slash_tx: slash_tx_init,
             consensus_tx: None,
             epoch_participation: HashSet::new(),
+            agent_policy_store: Arc::new(RwLock::new(AgentPolicyStore::new())),
             archive: false,
         }
     }
@@ -164,6 +169,11 @@ impl ExecutionPipeline {
     /// Shared staking store (for RPC server and epoch boundary).
     pub fn shared_staking_store(&self) -> Arc<RwLock<StakingStore>> {
         Arc::clone(&self.staking_store)
+    }
+
+    /// Shared agent policy store (for RPC server).
+    pub fn shared_agent_policy_store(&self) -> Arc<RwLock<AgentPolicyStore>> {
+        Arc::clone(&self.agent_policy_store)
     }
 
     /// Clone the slash event sender (for consensus → pipeline slashing bridge).
@@ -433,6 +443,8 @@ impl ExecutionPipeline {
         let mut unstakes: Vec<([u8; 32], u128, u64)> = Vec::new();
         let mut delegates: Vec<([u8; 32], [u8; 32], u128, u64)> = Vec::new();
         let mut undelegates: Vec<([u8; 32], u64)> = Vec::new();
+        let mut set_agent_policies: Vec<SetAgentPolicyEntry> = Vec::new();
+        let mut agent_executes: Vec<AgentExecuteEntry> = Vec::new();
 
         for tx in &executable {
             match tx {
@@ -683,6 +695,44 @@ impl ExecutionPipeline {
                 } => {
                     undelegates.push((*delegator, *nonce));
                 }
+                TxKind::SetAgentPolicy {
+                    owner,
+                    agent,
+                    per_tx_limit,
+                    per_epoch_limit,
+                    allowed_tx_kinds,
+                    expiry_epoch,
+                    nonce,
+                    ..
+                } => {
+                    set_agent_policies.push((
+                        *owner,
+                        *agent,
+                        *per_tx_limit,
+                        *per_epoch_limit,
+                        allowed_tx_kinds.clone(),
+                        *expiry_epoch,
+                        *nonce,
+                    ));
+                }
+                TxKind::AgentExecute {
+                    agent,
+                    inner_tx_kind,
+                    to,
+                    value,
+                    data,
+                    nonce,
+                    ..
+                } => {
+                    agent_executes.push((
+                        *agent,
+                        *inner_tx_kind,
+                        *to,
+                        *value,
+                        data.clone(),
+                        *nonce,
+                    ));
+                }
             }
         }
 
@@ -703,7 +753,9 @@ impl ExecutionPipeline {
             + stakes.len()
             + unstakes.len()
             + delegates.len()
-            + undelegates.len();
+            + undelegates.len()
+            + set_agent_policies.len()
+            + agent_executes.len();
 
         // Phase 2: Execute transactions.
         let mut exec_receipts = Vec::new();
@@ -1921,6 +1973,203 @@ impl ExecutionPipeline {
             }
         }
 
+        for (owner, agent, per_tx_limit, per_epoch_limit, allowed_tx_kinds, expiry_epoch, nonce) in
+            &set_agent_policies
+        {
+            let mut preimage = Vec::new();
+            preimage.extend_from_slice(owner);
+            preimage.extend_from_slice(agent);
+            preimage.extend_from_slice(&nonce.to_le_bytes());
+            let tx_hash = hash(&preimage);
+
+            let owner_nonce = state.nonce(owner);
+            if *nonce != owner_nonce {
+                state.increment_nonce(owner);
+                exec_receipts.push(ExecutionReceipt {
+                    tx_hash,
+                    success: false,
+                    gas_used: 21_000,
+                    contract_address: None,
+                    error: Some(format!(
+                        "nonce mismatch: expected {owner_nonce}, got {nonce}"
+                    )),
+                    inference_hash: None,
+                    anomaly_score: 0.0,
+                });
+                continue;
+            }
+
+            let agent_type = state.account_type(agent);
+            if agent_type != AccountType::AIAgent {
+                state.increment_nonce(owner);
+                exec_receipts.push(ExecutionReceipt {
+                    tx_hash,
+                    success: false,
+                    gas_used: 21_000,
+                    contract_address: None,
+                    error: Some("target address is not an AI agent".into()),
+                    inference_hash: None,
+                    anomaly_score: 0.0,
+                });
+                continue;
+            }
+
+            let acct = state.get(agent);
+            let is_owner = acct.is_some_and(|a| {
+                a.storage
+                    .get(b"creator".as_slice())
+                    .is_some_and(|v| v.as_slice() == owner)
+            });
+            if !is_owner {
+                // Check model_id creator pattern: the agent was created by owner
+                // if the agent's address was derived from the owner's address
+                let expected_agent = aztibase_execution::compute_contract_address(owner, 0);
+                let is_derived_owner = *agent == expected_agent
+                    || (0..100u64)
+                        .any(|n| aztibase_execution::compute_contract_address(owner, n) == *agent);
+                if !is_derived_owner {
+                    state.increment_nonce(owner);
+                    exec_receipts.push(ExecutionReceipt {
+                        tx_hash,
+                        success: false,
+                        gas_used: 21_000,
+                        contract_address: None,
+                        error: Some("only the agent creator can set policy".into()),
+                        inference_hash: None,
+                        anomaly_score: 0.0,
+                    });
+                    continue;
+                }
+            }
+
+            if allowed_tx_kinds.len() > 32 {
+                state.increment_nonce(owner);
+                exec_receipts.push(ExecutionReceipt {
+                    tx_hash,
+                    success: false,
+                    gas_used: 21_000,
+                    contract_address: None,
+                    error: Some("too many allowed tx kinds".into()),
+                    inference_hash: None,
+                    anomaly_score: 0.0,
+                });
+                continue;
+            }
+
+            let policy = aztibase_execution::AgentPolicy {
+                owner: *owner,
+                per_tx_limit: *per_tx_limit,
+                per_epoch_limit: *per_epoch_limit,
+                allowed_tx_kinds: allowed_tx_kinds.clone(),
+                expiry_epoch: *expiry_epoch,
+            };
+
+            let mut aps = self.agent_policy_store.write().await;
+            aps.set_policy(*agent, policy);
+            drop(aps);
+
+            state.increment_nonce(owner);
+            exec_receipts.push(ExecutionReceipt {
+                tx_hash,
+                success: true,
+                gas_used: 60_000,
+                contract_address: None,
+                error: None,
+                inference_hash: None,
+                anomaly_score: 0.0,
+            });
+        }
+
+        for (agent, inner_tx_kind, to, value, _data, nonce) in &agent_executes {
+            let mut preimage = Vec::new();
+            preimage.extend_from_slice(agent);
+            preimage.extend_from_slice(to);
+            preimage.extend_from_slice(&value.to_le_bytes());
+            preimage.extend_from_slice(&nonce.to_le_bytes());
+            let tx_hash = hash(&preimage);
+
+            let agent_nonce = state.nonce(agent);
+            if *nonce != agent_nonce {
+                state.increment_nonce(agent);
+                exec_receipts.push(ExecutionReceipt {
+                    tx_hash,
+                    success: false,
+                    gas_used: 21_000,
+                    contract_address: None,
+                    error: Some(format!(
+                        "nonce mismatch: expected {agent_nonce}, got {nonce}"
+                    )),
+                    inference_hash: None,
+                    anomaly_score: 0.0,
+                });
+                continue;
+            }
+
+            let agent_type = state.account_type(agent);
+            if agent_type != AccountType::AIAgent {
+                state.increment_nonce(agent);
+                exec_receipts.push(ExecutionReceipt {
+                    tx_hash,
+                    success: false,
+                    gas_used: 21_000,
+                    contract_address: None,
+                    error: Some("sender is not an AI agent".into()),
+                    inference_hash: None,
+                    anomaly_score: 0.0,
+                });
+                continue;
+            }
+
+            let current_epoch = self.current_round / 1000;
+            let mut aps = self.agent_policy_store.write().await;
+            let spend_result = aps.validate_spend(agent, *value, *inner_tx_kind, current_epoch);
+            drop(aps);
+
+            if let Err(e) = spend_result {
+                state.increment_nonce(agent);
+                exec_receipts.push(ExecutionReceipt {
+                    tx_hash,
+                    success: false,
+                    gas_used: 21_000,
+                    contract_address: None,
+                    error: Some(format!("agent policy violation: {e}")),
+                    inference_hash: None,
+                    anomaly_score: 0.0,
+                });
+                continue;
+            }
+
+            let agent_balance = state.balance(agent);
+            if agent_balance < *value {
+                state.increment_nonce(agent);
+                exec_receipts.push(ExecutionReceipt {
+                    tx_hash,
+                    success: false,
+                    gas_used: 21_000,
+                    contract_address: None,
+                    error: Some("agent has insufficient balance".into()),
+                    inference_hash: None,
+                    anomaly_score: 0.0,
+                });
+                continue;
+            }
+
+            state.set_balance(agent, agent_balance - *value);
+            let recipient_balance = state.balance(to);
+            state.set_balance(to, recipient_balance.saturating_add(*value));
+            state.increment_nonce(agent);
+
+            exec_receipts.push(ExecutionReceipt {
+                tx_hash,
+                success: true,
+                gas_used: 80_000,
+                contract_address: None,
+                error: None,
+                inference_hash: None,
+                anomaly_score: 0.0,
+            });
+        }
+
         // Phase 2.5: Score each executed tx for anomalous behavior.
         for (i, tx) in executable.iter().enumerate() {
             if i >= exec_receipts.len() {
@@ -2304,12 +2553,40 @@ fn compute_tx_hash(tx: &TxKind) -> [u8; 32] {
             buf.extend_from_slice(&nonce.to_le_bytes());
             hash(&buf)
         }
+        TxKind::SetAgentPolicy {
+            owner,
+            agent,
+            nonce,
+            ..
+        } => {
+            let mut buf = Vec::new();
+            buf.extend_from_slice(owner);
+            buf.extend_from_slice(agent);
+            buf.extend_from_slice(&nonce.to_le_bytes());
+            hash(&buf)
+        }
+        TxKind::AgentExecute {
+            agent,
+            to,
+            value,
+            nonce,
+            ..
+        } => {
+            let mut buf = Vec::new();
+            buf.extend_from_slice(agent);
+            buf.extend_from_slice(to);
+            buf.extend_from_slice(&value.to_le_bytes());
+            buf.extend_from_slice(&nonce.to_le_bytes());
+            hash(&buf)
+        }
     }
 }
 
 fn extract_tx_features(tx: &TxKind) -> TxFeatures {
     let value = match tx {
-        TxKind::Transfer { value, .. } | TxKind::EvmCall { value, .. } => *value,
+        TxKind::Transfer { value, .. }
+        | TxKind::EvmCall { value, .. }
+        | TxKind::AgentExecute { value, .. } => *value,
         _ => 0,
     };
     let payload_size = match tx {
@@ -2407,6 +2684,7 @@ mod tests {
             slash_tx: slash_tx_init,
             consensus_tx: None,
             epoch_participation: HashSet::new(),
+            agent_policy_store: Arc::new(RwLock::new(AgentPolicyStore::new())),
             archive: false,
         }
     }
@@ -2941,6 +3219,7 @@ mod tests {
             slash_tx: slash_tx_init,
             consensus_tx: None,
             epoch_participation: HashSet::new(),
+            agent_policy_store: Arc::new(RwLock::new(AgentPolicyStore::new())),
             archive: false,
         }
     }
