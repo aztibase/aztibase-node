@@ -65,12 +65,15 @@ impl ConnectionFilter {
 
     pub fn try_accept(&mut self, ip: IpAddr) -> Result<(), FilterReason> {
         let now = Instant::now();
+        let is_loopback = ip.is_loopback();
 
         if let Some(state) = self.ips.get(&ip) {
             if state.active >= self.max_per_ip {
                 return Err(FilterReason::IpLimit);
             }
-            if now.duration_since(state.last_connect).as_millis() < self.min_interval_ms as u128 {
+            if !is_loopback
+                && now.duration_since(state.last_connect).as_millis() < self.min_interval_ms as u128
+            {
                 return Err(FilterReason::RateLimit);
             }
         }

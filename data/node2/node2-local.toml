@@ -1,0 +1,29 @@
+data_dir = "./data/node2"
+genesis_path = "./data/genesis/genesis.toml"
+validator_key = "./data/node2/keys/validator2.json"
+
+[network]
+listen_addresses = [
+    "/ip4/127.0.0.1/tcp/30334",
+    "/ip4/127.0.0.1/udp/30334/quic-v1",
+]
+boot_nodes = [
+    "/ip4/127.0.0.1/tcp/30333",
+    "/ip4/127.0.0.1/tcp/30335",
+]
+idle_timeout_secs = 60
+stun_servers = []
+
+[rpc]
+listen_addr = "127.0.0.1:9945"
+enabled = true
+
+[log]
+level = "info"
+
+[ai]
+enabled = false
+models = []
+
+[metrics]
+enabled = true

@@ -22,8 +22,8 @@ use aztibase_consensus::{
 };
 use aztibase_network::{
     Libp2pTransport, NetworkEvent, PeerReputationStore, PeerStore, TOPIC_CONSENSUS,
-    TOPIC_STATE_SYNC, TOPIC_TRANSACTIONS, TransportConfig, build_header_response, decode_request,
-    encode_response,
+    TOPIC_STATE_SYNC, TOPIC_TRANSACTIONS, TransportConfig, build_header_response,
+    chain_scoped_topics, decode_request, encode_response, genesis_hex_prefix,
 };
 use aztibase_rpc::{EventBus, NodeMetrics, RpcServer};
 use aztibase_runtime::TractRuntime;
@@ -794,13 +794,22 @@ async fn main() -> Result<()> {
     let cached = transport.load_cached_peers(50);
     tracing::info!(peer_id = %transport.local_peer_id(), nat = %transport.nat_status(), cached_peers = cached, "Network identity");
 
+    let mut listen_count = 0usize;
     for addr_str in &config.network.listen_addresses {
         let addr: aztibase_network::Multiaddr = addr_str
             .parse()
             .with_context(|| format!("Invalid listen address: {addr_str}"))?;
-        transport
-            .listen_on(addr)
-            .with_context(|| format!("Failed to listen on {addr_str}"))?;
+        match transport.listen_on(addr) {
+            Ok(_) => {
+                listen_count += 1;
+            }
+            Err(e) => {
+                tracing::warn!(addr = %addr_str, error = %e, "Failed to listen (non-fatal)");
+            }
+        }
+    }
+    if listen_count == 0 {
+        anyhow::bail!("Failed to listen on any address");
     }
 
     for boot_str in &config.network.boot_nodes {
@@ -811,6 +820,21 @@ async fn main() -> Result<()> {
             tracing::warn!(addr = %boot_str, error = %e, "Failed to dial boot node");
         }
     }
+
+    let scoped_genesis_hex = transport_genesis_hash.as_ref().map(genesis_hex_prefix);
+    let scoped_topics = chain_scoped_topics(scoped_genesis_hex.as_deref());
+    let topic_consensus = scoped_topics
+        .get(2)
+        .cloned()
+        .unwrap_or(TOPIC_CONSENSUS.to_string());
+    let topic_state_sync = scoped_topics
+        .get(3)
+        .cloned()
+        .unwrap_or(TOPIC_STATE_SYNC.to_string());
+    let topic_transactions = scoped_topics
+        .get(1)
+        .cloned()
+        .unwrap_or(TOPIC_TRANSACTIONS.to_string());
 
     tracing::info!("Node started — press Ctrl+C to shut down");
 
@@ -824,10 +848,15 @@ async fn main() -> Result<()> {
     });
 
     // Spawn consensus engine
+    tracing::info!(
+        identity = %genesis::hex_encode(&identity),
+        "Spawning consensus engine"
+    );
     let consensus_handle = tokio::spawn(async move {
         if let Err(e) = engine.run().await {
             tracing::error!(error = %e, "Consensus engine failed");
         }
+        tracing::warn!("Consensus engine task exited");
     });
 
     // Wire consensus ↔ pipeline bridges
@@ -846,6 +875,7 @@ async fn main() -> Result<()> {
     let mut batch_index: u64 = 0;
     let mut sync_assembler: Option<SnapshotAssembler> = None;
     let mut sync_bootstrapped = false;
+    let mut peer_count: u64 = 0;
 
     // Request snapshot if state is empty (new node joining the network)
     {
@@ -864,10 +894,16 @@ async fn main() -> Result<()> {
                         tracing::info!(addr = %addr, "Listening");
                     }
                     NetworkEvent::PeerConnected(peer) => {
-                        tracing::info!(peer = %peer, "Peer connected");
+                        peer_count += 1;
+                        node_metrics.set_peer_count(peer_count);
+                        tracing::info!(peer = %peer, peers = peer_count, "Peer connected");
+                        let _ = consensus_tx.send(ConsensusInput::PeerCountChanged(peer_count)).await;
                     }
                     NetworkEvent::PeerDisconnected(peer) => {
-                        tracing::debug!(peer = %peer, "Peer disconnected");
+                        peer_count = peer_count.saturating_sub(1);
+                        node_metrics.set_peer_count(peer_count);
+                        tracing::debug!(peer = %peer, peers = peer_count, "Peer disconnected");
+                        let _ = consensus_tx.send(ConsensusInput::PeerCountChanged(peer_count)).await;
                     }
                     NetworkEvent::Message { source, topic, data } => {
                         tracing::debug!(
@@ -876,9 +912,14 @@ async fn main() -> Result<()> {
                             bytes = data.len(),
                             "Received message"
                         );
-                        if topic == TOPIC_CONSENSUS {
+                        if topic == topic_consensus {
+                            tracing::debug!(
+                                source = %source,
+                                bytes = data.len(),
+                                "Forwarding consensus vertex from gossip to engine"
+                            );
                             let _ = consensus_tx.send(ConsensusInput::ReceivedVertex(data)).await;
-                        } else if topic == TOPIC_STATE_SYNC {
+                        } else if topic == topic_state_sync {
                             if let Ok(msg) = decode_sync_message(&data) {
                                 match msg {
                                     SyncMessage::SnapshotRequest { requester, .. } => {
@@ -892,7 +933,7 @@ async fn main() -> Result<()> {
                                                 Ok(msgs) => {
                                                     for m in &msgs {
                                                         if let Ok(encoded) = encode_sync_message(m) {
-                                                            let _ = transport.publish(TOPIC_STATE_SYNC, encoded);
+                                                            let _ = transport.publish(&topic_state_sync, encoded);
                                                         }
                                                     }
                                                     tracing::info!(
@@ -980,13 +1021,13 @@ async fn main() -> Result<()> {
                                     if state_guard.account_count() == 0 {
                                         let req = build_snapshot_request(identity);
                                         if let Ok(encoded) = encode_sync_message(&req) {
-                                            let _ = transport.publish(TOPIC_STATE_SYNC, encoded);
+                                            let _ = transport.publish(&topic_state_sync, encoded);
                                             tracing::info!("Sent snapshot request to peers");
                                         }
                                     }
                                 }
                             }
-                        } else if topic == TOPIC_TRANSACTIONS {
+                        } else if topic == topic_transactions {
                             let state_guard = shared_state.read().await;
                             let min_gp = shared_base_fee.load(std::sync::atomic::Ordering::Relaxed);
                             if mempool.insert_checked(data.clone(), |addr| state_guard.nonce(addr), min_gp) {
@@ -1030,9 +1071,18 @@ async fn main() -> Result<()> {
             output = output_rx.recv() => {
                 match output {
                     Some(ConsensusOutput::BroadcastVertex(data)) => {
-                        if let Err(e) = transport.publish(TOPIC_CONSENSUS, data) {
-                            tracing::debug!(error = %e, "Failed to publish vertex");
+                        if let Err(e) = transport.publish(&topic_consensus, data) {
+                            tracing::debug!(error = %e, "Vertex publish failed (no subscribers yet)");
                         }
+                        let snap = consensus_metrics.snapshot();
+                        node_metrics.update_consensus(
+                            snap.vertices_proposed,
+                            snap.vertices_received,
+                            snap.commits,
+                            snap.rounds_advanced,
+                            snap.equivocations,
+                            snap.last_commit_latency_us,
+                        );
                     }
                     Some(ConsensusOutput::EquivocationDetected { author, round }) => {
                         tracing::warn!(
@@ -1055,6 +1105,15 @@ async fn main() -> Result<()> {
                                 batch.anchor_hash[2], batch.anchor_hash[3]),
                             txs = batch.transactions.len(),
                             "Batch committed — forwarding to execution"
+                        );
+                        let snap = consensus_metrics.snapshot();
+                        node_metrics.update_consensus(
+                            snap.vertices_proposed,
+                            snap.vertices_received,
+                            snap.commits,
+                            snap.rounds_advanced,
+                            snap.equivocations,
+                            snap.last_commit_latency_us,
                         );
                         if pipeline_tx.send(batch).await.is_err() {
                             tracing::error!(
@@ -1086,7 +1145,7 @@ async fn main() -> Result<()> {
                     validator: identity,
                 };
                 if let Ok(data) = postcard::to_allocvec(&announce)
-                    && let Err(e) = transport.publish(TOPIC_STATE_SYNC, data)
+                    && let Err(e) = transport.publish(&topic_state_sync, data)
                 {
                     tracing::debug!(error = %e, "Failed to publish state root");
                 }

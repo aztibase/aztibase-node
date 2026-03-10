@@ -11,8 +11,8 @@ pub mod webrtc;
 
 pub use connection_filter::{ConnectionFilter, FilterReason};
 pub use gossip::{
-    MessageAcceptance, TOPIC_CONSENSUS, TOPIC_STATE_SYNC, TOPIC_TRANSACTIONS,
-    validate_gossip_message,
+    MessageAcceptance, TOPIC_CONSENSUS, TOPIC_STATE_SYNC, TOPIC_TRANSACTIONS, chain_scoped_topics,
+    genesis_hex_prefix, validate_gossip_message,
 };
 pub use libp2p::{Multiaddr, PeerId};
 pub use light_sync::{

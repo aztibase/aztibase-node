@@ -76,7 +76,7 @@ pub fn decode_vertex(
         return Err(WireError::UnknownValidator(a[0], a[1], a[2], a[3]));
     }
 
-    let max_future = 10;
+    let max_future = 100;
     if block.round > local_round + max_future {
         return Err(WireError::FutureRound {
             vertex: block.round,
@@ -166,13 +166,13 @@ mod tests {
     fn rejects_future_round() {
         let vs = test_validators();
         let parent_hash = aztibase_core::hash(b"fake_parent");
-        let block = DagBlock::new(50, [1u8; 32], vec![parent_hash], vec![], 3000).unwrap();
+        let block = DagBlock::new(150, [1u8; 32], vec![parent_hash], vec![], 3000).unwrap();
         let encoded = encode_vertex(&block).unwrap();
         let result = decode_vertex(&encoded, &vs, 0);
         assert!(matches!(
             result,
             Err(WireError::FutureRound {
-                vertex: 50,
+                vertex: 150,
                 local: 0
             })
         ));
@@ -182,7 +182,7 @@ mod tests {
     fn accepts_near_future_round() {
         let vs = test_validators();
         let parent_hash = aztibase_core::hash(b"fake_parent");
-        let block = DagBlock::new(8, [1u8; 32], vec![parent_hash], vec![], 3000).unwrap();
+        let block = DagBlock::new(90, [1u8; 32], vec![parent_hash], vec![], 3000).unwrap();
         let encoded = encode_vertex(&block).unwrap();
         let result = decode_vertex(&encoded, &vs, 0);
         assert!(result.is_ok());

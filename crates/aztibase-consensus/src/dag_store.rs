@@ -118,6 +118,40 @@ impl DagStore {
         Ok(())
     }
 
+    /// Insert a block without checking parent existence or validating parent rounds.
+    /// Used for blocks received from peers where parents may arrive out of order.
+    /// The block's hash, round, and parent references are trusted from wire validation.
+    pub fn insert_relaxed(&mut self, block: DagBlock) -> DagStoreResult<()> {
+        let hash = block.hash;
+
+        if self.index.contains_key(&hash) {
+            return Err(DagStoreError::DuplicateBlock(hash));
+        }
+
+        let encoded = postcard::to_allocvec(&block)
+            .map_err(|e| DagStoreError::Serialization(e.to_string()))?;
+        self.store.put(BLOCKS_TABLE, &hash, &encoded)?;
+
+        for parent_hash in &block.parents {
+            if let Some(parent_entry) = self.index.get_mut(parent_hash) {
+                parent_entry.children.insert(hash);
+            }
+        }
+
+        self.rounds.entry(block.round).or_default().push(hash);
+
+        self.index.insert(
+            hash,
+            DagEntry {
+                round: block.round,
+                parents: block.parents,
+                children: HashSet::new(),
+            },
+        );
+
+        Ok(())
+    }
+
     /// Retrieve a block by hash, deserializing from disk.
     pub fn get(&self, hash: &BlockHash) -> DagStoreResult<DagBlock> {
         let raw = self
@@ -207,12 +241,20 @@ impl DagStore {
     pub fn causal_order(&self, tips: &[BlockHash]) -> DagStoreResult<Vec<BlockHash>> {
         let reachable = self.reachable_set(tips);
 
+        // Filter to hashes actually present in the index (relaxed insert
+        // may add parent references to blocks we haven't received yet).
+        let local_reachable: HashSet<BlockHash> = reachable
+            .iter()
+            .copied()
+            .filter(|h| self.index.contains_key(h))
+            .collect();
+
         let mut in_degree: HashMap<BlockHash, usize> = HashMap::new();
-        for &hash in &reachable {
+        for &hash in &local_reachable {
             in_degree.entry(hash).or_insert(0);
             let entry = &self.index[&hash];
             for child in &entry.children {
-                if reachable.contains(child) {
+                if local_reachable.contains(child) {
                     *in_degree.entry(*child).or_insert(0) += 1;
                 }
             }

@@ -114,8 +114,18 @@ impl ValidatorSet {
         self.total_stake
     }
 
+    /// Check if a set of validators meets the quorum threshold (>=2/3 of total stake).
+    /// Used by the threshold clock to gate round advancement.
+    pub fn has_quorum(&self, voter_ids: &[ValidatorId]) -> bool {
+        let voting_stake: u128 = voter_ids
+            .iter()
+            .filter_map(|id| self.validators.get(id).map(|r| r.stake))
+            .sum();
+        voting_stake * 3 >= self.total_stake * 2
+    }
+
     /// Check if a set of validators holds a supermajority (>2/3 of total stake).
-    /// This is the BFT threshold for consensus.
+    /// This is the BFT threshold for consensus commits.
     pub fn has_supermajority(&self, voter_ids: &[ValidatorId]) -> bool {
         let voting_stake: u128 = voter_ids
             .iter()

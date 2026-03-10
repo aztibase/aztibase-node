@@ -2599,14 +2599,15 @@ mod tests {
             buffered_attempts >= 20,
             "Should attempt at least 20 orphans"
         );
-        // All 20 should be buffered (< MAX_BUFFERED_VERTICES=64)
-        assert!(engine.buffered_count() <= 64);
-
-        // Buffer should be capped at MAX_BUFFERED_VERTICES (64)
+        // With relaxed insert, orphan vertices are accepted directly.
+        // Verify some were inserted (rounds 1-10 across 2 authors).
+        let mut inserted = 0usize;
+        for round in 1..=10u64 {
+            inserted += engine.state.vertices_at_round(round).len();
+        }
         assert!(
-            engine.buffered_count() <= 64,
-            "Buffer should be capped at 64, got {}",
-            engine.buffered_count()
+            inserted >= 15,
+            "At least 15 vertices should be inserted, got {inserted}"
         );
 
         cleanup(&path);
@@ -2645,13 +2646,12 @@ mod tests {
         let mut engine = CE::new(config, v1, dag, validators, in_rx, out_tx);
         engine.insert_genesis().unwrap();
 
-        // Vertex with fake parent — gets buffered, not inserted
+        // Vertex with fake parent — accepted via relaxed insert
         let fake_parent = aztibase_core::hash(b"does_not_exist");
         let block = DagBlock::new(1, v2, vec![fake_parent], vec![], 2000).unwrap();
         let data = aztibase_consensus::encode_vertex(&block).unwrap();
         engine.handle_received_vertex(&data).unwrap();
-        assert_eq!(engine.state.vertices_at_round(1).len(), 0);
-        assert_eq!(engine.buffered_count(), 1);
+        assert_eq!(engine.state.vertices_at_round(1).len(), 1);
 
         // Vertex with tampered hash — rejected at wire decode
         let mut bad_block = DagBlock::new(
@@ -3030,12 +3030,8 @@ mod tests {
             accepted >= 20,
             "Should have fed at least 20 orphan vertices"
         );
-        // Buffer is capped and engine didn't panic
-        assert!(
-            engine.buffered_count() <= 64,
-            "Buffer must be capped at 64, got {}",
-            engine.buffered_count()
-        );
+        // With relaxed insert, all vertices are accepted directly.
+        // Verify the engine didn't panic and can still function.
 
         // Engine still functions — can process a transaction without panic
         engine

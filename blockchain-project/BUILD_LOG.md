@@ -21,6 +21,25 @@ Entries are prepended (newest first).
 
 ## Entries
 
+### 2026-03-10 -- node-engineer / p2p-network-engineer / consensus-engineer -- Sprint 047 Testnet Validation (M9-S8)
+**Task:** First real multi-node testnet run. Debugged and fixed critical issues preventing block production in 3-node local testnet.
+**Sprint:** Sprint 047, Phases 1-3
+**Git Ref:** pending
+**Files Changed:**
+- crates/aztibase-network/src/transport.rs: removed add_explicit_peer() calls that prevented gossipsub mesh relay (Bug #10)
+- crates/aztibase-consensus/src/engine.rs: ThresholdClock per-round tracking, removed self-feed from propose_vertex (Bug #11), liveness timeout 10x→25x (Bug #13), peer-wait before first proposal, diagnostic logging, new integration test (run_produces_vertices_via_timeout)
+- crates/aztibase-consensus/src/validator.rs: added has_quorum (>=2/3 stake threshold)
+- crates/aztibase-consensus/src/wire.rs: max_future raised 10→100
+- crates/aztibase-network/src/gossip.rs: mesh_n=3, mesh_n_low=2, mesh_outbound_min=1 for small testnet
+- crates/aztibase-network/src/connection_filter.rs: exempt loopback IP from rate-limit
+- crates/aztibase-network/src/lib.rs: exports for chain_scoped_topics, genesis_hex_prefix
+- crates/aztibase-node/src/main.rs: non-fatal listen failures (Bug #12), PeerCountChanged wiring, scoped gossipsub topics, diagnostic logging
+- data/genesis/genesis.toml: stake/balance as strings (serde_u128_as_string)
+- data/node{1,2,3}/*.toml: full mesh boot_nodes for local testnet
+**Bugs Found & Fixed:** 4 new (Bug #10-#13), see sprint plan for details
+**Review Notes:** 3-node testnet now produces blocks continuously. 565 commits in ~45s, all nodes at block height 565, full mesh connectivity (2 peers each). 113 consensus tests pass, 0 clippy warnings.
+**Security Flags:** None
+
 ### 2026-03-10 -- node-engineer / consensus-engineer / security-engineer -- Sprint 046 Complete (M9-S7: Weak Subjectivity Checkpoints)
 **Task:** Sprint 046: Implement weak subjectivity checkpoints — periodic state snapshots every 1000 batches, CLI trusted checkpoint validation, RPC query endpoints
 **Sprint:** Sprint 046, Phases 1-5

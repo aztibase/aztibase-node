@@ -19,5 +19,10 @@ Thumbs.db
 # Logs
 *.log
 
+# Node runtime data (databases, peer stores)
+data/*/db/
+data/*/execution_db/
+data/*/*.redb
+
 # Reference repos (not part of our codebase)
 /references/

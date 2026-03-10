@@ -271,10 +271,6 @@ impl Libp2pTransport {
     pub fn add_peer(&mut self, peer_id: PeerId, addr: Multiaddr) {
         self.swarm
             .behaviour_mut()
-            .gossipsub
-            .add_explicit_peer(&peer_id);
-        self.swarm
-            .behaviour_mut()
             .kademlia
             .add_address(&peer_id, addr);
     }
@@ -314,10 +310,6 @@ impl Libp2pTransport {
                     peers,
                 ))) => {
                     for (peer_id, addr) in peers {
-                        self.swarm
-                            .behaviour_mut()
-                            .gossipsub
-                            .add_explicit_peer(&peer_id);
                         self.swarm
                             .behaviour_mut()
                             .kademlia

@@ -1,11 +1,10 @@
-use std::collections::{HashMap, HashSet, VecDeque};
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering as AtomicOrdering};
 use std::time::{Duration, Instant};
 
 use anyhow::{Context, Result};
 use tokio::sync::mpsc;
-use tokio::time::MissedTickBehavior;
 use tracing::{debug, info, warn};
 
 use aztibase_core::{BlockHash, ValidatorId};
@@ -16,8 +15,72 @@ use crate::dag_store::DagStore;
 use crate::validator::ValidatorSet;
 use crate::wire;
 
-const MAX_BUFFERED_VERTICES: usize = 64;
 const EQUIVOCATION_PRUNE_DEPTH: u64 = 20;
+const MAX_CATCHUP_ROUNDS: usize = 100;
+
+/// Message-driven threshold clock for DAG-BFT round advancement.
+///
+/// Tracks which validators have produced blocks at the current round.
+/// When a quorum (>=2/3 stake) of blocks is seen, the clock advances
+/// to the next round, signaling that the validator may propose.
+///
+/// Follows the Mysticeti/Sui pattern: safety via quorum-gated rounds,
+/// liveness via timeout-forced advancement.
+struct ThresholdClock {
+    round: u64,
+    seen: HashMap<u64, HashSet<ValidatorId>>,
+}
+
+impl ThresholdClock {
+    fn new() -> Self {
+        Self {
+            round: 0,
+            seen: HashMap::new(),
+        }
+    }
+
+    /// Register a block and try to advance through as many rounds as possible.
+    /// Tracks authors per-round so out-of-order arrivals are handled correctly.
+    /// Returns `true` if the clock advanced at least one round.
+    fn add_block(
+        &mut self,
+        author: ValidatorId,
+        block_round: u64,
+        validators: &ValidatorSet,
+    ) -> bool {
+        if block_round < self.round {
+            return false;
+        }
+
+        self.seen.entry(block_round).or_default().insert(author);
+
+        let mut advanced = false;
+        while let Some(authors) = self.seen.get(&self.round) {
+            let ids: Vec<ValidatorId> = authors.iter().copied().collect();
+            if validators.has_quorum(&ids) {
+                self.seen.remove(&self.round);
+                self.round += 1;
+                advanced = true;
+            } else {
+                break;
+            }
+        }
+
+        // Evict stale entries well behind the current round.
+        self.seen.retain(|&r, _| r >= self.round);
+
+        advanced
+    }
+
+    fn get_round(&self) -> u64 {
+        self.round
+    }
+
+    fn force_advance(&mut self) {
+        self.seen.remove(&self.round);
+        self.round += 1;
+    }
+}
 
 /// Lightweight consensus metrics, updated atomically by the engine.
 #[derive(Debug, Default)]
@@ -110,13 +173,26 @@ impl RoundState {
             .map_or(&[], |v| v.as_slice())
     }
 
-    /// Select parents from the previous round. Takes up to `max_parents` hashes.
+    /// Select parents from recent rounds. Scans a lookback window to handle
+    /// round drift between validators communicating over a real network.
     pub fn select_parents(&self, max_parents: usize) -> Vec<BlockHash> {
         if self.current_round == 0 {
             return Vec::new();
         }
-        let prev = self.vertices_at_round(self.current_round - 1);
-        prev.iter().take(max_parents).copied().collect()
+
+        let mut parents = Vec::new();
+        let lookback = 16u64.min(self.current_round);
+        let start = self.current_round - lookback;
+
+        for round in (start..self.current_round).rev() {
+            for &hash in self.vertices_at_round(round) {
+                if parents.len() >= max_parents {
+                    return parents;
+                }
+                parents.push(hash);
+            }
+        }
+        parents
     }
 
     pub fn record_commit(&mut self, hash: BlockHash) {
@@ -154,6 +230,8 @@ pub enum ConsensusInput {
     Transaction(Vec<u8>),
     /// Replace the validator set (sent from pipeline at epoch boundaries).
     UpdateValidatorSet(crate::validator::ValidatorSet),
+    /// Peer count changed (sent from the network layer).
+    PeerCountChanged(u64),
 }
 
 /// Messages flowing out of the consensus engine.
@@ -177,12 +255,6 @@ pub struct StateRootAnnounce {
     pub validator: aztibase_core::ValidatorId,
 }
 
-/// A decoded vertex waiting for its parents to arrive.
-struct BufferedVertex {
-    block: DagBlock,
-    missing_parents: Vec<BlockHash>,
-}
-
 pub struct ConsensusEngine {
     config: ConsensusConfig,
     identity: ValidatorId,
@@ -194,10 +266,12 @@ pub struct ConsensusEngine {
     inbox: mpsc::Receiver<ConsensusInput>,
     outbox: mpsc::Sender<ConsensusOutput>,
     seen_authors: HashMap<(u64, ValidatorId), BlockHash>,
-    buffered: VecDeque<BufferedVertex>,
     equivocations_detected: u64,
     metrics: Arc<ConsensusMetrics>,
     round_start: Instant,
+    threshold_clock: ThresholdClock,
+    last_proposed_round: u64,
+    peer_count: u64,
 }
 
 impl ConsensusEngine {
@@ -220,10 +294,12 @@ impl ConsensusEngine {
             inbox,
             outbox,
             seen_authors: HashMap::new(),
-            buffered: VecDeque::new(),
             equivocations_detected: 0,
             metrics: Arc::new(ConsensusMetrics::default()),
             round_start: Instant::now(),
+            threshold_clock: ThresholdClock::new(),
+            last_proposed_round: 0,
+            peer_count: 0,
         }
     }
 
@@ -231,25 +307,99 @@ impl ConsensusEngine {
         Arc::clone(&self.metrics)
     }
 
-    /// Run the consensus loop. Advances rounds on a timer, processes incoming
-    /// vertices, proposes new vertices, and evaluates commit rules.
+    /// Run the consensus loop. Uses a message-driven threshold clock:
+    /// rounds advance when a quorum of blocks is received, not on a timer.
+    /// A liveness timeout forces advancement if the clock stalls.
     pub async fn run(&mut self) -> Result<()> {
+        info!(
+            identity = %short_hex(&self.identity),
+            validators = self.validators.len(),
+            total_stake = self.validators.total_stake(),
+            is_validator = self.validators.contains(&self.identity),
+            "Consensus engine starting"
+        );
+
         self.insert_genesis()?;
 
-        let mut ticker = tokio::time::interval(self.config.round_duration);
-        ticker.set_missed_tick_behavior(MissedTickBehavior::Skip);
+        let genesis_count = self.state.vertices_at_round(0).len();
+        info!(genesis_blocks = genesis_count, "Genesis blocks in DAG");
 
-        // Skip the first immediate tick
-        ticker.tick().await;
+        // Seed threshold clock with genesis blocks (round 0).
+        let mut seeded = 0usize;
+        for &hash in self.state.vertices_at_round(0) {
+            if let Ok(block) = self.dag.get(&hash) {
+                let advanced = self
+                    .threshold_clock
+                    .add_block(block.author, 0, &self.validators);
+                seeded += 1;
+                debug!(
+                    author = %short_hex(&block.author),
+                    clock = self.threshold_clock.get_round(),
+                    advanced,
+                    "Seeded threshold clock with genesis block"
+                );
+            } else {
+                warn!(hash = %short_hex(&hash), "Failed to read genesis block from DAG");
+            }
+        }
 
-        loop {
+        info!(
+            seeded,
+            clock_round = self.threshold_clock.get_round(),
+            last_proposed = self.last_proposed_round,
+            "Threshold clock seeded — waiting for peers before first proposal"
+        );
+
+        // Wait for at least 1 peer before the first proposal.
+        // Without peers, gossipsub silently drops published vertices (dedup cache
+        // prevents re-broadcast), leaving other nodes permanently behind.
+        let peer_deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(30);
+        while self.peer_count == 0 {
             tokio::select! {
-                _ = ticker.tick() => {
-                    self.advance_round()?;
+                _ = tokio::time::sleep_until(peer_deadline) => {
+                    warn!("No peers after 30s — starting consensus without peers");
+                    break;
                 }
                 msg = self.inbox.recv() => {
                     match msg {
-                        Some(input) => self.handle_input(input)?,
+                        Some(input) => {
+                            let was_peer_update = matches!(&input, ConsensusInput::PeerCountChanged(_));
+                            self.handle_input(input)?;
+                            if was_peer_update && self.peer_count > 0 {
+                                info!(peer_count = self.peer_count, "First peer connected — starting consensus");
+                                break;
+                            }
+                        }
+                        None => return Ok(()),
+                    }
+                }
+            }
+        }
+
+        self.try_advance()?;
+
+        let timeout_duration = self.config.round_duration * 25;
+
+        loop {
+            tokio::select! {
+                _ = tokio::time::sleep(timeout_duration) => {
+                    info!(
+                        clock = self.threshold_clock.get_round(),
+                        proposed = self.last_proposed_round,
+                        "Liveness timeout, forcing round advance"
+                    );
+                    self.threshold_clock.force_advance();
+                    self.try_advance()?;
+                }
+                msg = self.inbox.recv() => {
+                    match msg {
+                        Some(input) => {
+                            let is_vertex = matches!(&input, ConsensusInput::ReceivedVertex(_));
+                            self.handle_input(input)?;
+                            if is_vertex {
+                                self.try_advance()?;
+                            }
+                        }
                         None => {
                             info!("Consensus inbox closed, shutting down");
                             break;
@@ -262,10 +412,50 @@ impl ConsensusEngine {
         Ok(())
     }
 
+    /// Propose and evaluate commits for all rounds where the threshold clock
+    /// has advanced past our last proposal.
+    fn try_advance(&mut self) -> Result<()> {
+        let clock = self.threshold_clock.get_round();
+        let last = self.last_proposed_round;
+        if clock <= last {
+            debug!(
+                clock,
+                last_proposed = last,
+                "try_advance: clock not ahead, skipping"
+            );
+            return Ok(());
+        }
+        debug!(
+            clock,
+            last_proposed = last,
+            gap = clock - last,
+            "try_advance: clock ahead"
+        );
+
+        let mut advances = 0;
+        while self.threshold_clock.get_round() > self.last_proposed_round
+            && advances < MAX_CATCHUP_ROUNDS
+        {
+            let round = self.last_proposed_round + 1;
+            self.state.current_round = round;
+            self.round_start = Instant::now();
+            self.propose_vertex()?;
+            self.evaluate_commits()?;
+            self.prune_equivocation_tracker();
+            self.metrics
+                .rounds_advanced
+                .fetch_add(1, AtomicOrdering::Relaxed);
+            self.last_proposed_round = round;
+            self.state.current_round = round + 1;
+            advances += 1;
+        }
+        Ok(())
+    }
+
     pub fn insert_genesis(&mut self) -> Result<()> {
         if self.dag.is_empty() {
             for (id, _) in self.validators.iter() {
-                let genesis = DagBlock::genesis(*id, now_ms());
+                let genesis = DagBlock::genesis(*id, 0);
                 let hash = genesis.hash;
                 self.dag
                     .insert(genesis)
@@ -290,22 +480,6 @@ impl ConsensusEngine {
                 "Resumed from existing DAG"
             );
         }
-        Ok(())
-    }
-
-    fn advance_round(&mut self) -> Result<()> {
-        let round = self.state.current_round;
-        debug!(round, "Advancing round");
-
-        self.round_start = Instant::now();
-        self.propose_vertex()?;
-        self.evaluate_commits()?;
-        self.prune_equivocation_tracker();
-        self.metrics
-            .rounds_advanced
-            .fetch_add(1, AtomicOrdering::Relaxed);
-
-        self.state.current_round += 1;
         Ok(())
     }
 
@@ -351,9 +525,17 @@ impl ConsensusEngine {
             .vertices_proposed
             .fetch_add(1, AtomicOrdering::Relaxed);
 
-        let _ = self
+        match self
             .outbox
-            .try_send(ConsensusOutput::BroadcastVertex(encoded));
+            .try_send(ConsensusOutput::BroadcastVertex(encoded))
+        {
+            Ok(()) => {
+                debug!(round, hash = %short_hex(&hash), "Vertex broadcast queued");
+            }
+            Err(e) => {
+                warn!(round, error = %e, "Failed to queue vertex for broadcast");
+            }
+        }
 
         Ok(())
     }
@@ -376,6 +558,10 @@ impl ConsensusEngine {
                     "Validator set updated from staking epoch"
                 );
                 self.validators = new_set;
+            }
+            ConsensusInput::PeerCountChanged(count) => {
+                self.peer_count = count;
+                debug!(peer_count = count, "Peer count updated in consensus engine");
             }
         }
         Ok(())
@@ -434,35 +620,17 @@ impl ConsensusEngine {
     fn try_insert_vertex(&mut self, block: DagBlock) -> Result<()> {
         let round = block.round;
         let hash = block.hash;
+        let author = block.author;
 
-        let missing: Vec<BlockHash> = block
-            .parents
-            .iter()
-            .filter(|p| !self.dag.contains(p))
-            .copied()
-            .collect();
-
-        if !missing.is_empty() && !block.is_genesis() {
-            if self.buffered.len() < MAX_BUFFERED_VERTICES {
-                debug!(
-                    round,
-                    hash = %short_hex(&hash),
-                    missing_count = missing.len(),
-                    "Buffered vertex with missing parents"
-                );
-                self.buffered.push_back(BufferedVertex {
-                    block,
-                    missing_parents: missing,
-                });
-            }
-            return Ok(());
-        }
-
-        match self.dag.insert(block) {
+        // Use relaxed insert: accept blocks even when parents are missing.
+        // In a DAG with asynchronous delivery, parents may arrive out of order.
+        // The commit rule only checks block.parents references, not parent existence.
+        match self.dag.insert_relaxed(block) {
             Ok(()) => {
                 self.state.record_vertex(round, hash);
+                self.threshold_clock
+                    .add_block(author, round, &self.validators);
                 debug!(round, hash = %short_hex(&hash), "Accepted vertex from peer");
-                self.drain_buffered();
             }
             Err(e) => {
                 debug!(error = %e, "Rejected vertex");
@@ -537,8 +705,14 @@ impl ConsensusEngine {
                         debug!(wave, round = r, "Leader skipped");
                         self.state.last_committed_wave = Some(wave);
                     }
-                    LeaderStatus::Undecided(_) => {
-                        break;
+                    LeaderStatus::Undecided(r) => {
+                        let voting_round = r + 1;
+                        if round > voting_round + wave_len * 8 {
+                            debug!(wave, round = r, "Force-skipping stale undecided wave");
+                            self.state.last_committed_wave = Some(wave);
+                        } else {
+                            break;
+                        }
                     }
                 }
             }
@@ -557,39 +731,6 @@ impl ConsensusEngine {
 
     pub fn equivocations_detected(&self) -> u64 {
         self.equivocations_detected
-    }
-
-    pub fn buffered_count(&self) -> usize {
-        self.buffered.len()
-    }
-
-    fn drain_buffered(&mut self) {
-        let mut made_progress = true;
-        while made_progress {
-            made_progress = false;
-            let mut remaining = VecDeque::new();
-            while let Some(mut entry) = self.buffered.pop_front() {
-                entry.missing_parents.retain(|p| !self.dag.contains(p));
-
-                if entry.missing_parents.is_empty() {
-                    let round = entry.block.round;
-                    let hash = entry.block.hash;
-                    match self.dag.insert(entry.block) {
-                        Ok(()) => {
-                            self.state.record_vertex(round, hash);
-                            debug!(round, hash = %short_hex(&hash), "Inserted buffered vertex");
-                            made_progress = true;
-                        }
-                        Err(e) => {
-                            debug!(error = %e, "Buffered vertex rejected on insert");
-                        }
-                    }
-                } else {
-                    remaining.push_back(entry);
-                }
-            }
-            self.buffered = remaining;
-        }
     }
 
     fn prune_equivocation_tracker(&mut self) {
@@ -812,11 +953,11 @@ mod tests {
         let (mut engine, _in_tx, _out_rx, path) = make_test_engine();
         engine.insert_genesis().unwrap();
         let genesis_hashes: Vec<BlockHash> = engine.state.vertices_at_round(0).to_vec();
-        let block = DagBlock::new(50, [2u8; 32], genesis_hashes, vec![], now_ms()).unwrap();
+        let block = DagBlock::new(150, [2u8; 32], genesis_hashes, vec![], now_ms()).unwrap();
         let data = crate::wire::encode_vertex(&block).unwrap();
 
         engine.handle_received_vertex(&data).unwrap();
-        assert_eq!(engine.state.vertices_at_round(50).len(), 0);
+        assert_eq!(engine.state.vertices_at_round(150).len(), 0);
         cleanup(&path);
     }
 
@@ -913,32 +1054,28 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn buffered_vertex_insertion() {
+    async fn relaxed_insert_out_of_order() {
         let (mut engine, _in_tx, _out_rx, path) = make_test_engine();
         engine.insert_genesis().unwrap();
 
         let genesis_hashes: Vec<BlockHash> = engine.state.vertices_at_round(0).to_vec();
 
-        // Create a round-1 vertex from v2
         let block_r1 =
             DagBlock::new(1, [2u8; 32], genesis_hashes.clone(), vec![], now_ms()).unwrap();
         let r1_hash = block_r1.hash;
 
-        // Create a round-2 vertex from v3 that references block_r1
+        // Round-2 vertex referencing round-1 (which doesn't exist yet in DAG).
         let block_r2 = DagBlock::new(2, [3u8; 32], vec![r1_hash], vec![], now_ms()).unwrap();
         let data_r2 = crate::wire::encode_vertex(&block_r2).unwrap();
 
-        // Insert r2 first — parent r1 is missing, so it gets buffered
+        // Relaxed insert: r2 goes in even though parent r1 is missing.
         engine.handle_received_vertex(&data_r2).unwrap();
-        assert_eq!(engine.state.vertices_at_round(2).len(), 0);
-        assert_eq!(engine.buffered_count(), 1);
+        assert_eq!(engine.state.vertices_at_round(2).len(), 1);
 
-        // Now insert r1 — this should trigger drain_buffered and insert r2
+        // Now insert r1 — also accepted.
         let data_r1 = crate::wire::encode_vertex(&block_r1).unwrap();
         engine.handle_received_vertex(&data_r1).unwrap();
         assert_eq!(engine.state.vertices_at_round(1).len(), 1);
-        assert_eq!(engine.state.vertices_at_round(2).len(), 1);
-        assert_eq!(engine.buffered_count(), 0);
 
         cleanup(&path);
     }
@@ -1037,6 +1174,60 @@ mod tests {
         assert_eq!(engine.validators.len(), 2);
         assert!(engine.validators.contains(&[10u8; 32]));
         assert!(!engine.validators.contains(&[1u8; 32]));
+        cleanup(&path);
+    }
+
+    #[tokio::test]
+    async fn run_produces_vertices_via_timeout() {
+        let (engine, in_tx, mut out_rx, path) = make_test_engine();
+        let metrics = engine.metrics();
+
+        let handle = tokio::spawn(async move {
+            let mut engine = engine;
+            engine.run().await.unwrap();
+        });
+
+        // Simulate a peer connecting so the engine starts proposing.
+        in_tx
+            .send(ConsensusInput::PeerCountChanged(1))
+            .await
+            .unwrap();
+
+        // Wait for at least one BroadcastVertex from genesis advance + one timeout
+        let mut vertex_count = 0u32;
+        let deadline = tokio::time::Instant::now() + Duration::from_secs(3);
+        while tokio::time::Instant::now() < deadline {
+            match tokio::time::timeout(Duration::from_millis(200), out_rx.recv()).await {
+                Ok(Some(ConsensusOutput::BroadcastVertex(_))) => {
+                    vertex_count += 1;
+                    if vertex_count >= 2 {
+                        break;
+                    }
+                }
+                Ok(Some(_)) => {}
+                Ok(None) => break,
+                Err(_) => {}
+            }
+        }
+
+        assert!(
+            vertex_count >= 1,
+            "Expected at least 1 vertex from run(), got {vertex_count}"
+        );
+
+        let snap = metrics.snapshot();
+        assert!(
+            snap.vertices_proposed >= 1,
+            "Expected vertices_proposed >= 1, got {}",
+            snap.vertices_proposed
+        );
+        assert!(
+            snap.rounds_advanced >= 1,
+            "Expected rounds_advanced >= 1, got {}",
+            snap.rounds_advanced
+        );
+
+        handle.abort();
         cleanup(&path);
     }
 }
