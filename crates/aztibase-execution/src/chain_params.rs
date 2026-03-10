@@ -168,6 +168,30 @@ static PARAM_DEFS: &[ParamDef] = &[
         max: Some(1_000_000),
         description: "Receipt store eviction cap",
     },
+    ParamDef {
+        key: "min_validator_stake",
+        param_type: ParamType::U64,
+        default: ParamValue::U64(50_000_000_000_000),
+        min: Some(10_000),
+        max: Some(500_000),
+        description: "Minimum stake to become an active validator (in base units)",
+    },
+    ParamDef {
+        key: "max_stake_cap",
+        param_type: ParamType::U64,
+        default: ParamValue::U64(50_000_000_000_000_000),
+        min: Some(1_000_000),
+        max: Some(100_000_000),
+        description: "Maximum effective stake per validator (in base units)",
+    },
+    ParamDef {
+        key: "validator_commission_bps",
+        param_type: ParamType::U64,
+        default: ParamValue::U64(1000),
+        min: Some(0),
+        max: Some(3000),
+        description: "Validator commission on delegation rewards (basis points, 100 = 1%)",
+    },
 ];
 
 pub struct ChainParams {
@@ -337,6 +361,31 @@ mod tests {
             .set("nonexistent_param", ParamValue::U64(42))
             .unwrap_err();
         assert!(matches!(err, ChainParamError::UnknownKey(_)));
+    }
+
+    #[test]
+    fn staking_params_defaults_and_bounds() {
+        let mut params = ChainParams::defaults();
+
+        assert_eq!(
+            params.get_u64("min_validator_stake"),
+            Some(50_000_000_000_000)
+        );
+        assert_eq!(
+            params.get_u64("max_stake_cap"),
+            Some(50_000_000_000_000_000)
+        );
+        assert_eq!(params.get_u64("validator_commission_bps"), Some(1000));
+
+        params
+            .set("validator_commission_bps", ParamValue::U64(0))
+            .unwrap();
+        assert_eq!(params.get_u64("validator_commission_bps"), Some(0));
+
+        let err = params
+            .set("validator_commission_bps", ParamValue::U64(5000))
+            .unwrap_err();
+        assert!(matches!(err, ChainParamError::OutOfBounds { .. }));
     }
 
     #[test]

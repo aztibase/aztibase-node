@@ -21,6 +21,23 @@ Entries are prepended (newest first).
 
 ## Entries
 
+### 2026-03-10 -- consensus-engineer / tokenomics-engineer / node-engineer / security-engineer -- Sprint 038 Complete (M8 Sprint 13: Validator Staking, Delegation & Slashing)
+**Task:** Sprint 038: StakingStore, 4 staking TxKinds, delegation, unbonding queue, epoch reward distribution, equivocation/downtime slashing, 4 staking RPCs, 3 governance params
+**Sprint:** Sprint 038, Phases 1-4
+**Git Ref:** pending
+**Files Changed:**
+- crates/aztibase-execution/src/staking.rs (NEW): StakingStore, ValidatorStake, Delegation, UnbondingEntry, SlashRecord, OffenseType, StakingError; register_validator, add_stake, begin_unstake, delegate, begin_undelegate, process_unbonding, slash_validator, distribute_epoch_rewards, active_set_snapshot; 24+ unit tests
+- crates/aztibase-execution/src/chain_params.rs: 3 new governance params (min_validator_stake, max_stake_cap, validator_commission_bps), 1 new test
+- crates/aztibase-execution/src/lib.rs: staking module + re-exports
+- crates/aztibase-execution/src/routing.rs: TxKind::Stake (0x10), Unstake (0x11), Delegate (0x12), Undelegate (0x13) — 19 total TxKind variants
+- crates/aztibase-node/src/pipeline.rs: StakingStore field, SlashEvent channel (mpsc), epoch_participation tracking, full Stake/Unstake/Delegate/Undelegate execution handlers, unbonding queue processing, epoch boundary (reward distribution + downtime slashing + validator set rebuild), slash event drain
+- crates/aztibase-rpc/src/server.rs: StakingStore in RpcState, with_staking_store() builder, 4 new handlers (aztb_getValidatorStake, aztb_getDelegation, aztb_getActiveValidators, aztb_getUnbondingStatus), 4 RPC tests
+- blockchain-project/sprints/SPRINT-038.md: sprint plan + retrospective
+**Review Notes:** Phase 1: StakingStore with self-stake, delegation, unbonding queue (UNBONDING_ROUNDS=4,536,000), MAX_UNBONDING_ENTRIES=10,000, equivocation/downtime slash records. Phase 2: Epoch reward distribution with 10% commission, active_set_snapshot for validator set rebuild, epoch participation tracking for downtime detection. Phase 3: 4 staking RPC endpoints, 3 governance params (min_validator_stake, max_stake_cap, validator_commission_bps with bounds). Phase 4: clippy 0 warnings, fmt clean, all tests pass (~34 new).
+**Security Flags:** 0 ELEVATED, 0 MEDIUM. u64 stake protected by MAX_STAKE_CAP + saturating_add. Unbonding queue bounded. Commission capped at 3000 bps. Floor division only. Slash-during-unbonding handled. No floating-point.
+
+---
+
 ### 2026-03-09 -- tokenomics-engineer / node-engineer / security-engineer -- Sprint 037 Complete (M8 Sprint 12: Token Supply, Emission & Vesting)
 **Task:** Sprint 037: Token supply hard cap, disinflationary emission schedule, genesis allocations with vesting, epoch reward distribution, 2 new RPCs
 **Sprint:** Sprint 037, Phases 1-4

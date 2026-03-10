@@ -7,7 +7,8 @@ use aztibase_consensus::{
 use aztibase_core::{Hash, hash};
 use aztibase_execution::{
     AccountState, BaseFeeCalculator, ChainParams, ContractTx, CreateProposalParams,
-    EmissionTracker, ExecutionReceipt, FeeEscrow, GovernanceStore, TransferTx, TxKind,
+    EmissionTracker, ExecutionReceipt, FeeEscrow, GovernanceStore, OffenseType, StakingStore,
+    TransferTx, TxKind,
     block_stm::{BlockSTMExecutor, apply_block_stm_to_state},
     escrow_fee, evm, execute_contract_txs, flush_state, load_base_fee, load_state,
     model_registry::{MODEL_REGISTRY_ADDRESS, ModelRegistry},
@@ -24,6 +25,18 @@ use crate::task_pool::{SettlementResult, TaskAssigner, TaskPool, TaskSettlement}
 const MAX_EXECUTED_ANCHORS: usize = 10_000;
 const MAX_ATTESTATIONS_PER_TASK: usize = 32;
 const MAX_ATTESTATION_BUFFER_TASKS: usize = 2048;
+
+const MIN_VALIDATOR_STAKE: u64 = 50_000_000_000_000;
+const MAX_VALIDATOR_STAKE_CAP: u64 = 50_000_000_000_000_000;
+const UNBONDING_ROUNDS: u64 = 4_536_000;
+
+/// Event emitted by consensus when a validator offense is detected.
+#[derive(Clone, Debug)]
+pub struct SlashEvent {
+    pub validator_id: [u8; 32],
+    pub offense: OffenseType,
+    pub round: u64,
+}
 
 /// Result of executing a single committed batch.
 #[derive(Clone, Debug)]
@@ -60,6 +73,11 @@ pub struct ExecutionPipeline {
     governance: Arc<RwLock<GovernanceStore>>,
     chain_params: Arc<RwLock<ChainParams>>,
     emission_tracker: Arc<RwLock<EmissionTracker>>,
+    staking_store: Arc<RwLock<StakingStore>>,
+    slash_rx: mpsc::Receiver<SlashEvent>,
+    #[allow(dead_code)]
+    slash_tx: mpsc::Sender<SlashEvent>,
+    epoch_participation: HashSet<[u8; 32]>,
     archive: bool,
 }
 
@@ -85,6 +103,7 @@ impl ExecutionPipeline {
         };
         let calculator = BaseFeeCalculator::new(initial_base_fee);
         let base_fee = Arc::new(std::sync::atomic::AtomicU64::new(calculator.base_fee()));
+        let (slash_tx_init, slash_rx_init) = mpsc::channel(64);
         Self {
             state: Arc::new(RwLock::new(state)),
             store: Some(store),
@@ -108,6 +127,10 @@ impl ExecutionPipeline {
             emission_tracker: Arc::new(RwLock::new(EmissionTracker::new(
                 aztibase_execution::tokenomics::DEFAULT_EPOCH_LENGTH,
             ))),
+            staking_store: Arc::new(RwLock::new(StakingStore::new())),
+            slash_rx: slash_rx_init,
+            slash_tx: slash_tx_init,
+            epoch_participation: HashSet::new(),
             archive: false,
         }
     }
@@ -135,6 +158,16 @@ impl ExecutionPipeline {
     /// Shared emission tracker (for RPC server).
     pub fn shared_emission_tracker(&self) -> Arc<RwLock<EmissionTracker>> {
         Arc::clone(&self.emission_tracker)
+    }
+
+    #[allow(dead_code)]
+    pub fn shared_staking_store(&self) -> Arc<RwLock<StakingStore>> {
+        Arc::clone(&self.staking_store)
+    }
+
+    #[allow(dead_code)]
+    pub fn slash_sender(&self) -> mpsc::Sender<SlashEvent> {
+        self.slash_tx.clone()
     }
 
     /// Attach an AI runtime for inference transaction execution.
@@ -252,6 +285,10 @@ impl ExecutionPipeline {
 
         routed.sort_by(|a, b| a.sender().cmp(b.sender()).then(a.nonce().cmp(&b.nonce())));
 
+        for tx in &routed {
+            self.epoch_participation.insert(*tx.sender());
+        }
+
         let mut state = self.state.write().await;
 
         // Phase 0: Validate nonces against current state.
@@ -354,6 +391,10 @@ impl ExecutionPipeline {
         let mut deregister_models = Vec::new();
         let mut create_proposals = Vec::new();
         let mut cast_votes = Vec::new();
+        let mut stakes: Vec<([u8; 32], u64, u64)> = Vec::new();
+        let mut unstakes: Vec<([u8; 32], u64, u64)> = Vec::new();
+        let mut delegates: Vec<([u8; 32], [u8; 32], u64, u64)> = Vec::new();
+        let mut undelegates: Vec<([u8; 32], u64)> = Vec::new();
 
         for tx in &executable {
             match tx {
@@ -574,6 +615,36 @@ impl ExecutionPipeline {
                 } => {
                     cast_votes.push((*voter, *proposal_id, *approve, *nonce));
                 }
+                TxKind::Stake {
+                    staker,
+                    amount,
+                    nonce,
+                    ..
+                } => {
+                    stakes.push((*staker, *amount, *nonce));
+                }
+                TxKind::Unstake {
+                    staker,
+                    amount,
+                    nonce,
+                    ..
+                } => {
+                    unstakes.push((*staker, *amount, *nonce));
+                }
+                TxKind::Delegate {
+                    delegator,
+                    validator_id,
+                    amount,
+                    nonce,
+                    ..
+                } => {
+                    delegates.push((*delegator, *validator_id, *amount, *nonce));
+                }
+                TxKind::Undelegate {
+                    delegator, nonce, ..
+                } => {
+                    undelegates.push((*delegator, *nonce));
+                }
             }
         }
 
@@ -590,7 +661,11 @@ impl ExecutionPipeline {
             + deregister_computes.len()
             + deregister_models.len()
             + create_proposals.len()
-            + cast_votes.len();
+            + cast_votes.len()
+            + stakes.len()
+            + unstakes.len()
+            + delegates.len()
+            + undelegates.len();
 
         // Phase 2: Execute transactions.
         let mut exec_receipts = Vec::new();
@@ -1531,6 +1606,283 @@ impl ExecutionPipeline {
             }
         }
 
+        // Execute Stake transactions.
+        for (staker, amount, nonce) in &stakes {
+            let mut preimage = Vec::new();
+            preimage.extend_from_slice(staker);
+            preimage.extend_from_slice(&amount.to_le_bytes());
+            preimage.extend_from_slice(&nonce.to_le_bytes());
+            let tx_hash = hash(&preimage);
+
+            let staker_nonce = state.nonce(staker);
+            if *nonce != staker_nonce {
+                state.increment_nonce(staker);
+                exec_receipts.push(ExecutionReceipt {
+                    tx_hash,
+                    success: false,
+                    gas_used: 21_000,
+                    contract_address: None,
+                    error: Some(format!(
+                        "nonce mismatch: expected {staker_nonce}, got {nonce}"
+                    )),
+                    inference_hash: None,
+                    anomaly_score: 0.0,
+                });
+                continue;
+            }
+
+            let balance = state.balance(staker);
+            if balance < *amount {
+                state.increment_nonce(staker);
+                exec_receipts.push(ExecutionReceipt {
+                    tx_hash,
+                    success: false,
+                    gas_used: 21_000,
+                    contract_address: None,
+                    error: Some("insufficient balance for stake".into()),
+                    inference_hash: None,
+                    anomaly_score: 0.0,
+                });
+                continue;
+            }
+
+            let mut staking = self.staking_store.write().await;
+            let result = if staking.get_validator(staker).is_some() {
+                staking.add_stake(*staker, *amount, MAX_VALIDATOR_STAKE_CAP)
+            } else {
+                staking.register_validator(
+                    *staker,
+                    *amount,
+                    MIN_VALIDATOR_STAKE,
+                    MAX_VALIDATOR_STAKE_CAP,
+                    self.current_round,
+                )
+            };
+            drop(staking);
+
+            match result {
+                Ok(()) => {
+                    state.set_balance(staker, balance - *amount);
+                    state.increment_nonce(staker);
+                    exec_receipts.push(ExecutionReceipt {
+                        tx_hash,
+                        success: true,
+                        gas_used: 60_000,
+                        contract_address: None,
+                        error: None,
+                        inference_hash: None,
+                        anomaly_score: 0.0,
+                    });
+                }
+                Err(e) => {
+                    state.increment_nonce(staker);
+                    exec_receipts.push(ExecutionReceipt {
+                        tx_hash,
+                        success: false,
+                        gas_used: 21_000,
+                        contract_address: None,
+                        error: Some(format!("stake failed: {e}")),
+                        inference_hash: None,
+                        anomaly_score: 0.0,
+                    });
+                }
+            }
+        }
+
+        // Execute Unstake transactions.
+        for (staker, amount, nonce) in &unstakes {
+            let mut preimage = Vec::new();
+            preimage.extend_from_slice(staker);
+            preimage.extend_from_slice(&amount.to_le_bytes());
+            preimage.extend_from_slice(&nonce.to_le_bytes());
+            let tx_hash = hash(&preimage);
+
+            let staker_nonce = state.nonce(staker);
+            if *nonce != staker_nonce {
+                state.increment_nonce(staker);
+                exec_receipts.push(ExecutionReceipt {
+                    tx_hash,
+                    success: false,
+                    gas_used: 21_000,
+                    contract_address: None,
+                    error: Some(format!(
+                        "nonce mismatch: expected {staker_nonce}, got {nonce}"
+                    )),
+                    inference_hash: None,
+                    anomaly_score: 0.0,
+                });
+                continue;
+            }
+
+            let mut staking = self.staking_store.write().await;
+            let result = staking.begin_unstake(
+                *staker,
+                *amount,
+                MIN_VALIDATOR_STAKE,
+                self.current_round,
+                UNBONDING_ROUNDS,
+            );
+            drop(staking);
+
+            match result {
+                Ok(()) => {
+                    state.increment_nonce(staker);
+                    exec_receipts.push(ExecutionReceipt {
+                        tx_hash,
+                        success: true,
+                        gas_used: 60_000,
+                        contract_address: None,
+                        error: None,
+                        inference_hash: None,
+                        anomaly_score: 0.0,
+                    });
+                }
+                Err(e) => {
+                    state.increment_nonce(staker);
+                    exec_receipts.push(ExecutionReceipt {
+                        tx_hash,
+                        success: false,
+                        gas_used: 21_000,
+                        contract_address: None,
+                        error: Some(format!("unstake failed: {e}")),
+                        inference_hash: None,
+                        anomaly_score: 0.0,
+                    });
+                }
+            }
+        }
+
+        // Execute Delegate transactions.
+        for (delegator, validator_id, amount, nonce) in &delegates {
+            let mut preimage = Vec::new();
+            preimage.extend_from_slice(delegator);
+            preimage.extend_from_slice(validator_id);
+            preimage.extend_from_slice(&amount.to_le_bytes());
+            let tx_hash = hash(&preimage);
+
+            let del_nonce = state.nonce(delegator);
+            if *nonce != del_nonce {
+                state.increment_nonce(delegator);
+                exec_receipts.push(ExecutionReceipt {
+                    tx_hash,
+                    success: false,
+                    gas_used: 21_000,
+                    contract_address: None,
+                    error: Some(format!("nonce mismatch: expected {del_nonce}, got {nonce}")),
+                    inference_hash: None,
+                    anomaly_score: 0.0,
+                });
+                continue;
+            }
+
+            let balance = state.balance(delegator);
+            if balance < *amount {
+                state.increment_nonce(delegator);
+                exec_receipts.push(ExecutionReceipt {
+                    tx_hash,
+                    success: false,
+                    gas_used: 21_000,
+                    contract_address: None,
+                    error: Some("insufficient balance for delegation".into()),
+                    inference_hash: None,
+                    anomaly_score: 0.0,
+                });
+                continue;
+            }
+
+            let mut staking = self.staking_store.write().await;
+            let result = staking.delegate(
+                *delegator,
+                *validator_id,
+                *amount,
+                MAX_VALIDATOR_STAKE_CAP,
+                self.current_round,
+            );
+            drop(staking);
+
+            match result {
+                Ok(()) => {
+                    state.set_balance(delegator, balance - *amount);
+                    state.increment_nonce(delegator);
+                    exec_receipts.push(ExecutionReceipt {
+                        tx_hash,
+                        success: true,
+                        gas_used: 60_000,
+                        contract_address: None,
+                        error: None,
+                        inference_hash: None,
+                        anomaly_score: 0.0,
+                    });
+                }
+                Err(e) => {
+                    state.increment_nonce(delegator);
+                    exec_receipts.push(ExecutionReceipt {
+                        tx_hash,
+                        success: false,
+                        gas_used: 21_000,
+                        contract_address: None,
+                        error: Some(format!("delegate failed: {e}")),
+                        inference_hash: None,
+                        anomaly_score: 0.0,
+                    });
+                }
+            }
+        }
+
+        // Execute Undelegate transactions.
+        for (delegator, nonce) in &undelegates {
+            let mut preimage = Vec::new();
+            preimage.extend_from_slice(delegator);
+            preimage.extend_from_slice(&nonce.to_le_bytes());
+            let tx_hash = hash(&preimage);
+
+            let del_nonce = state.nonce(delegator);
+            if *nonce != del_nonce {
+                state.increment_nonce(delegator);
+                exec_receipts.push(ExecutionReceipt {
+                    tx_hash,
+                    success: false,
+                    gas_used: 21_000,
+                    contract_address: None,
+                    error: Some(format!("nonce mismatch: expected {del_nonce}, got {nonce}")),
+                    inference_hash: None,
+                    anomaly_score: 0.0,
+                });
+                continue;
+            }
+
+            let mut staking = self.staking_store.write().await;
+            let result = staking.begin_undelegate(*delegator, self.current_round, UNBONDING_ROUNDS);
+            drop(staking);
+
+            match result {
+                Ok(_amount) => {
+                    state.increment_nonce(delegator);
+                    exec_receipts.push(ExecutionReceipt {
+                        tx_hash,
+                        success: true,
+                        gas_used: 60_000,
+                        contract_address: None,
+                        error: None,
+                        inference_hash: None,
+                        anomaly_score: 0.0,
+                    });
+                }
+                Err(e) => {
+                    state.increment_nonce(delegator);
+                    exec_receipts.push(ExecutionReceipt {
+                        tx_hash,
+                        success: false,
+                        gas_used: 21_000,
+                        contract_address: None,
+                        error: Some(format!("undelegate failed: {e}")),
+                        inference_hash: None,
+                        anomaly_score: 0.0,
+                    });
+                }
+            }
+        }
+
         // Phase 2.5: Score each executed tx for anomalous behavior.
         for (i, tx) in executable.iter().enumerate() {
             if i >= exec_receipts.len() {
@@ -1607,6 +1959,118 @@ impl ExecutionPipeline {
                 let _ = store.evict_oldest(aztibase_storage::RECEIPTS_TABLE, max_receipts);
                 let _ = store.evict_oldest(aztibase_storage::TX_TABLE, max_txs);
                 let _ = store.evict_oldest(aztibase_storage::BATCH_ROOTS_TABLE, max_roots);
+            }
+        }
+
+        // Process pending slash events from consensus.
+        {
+            let mut pending_slashes = Vec::new();
+            while let Ok(event) = self.slash_rx.try_recv() {
+                pending_slashes.push(event);
+            }
+            if !pending_slashes.is_empty() {
+                let mut staking = self.staking_store.write().await;
+                for event in &pending_slashes {
+                    let slash_bps = match event.offense {
+                        OffenseType::Equivocation => aztibase_execution::EQUIVOCATION_SLASH_BPS,
+                        OffenseType::Downtime => aztibase_execution::DOWNTIME_SLASH_BPS,
+                    };
+                    match staking.slash_validator(
+                        event.validator_id,
+                        slash_bps,
+                        event.offense,
+                        event.round,
+                    ) {
+                        Ok(slashed) => {
+                            tracing::warn!(
+                                validator = %short_hex(&event.validator_id),
+                                offense = ?event.offense,
+                                slashed_amount = slashed,
+                                "Validator slashed"
+                            );
+                        }
+                        Err(e) => {
+                            tracing::warn!(
+                                validator = %short_hex(&event.validator_id),
+                                error = %e,
+                                "Slash failed — validator not found"
+                            );
+                        }
+                    }
+                }
+            }
+        }
+
+        // Process unbonding queue: release matured entries back to account balances.
+        {
+            let mut staking = self.staking_store.write().await;
+            let released = staking.process_unbonding(self.current_round);
+            drop(staking);
+            for (owner, amount) in released {
+                let prev = state.balance(&owner);
+                state.set_balance(&owner, prev + amount);
+            }
+        }
+
+        // Epoch boundary: distribute emission rewards to stakers.
+        {
+            let epoch_length = {
+                let tracker = self.emission_tracker.read().await;
+                tracker.epoch_length
+            };
+            if epoch_length > 0 && self.current_round.is_multiple_of(epoch_length) {
+                let dist = {
+                    let mut tracker = self.emission_tracker.write().await;
+                    tracker.advance_epoch()
+                };
+                if let Some(dist) = dist {
+                    let commission_bps = {
+                        let cp = self.chain_params.read().await;
+                        cp.get_u64("validator_commission_bps").unwrap_or(1000) as u32
+                    };
+                    let mut staking = self.staking_store.write().await;
+                    let credits =
+                        staking.distribute_epoch_rewards(dist.validator_rewards, commission_bps);
+                    let active_set = staking.active_set_snapshot(MIN_VALIDATOR_STAKE);
+                    drop(staking);
+                    for (addr, amount) in credits {
+                        let prev = state.balance(&addr);
+                        state.set_balance(&addr, prev + amount);
+                    }
+                    // Downtime slashing: validators who didn't participate get slashed.
+                    let inactive_validators: Vec<[u8; 32]> = active_set
+                        .iter()
+                        .filter(|(vid, _)| !self.epoch_participation.contains(vid))
+                        .map(|(vid, _)| *vid)
+                        .collect();
+                    if !inactive_validators.is_empty() {
+                        let mut staking = self.staking_store.write().await;
+                        for vid in &inactive_validators {
+                            if let Ok(slashed) = staking.slash_validator(
+                                *vid,
+                                aztibase_execution::DOWNTIME_SLASH_BPS,
+                                OffenseType::Downtime,
+                                self.current_round,
+                            ) {
+                                tracing::warn!(
+                                    validator = %short_hex(vid),
+                                    slashed_amount = slashed,
+                                    "Downtime slash — validator inactive during epoch"
+                                );
+                            }
+                        }
+                    }
+
+                    self.epoch_participation.clear();
+
+                    tracing::info!(
+                        round = self.current_round,
+                        active_validators = active_set.len(),
+                        validator_pool = %dist.validator_rewards,
+                        downtime_slashed = inactive_validators.len(),
+                        "Epoch boundary — rewards distributed, validator set refreshed"
+                    );
+                }
             }
         }
 
@@ -1747,6 +2211,50 @@ fn compute_tx_hash(tx: &TxKind) -> [u8; 32] {
             buf.extend_from_slice(proposal_id);
             hash(&buf)
         }
+        TxKind::Stake {
+            staker,
+            amount,
+            nonce,
+            ..
+        } => {
+            let mut buf = Vec::new();
+            buf.extend_from_slice(staker);
+            buf.extend_from_slice(&amount.to_le_bytes());
+            buf.extend_from_slice(&nonce.to_le_bytes());
+            hash(&buf)
+        }
+        TxKind::Unstake {
+            staker,
+            amount,
+            nonce,
+            ..
+        } => {
+            let mut buf = Vec::new();
+            buf.extend_from_slice(staker);
+            buf.extend_from_slice(&amount.to_le_bytes());
+            buf.extend_from_slice(&nonce.to_le_bytes());
+            hash(&buf)
+        }
+        TxKind::Delegate {
+            delegator,
+            validator_id,
+            amount,
+            ..
+        } => {
+            let mut buf = Vec::new();
+            buf.extend_from_slice(delegator);
+            buf.extend_from_slice(validator_id);
+            buf.extend_from_slice(&amount.to_le_bytes());
+            hash(&buf)
+        }
+        TxKind::Undelegate {
+            delegator, nonce, ..
+        } => {
+            let mut buf = Vec::new();
+            buf.extend_from_slice(delegator);
+            buf.extend_from_slice(&nonce.to_le_bytes());
+            hash(&buf)
+        }
     }
 }
 
@@ -1821,6 +2329,7 @@ mod tests {
 
     fn make_pipeline(rx: mpsc::Receiver<CommittedBatch>) -> ExecutionPipeline {
         let calculator = BaseFeeCalculator::new(1);
+        let (slash_tx_init, slash_rx_init) = mpsc::channel(64);
         ExecutionPipeline {
             state: Arc::new(RwLock::new(AccountState::new())),
             store: None,
@@ -1844,6 +2353,10 @@ mod tests {
             emission_tracker: Arc::new(RwLock::new(EmissionTracker::new(
                 aztibase_execution::tokenomics::DEFAULT_EPOCH_LENGTH,
             ))),
+            staking_store: Arc::new(RwLock::new(StakingStore::new())),
+            slash_rx: slash_rx_init,
+            slash_tx: slash_tx_init,
+            epoch_participation: HashSet::new(),
             archive: false,
         }
     }
@@ -2343,6 +2856,7 @@ mod tests {
         rt.register_model("add", &model_bytes).unwrap();
 
         let calculator = BaseFeeCalculator::new(1);
+        let (slash_tx_init, slash_rx_init) = mpsc::channel(64);
         ExecutionPipeline {
             state: Arc::new(RwLock::new(AccountState::new())),
             store: None,
@@ -2366,6 +2880,10 @@ mod tests {
             emission_tracker: Arc::new(RwLock::new(EmissionTracker::new(
                 aztibase_execution::tokenomics::DEFAULT_EPOCH_LENGTH,
             ))),
+            staking_store: Arc::new(RwLock::new(StakingStore::new())),
+            slash_rx: slash_rx_init,
+            slash_tx: slash_tx_init,
+            epoch_participation: HashSet::new(),
             archive: false,
         }
     }

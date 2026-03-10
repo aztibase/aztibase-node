@@ -13,6 +13,7 @@ pub mod precompiles;
 pub mod receipt;
 pub mod routing;
 pub mod snapshot;
+pub mod staking;
 pub mod state;
 pub mod tokenomics;
 pub mod tx;
@@ -42,6 +43,11 @@ pub use routing::{RoutingError, TxKind, route_batch, route_tx};
 pub use snapshot::{
     SnapshotError, StateSnapshot, apply_snapshot, create_snapshot, create_snapshot_with_finality,
     deserialize_snapshot, serialize_snapshot, snapshot_hash, snapshot_header_hash,
+};
+pub use staking::{
+    DEFAULT_COMMISSION_BPS, DOWNTIME_SLASH_BPS, DOWNTIME_THRESHOLD_ROUNDS, Delegation,
+    EQUIVOCATION_SLASH_BPS, MAX_UNBONDING_ENTRIES, OffenseType, SlashRecord, StakingError,
+    StakingStore, UnbondingEntry, ValidatorStake,
 };
 pub use state::{AccountState, AccountType, MerkleCommitment};
 pub use tokenomics::{

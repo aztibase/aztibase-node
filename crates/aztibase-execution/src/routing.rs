@@ -17,6 +17,10 @@ const PREFIX_DEREGISTER_COMPUTE: u8 = 0x0C;
 const PREFIX_DEREGISTER_MODEL: u8 = 0x0D;
 const PREFIX_CREATE_PROPOSAL: u8 = 0x0E;
 const PREFIX_CAST_VOTE: u8 = 0x0F;
+const PREFIX_STAKE: u8 = 0x10;
+const PREFIX_UNSTAKE: u8 = 0x11;
+const PREFIX_DELEGATE: u8 = 0x12;
+const PREFIX_UNDELEGATE: u8 = 0x13;
 
 /// Maximum encoded transaction size (1 MB). Rejects oversized payloads before
 /// deserialization to prevent memory-bomb attacks via oversized payloads.
@@ -140,6 +144,30 @@ pub enum TxKind {
         nonce: u64,
         gas_price: u64,
     },
+    Stake {
+        staker: Address,
+        amount: u64,
+        nonce: u64,
+        gas_price: u64,
+    },
+    Unstake {
+        staker: Address,
+        amount: u64,
+        nonce: u64,
+        gas_price: u64,
+    },
+    Delegate {
+        delegator: Address,
+        validator_id: [u8; 32],
+        amount: u64,
+        nonce: u64,
+        gas_price: u64,
+    },
+    Undelegate {
+        delegator: Address,
+        nonce: u64,
+        gas_price: u64,
+    },
 }
 
 impl TxKind {
@@ -161,6 +189,10 @@ impl TxKind {
             TxKind::DeregisterModel { .. } => PREFIX_DEREGISTER_MODEL,
             TxKind::CreateProposal { .. } => PREFIX_CREATE_PROPOSAL,
             TxKind::CastVote { .. } => PREFIX_CAST_VOTE,
+            TxKind::Stake { .. } => PREFIX_STAKE,
+            TxKind::Unstake { .. } => PREFIX_UNSTAKE,
+            TxKind::Delegate { .. } => PREFIX_DELEGATE,
+            TxKind::Undelegate { .. } => PREFIX_UNDELEGATE,
         };
         let payload = postcard::to_allocvec(self).expect("TxKind serialization cannot fail");
         let mut buf = Vec::with_capacity(1 + payload.len());
@@ -185,7 +217,11 @@ impl TxKind {
             | TxKind::DeregisterCompute { nonce, .. }
             | TxKind::DeregisterModel { nonce, .. }
             | TxKind::CreateProposal { nonce, .. }
-            | TxKind::CastVote { nonce, .. } => *nonce,
+            | TxKind::CastVote { nonce, .. }
+            | TxKind::Stake { nonce, .. }
+            | TxKind::Unstake { nonce, .. }
+            | TxKind::Delegate { nonce, .. }
+            | TxKind::Undelegate { nonce, .. } => *nonce,
         }
     }
 
@@ -205,7 +241,11 @@ impl TxKind {
             | TxKind::DeregisterCompute { gas_price, .. }
             | TxKind::DeregisterModel { gas_price, .. }
             | TxKind::CreateProposal { gas_price, .. }
-            | TxKind::CastVote { gas_price, .. } => *gas_price,
+            | TxKind::CastVote { gas_price, .. }
+            | TxKind::Stake { gas_price, .. }
+            | TxKind::Unstake { gas_price, .. }
+            | TxKind::Delegate { gas_price, .. }
+            | TxKind::Undelegate { gas_price, .. } => *gas_price,
         }
     }
 
@@ -228,6 +268,10 @@ impl TxKind {
             TxKind::DeregisterModel { .. } => 60_000,
             TxKind::CreateProposal { .. } => 100_000,
             TxKind::CastVote { .. } => 40_000,
+            TxKind::Stake { .. } => 60_000,
+            TxKind::Unstake { .. } => 60_000,
+            TxKind::Delegate { .. } => 60_000,
+            TxKind::Undelegate { .. } => 60_000,
         }
     }
 
@@ -248,6 +292,10 @@ impl TxKind {
             TxKind::DeregisterModel { owner, .. } => owner,
             TxKind::CreateProposal { proposer, .. } => proposer,
             TxKind::CastVote { voter, .. } => voter,
+            TxKind::Stake { staker, .. } => staker,
+            TxKind::Unstake { staker, .. } => staker,
+            TxKind::Delegate { delegator, .. } => delegator,
+            TxKind::Undelegate { delegator, .. } => delegator,
         }
     }
 
@@ -268,6 +316,10 @@ impl TxKind {
             TxKind::DeregisterModel { .. } => PREFIX_DEREGISTER_MODEL,
             TxKind::CreateProposal { .. } => PREFIX_CREATE_PROPOSAL,
             TxKind::CastVote { .. } => PREFIX_CAST_VOTE,
+            TxKind::Stake { .. } => PREFIX_STAKE,
+            TxKind::Unstake { .. } => PREFIX_UNSTAKE,
+            TxKind::Delegate { .. } => PREFIX_DELEGATE,
+            TxKind::Undelegate { .. } => PREFIX_UNDELEGATE,
         }
     }
 }
@@ -340,7 +392,11 @@ pub fn route_tx(raw: &[u8]) -> Result<TxKind, RoutingError> {
         | PREFIX_DEREGISTER_COMPUTE
         | PREFIX_DEREGISTER_MODEL
         | PREFIX_CREATE_PROPOSAL
-        | PREFIX_CAST_VOTE => {}
+        | PREFIX_CAST_VOTE
+        | PREFIX_STAKE
+        | PREFIX_UNSTAKE
+        | PREFIX_DELEGATE
+        | PREFIX_UNDELEGATE => {}
         other => return Err(RoutingError::UnknownPrefix(other)),
     }
     let (decoded, remaining): (TxKind, &[u8]) =
@@ -845,5 +901,62 @@ mod tests {
         assert_eq!(decoded.nonce(), 15);
         assert_eq!(decoded.gas_price(), 4);
         assert_eq!(*decoded.sender(), [0xF0; 32]);
+    }
+
+    #[test]
+    fn stake_roundtrip() {
+        let tx = TxKind::Stake {
+            staker: [0xA1; 32],
+            amount: 50_000,
+            nonce: 1,
+            gas_price: 2,
+        };
+        let encoded = tx.encode();
+        assert_eq!(encoded[0], PREFIX_STAKE);
+        let decoded = route_tx(&encoded).unwrap();
+        assert_eq!(decoded, tx);
+        assert_eq!(decoded.gas_limit(), 60_000);
+    }
+
+    #[test]
+    fn unstake_roundtrip() {
+        let tx = TxKind::Unstake {
+            staker: [0xA2; 32],
+            amount: 25_000,
+            nonce: 3,
+            gas_price: 1,
+        };
+        let encoded = tx.encode();
+        assert_eq!(encoded[0], PREFIX_UNSTAKE);
+        let decoded = route_tx(&encoded).unwrap();
+        assert_eq!(decoded, tx);
+    }
+
+    #[test]
+    fn delegate_roundtrip() {
+        let tx = TxKind::Delegate {
+            delegator: [0xA3; 32],
+            validator_id: [0xB3; 32],
+            amount: 10_000,
+            nonce: 7,
+            gas_price: 3,
+        };
+        let encoded = tx.encode();
+        assert_eq!(encoded[0], PREFIX_DELEGATE);
+        let decoded = route_tx(&encoded).unwrap();
+        assert_eq!(decoded, tx);
+    }
+
+    #[test]
+    fn undelegate_roundtrip() {
+        let tx = TxKind::Undelegate {
+            delegator: [0xA4; 32],
+            nonce: 9,
+            gas_price: 1,
+        };
+        let encoded = tx.encode();
+        assert_eq!(encoded[0], PREFIX_UNDELEGATE);
+        let decoded = route_tx(&encoded).unwrap();
+        assert_eq!(decoded, tx);
     }
 }

@@ -19,7 +19,7 @@ use tracing::{debug, info};
 use aztibase_consensus::ComputeCommitmentStore;
 use aztibase_execution::AccountState;
 use aztibase_execution::model_registry::{MODEL_REGISTRY_ADDRESS, ModelMetadata, ModelRegistry};
-use aztibase_execution::{ChainParams, EmissionTracker, GovernanceStore};
+use aztibase_execution::{ChainParams, EmissionTracker, GovernanceStore, StakingStore};
 use aztibase_storage::StateStore;
 
 // ── JSON-RPC 2.0 Types ─────────────────────────────────────────────
@@ -106,6 +106,7 @@ pub struct RpcState {
     pub governance: Option<Arc<RwLock<GovernanceStore>>>,
     pub chain_params: Option<Arc<RwLock<ChainParams>>>,
     pub emission_tracker: Option<Arc<RwLock<EmissionTracker>>>,
+    pub staking_store: Option<Arc<RwLock<StakingStore>>>,
     pub chain_id: u64,
     pub genesis_hash: Option<[u8; 32]>,
     faucet_tracker: Arc<std::sync::Mutex<HashMap<[u8; 32], std::time::Instant>>>,
@@ -128,6 +129,7 @@ impl Clone for RpcState {
             governance: self.governance.clone(),
             chain_params: self.chain_params.clone(),
             emission_tracker: self.emission_tracker.clone(),
+            staking_store: self.staking_store.clone(),
             chain_id: self.chain_id,
             genesis_hash: self.genesis_hash,
             faucet_tracker: Arc::clone(&self.faucet_tracker),
@@ -242,6 +244,7 @@ impl RpcServer {
                 governance: None,
                 chain_params: None,
                 emission_tracker: None,
+                staking_store: None,
                 chain_id: TESTNET_CHAIN_ID,
                 genesis_hash: None,
                 faucet_tracker: Arc::new(std::sync::Mutex::new(HashMap::new())),
@@ -291,6 +294,11 @@ impl RpcServer {
 
     pub fn with_emission_tracker(mut self, tracker: Arc<RwLock<EmissionTracker>>) -> Self {
         self.state.emission_tracker = Some(tracker);
+        self
+    }
+
+    pub fn with_staking_store(mut self, store: Arc<RwLock<StakingStore>>) -> Self {
+        self.state.staking_store = Some(store);
         self
     }
 
@@ -406,6 +414,10 @@ async fn dispatch(state: &RpcState, req: &JsonRpcRequest) -> JsonRpcResponse {
         "aztb_listChainParams" => handle_list_chain_params(state, req).await,
         "aztb_getEmissionInfo" => handle_get_emission_info(state, req).await,
         "aztb_getVestingStatus" => handle_get_vesting_status(state, req).await,
+        "aztb_getValidatorStake" => handle_get_validator_stake(state, req).await,
+        "aztb_getDelegation" => handle_get_delegation(state, req).await,
+        "aztb_getActiveValidators" => handle_get_active_validators(state, req).await,
+        "aztb_getUnbondingStatus" => handle_get_unbonding_status(state, req).await,
         _ => JsonRpcResponse::error(
             req.id.clone(),
             METHOD_NOT_FOUND,
@@ -1648,6 +1660,146 @@ async fn handle_get_vesting_status(state: &RpcState, req: &JsonRpcRequest) -> Js
     }
 }
 
+async fn handle_get_validator_stake(state: &RpcState, req: &JsonRpcRequest) -> JsonRpcResponse {
+    let store = match &state.staking_store {
+        Some(s) => s,
+        None => {
+            return JsonRpcResponse::error(
+                req.id.clone(),
+                -32000,
+                "staking store not available".into(),
+            );
+        }
+    };
+
+    let validator_id = match parse_hash_param(&req.params, 0) {
+        Ok(h) => h,
+        Err(e) => return JsonRpcResponse::error(req.id.clone(), INVALID_PARAMS, e),
+    };
+
+    let ss = store.read().await;
+    match ss.get_validator(&validator_id) {
+        Some(v) => {
+            let slash_records: Vec<_> = ss
+                .validator_slash_history(&validator_id)
+                .iter()
+                .map(|r| {
+                    serde_json::json!({
+                        "offense": format!("{:?}", r.offense_type),
+                        "slash_bps": r.slash_bps,
+                        "round": r.round,
+                        "amount_slashed": r.amount_slashed,
+                    })
+                })
+                .collect();
+            JsonRpcResponse::success(
+                req.id.clone(),
+                serde_json::json!({
+                    "validator_id": hex::encode(v.validator_id),
+                    "self_stake": v.self_stake,
+                    "total_delegated": v.total_delegated,
+                    "effective_stake": v.effective_stake(),
+                    "active": v.active,
+                    "registered_round": v.registered_round,
+                    "slash_history": slash_records,
+                }),
+            )
+        }
+        None => JsonRpcResponse::error(req.id.clone(), -32000, "validator not found".into()),
+    }
+}
+
+async fn handle_get_delegation(state: &RpcState, req: &JsonRpcRequest) -> JsonRpcResponse {
+    let store = match &state.staking_store {
+        Some(s) => s,
+        None => {
+            return JsonRpcResponse::error(
+                req.id.clone(),
+                -32000,
+                "staking store not available".into(),
+            );
+        }
+    };
+
+    let address = match parse_hash_param(&req.params, 0) {
+        Ok(h) => h,
+        Err(e) => return JsonRpcResponse::error(req.id.clone(), INVALID_PARAMS, e),
+    };
+
+    let ss = store.read().await;
+    match ss.get_delegation(&address) {
+        Some(d) => JsonRpcResponse::success(
+            req.id.clone(),
+            serde_json::json!({
+                "validator_id": hex::encode(d.validator_id),
+                "amount": d.amount,
+                "round_delegated": d.round_delegated,
+            }),
+        ),
+        None => JsonRpcResponse::success(req.id.clone(), serde_json::Value::Null),
+    }
+}
+
+async fn handle_get_active_validators(state: &RpcState, req: &JsonRpcRequest) -> JsonRpcResponse {
+    let store = match &state.staking_store {
+        Some(s) => s,
+        None => {
+            return JsonRpcResponse::error(
+                req.id.clone(),
+                -32000,
+                "staking store not available".into(),
+            );
+        }
+    };
+
+    let ss = store.read().await;
+    let validators: Vec<_> = ss
+        .active_validators()
+        .iter()
+        .map(|v| {
+            serde_json::json!({
+                "validator_id": hex::encode(v.validator_id),
+                "self_stake": v.self_stake,
+                "total_delegated": v.total_delegated,
+                "effective_stake": v.effective_stake(),
+                "registered_round": v.registered_round,
+            })
+        })
+        .collect();
+    JsonRpcResponse::success(req.id.clone(), serde_json::json!(validators))
+}
+
+async fn handle_get_unbonding_status(state: &RpcState, req: &JsonRpcRequest) -> JsonRpcResponse {
+    let store = match &state.staking_store {
+        Some(s) => s,
+        None => {
+            return JsonRpcResponse::error(
+                req.id.clone(),
+                -32000,
+                "staking store not available".into(),
+            );
+        }
+    };
+
+    let address = match parse_hash_param(&req.params, 0) {
+        Ok(h) => h,
+        Err(e) => return JsonRpcResponse::error(req.id.clone(), INVALID_PARAMS, e),
+    };
+
+    let ss = store.read().await;
+    let entries: Vec<_> = ss
+        .pending_unbonding(&address)
+        .iter()
+        .map(|e| {
+            serde_json::json!({
+                "amount": e.amount,
+                "available_round": e.available_round,
+            })
+        })
+        .collect();
+    JsonRpcResponse::success(req.id.clone(), serde_json::json!(entries))
+}
+
 fn parse_u64_param(params: &serde_json::Value, index: usize) -> Result<u64, String> {
     let val = params
         .get(index)
@@ -1740,6 +1892,7 @@ mod tests {
             governance: None,
             chain_params: None,
             emission_tracker: None,
+            staking_store: None,
             chain_id: TESTNET_CHAIN_ID,
             genesis_hash: None,
             faucet_tracker: Arc::new(std::sync::Mutex::new(HashMap::new())),
@@ -1770,6 +1923,7 @@ mod tests {
             governance: None,
             chain_params: None,
             emission_tracker: None,
+            staking_store: None,
             chain_id: TESTNET_CHAIN_ID,
             genesis_hash: None,
             faucet_tracker: Arc::new(std::sync::Mutex::new(HashMap::new())),
@@ -2009,6 +2163,7 @@ mod tests {
             governance: None,
             chain_params: None,
             emission_tracker: None,
+            staking_store: None,
             chain_id: TESTNET_CHAIN_ID,
             genesis_hash: None,
             faucet_tracker: Arc::new(std::sync::Mutex::new(HashMap::new())),
@@ -2390,6 +2545,7 @@ mod tests {
             governance: None,
             chain_params: None,
             emission_tracker: None,
+            staking_store: None,
             chain_id: TESTNET_CHAIN_ID,
             genesis_hash: None,
             faucet_tracker: Arc::new(std::sync::Mutex::new(HashMap::new())),
@@ -2480,6 +2636,7 @@ mod tests {
             governance: None,
             chain_params: None,
             emission_tracker: None,
+            staking_store: None,
             chain_id: TESTNET_CHAIN_ID,
             genesis_hash: None,
             faucet_tracker: Arc::new(std::sync::Mutex::new(HashMap::new())),
@@ -2792,5 +2949,81 @@ mod tests {
         assert!(!resp["error"].is_null());
         let msg = resp["error"]["message"].as_str().unwrap();
         assert!(msg.contains("unknown category"));
+    }
+
+    fn test_state_with_staking() -> (RpcState, mpsc::Receiver<Vec<u8>>) {
+        let (mut state, rx) = test_state();
+        let mut store = StakingStore::new();
+        let vid = [0xAAu8; 32];
+        store
+            .register_validator(vid, 100_000, 1, u64::MAX, 1)
+            .expect("register");
+        store
+            .delegate([0xBBu8; 32], vid, 50_000, u64::MAX, 2)
+            .expect("delegate");
+        store
+            .begin_unstake(vid, 10_000, 1, 100, 4_536_000)
+            .expect("unstake");
+        state.staking_store = Some(Arc::new(RwLock::new(store)));
+        (state, rx)
+    }
+
+    #[tokio::test]
+    async fn get_validator_stake_rpc() {
+        let (state, _rx) = test_state_with_staking();
+        let vid_hex = "aa".repeat(32);
+        let body = format!(
+            r#"{{"jsonrpc":"2.0","method":"aztb_getValidatorStake","params":["{}"],"id":1}}"#,
+            vid_hex
+        );
+        let resp = rpc_call(&state, &body).await;
+        assert!(resp["error"].is_null(), "unexpected error: {:?}", resp);
+        assert_eq!(resp["result"]["self_stake"], 90_000);
+        assert_eq!(resp["result"]["total_delegated"], 50_000);
+        assert_eq!(resp["result"]["effective_stake"], 140_000);
+        assert!(resp["result"]["active"].as_bool().unwrap());
+    }
+
+    #[tokio::test]
+    async fn get_delegation_rpc() {
+        let (state, _rx) = test_state_with_staking();
+        let addr_hex = "bb".repeat(32);
+        let body = format!(
+            r#"{{"jsonrpc":"2.0","method":"aztb_getDelegation","params":["{}"],"id":1}}"#,
+            addr_hex
+        );
+        let resp = rpc_call(&state, &body).await;
+        assert!(resp["error"].is_null(), "unexpected error: {:?}", resp);
+        assert_eq!(resp["result"]["amount"], 50_000);
+        assert_eq!(resp["result"]["round_delegated"], 2);
+    }
+
+    #[tokio::test]
+    async fn get_active_validators_rpc() {
+        let (state, _rx) = test_state_with_staking();
+        let resp = rpc_call(
+            &state,
+            r#"{"jsonrpc":"2.0","method":"aztb_getActiveValidators","params":[],"id":1}"#,
+        )
+        .await;
+        assert!(resp["error"].is_null(), "unexpected error: {:?}", resp);
+        let list = resp["result"].as_array().unwrap();
+        assert_eq!(list.len(), 1);
+        assert_eq!(list[0]["effective_stake"], 140_000);
+    }
+
+    #[tokio::test]
+    async fn get_unbonding_status_rpc() {
+        let (state, _rx) = test_state_with_staking();
+        let vid_hex = "aa".repeat(32);
+        let body = format!(
+            r#"{{"jsonrpc":"2.0","method":"aztb_getUnbondingStatus","params":["{}"],"id":1}}"#,
+            vid_hex
+        );
+        let resp = rpc_call(&state, &body).await;
+        assert!(resp["error"].is_null(), "unexpected error: {:?}", resp);
+        let entries = resp["result"].as_array().unwrap();
+        assert_eq!(entries.len(), 1);
+        assert_eq!(entries[0]["amount"], 10_000);
     }
 }

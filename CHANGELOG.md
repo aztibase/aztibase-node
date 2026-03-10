@@ -5,6 +5,32 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ---
 
+## [M8-S13] -- Validator Staking, Delegation & Slashing (Sprint 038)
+
+### Added
+- `staking` module in aztibase-execution: StakingStore, ValidatorStake, Delegation, UnbondingEntry, SlashRecord, OffenseType, StakingError (2026-03-10)
+- StakingStore methods: register_validator, add_stake, begin_unstake, delegate, begin_undelegate, process_unbonding, slash_validator, distribute_epoch_rewards, active_set_snapshot, active_validators, pending_unbonding, validator_slash_history (2026-03-10)
+- `TxKind::Stake` (0x10), `TxKind::Unstake` (0x11), `TxKind::Delegate` (0x12), `TxKind::Undelegate` (0x13) — 19 total TxKind variants (2026-03-10)
+- Pipeline: full execution handlers for all 4 staking tx types with nonce/balance/cap validation (2026-03-10)
+- Pipeline: unbonding queue processing after batch persistence — matured entries credited to account balances (2026-03-10)
+- Pipeline: epoch boundary processing — EmissionTracker.advance_epoch() → distribute_epoch_rewards() → downtime slashing → validator set rebuild (2026-03-10)
+- Pipeline: SlashEvent mpsc channel for consensus→pipeline equivocation reporting (2026-03-10)
+- Pipeline: epoch_participation tracking (HashSet of active senders) for downtime detection (2026-03-10)
+- `aztb_getValidatorStake(validator_id)` RPC: self_stake, total_delegated, effective_stake, active, slash_history (2026-03-10)
+- `aztb_getDelegation(address)` RPC: validator_id, amount, round_delegated (or null) (2026-03-10)
+- `aztb_getActiveValidators()` RPC: sorted by effective_stake descending (2026-03-10)
+- `aztb_getUnbondingStatus(address)` RPC: pending unbonding entries with amounts + available_round (2026-03-10)
+- 3 new governance-controllable staking params: min_validator_stake, max_stake_cap, validator_commission_bps (2026-03-10)
+- ~34 new tests: 24 staking unit + 4 RPC + 1 chain_params + pipeline tests (2026-03-10)
+
+### Changed
+- `ExecutionPipeline`: added staking_store, slash_rx/slash_tx, epoch_participation fields (2026-03-10)
+- `RpcState`: added `staking_store: Option<Arc<RwLock<StakingStore>>>` field (2026-03-10)
+- `ChainParams`: 12 params total (9 existing + 3 staking governance) (2026-03-10)
+- `TxKind` routing: 19 variants (15 existing + 4 staking) (2026-03-10)
+
+---
+
 ## [M8-S12] -- Token Supply, Emission & Vesting (Sprint 037)
 
 ### Added
