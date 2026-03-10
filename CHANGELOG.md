@@ -5,12 +5,23 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ---
 
-## Sprint 050 Prep — CI Pipeline & RPC Docs (2026-03-10)
+## Sprint 050 — CI Pipeline & Public Testnet Infrastructure (M9-S11) (2026-03-10)
 
 ### Added
-- CI pipeline upgrade: `dev` branch trigger, `CARGO_INCREMENTAL=0`, release build gate (2026-03-10)
+- CI pipeline: `dev` branch trigger, `CARGO_INCREMENTAL=0`, release build gate, security audit job (2026-03-10)
 - RPC API reference (`docs/rpc-api.md`): all 43 methods documented with params, return types, curl examples (2026-03-10)
-- Sprint 050 plan: CI, release benchmarks, genesis config, faucet, Docker deployment (2026-03-10)
+- `--testnet` CLI flag: loads bundled deterministic genesis config + DNS boot nodes (testnet1/2/3.aztibase.com) (2026-03-10)
+- `BlsKeypair::from_ikm()`: deterministic BLS key derivation using proper HKDF (not raw scalar bytes) (2026-03-10)
+- `testnet_genesis()`: 3-validator testnet genesis from fixed BLAKE3 seeds + faucet (100M tokens) (2026-03-10)
+- Criterion benchmarks: `verify_and_route_single_tx`, `verify_tx_batch` (10/100/500) (2026-03-10)
+- `scripts/deploy-validator.sh`: VPS/cloud deployment with systemd service, key generation, `--testnet` support (2026-03-10)
+- 3 new tests: testnet genesis validity, determinism, boot node format (2026-03-10)
+
+### Performance (release-mode benchmarks)
+- vertex_creation: 1.35 µs
+- commit_rule_evaluation: 17.63 ms
+- BLS cert verification (21 validators): 3.40 ms
+- BLS cert verification (100 validators): 8.04 ms
 
 ---
 

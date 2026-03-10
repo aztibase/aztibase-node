@@ -44,6 +44,18 @@ impl BlsKeypair {
         self.secret.to_bytes()
     }
 
+    pub fn from_ikm(ikm: &[u8; 32]) -> Self {
+        let secret = SecretKey::key_gen(ikm, &[]).expect("IKM length >= 32");
+        let pk = secret.sk_to_pk();
+        let pk_bytes = pk.to_bytes();
+        let pop = secret.sign(&pk_bytes, DST_POP, &[]);
+        Self {
+            secret,
+            public: BlsPublicKey(pk_bytes),
+            proof_of_possession: BlsSignature(pop.to_bytes()),
+        }
+    }
+
     pub fn from_secret_bytes(bytes: &[u8; 32]) -> Option<Self> {
         let secret = SecretKey::from_bytes(bytes).ok()?;
         let pk = secret.sk_to_pk();

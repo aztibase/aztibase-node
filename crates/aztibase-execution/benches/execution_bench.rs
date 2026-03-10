@@ -1,9 +1,10 @@
 use criterion::{BenchmarkId, Criterion, criterion_group, criterion_main};
 
 use aztibase_core::commitment::StateCommitment;
-use aztibase_core::hash;
+use aztibase_core::{Keypair, address_from_pubkey, hash};
 use aztibase_execution::{
-    AccountState, MerkleCommitment, TransferTx, VerkleCommitment, execute_transfers,
+    AccountState, MerkleCommitment, SignedTx, TransferTx, TxKind, VerkleCommitment,
+    execute_transfers, verify_and_route, verify_and_route_batch,
 };
 
 fn make_state_with_accounts(n: usize) -> AccountState {
@@ -123,6 +124,51 @@ fn bench_verkle_prove_verify(c: &mut Criterion) {
     group.finish();
 }
 
+fn make_signed_transfer(kp: &Keypair, to: [u8; 32], nonce: u64) -> Vec<u8> {
+    let from = address_from_pubkey(kp.public_key().as_bytes());
+    let tx = TxKind::Transfer {
+        from,
+        to,
+        value: 100,
+        nonce,
+        gas_price: 1,
+    };
+    SignedTx::new(tx.encode(), kp).encode()
+}
+
+fn bench_verify_tx(c: &mut Criterion) {
+    let kp = Keypair::generate();
+    let to = hash(b"recipient");
+    let raw = make_signed_transfer(&kp, to, 0);
+
+    c.bench_function("verify_and_route_single_tx", |b| {
+        b.iter(|| {
+            let _ = verify_and_route(&raw);
+        });
+    });
+}
+
+fn bench_verify_tx_batch(c: &mut Criterion) {
+    let mut group = c.benchmark_group("verify_tx_batch");
+    for batch_size in [10, 100, 500] {
+        group.bench_with_input(
+            BenchmarkId::from_parameter(batch_size),
+            &batch_size,
+            |b, &n| {
+                let kp = Keypair::generate();
+                let to = hash(b"recipient");
+                let txs: Vec<Vec<u8>> = (0..n)
+                    .map(|i| make_signed_transfer(&kp, to, i as u64))
+                    .collect();
+                b.iter(|| {
+                    let _ = verify_and_route_batch(&txs);
+                });
+            },
+        );
+    }
+    group.finish();
+}
+
 criterion_group!(
     benches,
     bench_state_root,
@@ -130,5 +176,7 @@ criterion_group!(
     bench_single_transfer,
     bench_merkle_prove_verify,
     bench_verkle_prove_verify,
+    bench_verify_tx,
+    bench_verify_tx_batch,
 );
 criterion_main!(benches);

@@ -2,8 +2,8 @@
 
 **Last Updated:** 2026-03-10
 **Updated By:** node-engineer / consensus-engineer / p2p-network-engineer
-**Current Phase:** M9 -- Mainnet Prep (Sprint 10 IN PROGRESS)
-**Current Sprint:** Sprint 049 -- COMPLETE (Protocol Hardening & Multi-Node Stability)
+**Current Phase:** M9 -- Mainnet Prep (Sprint 11 IN PROGRESS)
+**Current Sprint:** Sprint 050 -- IN PROGRESS (CI Pipeline & Public Testnet Infrastructure)
 
 ---
 
@@ -77,12 +77,14 @@
 | aztibase-wasm | PARTIAL | p2p-network-engineer | NO | YES |
 
 ### In Progress
-- Nothing currently in progress
+- Sprint 050: Execution benchmarks running (verify_tx, verify_tx_batch, state_root, transfer_execution, merkle/verkle proof)
 
 ### Blocked
 - Nothing currently blocked
 
 ### Recently Completed
+- Sprint 050 Phase 1-4: CI pipeline, testnet genesis (--testnet flag), criterion benchmarks, deploy script
+- Sprint 049: Protocol versioning, crash recovery, epoch boundaries, throughput baseline (86 TPS debug)
 - Sprint 048 Phase 10: S8-1 — Quorum-signed DHT records (≥2 sigs, round freshness, 8 tests), ADR-020
 - Sprint 048 Phase 9: S4-1 — Browser wallet spending limits (per-tx 100 AZTB, session 10K, WASM exports, 5 tests), ADR-019
 - Sprint 048 Phase 8: S2-2 — RANDAO-style VRF seed accumulation from causal DAG history, ADR-018
@@ -244,7 +246,8 @@
 - Sprint 005 Phase 1: Consensus-to-execution wiring, TxKind routing, ExecutionPipeline
 
 ### Next Up
-1. Sprint 049 planning — All 9 ELEVATED flags resolved, mainnet prep continues
+1. Sprint 050 completion — execution benchmark results, doc sync commit
+2. Sprint 051 scoping — block explorer, wallet UI, public launch prep
 
 ### Deferred to M9+ (Locked in FUTURE_PLANNING.md)
 

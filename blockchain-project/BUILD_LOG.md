@@ -21,15 +21,26 @@ Entries are prepended (newest first).
 
 ## Entries
 
-### Sprint 050 Prep — CI Pipeline, RPC Docs, Sprint Plan (M9-S11)
+### Sprint 050 — CI Pipeline & Public Testnet Infrastructure (M9-S11)
 - **Date**: 2026-03-10
-- **Commit**: (pending — bundled with Sprint 049 commit)
+- **Commit**: (pending)
 - **Files changed**:
   - `.github/workflows/ci.yml` — Added dev branch trigger, CARGO_INCREMENTAL=0, release build gate job
   - `docs/rpc-api.md` — NEW: Full RPC API reference for all 43 methods with params, return types, examples
-  - `blockchain-project/sprints/SPRINT-050.md` — NEW: Sprint 050 plan (CI, benchmarks, genesis config, faucet, deployment)
-- **Review**: No code changes. Infrastructure and documentation only.
+  - `blockchain-project/sprints/SPRINT-050.md` — Sprint 050 plan + task status updates
+  - `crates/aztibase-core/src/bls.rs` — Added `BlsKeypair::from_ikm()` for deterministic BLS key derivation
+  - `crates/aztibase-node/src/genesis.rs` — Added `testnet_genesis()`, `testnet_boot_nodes()`, 3 tests
+  - `crates/aztibase-node/src/main.rs` — Added `--testnet` CLI flag, genesis loading logic, boot node injection
+  - `crates/aztibase-execution/benches/execution_bench.rs` — Added `verify_tx` and `verify_tx_batch` criterion benchmarks
+  - `scripts/deploy-validator.sh` — NEW: VPS/cloud validator deployment script (systemd, key gen, --testnet)
+- **Review**: Testnet genesis uses deterministic keys from fixed seeds — TESTNET ONLY, well-known keys. Deploy script uses systemd hardening (LimitNOFILE, dedicated user). BLS from_ikm uses proper HKDF derivation (not raw scalar).
 - **Security Flags**: None
+- **Benchmarks (release mode, consensus crate)**:
+  - vertex_creation: 1.35 µs
+  - dag_insert_100_vertices: 113.93 ms
+  - commit_rule_evaluation: 17.63 ms
+  - bls_cert_verification/21: 3.40 ms
+  - bls_cert_verification/100: 8.04 ms
 
 ### Sprint 049 — Protocol Hardening & Multi-Node Stability (M9-S10)
 - **Date**: 2026-03-10

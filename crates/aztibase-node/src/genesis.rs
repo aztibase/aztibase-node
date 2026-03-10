@@ -465,6 +465,53 @@ pub fn validate_genesis_with_min_stake(
     }
 }
 
+pub fn testnet_genesis() -> GenesisConfig {
+    let mut validators = Vec::with_capacity(3);
+    let mut accounts = BTreeMap::new();
+
+    for i in 0..3u8 {
+        let seed = blake3::hash(format!("aztibase-testnet-validator-{i}").as_bytes());
+        let kp = Keypair::from_secret_bytes(seed.as_bytes());
+        let addr = address_from_pubkey(kp.public_key().as_bytes());
+
+        let bls_ikm = blake3::hash(format!("aztibase-testnet-bls-{i}").as_bytes());
+        let bls_kp = BlsKeypair::from_ikm(bls_ikm.as_bytes());
+        let bls_pub_hex = hex_encode(bls_kp.public_key().as_bytes());
+
+        validators.push(ValidatorEntry {
+            name: format!("testnet-{}", i + 1),
+            address: hex_encode(&addr),
+            stake: 1_000_000,
+            bls_public_key: Some(bls_pub_hex),
+        });
+    }
+
+    let faucet_seed = blake3::hash(b"aztibase-testnet-faucet");
+    let faucet_kp = Keypair::from_secret_bytes(faucet_seed.as_bytes());
+    let faucet_addr = address_from_pubkey(faucet_kp.public_key().as_bytes());
+    accounts.insert(
+        hex_encode(&faucet_addr),
+        AccountEntry {
+            balance: 100_000_000,
+        },
+    );
+
+    GenesisConfig {
+        chain_id: CHAIN_ID,
+        timestamp: 1_710_000_000_000,
+        validators,
+        accounts,
+    }
+}
+
+pub fn testnet_boot_nodes() -> Vec<String> {
+    vec![
+        "/dns4/testnet1.aztibase.com/tcp/30333".into(),
+        "/dns4/testnet2.aztibase.com/tcp/30334".into(),
+        "/dns4/testnet3.aztibase.com/tcp/30335".into(),
+    ]
+}
+
 pub fn load_genesis(path: &Path) -> Result<GenesisConfig> {
     let contents = std::fs::read_to_string(path)
         .with_context(|| format!("Failed to read genesis file: {}", path.display()))?;
@@ -749,6 +796,37 @@ mod tests {
         }
 
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn testnet_genesis_is_valid() {
+        let cfg = testnet_genesis();
+        assert_eq!(cfg.chain_id, CHAIN_ID);
+        assert_eq!(cfg.validators.len(), 3);
+        assert_eq!(cfg.accounts.len(), 1);
+        assert!(validate_genesis(&cfg).is_ok());
+    }
+
+    #[test]
+    fn testnet_genesis_is_deterministic() {
+        let a = testnet_genesis();
+        let b = testnet_genesis();
+        assert_eq!(genesis_hash(&a), genesis_hash(&b));
+        for i in 0..3 {
+            assert_eq!(a.validators[i].address, b.validators[i].address);
+            assert_eq!(
+                a.validators[i].bls_public_key,
+                b.validators[i].bls_public_key
+            );
+        }
+    }
+
+    #[test]
+    fn testnet_boot_nodes_are_valid_multiaddrs() {
+        for addr in testnet_boot_nodes() {
+            assert!(addr.starts_with("/dns4/testnet"));
+            assert!(addr.contains("/tcp/"));
+        }
     }
 
     #[test]

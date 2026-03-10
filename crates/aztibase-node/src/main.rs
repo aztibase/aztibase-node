@@ -100,6 +100,10 @@ struct Cli {
     /// with short epochs (e.g. 100). Default: 10,000 rounds.
     #[arg(long)]
     epoch_length: Option<u64>,
+
+    /// Use the built-in public testnet genesis config and boot nodes
+    #[arg(long)]
+    testnet: bool,
 }
 
 #[derive(clap::Subcommand, Debug)]
@@ -445,7 +449,11 @@ async fn main() -> Result<()> {
     }
 
     let config = NodeConfig::load_or_default(cli.config.as_deref())?;
-    let config = cli.apply_overrides(config);
+    let mut config = cli.apply_overrides(config);
+
+    if cli.testnet && config.network.boot_nodes.is_empty() {
+        config.network.boot_nodes = genesis::testnet_boot_nodes();
+    }
 
     init_logging(&config.log.level)?;
 
@@ -464,9 +472,16 @@ async fn main() -> Result<()> {
     let store = StateStore::open(storage_path_str).context("Failed to open storage")?;
     tracing::info!(path = %storage_path.display(), "Storage initialized");
 
-    // Load genesis config (CLI flag > config file > none)
+    // Load genesis config (--genesis file > config file > --testnet bundled > none)
     let genesis_path = cli.genesis.as_ref().or(config.genesis_path.as_ref());
-    let genesis_config = genesis_path.map(|p| genesis::load_genesis(p)).transpose()?;
+    let genesis_config = if let Some(path) = genesis_path {
+        Some(genesis::load_genesis(path)?)
+    } else if cli.testnet {
+        tracing::info!("Using built-in testnet genesis config");
+        Some(genesis::testnet_genesis())
+    } else {
+        None
+    };
 
     if let Some(ref gen_cfg) = genesis_config {
         if let Err(errors) = genesis::validate_genesis(gen_cfg) {
@@ -1505,6 +1520,7 @@ mod tests {
             archive: false,
             checkpoint: None,
             epoch_length: None,
+            testnet: false,
         };
         let config = cli.apply_overrides(NodeConfig::default());
         assert_eq!(config.data_dir, PathBuf::from("/tmp/test"));
@@ -1529,6 +1545,7 @@ mod tests {
             archive: false,
             checkpoint: None,
             epoch_length: None,
+            testnet: false,
         };
         let config = cli.apply_overrides(NodeConfig::default());
         assert_eq!(config.network.listen_addresses.len(), 1);
@@ -1618,6 +1635,7 @@ mod tests {
             archive: false,
             checkpoint: None,
             epoch_length: None,
+            testnet: false,
         };
         let result = cli.apply_overrides(config);
 
