@@ -5,6 +5,37 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ---
 
+## Sprint 050 Prep — CI Pipeline & RPC Docs (2026-03-10)
+
+### Added
+- CI pipeline upgrade: `dev` branch trigger, `CARGO_INCREMENTAL=0`, release build gate (2026-03-10)
+- RPC API reference (`docs/rpc-api.md`): all 43 methods documented with params, return types, curl examples (2026-03-10)
+- Sprint 050 plan: CI, release benchmarks, genesis config, faucet, Docker deployment (2026-03-10)
+
+---
+
+## Sprint 049 — Protocol Hardening & Multi-Node Stability (M9-S10) (2026-03-10)
+
+### Added
+- `latest_batch_index()` — recovers last persisted batch number from disk via reverse range scan (2026-03-10)
+- Crash recovery in `ExecutionPipeline::with_storage()` — batch_count restored from BATCH_INDEX_TABLE on restart (2026-03-10)
+- Shutdown logging — pipeline logs last persisted batch number on exit (2026-03-10)
+- `PROTOCOL_VERSION` (v1), `agent_version()`, `parse_agent_version()` — protocol version infrastructure (2026-03-10)
+- `identify::Behaviour` in libp2p swarm — peers with mismatched protocol versions disconnected automatically (2026-03-10)
+- `--epoch-length` CLI flag — override epoch length for testnet/testing (2026-03-10)
+- 17 new tests: 3 crash recovery, 4 epoch boundary, 2 throughput, 5 protocol version, 3 persist (2026-03-10)
+- ADR-021: No mempool persistence — re-gossip from peers on restart (2026-03-10)
+- ADR-022: Protocol version negotiation via libp2p identify (2026-03-10)
+
+### Changed
+- `batch_count.fetch_add(1)` moved from `run()` into `execute_batch()` for correct behavior in direct calls (2026-03-10)
+
+### Performance
+- Baseline TPS: 86 TPS (debug mode, 50 txs across 10 batches with redb persistence) (2026-03-10)
+- Empty batch throughput: ~39,000 batches/s (debug mode) (2026-03-10)
+
+---
+
 ## Sprint 048 — Security Flag Resolution (M9-S9) (2026-03-10)
 
 ### Security (9 ELEVATED flags resolved — ALL cleared)

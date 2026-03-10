@@ -7,7 +7,9 @@ use anyhow::{Context, Result};
 use futures::StreamExt;
 use libp2p::request_response::{self, OutboundRequestId, ProtocolSupport, ResponseChannel};
 use libp2p::swarm::SwarmEvent;
-use libp2p::{Multiaddr, PeerId, Swarm, autonat, connection_limits, dcutr, gossipsub, kad, mdns};
+use libp2p::{
+    Multiaddr, PeerId, Swarm, autonat, connection_limits, dcutr, gossipsub, identify, kad, mdns,
+};
 use tracing::{debug, info, warn};
 
 use crate::behaviour::{AztibaseBehaviour, AztibaseBehaviourEvent};
@@ -19,6 +21,27 @@ use crate::{discovery, gossip};
 
 pub const MAX_ESTABLISHED_CONNECTIONS: u32 = 50;
 pub const AUTONAT_PROBE_INTERVAL_SECS: u64 = 30;
+
+/// Protocol version for peer compatibility checks.
+/// Peers with different major versions are disconnected.
+pub const PROTOCOL_VERSION: u32 = 1;
+
+/// Agent string prefix used in libp2p identify.
+pub const AGENT_PREFIX: &str = "aztibase";
+
+/// Build the agent version string: `aztibase/<major>`.
+pub fn agent_version() -> String {
+    format!("{}/{}", AGENT_PREFIX, PROTOCOL_VERSION)
+}
+
+/// Parse a protocol version from a peer's agent string.
+/// Returns None if the agent string doesn't match the expected format.
+pub fn parse_agent_version(agent: &str) -> Option<u32> {
+    let stripped = agent
+        .strip_prefix(AGENT_PREFIX)
+        .and_then(|s| s.strip_prefix('/'))?;
+    stripped.split('.').next()?.parse().ok()
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum NatStatus {
@@ -168,6 +191,11 @@ impl Libp2pTransport {
                 };
                 let autonat = autonat::Behaviour::new(peer_id, autonat_config);
 
+                let identify_config =
+                    identify::Config::new(format!("/aztibase/{}", PROTOCOL_VERSION), key.public())
+                        .with_agent_version(agent_version());
+                let identify = identify::Behaviour::new(identify_config);
+
                 Ok(AztibaseBehaviour {
                     gossipsub: gs,
                     kademlia,
@@ -177,6 +205,7 @@ impl Libp2pTransport {
                     autonat,
                     relay_client,
                     dcutr: dcutr::Behaviour::new(peer_id),
+                    identify,
                 })
             })
             .context("Failed to configure behaviour")?
@@ -484,6 +513,33 @@ impl Libp2pTransport {
                     }
                 }
                 SwarmEvent::Behaviour(AztibaseBehaviourEvent::Kademlia(_)) => {}
+                SwarmEvent::Behaviour(AztibaseBehaviourEvent::Identify(
+                    identify::Event::Received { peer_id, info, .. },
+                )) => {
+                    debug!(
+                        %peer_id,
+                        agent = %info.agent_version,
+                        "Identify received"
+                    );
+                    if let Some(remote_version) = parse_agent_version(&info.agent_version) {
+                        if remote_version != PROTOCOL_VERSION {
+                            warn!(
+                                %peer_id,
+                                local = PROTOCOL_VERSION,
+                                remote = remote_version,
+                                "Protocol version mismatch — disconnecting peer"
+                            );
+                            let _ = self.swarm.disconnect_peer_id(peer_id);
+                        }
+                    } else {
+                        debug!(
+                            %peer_id,
+                            agent = %info.agent_version,
+                            "Non-Aztibase peer — allowing connection"
+                        );
+                    }
+                }
+                SwarmEvent::Behaviour(AztibaseBehaviourEvent::Identify(_)) => {}
                 _ => {}
             }
         }

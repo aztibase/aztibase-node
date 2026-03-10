@@ -11,7 +11,8 @@ use aztibase_execution::{
     CreateProposalParams, EmissionTracker, ExecutionReceipt, FeeEscrow, GovernanceStore,
     OffenseType, StakingStore, TransferTx, TxKind,
     block_stm::{BlockSTMExecutor, apply_block_stm_to_state},
-    escrow_fee, evm, execute_contract_txs, flush_state, load_base_fee, load_state,
+    escrow_fee, evm, execute_contract_txs, flush_state, latest_batch_index, load_base_fee,
+    load_state,
     model_registry::{MODEL_REGISTRY_ADDRESS, ModelRegistry},
     refund_unused,
     state::AccountType,
@@ -101,6 +102,17 @@ impl ExecutionPipeline {
                 AccountState::new()
             }
         };
+        let recovered_batch_count = match latest_batch_index(&store) {
+            Ok(Some(idx)) => {
+                tracing::info!(last_batch = idx, "Recovered batch index from disk");
+                idx + 1
+            }
+            Ok(None) => 0,
+            Err(e) => {
+                tracing::warn!(error = %e, "Could not read last batch index, starting from 0");
+                0
+            }
+        };
         let initial_base_fee = match load_base_fee(&store) {
             Ok(Some(fee)) => {
                 tracing::info!(base_fee = fee, "Base fee loaded from disk");
@@ -115,7 +127,7 @@ impl ExecutionPipeline {
             state: Arc::new(RwLock::new(state)),
             store: Some(store),
             rx,
-            batch_count: Arc::new(std::sync::atomic::AtomicU64::new(0)),
+            batch_count: Arc::new(std::sync::atomic::AtomicU64::new(recovered_batch_count)),
             executed_anchors_set: HashSet::new(),
             executed_anchors_queue: VecDeque::new(),
             result_tx: None,
@@ -256,8 +268,6 @@ impl ExecutionPipeline {
             }
             match self.execute_batch(&batch).await {
                 Ok(result) => {
-                    self.batch_count
-                        .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
                     tracing::info!(
                         anchor = %short_hex(&result.batch_anchor),
                         state_root = %short_hex(&result.state_root),
@@ -278,7 +288,11 @@ impl ExecutionPipeline {
                 }
             }
         }
-        tracing::info!("Execution pipeline shutting down");
+        let final_batch = self.batch_count.load(std::sync::atomic::Ordering::Relaxed);
+        tracing::info!(
+            last_batch = final_batch,
+            "Execution pipeline shutting down — state persisted through batch {final_batch}"
+        );
     }
 
     /// Execute a single committed batch: verify signatures, route transactions,
@@ -2410,6 +2424,9 @@ impl ExecutionPipeline {
                 }
             }
         }
+
+        self.batch_count
+            .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
 
         Ok(PipelineResult {
             batch_anchor: batch.anchor_hash,
@@ -5178,5 +5195,565 @@ mod tests {
         let (_tx, rx) = mpsc::channel(1);
         let pipeline = make_pipeline(rx);
         assert!(pipeline.consensus_tx.is_none());
+    }
+
+    // ── Phase 1: Crash recovery & resilience tests ──────────────────
+
+    #[tokio::test]
+    async fn pipeline_recovers_batch_count_from_disk() {
+        let path = test_db_path();
+        let (alice_kp, alice) = make_sender();
+        let bob = [2u8; 32];
+
+        {
+            let store = Arc::new(StateStore::open(path.to_str().unwrap()).unwrap());
+            let (_tx, rx) = mpsc::channel(16);
+            let mut pipeline = ExecutionPipeline::with_storage(store, rx);
+            pipeline.state.write().await.set_balance(&alice, 10_000_000);
+
+            for i in 0u64..5 {
+                let batch = make_batch_with_anchor(
+                    aztibase_core::hash(&i.to_le_bytes()),
+                    vec![sign(
+                        &TxKind::Transfer {
+                            from: alice,
+                            to: bob,
+                            value: 100,
+                            nonce: i,
+                            gas_price: 1,
+                        },
+                        &alice_kp,
+                    )],
+                );
+                pipeline.execute_batch(&batch).await.unwrap();
+            }
+            let count = pipeline.batch_count.load(Ordering::Relaxed);
+            assert_eq!(count, 5);
+        }
+
+        // Reopen — batch_count should recover from BATCH_INDEX_TABLE.
+        {
+            let store = Arc::new(StateStore::open(path.to_str().unwrap()).unwrap());
+            let (_tx, rx) = mpsc::channel(16);
+            let pipeline = ExecutionPipeline::with_storage(store, rx);
+            let recovered = pipeline.batch_count.load(Ordering::Relaxed);
+            assert_eq!(recovered, 5);
+        }
+
+        cleanup(&path);
+    }
+
+    #[tokio::test]
+    async fn pipeline_crash_recovery_state_consistent() {
+        let path = test_db_path();
+        let (alice_kp, alice) = make_sender();
+        let bob = [2u8; 32];
+
+        let initial_balance: u128 = 5_000_000;
+        let transfer_value: u128 = 500;
+        let gas_cost: u128 = 21_000;
+
+        {
+            let store = Arc::new(StateStore::open(path.to_str().unwrap()).unwrap());
+            let (_tx, rx) = mpsc::channel(16);
+            let mut pipeline = ExecutionPipeline::with_storage(store, rx);
+            pipeline
+                .state
+                .write()
+                .await
+                .set_balance(&alice, initial_balance);
+
+            for i in 0u64..3 {
+                let batch = make_batch_with_anchor(
+                    aztibase_core::hash(&i.to_le_bytes()),
+                    vec![sign(
+                        &TxKind::Transfer {
+                            from: alice,
+                            to: bob,
+                            value: transfer_value,
+                            nonce: i,
+                            gas_price: 1,
+                        },
+                        &alice_kp,
+                    )],
+                );
+                pipeline.execute_batch(&batch).await.unwrap();
+            }
+            // Drop without explicit shutdown — simulates crash.
+        }
+
+        // Reopen and verify state is consistent after "crash".
+        {
+            let store = Arc::new(StateStore::open(path.to_str().unwrap()).unwrap());
+            let loaded = aztibase_execution::load_state(&store).unwrap();
+
+            let expected_alice = initial_balance - 3 * (transfer_value + gas_cost);
+            let expected_bob = 3 * transfer_value;
+
+            assert_eq!(loaded.balance(&alice), expected_alice);
+            assert_eq!(loaded.balance(&bob), expected_bob);
+
+            let idx = aztibase_execution::latest_batch_index(&store).unwrap();
+            assert_eq!(idx, Some(2)); // 0-indexed: batches 0, 1, 2
+
+            let fee = aztibase_execution::load_base_fee(&store).unwrap();
+            assert!(fee.is_some(), "base fee should survive crash");
+        }
+
+        cleanup(&path);
+    }
+
+    #[tokio::test]
+    async fn pipeline_resumes_processing_after_recovery() {
+        let path = test_db_path();
+        let (alice_kp, alice) = make_sender();
+        let bob = [2u8; 32];
+
+        // Session 1: process 2 batches.
+        {
+            let store = Arc::new(StateStore::open(path.to_str().unwrap()).unwrap());
+            let (_tx, rx) = mpsc::channel(16);
+            let mut pipeline = ExecutionPipeline::with_storage(store, rx);
+            pipeline.state.write().await.set_balance(&alice, 10_000_000);
+
+            for i in 0u64..2 {
+                let batch = make_batch_with_anchor(
+                    aztibase_core::hash(&i.to_le_bytes()),
+                    vec![sign(
+                        &TxKind::Transfer {
+                            from: alice,
+                            to: bob,
+                            value: 1000,
+                            nonce: i,
+                            gas_price: 1,
+                        },
+                        &alice_kp,
+                    )],
+                );
+                pipeline.execute_batch(&batch).await.unwrap();
+            }
+        }
+
+        // Session 2: recover and process 2 more batches.
+        {
+            let store = Arc::new(StateStore::open(path.to_str().unwrap()).unwrap());
+            let (_tx, rx) = mpsc::channel(16);
+            let mut pipeline = ExecutionPipeline::with_storage(store, rx);
+
+            let batch_before = pipeline.batch_count.load(Ordering::Relaxed);
+            assert_eq!(batch_before, 2);
+
+            for i in 2u64..4 {
+                let batch = make_batch_with_anchor(
+                    aztibase_core::hash(&i.to_le_bytes()),
+                    vec![sign(
+                        &TxKind::Transfer {
+                            from: alice,
+                            to: bob,
+                            value: 1000,
+                            nonce: i,
+                            gas_price: 1,
+                        },
+                        &alice_kp,
+                    )],
+                );
+                pipeline.execute_batch(&batch).await.unwrap();
+            }
+
+            let batch_after = pipeline.batch_count.load(Ordering::Relaxed);
+            assert_eq!(batch_after, 4);
+
+            let state = pipeline.state.read().await;
+            assert_eq!(state.balance(&bob), 4000);
+        }
+
+        cleanup(&path);
+    }
+
+    // ── Phase 3: Epoch boundary tests ──────────────────────────────
+
+    #[tokio::test]
+    async fn epoch_boundary_distributes_rewards() {
+        let path = test_db_path();
+        let store = Arc::new(StateStore::open(path.to_str().unwrap()).unwrap());
+        let (_tx, rx) = mpsc::channel(16);
+        let mut pipeline = ExecutionPipeline::with_storage(store, rx);
+
+        let (alice_kp, alice) = make_sender();
+        let bob = [2u8; 32];
+        pipeline
+            .state
+            .write()
+            .await
+            .set_balance(&alice, 100_000_000);
+
+        // Set short epoch length for testing.
+        {
+            let cp = pipeline.shared_chain_params();
+            let mut cp_guard = cp.write().await;
+            cp_guard
+                .set("epoch_length", aztibase_execution::ParamValue::U64(1000))
+                .unwrap();
+        }
+
+        // Register alice as a validator with sufficient stake.
+        {
+            let mut staking = pipeline.staking_store.write().await;
+            staking
+                .register_validator(
+                    alice,
+                    MIN_VALIDATOR_STAKE,
+                    MIN_VALIDATOR_STAKE,
+                    MAX_VALIDATOR_STAKE_CAP,
+                    0,
+                )
+                .unwrap();
+        }
+
+        // Start near epoch boundary so 1 batch triggers it.
+        pipeline.current_round = 999;
+
+        let balance_before = pipeline.state.read().await.balance(&alice);
+
+        // Run 1 batch — round becomes 1000, triggering epoch boundary.
+        let batch = make_batch_with_anchor(
+            aztibase_core::hash(&0u64.to_le_bytes()),
+            vec![sign(
+                &TxKind::Transfer {
+                    from: alice,
+                    to: bob,
+                    value: 10,
+                    nonce: 0,
+                    gas_price: 1,
+                },
+                &alice_kp,
+            )],
+        );
+        pipeline.execute_batch(&batch).await.unwrap();
+
+        // After epoch boundary, alice should have received emission rewards.
+        let balance_after = pipeline.state.read().await.balance(&alice);
+        // Transfer cost: 10 value + 21,000 gas = 21,010.
+        // If rewards were distributed, the net loss should be less than just transfer+gas.
+        let total_spent: u128 = 10 + 21_000;
+        let net_change = balance_before - balance_after;
+        assert!(
+            net_change < total_spent,
+            "Expected rewards to partially offset spending: net_change={net_change}, total_spent={total_spent}"
+        );
+
+        cleanup(&path);
+    }
+
+    #[tokio::test]
+    async fn epoch_boundary_clears_participation() {
+        let (_tx, rx) = mpsc::channel(16);
+        let mut pipeline = make_pipeline(rx);
+
+        let (alice_kp, alice) = make_sender();
+        let bob = [2u8; 32];
+        pipeline
+            .state
+            .write()
+            .await
+            .set_balance(&alice, 100_000_000);
+
+        {
+            let cp = pipeline.shared_chain_params();
+            let mut cp_guard = cp.write().await;
+            cp_guard
+                .set("epoch_length", aztibase_execution::ParamValue::U64(1000))
+                .unwrap();
+        }
+
+        // Register a validator so epoch boundary logic triggers.
+        {
+            let mut staking = pipeline.staking_store.write().await;
+            staking
+                .register_validator(
+                    alice,
+                    MIN_VALIDATOR_STAKE,
+                    MIN_VALIDATOR_STAKE,
+                    MAX_VALIDATOR_STAKE_CAP,
+                    0,
+                )
+                .unwrap();
+        }
+
+        pipeline.current_round = 999;
+
+        let batch = make_batch_with_anchor(
+            aztibase_core::hash(&0u64.to_le_bytes()),
+            vec![sign(
+                &TxKind::Transfer {
+                    from: alice,
+                    to: bob,
+                    value: 10,
+                    nonce: 0,
+                    gas_price: 1,
+                },
+                &alice_kp,
+            )],
+        );
+        pipeline.execute_batch(&batch).await.unwrap();
+
+        // After epoch boundary, participation should be cleared.
+        assert!(
+            pipeline.epoch_participation.is_empty(),
+            "Epoch participation should be cleared after epoch boundary"
+        );
+    }
+
+    #[tokio::test]
+    async fn downtime_slashing_at_epoch_boundary() {
+        let (_tx, rx) = mpsc::channel(16);
+        let mut pipeline = make_pipeline(rx);
+
+        let (alice_kp, alice) = make_sender();
+        let bob = [2u8; 32];
+        let silent_validator = [0xDD; 32];
+        pipeline
+            .state
+            .write()
+            .await
+            .set_balance(&alice, 100_000_000);
+
+        {
+            let cp = pipeline.shared_chain_params();
+            let mut cp_guard = cp.write().await;
+            cp_guard
+                .set("epoch_length", aztibase_execution::ParamValue::U64(1000))
+                .unwrap();
+        }
+
+        // Register 2 validators: alice (will be active) and silent (will be inactive).
+        {
+            let mut staking = pipeline.staking_store.write().await;
+            staking
+                .register_validator(
+                    alice,
+                    MIN_VALIDATOR_STAKE,
+                    MIN_VALIDATOR_STAKE,
+                    MAX_VALIDATOR_STAKE_CAP,
+                    0,
+                )
+                .unwrap();
+            staking
+                .register_validator(
+                    silent_validator,
+                    MIN_VALIDATOR_STAKE,
+                    MIN_VALIDATOR_STAKE,
+                    MAX_VALIDATOR_STAKE_CAP,
+                    0,
+                )
+                .unwrap();
+        }
+
+        let silent_stake_before = {
+            let staking = pipeline.staking_store.read().await;
+            staking
+                .get_validator(&silent_validator)
+                .map(|v| v.self_stake)
+                .unwrap_or(0)
+        };
+
+        pipeline.current_round = 999;
+
+        // Run 1 batch — alice is active, silent does nothing. Epoch boundary at round 1000.
+        let batch = make_batch_with_anchor(
+            aztibase_core::hash(&0u64.to_le_bytes()),
+            vec![sign(
+                &TxKind::Transfer {
+                    from: alice,
+                    to: bob,
+                    value: 10,
+                    nonce: 0,
+                    gas_price: 1,
+                },
+                &alice_kp,
+            )],
+        );
+        pipeline.execute_batch(&batch).await.unwrap();
+
+        // silent_validator should have been slashed for downtime.
+        let silent_stake_after = {
+            let staking = pipeline.staking_store.read().await;
+            staking
+                .get_validator(&silent_validator)
+                .map(|v| v.self_stake)
+                .unwrap_or(0)
+        };
+
+        assert!(
+            silent_stake_after < silent_stake_before,
+            "Silent validator should be slashed: before={silent_stake_before}, after={silent_stake_after}"
+        );
+    }
+
+    #[tokio::test]
+    async fn epoch_boundary_propagates_validator_set() {
+        let (_tx, rx) = mpsc::channel(16);
+        let mut pipeline = make_pipeline(rx);
+
+        let (alice_kp, alice) = make_sender();
+        let bob = [2u8; 32];
+        pipeline
+            .state
+            .write()
+            .await
+            .set_balance(&alice, 100_000_000);
+
+        {
+            let cp = pipeline.shared_chain_params();
+            let mut cp_guard = cp.write().await;
+            cp_guard
+                .set("epoch_length", aztibase_execution::ParamValue::U64(1000))
+                .unwrap();
+        }
+
+        {
+            let mut staking = pipeline.staking_store.write().await;
+            staking
+                .register_validator(
+                    alice,
+                    MIN_VALIDATOR_STAKE,
+                    MIN_VALIDATOR_STAKE,
+                    MAX_VALIDATOR_STAKE_CAP,
+                    0,
+                )
+                .unwrap();
+        }
+
+        // Wire a consensus_tx to capture the UpdateValidatorSet message.
+        let (ctx, mut crx) = mpsc::channel(16);
+        pipeline.set_consensus_tx(ctx);
+
+        pipeline.current_round = 999;
+
+        let batch = make_batch_with_anchor(
+            aztibase_core::hash(&0u64.to_le_bytes()),
+            vec![sign(
+                &TxKind::Transfer {
+                    from: alice,
+                    to: bob,
+                    value: 10,
+                    nonce: 0,
+                    gas_price: 1,
+                },
+                &alice_kp,
+            )],
+        );
+        pipeline.execute_batch(&batch).await.unwrap();
+
+        // Check that UpdateValidatorSet was sent to consensus.
+        let mut found_update = false;
+        while let Ok(msg) = crx.try_recv() {
+            if matches!(
+                msg,
+                aztibase_consensus::ConsensusInput::UpdateValidatorSet(_)
+            ) {
+                found_update = true;
+            }
+        }
+        assert!(
+            found_update,
+            "Expected UpdateValidatorSet to be sent at epoch boundary"
+        );
+    }
+
+    // ── Phase 4: Throughput measurement tests ──────────────────────
+
+    #[tokio::test]
+    async fn throughput_baseline_100_transfers() {
+        let path = test_db_path();
+        let store = Arc::new(StateStore::open(path.to_str().unwrap()).unwrap());
+        let (_tx, rx) = mpsc::channel(256);
+        let mut pipeline = ExecutionPipeline::with_storage(store, rx);
+
+        let (alice_kp, alice) = make_sender();
+        let bob = [2u8; 32];
+        pipeline
+            .state
+            .write()
+            .await
+            .set_balance(&alice, 100_000_000_000);
+
+        let batch_count = 10u64;
+        let txs_per_batch = 5usize;
+
+        // Pre-sign all transactions.
+        let mut batches = Vec::with_capacity(batch_count as usize);
+        let mut nonce = 0u64;
+        for i in 0..batch_count {
+            let mut txs = Vec::with_capacity(txs_per_batch);
+            for _ in 0..txs_per_batch {
+                txs.push(sign(
+                    &TxKind::Transfer {
+                        from: alice,
+                        to: bob,
+                        value: 10,
+                        nonce,
+                        gas_price: 1,
+                    },
+                    &alice_kp,
+                ));
+                nonce += 1;
+            }
+            batches.push(make_batch_with_anchor(
+                aztibase_core::hash(&i.to_le_bytes()),
+                txs,
+            ));
+        }
+
+        let start = std::time::Instant::now();
+        for batch in &batches {
+            pipeline.execute_batch(batch).await.unwrap();
+        }
+        let elapsed = start.elapsed();
+
+        let total_txs = batch_count * txs_per_batch as u64;
+        let tps = total_txs as f64 / elapsed.as_secs_f64();
+        let batches_per_sec = batch_count as f64 / elapsed.as_secs_f64();
+
+        // Log throughput numbers for baseline tracking.
+        println!(
+            "THROUGHPUT: {total_txs} txs in {:.2}s = {tps:.0} TPS, {batches_per_sec:.0} batches/s",
+            elapsed.as_secs_f64()
+        );
+
+        // Sanity: all transfers landed.
+        let final_bob = pipeline.state.read().await.balance(&bob);
+        assert_eq!(final_bob, total_txs as u128 * 10);
+
+        // Sanity: batch count correct.
+        let bc = pipeline.batch_count.load(Ordering::Relaxed);
+        assert_eq!(bc, batch_count);
+
+        cleanup(&path);
+    }
+
+    #[tokio::test]
+    async fn throughput_empty_batches_baseline() {
+        let (_tx, rx) = mpsc::channel(256);
+        let mut pipeline = make_pipeline(rx);
+
+        let batch_count = 100u64;
+        let start = std::time::Instant::now();
+        for i in 0..batch_count {
+            let batch = make_batch_with_anchor(aztibase_core::hash(&i.to_le_bytes()), vec![]);
+            pipeline.execute_batch(&batch).await.unwrap();
+        }
+        let elapsed = start.elapsed();
+
+        let batches_per_sec = batch_count as f64 / elapsed.as_secs_f64();
+        println!(
+            "EMPTY BATCH THROUGHPUT: {batch_count} batches in {:.3}s = {batches_per_sec:.0} batches/s",
+            elapsed.as_secs_f64()
+        );
+
+        assert!(
+            batches_per_sec > 50.0,
+            "Empty batch processing should exceed 50/s in debug mode"
+        );
     }
 }

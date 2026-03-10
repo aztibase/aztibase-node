@@ -21,6 +21,31 @@ Entries are prepended (newest first).
 
 ## Entries
 
+### Sprint 050 Prep — CI Pipeline, RPC Docs, Sprint Plan (M9-S11)
+- **Date**: 2026-03-10
+- **Commit**: (pending — bundled with Sprint 049 commit)
+- **Files changed**:
+  - `.github/workflows/ci.yml` — Added dev branch trigger, CARGO_INCREMENTAL=0, release build gate job
+  - `docs/rpc-api.md` — NEW: Full RPC API reference for all 43 methods with params, return types, examples
+  - `blockchain-project/sprints/SPRINT-050.md` — NEW: Sprint 050 plan (CI, benchmarks, genesis config, faucet, deployment)
+- **Review**: No code changes. Infrastructure and documentation only.
+- **Security Flags**: None
+
+### Sprint 049 — Protocol Hardening & Multi-Node Stability (M9-S10)
+- **Date**: 2026-03-10
+- **Commit**: (pending)
+- **Files changed**:
+  - `crates/aztibase-execution/src/persist.rs` — `latest_batch_index()` reverse range scan for crash recovery, 3 new tests
+  - `crates/aztibase-execution/src/lib.rs` — `latest_batch_index` re-export
+  - `crates/aztibase-node/src/pipeline.rs` — batch_count recovery from disk in `with_storage()`, shutdown logging, `batch_count.fetch_add` moved into `execute_batch()`, 3 crash recovery tests, 4 epoch boundary tests, 2 throughput tests
+  - `crates/aztibase-node/src/main.rs` — `--epoch-length` CLI flag wired to chain_params
+  - `crates/aztibase-network/src/transport.rs` — `PROTOCOL_VERSION`, `AGENT_PREFIX`, `agent_version()`, `parse_agent_version()`, identify behaviour for version enforcement
+  - `crates/aztibase-network/src/behaviour.rs` — `identify::Behaviour` added to AztibaseBehaviour
+  - `crates/aztibase-network/src/lib.rs` — protocol version exports, 5 new tests
+  - `blockchain-project/DECISIONS.md` — ADR-021 (no mempool persistence), ADR-022 (protocol versioning)
+- **Review**: 5 phases complete. Crash recovery, protocol versioning, epoch boundaries, throughput baseline all tested. 284 execution + 85 network + 209 node tests pass. 0 clippy warnings, fmt clean.
+- **Security Flags**: None new. Crash recovery verified safe (redb ACID). Protocol version bypass blocked by identify disconnect.
+
 ### Sprint 048 — Security Flag Resolution (M9-S9) — Bottom 5 Flags
 - **Date**: 2026-03-10
 - **Commit**: (pending)

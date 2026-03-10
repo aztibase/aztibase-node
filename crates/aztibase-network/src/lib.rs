@@ -31,8 +31,8 @@ pub use light_sync::{
 pub use peer_store::{PeerStore, StoredPeer};
 pub use reputation::{OffenseSeverity, PeerReputation, PeerReputationStore};
 pub use transport::{
-    DEFAULT_WEBRTC_PORT, Libp2pTransport, NatStatus, NatTraversalStats, NetworkEvent,
-    TransportConfig,
+    AGENT_PREFIX, DEFAULT_WEBRTC_PORT, Libp2pTransport, NatStatus, NatTraversalStats, NetworkEvent,
+    PROTOCOL_VERSION, TransportConfig, agent_version, parse_agent_version,
 };
 #[cfg(feature = "webrtc")]
 pub use webrtc::{WebRtcConfig, WebRtcTransport};
@@ -262,5 +262,38 @@ mod tests {
         let data = vec![0u8; 128];
         let result = gossip::validate_gossip_message(gossip::TOPIC_BLOCKS, &data);
         assert_eq!(result, gossip::MessageAcceptance::Accept);
+    }
+
+    // ── Protocol version tests ──────────────────────────────────────
+
+    #[test]
+    fn agent_version_format() {
+        let version = agent_version();
+        assert_eq!(version, format!("aztibase/{}", PROTOCOL_VERSION));
+    }
+
+    #[test]
+    fn parse_agent_version_valid() {
+        assert_eq!(parse_agent_version("aztibase/1"), Some(1));
+        assert_eq!(parse_agent_version("aztibase/2"), Some(2));
+        assert_eq!(parse_agent_version("aztibase/42"), Some(42));
+    }
+
+    #[test]
+    fn parse_agent_version_ignores_non_aztibase() {
+        assert_eq!(parse_agent_version("lighthouse/4.0.0"), None);
+        assert_eq!(parse_agent_version("prysm/v5"), None);
+        assert_eq!(parse_agent_version(""), None);
+    }
+
+    #[test]
+    fn parse_agent_version_handles_subversions() {
+        assert_eq!(parse_agent_version("aztibase/1.2.3"), Some(1));
+        assert_eq!(parse_agent_version("aztibase/2.0"), Some(2));
+    }
+
+    #[test]
+    fn protocol_version_is_one() {
+        assert_eq!(PROTOCOL_VERSION, 1);
     }
 }

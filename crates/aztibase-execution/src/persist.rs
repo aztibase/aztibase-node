@@ -334,6 +334,18 @@ pub fn get_equivocation_proof(
     }
 }
 
+/// Retrieve the latest (highest) batch index stored in the database.
+/// Returns None if no batches have been persisted.
+pub fn latest_batch_index(store: &StateStore) -> StorageResult<Option<u64>> {
+    let entries = store.range_reverse(BATCH_INDEX_TABLE, &[0u8; 8], &u64::MAX.to_be_bytes())?;
+    match entries.first() {
+        Some((k, _)) if k.len() == 8 => {
+            Ok(Some(u64::from_be_bytes(k.as_slice().try_into().unwrap())))
+        }
+        _ => Ok(None),
+    }
+}
+
 /// Query a range of batch numbers, returning (batch_number, anchor_hash) pairs.
 /// Enforces a hard limit of `max_results` entries per call.
 pub fn get_batch_range(
@@ -727,6 +739,84 @@ mod tests {
                 .unwrap()
                 .is_none()
         );
+
+        cleanup(&path);
+    }
+
+    #[test]
+    fn latest_batch_index_empty_db() {
+        let path = test_db_path();
+        let store = StateStore::open(path.to_str().unwrap()).unwrap();
+
+        assert_eq!(latest_batch_index(&store).unwrap(), None);
+
+        cleanup(&path);
+    }
+
+    #[test]
+    fn latest_batch_index_returns_highest() {
+        let path = test_db_path();
+        let store = StateStore::open(path.to_str().unwrap()).unwrap();
+
+        store_batch_index(&store, 0, &[0xAA; 32]).unwrap();
+        store_batch_index(&store, 5, &[0xBB; 32]).unwrap();
+        store_batch_index(&store, 3, &[0xCC; 32]).unwrap();
+
+        assert_eq!(latest_batch_index(&store).unwrap(), Some(5));
+
+        cleanup(&path);
+    }
+
+    #[test]
+    fn crash_recovery_state_consistent() {
+        let path = test_db_path();
+
+        let alice = [1u8; 32];
+        let bob = [2u8; 32];
+        let anchor_a = [0xA0; 32];
+        let anchor_b = [0xB0; 32];
+
+        {
+            let store = StateStore::open(path.to_str().unwrap()).unwrap();
+            let mut state = AccountState::new();
+            state.set_balance(&alice, 1000);
+            state.set_balance(&bob, 500);
+            state.increment_nonce(&alice);
+
+            flush_state(&store, &state).unwrap();
+            store_batch_root(&store, &anchor_a, &state.state_root()).unwrap();
+            store_batch_index(&store, 0, &anchor_a).unwrap();
+            store_base_fee(&store, 10).unwrap();
+
+            state.set_balance(&alice, 800);
+            state.set_balance(&bob, 700);
+            state.increment_nonce(&alice);
+
+            flush_state(&store, &state).unwrap();
+            store_batch_root(&store, &anchor_b, &state.state_root()).unwrap();
+            store_batch_index(&store, 1, &anchor_b).unwrap();
+            store_base_fee(&store, 15).unwrap();
+            // Drop simulates crash — redb commits are already durable.
+        }
+
+        // Reopen: verify recovery is consistent.
+        {
+            let store = StateStore::open(path.to_str().unwrap()).unwrap();
+            let loaded = load_state(&store).unwrap();
+            assert_eq!(loaded.balance(&alice), 800);
+            assert_eq!(loaded.balance(&bob), 700);
+            assert_eq!(loaded.nonce(&alice), 2);
+
+            let idx = latest_batch_index(&store).unwrap();
+            assert_eq!(idx, Some(1));
+
+            let fee = load_base_fee(&store).unwrap();
+            assert_eq!(fee, Some(15));
+
+            let root = get_batch_root(&store, &anchor_b).unwrap();
+            assert!(root.is_some());
+            assert_eq!(root.unwrap(), loaded.state_root());
+        }
 
         cleanup(&path);
     }

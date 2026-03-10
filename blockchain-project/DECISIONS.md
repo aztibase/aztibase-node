@@ -28,6 +28,8 @@ Every non-obvious technical decision is recorded here. Each ADR is immutable onc
 | ADR-018 | RANDAO-style VRF seed accumulation (anti-last-revealer) | 2026-03-10 | ACCEPTED | consensus-engineer + security-engineer |
 | ADR-019 | Browser wallet spending limits in WASM | 2026-03-10 | ACCEPTED | security-engineer + p2p-network-engineer |
 | ADR-020 | Quorum-signed DHT records (anti-poisoning) | 2026-03-10 | ACCEPTED | p2p-network-engineer + security-engineer |
+| ADR-021 | No mempool persistence — re-gossip from peers on restart | 2026-03-10 | ACCEPTED | node-engineer + blockchain-architect |
+| ADR-022 | Protocol version negotiation via libp2p identify | 2026-03-10 | ACCEPTED | p2p-network-engineer + blockchain-architect |
 
 ---
 
@@ -606,6 +608,59 @@ Introduce `SignedDhtRecord` — a wrapper around DHT values that includes: (1) `
 - Records older than 10,000 rounds (~67 minutes at 400ms) are rejected — ensures liveness
 - Unsigned legacy records are rejected — all DHT records must use the new format
 - Future: per-kind quorum thresholds (e.g., ValidatorSet requires ≥ f+1 signatures)
+
+---
+
+## ADR-021: No mempool persistence — re-gossip from peers on restart
+
+**Date:** 2026-03-10
+**Status:** ACCEPTED
+**Decided By:** node-engineer + blockchain-architect
+**Git Ref:** pending (Sprint 049)
+
+### Context
+The mempool is in-memory only. On node restart, all pending transactions are lost. The question is whether to persist the mempool to redb or accept the loss.
+
+### Decision
+Do not persist the mempool. Pending transactions are recovered via gossipsub re-propagation from peers.
+
+### Rationale
+- Gossipsub already re-propagates unconfirmed transactions to new peers on connect
+- Persisting mempool adds write amplification to the hot path (every tx insert hits disk)
+- Stale transactions in a persisted mempool may have expired nonces or changed base fees
+- Validators that restart quickly will re-receive pending txs from the mesh within seconds
+- Ethereum, Sui, and most L1s do not persist mempools — industry standard
+
+### Consequences
+- Solo-node restarts lose pending transactions (acceptable — they are re-gossiped)
+- No additional redb write overhead on the transaction insertion path
+- Mempool contents are ephemeral by design
+
+---
+
+## ADR-022: Protocol version negotiation via libp2p identify
+
+**Date:** 2026-03-10
+**Status:** ACCEPTED
+**Decided By:** p2p-network-engineer + blockchain-architect
+**Git Ref:** pending (Sprint 049)
+
+### Context
+Nodes have no mechanism to reject peers running incompatible protocol versions. A protocol-breaking upgrade will silently partition the network unless version negotiation is enforced.
+
+### Decision
+Add a `PROTOCOL_VERSION` constant (starting at 1). Include it in the libp2p identify agent string as `aztibase/1`. On peer identification, parse the remote version and disconnect peers with mismatched major versions. Add a version byte to the vertex wire format; reject vertices with unrecognized versions.
+
+### Rationale
+- libp2p identify is already part of the swarm — no new protocol needed
+- Agent string parsing is standard practice (Lighthouse, Prysm use similar schemes)
+- Vertex version byte costs 1 byte per vertex with zero parsing overhead
+- Disconnecting incompatible peers prevents silent consensus splits during upgrades
+
+### Consequences
+- All nodes must be upgraded together for major version bumps (expected for pre-mainnet)
+- Minor version differences are tolerated (only major version triggers disconnect)
+- Future: version negotiation can gate feature flags (e.g., compact blocks, new TxKinds)
 
 ---
 

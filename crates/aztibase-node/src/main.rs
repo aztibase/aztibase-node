@@ -95,6 +95,11 @@ struct Cli {
     /// Trusted weak subjectivity checkpoint: batch_index:state_root_hex (e.g. 1000:abcdef01...)
     #[arg(long)]
     checkpoint: Option<String>,
+
+    /// Override epoch length (rounds per epoch). Useful for testing epoch boundaries
+    /// with short epochs (e.g. 100). Default: 10,000 rounds.
+    #[arg(long)]
+    epoch_length: Option<u64>,
 }
 
 #[derive(clap::Subcommand, Debug)]
@@ -576,6 +581,19 @@ async fn main() -> Result<()> {
     if config.archive {
         exec_pipeline.set_archive(true);
         tracing::info!("Archive mode enabled — eviction disabled, full history retained");
+    }
+
+    if let Some(epoch_len) = cli.epoch_length {
+        let cp = exec_pipeline.shared_chain_params();
+        let mut cp_guard = cp.write().await;
+        if let Err(e) = cp_guard.set(
+            "epoch_length",
+            aztibase_execution::ParamValue::U64(epoch_len),
+        ) {
+            tracing::warn!(epoch_length = epoch_len, error = %e, "Failed to set epoch_length override");
+        } else {
+            tracing::info!(epoch_length = epoch_len, "Epoch length overridden via CLI");
+        }
     }
 
     if let Some(ref cp_str) = cli.checkpoint {
@@ -1486,6 +1504,7 @@ mod tests {
             webrtc: false,
             archive: false,
             checkpoint: None,
+            epoch_length: None,
         };
         let config = cli.apply_overrides(NodeConfig::default());
         assert_eq!(config.data_dir, PathBuf::from("/tmp/test"));
@@ -1509,6 +1528,7 @@ mod tests {
             webrtc: false,
             archive: false,
             checkpoint: None,
+            epoch_length: None,
         };
         let config = cli.apply_overrides(NodeConfig::default());
         assert_eq!(config.network.listen_addresses.len(), 1);
@@ -1597,6 +1617,7 @@ mod tests {
             webrtc: false,
             archive: false,
             checkpoint: None,
+            epoch_length: None,
         };
         let result = cli.apply_overrides(config);
 

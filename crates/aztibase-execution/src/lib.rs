@@ -38,8 +38,8 @@ pub use parallel::{BatchResult, TransferTx, TxReceipt, TxStatus, execute_transfe
 pub use persist::{
     evict_old_batch_roots, evict_old_transactions, flush_state, get_batch_by_number,
     get_batch_range, get_batch_root, get_batch_txs, get_checkpoint_raw, get_equivocation_proof,
-    get_transaction, latest_checkpoint_raw, load_base_fee, load_state, store_base_fee,
-    store_batch_index, store_batch_root, store_batch_txs, store_checkpoint_raw,
+    get_transaction, latest_batch_index, latest_checkpoint_raw, load_base_fee, load_state,
+    store_base_fee, store_batch_index, store_batch_root, store_batch_txs, store_checkpoint_raw,
     store_equivocation_proof, store_transaction,
 };
 pub use receipt::{ExecutionReceipt, evict_old_receipts, get_receipt, store_receipts};
