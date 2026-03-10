@@ -356,8 +356,9 @@ impl ExecutionPipeline {
             .map(|(tx, _)| tx)
             .collect();
 
-        // Phase 1: Escrow fees for all txs with gas_price > 0.
-        // Txs that fail escrow get a failure receipt and are excluded from execution.
+        // Phase 1: Validate gas price and escrow fees.
+        // All txs must meet the current base fee. Txs below base fee are rejected.
+        let current_base_fee = self.base_fee_calculator.base_fee();
         let mut escrows: Vec<Option<FeeEscrow>> = Vec::with_capacity(routed.len());
         let mut escrowed_indices: Vec<usize> = Vec::new();
         let mut receipts = Vec::new();
@@ -366,9 +367,22 @@ impl ExecutionPipeline {
         for (i, tx) in routed.iter().enumerate() {
             let gas_price = tx.gas_price();
             let gas_limit = tx.gas_limit();
-            if gas_price == 0 {
+            if gas_price < current_base_fee {
+                let tx_hash = compute_tx_hash(tx);
+                state.increment_nonce(tx.sender());
+                receipts.push(ExecutionReceipt {
+                    tx_hash,
+                    success: false,
+                    gas_used: 0,
+                    contract_address: None,
+                    error: Some(format!(
+                        "gas price too low: {} < base fee {}",
+                        gas_price, current_base_fee
+                    )),
+                    inference_hash: None,
+                    anomaly_score: 0.0,
+                });
                 escrows.push(None);
-                escrowed_indices.push(i);
                 continue;
             }
             let value = match tx {
@@ -2420,14 +2434,14 @@ mod tests {
 
         let (alice_kp, alice) = make_sender();
         let bob = [2u8; 32];
-        pipeline.state.write().await.set_balance(&alice, 1000);
+        pipeline.state.write().await.set_balance(&alice, 1_000_000);
 
         let transfer = TxKind::Transfer {
             from: alice,
             to: bob,
             value: 300,
             nonce: 0,
-            gas_price: 0,
+            gas_price: 1,
         };
 
         let batch = make_batch(vec![sign(&transfer, &alice_kp)]);
@@ -2437,7 +2451,8 @@ mod tests {
         assert_eq!(result.contract_count, 0);
         assert_eq!(result.routing_errors, 0);
         let state = pipeline.state.read().await;
-        assert_eq!(state.balance(&alice), 700);
+        // 1_000_000 - 300 (value) - 21_000 (gas fee) = 978_700
+        assert_eq!(state.balance(&alice), 978_700);
         assert_eq!(state.balance(&bob), 300);
         assert_ne!(result.state_root, [0u8; 32]);
     }
@@ -2449,14 +2464,14 @@ mod tests {
 
         let (alice_kp, alice) = make_sender();
         let bob = [2u8; 32];
-        pipeline.state.write().await.set_balance(&alice, 5000);
+        pipeline.state.write().await.set_balance(&alice, 10_000_000);
 
         let transfer = TxKind::Transfer {
             from: alice,
             to: bob,
             value: 100,
             nonce: 0,
-            gas_price: 0,
+            gas_price: 1,
         };
 
         let deploy = TxKind::ContractDeploy {
@@ -2464,7 +2479,7 @@ mod tests {
             code: vec![0x00, 0x61, 0x73, 0x6d],
             nonce: 1,
             gas_limit: 1_000_000,
-            gas_price: 0,
+            gas_price: 1,
         };
 
         let batch = make_batch(vec![sign(&transfer, &alice_kp), sign(&deploy, &alice_kp)]);
@@ -2481,12 +2496,13 @@ mod tests {
         let mut pipeline = make_pipeline(rx);
 
         let (kp, sender) = make_sender();
+        pipeline.state.write().await.set_balance(&sender, 1_000_000);
         let good = TxKind::Transfer {
             from: sender,
             to: [2u8; 32],
             value: 0,
             nonce: 0,
-            gas_price: 0,
+            gas_price: 1,
         };
 
         let batch = make_batch(vec![sign(&good, &kp), vec![0xFE, 0x00]]);
@@ -2503,14 +2519,14 @@ mod tests {
 
         let (alice_kp, alice) = make_sender();
         let bob = [2u8; 32];
-        pipeline.state.write().await.set_balance(&alice, 1000);
+        pipeline.state.write().await.set_balance(&alice, 1_000_000);
 
         let transfer = TxKind::Transfer {
             from: alice,
             to: bob,
             value: 200,
             nonce: 0,
-            gas_price: 0,
+            gas_price: 1,
         };
 
         let batch = make_batch(vec![sign(&transfer, &alice_kp)]);
@@ -2526,7 +2542,7 @@ mod tests {
 
         let (alice_kp, alice) = make_sender();
         let bob = [2u8; 32];
-        pipeline.state.write().await.set_balance(&alice, 1000);
+        pipeline.state.write().await.set_balance(&alice, 1_000_000);
 
         let batch1 = make_batch(vec![sign(
             &TxKind::Transfer {
@@ -2534,7 +2550,7 @@ mod tests {
                 to: bob,
                 value: 300,
                 nonce: 0,
-                gas_price: 0,
+                gas_price: 1,
             },
             &alice_kp,
         )]);
@@ -2545,7 +2561,7 @@ mod tests {
                 to: bob,
                 value: 200,
                 nonce: 1,
-                gas_price: 0,
+                gas_price: 1,
             },
             &alice_kp,
         )]);
@@ -2554,7 +2570,8 @@ mod tests {
         let result = pipeline.execute_batch(&batch2).await.unwrap();
 
         let state = pipeline.state.read().await;
-        assert_eq!(state.balance(&alice), 500);
+        // 1_000_000 - 300 - 21_000 - 200 - 21_000 = 957_500
+        assert_eq!(state.balance(&alice), 957_500);
         assert_eq!(state.balance(&bob), 500);
         assert_ne!(result.state_root, [0u8; 32]);
     }
@@ -2573,14 +2590,14 @@ mod tests {
             let store = Arc::new(StateStore::open(path.to_str().unwrap()).unwrap());
             let (_tx, rx) = mpsc::channel(16);
             let mut pipeline = ExecutionPipeline::with_storage(store, rx);
-            pipeline.state.write().await.set_balance(&alice, 1000);
+            pipeline.state.write().await.set_balance(&alice, 1_000_000);
 
             let transfer = TxKind::Transfer {
                 from: alice,
                 to: bob,
                 value: 400,
                 nonce: 0,
-                gas_price: 0,
+                gas_price: 1,
             };
 
             let batch = make_batch_with_anchor(anchor, vec![sign(&transfer, &alice_kp)]);
@@ -2590,7 +2607,8 @@ mod tests {
 
         let store2 = StateStore::open(path.to_str().unwrap()).unwrap();
         let loaded = load_state(&store2).unwrap();
-        assert_eq!(loaded.balance(&alice), 600);
+        // 1_000_000 - 400 - 21_000 = 978_600
+        assert_eq!(loaded.balance(&alice), 978_600);
         assert_eq!(loaded.balance(&bob), 400);
 
         let root = get_batch_root(&store2, &anchor).unwrap();
@@ -2607,7 +2625,7 @@ mod tests {
         let (alice_kp, alice) = make_sender();
         let bob = [2u8; 32];
         let shared_state = pipeline.shared_state();
-        shared_state.write().await.set_balance(&alice, 1000);
+        shared_state.write().await.set_balance(&alice, 1_000_000);
 
         let batch = make_batch(vec![sign(
             &TxKind::Transfer {
@@ -2615,7 +2633,7 @@ mod tests {
                 to: bob,
                 value: 300,
                 nonce: 0,
-                gas_price: 0,
+                gas_price: 1,
             },
             &alice_kp,
         )]);
@@ -2627,7 +2645,8 @@ mod tests {
         pipeline.run().await;
 
         let state = shared_state.read().await;
-        assert_eq!(state.balance(&alice), 700);
+        // 1_000_000 - 300 - 21_000 = 978_700
+        assert_eq!(state.balance(&alice), 978_700);
         assert_eq!(state.balance(&bob), 300);
     }
 
@@ -2650,7 +2669,7 @@ mod tests {
             code: init_code,
             nonce: 0,
             gas_limit: 1_000_000,
-            gas_price: 0,
+            gas_price: 1,
         };
 
         let batch = make_batch(vec![sign(&evm_deploy, &deployer_kp)]);
@@ -2685,7 +2704,7 @@ mod tests {
             code: init_code,
             nonce: 0,
             gas_limit: 1_000_000,
-            gas_price: 0,
+            gas_price: 1,
         };
 
         let batch1 = make_batch(vec![sign(&evm_deploy, &deployer_kp)]);
@@ -2700,7 +2719,7 @@ mod tests {
             nonce: 1,
             gas_limit: 1_000_000,
             value: 0,
-            gas_price: 0,
+            gas_price: 1,
         };
 
         let batch2 = make_batch_with_anchor([0xBB; 32], vec![sign(&evm_call, &deployer_kp)]);
@@ -2731,7 +2750,7 @@ mod tests {
             to: bob,
             value: 500,
             nonce: 0,
-            gas_price: 0,
+            gas_price: 1,
         };
 
         let evm_deploy = TxKind::EvmDeploy {
@@ -2739,7 +2758,7 @@ mod tests {
             code: vec![0x60, 0x42, 0x60, 0x00, 0x52, 0x60, 0x20, 0x60, 0x00, 0xf3],
             nonce: 1,
             gas_limit: 1_000_000,
-            gas_price: 0,
+            gas_price: 1,
         };
 
         let batch = make_batch(vec![
@@ -2769,7 +2788,7 @@ mod tests {
             let store = Arc::new(StateStore::open(path.to_str().unwrap()).unwrap());
             let (_tx, rx) = mpsc::channel(16);
             let mut pipeline = ExecutionPipeline::with_storage(store, rx);
-            pipeline.state.write().await.set_balance(&alice, 5000);
+            pipeline.state.write().await.set_balance(&alice, 1_000_000);
 
             let batch = make_batch(vec![sign(
                 &TxKind::Transfer {
@@ -2777,7 +2796,7 @@ mod tests {
                     to: [2u8; 32],
                     value: 1500,
                     nonce: 0,
-                    gas_price: 0,
+                    gas_price: 1,
                 },
                 &alice_kp,
             )]);
@@ -2789,7 +2808,8 @@ mod tests {
             let (_tx, rx) = mpsc::channel(16);
             let pipeline = ExecutionPipeline::with_storage(store, rx);
             let state = pipeline.state.read().await;
-            assert_eq!(state.balance(&alice), 3500);
+            // 1_000_000 - 1500 - 21_000 = 977_500
+            assert_eq!(state.balance(&alice), 977_500);
             assert_eq!(state.balance(&[2u8; 32]), 1500);
             assert_eq!(state.nonce(&alice), 1);
         }
@@ -2935,13 +2955,18 @@ mod tests {
         let mut pipeline = make_ai_pipeline(rx);
 
         let (kp, requester) = make_sender();
+        pipeline
+            .state
+            .write()
+            .await
+            .set_balance(&requester, 1_000_000);
         let ai_tx = TxKind::AiInfer {
             requester,
             model_id: "add".into(),
             input: make_f32_input(&[2.0, 3.0, 4.0]),
             nonce: 0,
             max_compute_units: 10_000,
-            gas_price: 0,
+            gas_price: 1,
         };
 
         let batch = make_batch(vec![sign(&ai_tx, &kp)]);
@@ -2960,13 +2985,18 @@ mod tests {
         let mut pipeline = make_ai_pipeline(rx);
 
         let (kp, requester) = make_sender();
+        pipeline
+            .state
+            .write()
+            .await
+            .set_balance(&requester, 1_000_000);
         let ai_tx = TxKind::AiInfer {
             requester,
             model_id: "nonexistent".into(),
             input: vec![1, 2, 3],
             nonce: 0,
             max_compute_units: 10_000,
-            gas_price: 0,
+            gas_price: 1,
         };
 
         let batch = make_batch(vec![sign(&ai_tx, &kp)]);
@@ -2991,14 +3021,14 @@ mod tests {
 
         let (alice_kp, alice) = make_sender();
         let bob = [2u8; 32];
-        pipeline.state.write().await.set_balance(&alice, 5000);
+        pipeline.state.write().await.set_balance(&alice, 1_000_000);
 
         let transfer = TxKind::Transfer {
             from: alice,
             to: bob,
             value: 100,
             nonce: 0,
-            gas_price: 0,
+            gas_price: 1,
         };
 
         let ai_tx = TxKind::AiInfer {
@@ -3007,7 +3037,7 @@ mod tests {
             input: make_f32_input(&[1.0, 2.0, 3.0]),
             nonce: 1,
             max_compute_units: 10_000,
-            gas_price: 0,
+            gas_price: 1,
         };
 
         let batch = make_batch(vec![sign(&transfer, &alice_kp), sign(&ai_tx, &alice_kp)]);
@@ -3029,11 +3059,16 @@ mod tests {
         let mut pipeline = make_pipeline(rx);
 
         let (creator_kp, creator) = make_sender();
+        pipeline
+            .state
+            .write()
+            .await
+            .set_balance(&creator, 1_000_000);
         let create_tx = TxKind::CreateAgent {
             creator,
             model_id: "sentiment_v1".into(),
             nonce: 0,
-            gas_price: 0,
+            gas_price: 1,
         };
 
         let batch = make_batch(vec![sign(&create_tx, &creator_kp)]);
@@ -3056,11 +3091,16 @@ mod tests {
         let mut pipeline = make_pipeline(rx);
 
         let (creator_kp, creator) = make_sender();
+        pipeline
+            .state
+            .write()
+            .await
+            .set_balance(&creator, 1_000_000);
         let create_tx = TxKind::CreateAgent {
             creator,
             model_id: "model_v1".into(),
             nonce: 5,
-            gas_price: 0,
+            gas_price: 1,
         };
 
         let batch = make_batch(vec![sign(&create_tx, &creator_kp)]);
@@ -3084,24 +3124,34 @@ mod tests {
 
         let (creator_kp, creator) = make_sender();
 
+        pipeline
+            .state
+            .write()
+            .await
+            .set_balance(&creator, 1_000_000);
         let create_tx = TxKind::CreateAgent {
             creator,
             model_id: "trader_v1".into(),
             nonce: 0,
-            gas_price: 0,
+            gas_price: 1,
         };
         let batch1 = make_batch(vec![sign(&create_tx, &creator_kp)]);
         let result1 = pipeline.execute_batch(&batch1).await.unwrap();
         let agent_addr = result1.receipts[0].contract_address.unwrap();
 
-        pipeline.state.write().await.set_balance(&creator, 5000);
+        // Reset balance after CreateAgent gas was consumed
+        pipeline
+            .state
+            .write()
+            .await
+            .set_balance(&creator, 1_000_000);
 
         let transfer = TxKind::Transfer {
             from: creator,
             to: agent_addr,
             value: 1000,
             nonce: 1,
-            gas_price: 0,
+            gas_price: 1,
         };
         let batch2 = make_batch_with_anchor([0xBB; 32], vec![sign(&transfer, &creator_kp)]);
         let result2 = pipeline.execute_batch(&batch2).await.unwrap();
@@ -3109,7 +3159,8 @@ mod tests {
         assert!(result2.receipts[0].success);
         let state = pipeline.state.read().await;
         assert_eq!(state.balance(&agent_addr), 1000);
-        assert_eq!(state.balance(&creator), 4000);
+        // 1_000_000 - 1000 - 21_000 = 978_000
+        assert_eq!(state.balance(&creator), 978_000);
         assert_eq!(state.account_type(&agent_addr), AccountType::AIAgent);
     }
 
@@ -3123,7 +3174,7 @@ mod tests {
             to: [2u8; 32],
             value: 100,
             nonce: 0,
-            gas_price: 0,
+            gas_price: 1,
         }
         .encode();
 
@@ -3147,7 +3198,7 @@ mod tests {
             to: [2u8; 32],
             value: 100,
             nonce: 0,
-            gas_price: 0,
+            gas_price: 1,
         };
         let wrong_sig = sign(&transfer, &kp2);
 
@@ -3188,13 +3239,13 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn pipeline_zero_gas_price_no_fee() {
+    async fn pipeline_rejects_zero_gas_price() {
         let (_tx, rx) = mpsc::channel(16);
         let mut pipeline = make_pipeline(rx);
 
         let (alice_kp, alice) = make_sender();
         let bob = [2u8; 32];
-        pipeline.state.write().await.set_balance(&alice, 1000);
+        pipeline.state.write().await.set_balance(&alice, 1_000_000);
 
         let transfer = TxKind::Transfer {
             from: alice,
@@ -3205,11 +3256,19 @@ mod tests {
         };
 
         let batch = make_batch(vec![sign(&transfer, &alice_kp)]);
-        pipeline.execute_batch(&batch).await.unwrap();
+        let result = pipeline.execute_batch(&batch).await.unwrap();
 
+        assert!(!result.receipts[0].success);
+        assert!(
+            result.receipts[0]
+                .error
+                .as_ref()
+                .unwrap()
+                .contains("gas price too low")
+        );
         let state = pipeline.state.read().await;
-        assert_eq!(state.balance(&alice), 500);
-        assert_eq!(state.balance(&bob), 500);
+        assert_eq!(state.balance(&alice), 1_000_000);
+        assert_eq!(state.balance(&bob), 0);
     }
 
     #[tokio::test]
@@ -3304,12 +3363,12 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn pipeline_zero_gas_reports_zero_fees() {
+    async fn pipeline_zero_gas_price_rejected_reports_zero_fees() {
         let (_tx, rx) = mpsc::channel(16);
         let mut pipeline = make_pipeline(rx);
 
         let (alice_kp, alice) = make_sender();
-        pipeline.state.write().await.set_balance(&alice, 1000);
+        pipeline.state.write().await.set_balance(&alice, 1_000_000);
 
         let transfer = TxKind::Transfer {
             from: alice,
@@ -3322,7 +3381,9 @@ mod tests {
         let batch = make_batch(vec![sign(&transfer, &alice_kp)]);
         let result = pipeline.execute_batch(&batch).await.unwrap();
 
+        // Tx rejected (gas price below base fee), so no fees burned
         assert_eq!(result.total_fees_burned, 0);
+        assert!(!result.receipts[0].success);
     }
 
     #[tokio::test]
@@ -3448,7 +3509,7 @@ mod tests {
         let mut pipeline = make_pipeline(rx);
 
         let (alice_kp, alice) = make_sender();
-        pipeline.state.write().await.set_balance(&alice, 10_000);
+        pipeline.state.write().await.set_balance(&alice, 1_000_000);
         pipeline.state.write().await.get_mut(&alice).nonce = 5;
 
         // nonce=3 is stale (current is 5)
@@ -3457,7 +3518,7 @@ mod tests {
             to: [2u8; 32],
             value: 100,
             nonce: 3,
-            gas_price: 0,
+            gas_price: 1,
         };
 
         let batch = make_batch(vec![sign(&transfer, &alice_kp)]);
@@ -3478,7 +3539,7 @@ mod tests {
         let mut pipeline = make_pipeline(rx);
 
         let (alice_kp, alice) = make_sender();
-        pipeline.state.write().await.set_balance(&alice, 10_000);
+        pipeline.state.write().await.set_balance(&alice, 1_000_000);
 
         // nonce=5 when current is 0 — gap
         let transfer = TxKind::Transfer {
@@ -3486,7 +3547,7 @@ mod tests {
             to: [2u8; 32],
             value: 100,
             nonce: 5,
-            gas_price: 0,
+            gas_price: 1,
         };
 
         let batch = make_batch(vec![sign(&transfer, &alice_kp)]);
@@ -3515,7 +3576,7 @@ mod tests {
             to: [2u8; 32],
             value: 100,
             nonce: 0,
-            gas_price: 0,
+            gas_price: 1,
         };
 
         let before = shared_fee.load(std::sync::atomic::Ordering::Relaxed);
@@ -3536,6 +3597,7 @@ mod tests {
         let mut pipeline = make_pipeline(rx);
 
         let (owner_kp, owner) = make_sender();
+        pipeline.state.write().await.set_balance(&owner, 1_000_000);
         let fingerprint = hash(b"model-weights-v1");
 
         let reg_tx = TxKind::RegisterModel {
@@ -3545,7 +3607,7 @@ mod tests {
             compute_cost: 500,
             min_stake: 100,
             nonce: 0,
-            gas_price: 0,
+            gas_price: 1,
         };
 
         let batch = make_batch(vec![sign(&reg_tx, &owner_kp)]);
@@ -3572,6 +3634,7 @@ mod tests {
         let mut pipeline = make_pipeline(rx);
 
         let (owner_kp, owner) = make_sender();
+        pipeline.state.write().await.set_balance(&owner, 1_000_000);
         let fingerprint = hash(b"fp");
 
         let reg_tx = TxKind::RegisterModel {
@@ -3581,7 +3644,7 @@ mod tests {
             compute_cost: 100,
             min_stake: 0,
             nonce: 0,
-            gas_price: 0,
+            gas_price: 1,
         };
 
         let batch1 = make_batch(vec![sign(&reg_tx, &owner_kp)]);
@@ -3594,7 +3657,7 @@ mod tests {
             compute_cost: 200,
             min_stake: 0,
             nonce: 1,
-            gas_price: 0,
+            gas_price: 1,
         };
 
         let batch2 = make_batch_with_anchor([0xBB; 32], vec![sign(&reg_tx2, &owner_kp)]);
@@ -3617,7 +3680,12 @@ mod tests {
 
         let (owner_kp, owner) = make_sender();
         let (req_kp, requester) = make_sender();
-        pipeline.state.write().await.set_balance(&requester, 10_000);
+        pipeline.state.write().await.set_balance(&owner, 1_000_000);
+        pipeline
+            .state
+            .write()
+            .await
+            .set_balance(&requester, 1_000_000);
 
         let reg_tx = TxKind::RegisterModel {
             owner,
@@ -3626,7 +3694,7 @@ mod tests {
             compute_cost: 100,
             min_stake: 0,
             nonce: 0,
-            gas_price: 0,
+            gas_price: 1,
         };
         let batch1 = make_batch(vec![sign(&reg_tx, &owner_kp)]);
         pipeline.execute_batch(&batch1).await.unwrap();
@@ -3638,7 +3706,7 @@ mod tests {
             reward: 500,
             deadline_round: 100,
             nonce: 0,
-            gas_price: 0,
+            gas_price: 1,
         };
 
         let batch2 = make_batch_with_anchor([0xBB; 32], vec![sign(&post_tx, &req_kp)]);
@@ -3650,7 +3718,8 @@ mod tests {
         assert_eq!(result.receipts[0].gas_used, 42_000);
 
         let state = pipeline.state.read().await;
-        assert_eq!(state.balance(&requester), 9_500);
+        // 1_000_000 - 500 (reward) - 42_000 (gas fee) = 957_500
+        assert_eq!(state.balance(&requester), 957_500);
     }
 
     #[tokio::test]
@@ -3659,7 +3728,11 @@ mod tests {
         let mut pipeline = make_pipeline(rx);
 
         let (req_kp, requester) = make_sender();
-        pipeline.state.write().await.set_balance(&requester, 10_000);
+        pipeline
+            .state
+            .write()
+            .await
+            .set_balance(&requester, 1_000_000);
 
         let post_tx = TxKind::PostTask {
             requester,
@@ -3668,7 +3741,7 @@ mod tests {
             reward: 500,
             deadline_round: 100,
             nonce: 0,
-            gas_price: 0,
+            gas_price: 1,
         };
 
         let batch = make_batch(vec![sign(&post_tx, &req_kp)]);
@@ -3682,7 +3755,11 @@ mod tests {
                 .unwrap()
                 .contains("not registered")
         );
-        assert_eq!(pipeline.state.read().await.balance(&requester), 10_000);
+        // Gas fee charged even on failure: escrow=42_000, gas_used=21_000, refund=21_000, net=21_000
+        assert_eq!(
+            pipeline.state.read().await.balance(&requester),
+            1_000_000 - 21_000
+        );
     }
 
     #[tokio::test]
@@ -3692,7 +3769,9 @@ mod tests {
 
         let (owner_kp, owner) = make_sender();
         let (req_kp, requester) = make_sender();
-        pipeline.state.write().await.set_balance(&requester, 100);
+        pipeline.state.write().await.set_balance(&owner, 1_000_000);
+        // Balance enough for gas escrow (42_000) but not for reward (500) after escrow
+        pipeline.state.write().await.set_balance(&requester, 42_100);
 
         let reg = TxKind::RegisterModel {
             owner,
@@ -3701,7 +3780,7 @@ mod tests {
             compute_cost: 100,
             min_stake: 0,
             nonce: 0,
-            gas_price: 0,
+            gas_price: 1,
         };
         let batch1 = make_batch(vec![sign(&reg, &owner_kp)]);
         pipeline.execute_batch(&batch1).await.unwrap();
@@ -3713,7 +3792,7 @@ mod tests {
             reward: 500,
             deadline_round: 100,
             nonce: 0,
-            gas_price: 0,
+            gas_price: 1,
         };
 
         let batch2 = make_batch_with_anchor([0xBB; 32], vec![sign(&post_tx, &req_kp)]);
@@ -3738,7 +3817,12 @@ mod tests {
 
         let (owner_kp, owner) = make_sender();
         let (req_kp, requester) = make_sender();
-        pipeline.state.write().await.set_balance(&requester, 10_000);
+        pipeline.state.write().await.set_balance(&owner, 1_000_000);
+        pipeline
+            .state
+            .write()
+            .await
+            .set_balance(&requester, 1_000_000);
 
         let reg = TxKind::RegisterModel {
             owner,
@@ -3747,7 +3831,7 @@ mod tests {
             compute_cost: 100,
             min_stake: 0,
             nonce: 0,
-            gas_price: 0,
+            gas_price: 1,
         };
         let batch1 = make_batch(vec![sign(&reg, &owner_kp)]);
         pipeline.execute_batch(&batch1).await.unwrap();
@@ -3766,7 +3850,7 @@ mod tests {
             reward: 500,
             deadline_round: 100,
             nonce: 0,
-            gas_price: 0,
+            gas_price: 1,
         };
         let batch2 = make_batch_with_anchor([0xBB; 32], vec![sign(&post, &req_kp)]);
         let result = pipeline.execute_batch(&batch2).await.unwrap();
@@ -3792,7 +3876,12 @@ mod tests {
 
         let (owner_kp, owner) = make_sender();
         let (req_kp, requester) = make_sender();
-        pipeline.state.write().await.set_balance(&requester, 10_000);
+        pipeline.state.write().await.set_balance(&owner, 1_000_000);
+        pipeline
+            .state
+            .write()
+            .await
+            .set_balance(&requester, 1_000_000);
 
         let reg = TxKind::RegisterModel {
             owner,
@@ -3801,7 +3890,7 @@ mod tests {
             compute_cost: 100,
             min_stake: 0,
             nonce: 0,
-            gas_price: 0,
+            gas_price: 1,
         };
         let batch1 = make_batch(vec![sign(&reg, &owner_kp)]);
         pipeline.execute_batch(&batch1).await.unwrap();
@@ -3814,13 +3903,13 @@ mod tests {
             reward: 2000,
             deadline_round: 3,
             nonce: 0,
-            gas_price: 0,
+            gas_price: 1,
         };
         let batch2 = make_batch_with_anchor([0xBB; 32], vec![sign(&post, &req_kp)]);
         pipeline.execute_batch(&batch2).await.unwrap();
 
-        // After batch2, current_round=2. Balance should be 10000-2000=8000
-        assert_eq!(pipeline.state.read().await.balance(&requester), 8_000);
+        // After batch2: 1_000_000 - 42_000 (gas) - 2_000 (reward) = 956_000
+        assert_eq!(pipeline.state.read().await.balance(&requester), 956_000);
         assert_eq!(pipeline.task_pool.read().await.len(), 1);
 
         // Execute empty batch to advance to round 3 — task not yet expired (deadline=3, expired when round>3)
@@ -3839,8 +3928,8 @@ mod tests {
                 .load(std::sync::atomic::Ordering::Relaxed),
             0
         );
-        // Reward should be refunded
-        assert_eq!(pipeline.state.read().await.balance(&requester), 10_000);
+        // Reward refunded but gas fee stays: 1_000_000 - 42_000 = 958_000
+        assert_eq!(pipeline.state.read().await.balance(&requester), 958_000);
     }
 
     #[tokio::test]
@@ -3850,7 +3939,12 @@ mod tests {
 
         let (owner_kp, owner) = make_sender();
         let (req_kp, requester) = make_sender();
-        pipeline.state.write().await.set_balance(&requester, 50_000);
+        pipeline.state.write().await.set_balance(&owner, 1_000_000);
+        pipeline
+            .state
+            .write()
+            .await
+            .set_balance(&requester, 1_000_000);
 
         let reg = TxKind::RegisterModel {
             owner,
@@ -3859,7 +3953,7 @@ mod tests {
             compute_cost: 100,
             min_stake: 0,
             nonce: 0,
-            gas_price: 0,
+            gas_price: 1,
         };
         let batch1 = make_batch(vec![sign(&reg, &owner_kp)]);
         pipeline.execute_batch(&batch1).await.unwrap();
@@ -3871,7 +3965,7 @@ mod tests {
             reward: 100,
             deadline_round: 100,
             nonce: 0,
-            gas_price: 0,
+            gas_price: 1,
         };
         let post2 = TxKind::PostTask {
             requester,
@@ -3880,7 +3974,7 @@ mod tests {
             reward: 200,
             deadline_round: 100,
             nonce: 1,
-            gas_price: 0,
+            gas_price: 1,
         };
         let batch2 = make_batch_with_anchor(
             [0xBB; 32],
@@ -3906,7 +4000,11 @@ mod tests {
         let mut pipeline = make_pipeline(rx);
 
         let (req_kp, requester) = make_sender();
-        pipeline.state.write().await.set_balance(&requester, 10_000);
+        pipeline
+            .state
+            .write()
+            .await
+            .set_balance(&requester, 1_000_000);
 
         // Post task for unregistered model — should fail
         let post = TxKind::PostTask {
@@ -3916,7 +4014,7 @@ mod tests {
             reward: 500,
             deadline_round: 100,
             nonce: 0,
-            gas_price: 0,
+            gas_price: 1,
         };
         let batch = make_batch(vec![sign(&post, &req_kp)]);
         let result = pipeline.execute_batch(&batch).await.unwrap();
@@ -3939,9 +4037,14 @@ mod tests {
         let mut pipeline = make_pipeline(rx);
 
         let (val_kp, validator) = make_sender();
-        pipeline.state.write().await.set_balance(&validator, 10_000);
+        pipeline
+            .state
+            .write()
+            .await
+            .set_balance(&validator, 1_000_000);
 
         let (owner_kp, owner) = make_sender();
+        pipeline.state.write().await.set_balance(&owner, 1_000_000);
         let reg_tx = TxKind::RegisterModel {
             owner,
             model_id: "m1".into(),
@@ -3949,7 +4052,7 @@ mod tests {
             compute_cost: 100,
             min_stake: 0,
             nonce: 0,
-            gas_price: 0,
+            gas_price: 1,
         };
         let batch0 = make_batch(vec![sign(&reg_tx, &owner_kp)]);
         pipeline.execute_batch(&batch0).await.unwrap();
@@ -3962,22 +4065,24 @@ mod tests {
             bls_pubkey: bls_pk,
             bls_pop,
             nonce: 0,
-            gas_price: 0,
+            gas_price: 1,
         };
         let batch1 = make_batch_with_anchor([0xBB; 32], vec![sign(&commit_tx, &val_kp)]);
         pipeline.execute_batch(&batch1).await.unwrap();
-        assert_eq!(pipeline.state.read().await.balance(&validator), 7_000);
+        // 1_000_000 - 75_000 (gas) - 3_000 (stake) = 922_000
+        assert_eq!(pipeline.state.read().await.balance(&validator), 922_000);
 
         let dereg_tx = TxKind::DeregisterCompute {
             validator,
             nonce: 1,
-            gas_price: 0,
+            gas_price: 1,
         };
         let batch2 = make_batch_with_anchor([0xCC; 32], vec![sign(&dereg_tx, &val_kp)]);
         let result = pipeline.execute_batch(&batch2).await.unwrap();
 
         assert!(result.receipts[0].success);
-        assert_eq!(pipeline.state.read().await.balance(&validator), 10_000);
+        // 922_000 - 50_000 (gas) + 3_000 (stake refund) = 875_000
+        assert_eq!(pipeline.state.read().await.balance(&validator), 875_000);
         assert_eq!(pipeline.compute_commitments.read().await.active_count(), 0);
     }
 
@@ -3987,12 +4092,16 @@ mod tests {
         let mut pipeline = make_pipeline(rx);
 
         let (val_kp, validator) = make_sender();
-        pipeline.state.write().await.set_balance(&validator, 10_000);
+        pipeline
+            .state
+            .write()
+            .await
+            .set_balance(&validator, 1_000_000);
 
         let dereg_tx = TxKind::DeregisterCompute {
             validator,
             nonce: 0,
-            gas_price: 0,
+            gas_price: 1,
         };
         let batch = make_batch(vec![sign(&dereg_tx, &val_kp)]);
         let result = pipeline.execute_batch(&batch).await.unwrap();
@@ -4013,9 +4122,14 @@ mod tests {
         let mut pipeline = make_pipeline(rx);
 
         let (val_kp, validator) = make_sender();
-        pipeline.state.write().await.set_balance(&validator, 10_000);
+        pipeline
+            .state
+            .write()
+            .await
+            .set_balance(&validator, 1_000_000);
 
         let (owner_kp, owner) = make_sender();
+        pipeline.state.write().await.set_balance(&owner, 1_000_000);
         let reg_tx = TxKind::RegisterModel {
             owner,
             model_id: "m1".into(),
@@ -4023,7 +4137,7 @@ mod tests {
             compute_cost: 100,
             min_stake: 0,
             nonce: 0,
-            gas_price: 0,
+            gas_price: 1,
         };
         let batch0 = make_batch(vec![sign(&reg_tx, &owner_kp)]);
         pipeline.execute_batch(&batch0).await.unwrap();
@@ -4036,11 +4150,12 @@ mod tests {
             bls_pubkey: bls_pk.clone(),
             bls_pop: bls_pop.clone(),
             nonce: 0,
-            gas_price: 0,
+            gas_price: 1,
         };
         let batch1 = make_batch_with_anchor([0xBB; 32], vec![sign(&commit1, &val_kp)]);
         pipeline.execute_batch(&batch1).await.unwrap();
-        assert_eq!(pipeline.state.read().await.balance(&validator), 8_000);
+        // 1_000_000 - 75_000 (gas) - 2_000 (stake) = 923_000
+        assert_eq!(pipeline.state.read().await.balance(&validator), 923_000);
 
         let commit2 = TxKind::CommitCompute {
             validator,
@@ -4049,13 +4164,13 @@ mod tests {
             bls_pubkey: bls_pk,
             bls_pop,
             nonce: 1,
-            gas_price: 0,
+            gas_price: 1,
         };
         let batch2 = make_batch_with_anchor([0xCC; 32], vec![sign(&commit2, &val_kp)]);
         pipeline.execute_batch(&batch2).await.unwrap();
 
-        // 10000 - 2000 (first) + 2000 (refund) - 5000 (second) = 5000
-        assert_eq!(pipeline.state.read().await.balance(&validator), 5_000);
+        // 923_000 - 75_000 (gas escrow) + 2_000 (prev stake refund) - 5_000 (new stake) + 0 (no gas refund) = 845_000
+        assert_eq!(pipeline.state.read().await.balance(&validator), 845_000);
     }
 
     // ── Phase: DeregisterModel tests ────────────────────────────
@@ -4066,6 +4181,7 @@ mod tests {
         let mut pipeline = make_pipeline(rx);
 
         let (owner_kp, owner) = make_sender();
+        pipeline.state.write().await.set_balance(&owner, 1_000_000);
         let reg_tx = TxKind::RegisterModel {
             owner,
             model_id: "m1".into(),
@@ -4073,7 +4189,7 @@ mod tests {
             compute_cost: 100,
             min_stake: 0,
             nonce: 0,
-            gas_price: 0,
+            gas_price: 1,
         };
         let batch1 = make_batch(vec![sign(&reg_tx, &owner_kp)]);
         pipeline.execute_batch(&batch1).await.unwrap();
@@ -4082,7 +4198,7 @@ mod tests {
             owner,
             model_id: "m1".into(),
             nonce: 1,
-            gas_price: 0,
+            gas_price: 1,
         };
         let batch2 = make_batch_with_anchor([0xBB; 32], vec![sign(&dereg_tx, &owner_kp)]);
         let result = pipeline.execute_batch(&batch2).await.unwrap();
@@ -4104,6 +4220,13 @@ mod tests {
 
         let (owner_kp, owner) = make_sender();
         let (other_kp, _other) = make_sender();
+        pipeline.state.write().await.set_balance(&owner, 1_000_000);
+        let other_addr = aztibase_core::address_from_pubkey(other_kp.public_key().as_bytes());
+        pipeline
+            .state
+            .write()
+            .await
+            .set_balance(&other_addr, 1_000_000);
         let reg_tx = TxKind::RegisterModel {
             owner,
             model_id: "m1".into(),
@@ -4111,17 +4234,16 @@ mod tests {
             compute_cost: 100,
             min_stake: 0,
             nonce: 0,
-            gas_price: 0,
+            gas_price: 1,
         };
         let batch1 = make_batch(vec![sign(&reg_tx, &owner_kp)]);
         pipeline.execute_batch(&batch1).await.unwrap();
 
-        let other_addr = aztibase_core::address_from_pubkey(other_kp.public_key().as_bytes());
         let dereg_tx = TxKind::DeregisterModel {
             owner: other_addr,
             model_id: "m1".into(),
             nonce: 0,
-            gas_price: 0,
+            gas_price: 1,
         };
         let batch2 = make_batch_with_anchor([0xBB; 32], vec![sign(&dereg_tx, &other_kp)]);
         let result = pipeline.execute_batch(&batch2).await.unwrap();
@@ -4143,7 +4265,12 @@ mod tests {
 
         let (owner_kp, owner) = make_sender();
         let (req_kp, requester) = make_sender();
-        pipeline.state.write().await.set_balance(&requester, 10_000);
+        pipeline.state.write().await.set_balance(&owner, 1_000_000);
+        pipeline
+            .state
+            .write()
+            .await
+            .set_balance(&requester, 1_000_000);
 
         let reg_tx = TxKind::RegisterModel {
             owner,
@@ -4152,7 +4279,7 @@ mod tests {
             compute_cost: 100,
             min_stake: 0,
             nonce: 0,
-            gas_price: 0,
+            gas_price: 1,
         };
         let batch1 = make_batch(vec![sign(&reg_tx, &owner_kp)]);
         pipeline.execute_batch(&batch1).await.unwrap();
@@ -4164,7 +4291,7 @@ mod tests {
             reward: 500,
             deadline_round: 100,
             nonce: 0,
-            gas_price: 0,
+            gas_price: 1,
         };
         let batch2 = make_batch_with_anchor([0xBB; 32], vec![sign(&post_tx, &req_kp)]);
         pipeline.execute_batch(&batch2).await.unwrap();
@@ -4173,7 +4300,7 @@ mod tests {
             owner,
             model_id: "m1".into(),
             nonce: 1,
-            gas_price: 0,
+            gas_price: 1,
         };
         let batch3 = make_batch_with_anchor([0xCC; 32], vec![sign(&dereg_tx, &owner_kp)]);
         let result = pipeline.execute_batch(&batch3).await.unwrap();
@@ -4196,7 +4323,11 @@ mod tests {
         let mut pipeline = make_pipeline(rx);
 
         let (val_kp, validator) = make_sender();
-        pipeline.state.write().await.set_balance(&validator, 10_000);
+        pipeline
+            .state
+            .write()
+            .await
+            .set_balance(&validator, 1_000_000);
 
         let (bls_pk, bls_pop) = make_bls();
         let commit_tx = TxKind::CommitCompute {
@@ -4206,7 +4337,7 @@ mod tests {
             bls_pubkey: bls_pk,
             bls_pop,
             nonce: 0,
-            gas_price: 0,
+            gas_price: 1,
         };
         let batch = make_batch(vec![sign(&commit_tx, &val_kp)]);
         let result = pipeline.execute_batch(&batch).await.unwrap();
@@ -4219,7 +4350,11 @@ mod tests {
                 .unwrap()
                 .contains("not registered")
         );
-        assert_eq!(pipeline.state.read().await.balance(&validator), 10_000);
+        // Gas charged on failure: escrow=75_000, gas_used=21_000, refund=54_000, net=21_000
+        assert_eq!(
+            pipeline.state.read().await.balance(&validator),
+            1_000_000 - 21_000
+        );
     }
 
     #[tokio::test]
@@ -4229,7 +4364,12 @@ mod tests {
 
         let (val_kp, validator) = make_sender();
         let (owner_kp, owner) = make_sender();
-        pipeline.state.write().await.set_balance(&validator, 10_000);
+        pipeline
+            .state
+            .write()
+            .await
+            .set_balance(&validator, 1_000_000);
+        pipeline.state.write().await.set_balance(&owner, 1_000_000);
 
         let reg_tx = TxKind::RegisterModel {
             owner,
@@ -4238,7 +4378,7 @@ mod tests {
             compute_cost: 100,
             min_stake: 0,
             nonce: 0,
-            gas_price: 0,
+            gas_price: 1,
         };
         let batch0 = make_batch(vec![sign(&reg_tx, &owner_kp)]);
         pipeline.execute_batch(&batch0).await.unwrap();
@@ -4253,7 +4393,7 @@ mod tests {
             bls_pubkey: bls_pk,
             bls_pop: wrong_pop,
             nonce: 0,
-            gas_price: 0,
+            gas_price: 1,
         };
         let batch = make_batch_with_anchor([0xBB; 32], vec![sign(&commit_tx, &val_kp)]);
         let result = pipeline.execute_batch(&batch).await.unwrap();
@@ -4266,7 +4406,11 @@ mod tests {
                 .unwrap()
                 .contains("proof-of-possession")
         );
-        assert_eq!(pipeline.state.read().await.balance(&validator), 10_000);
+        // Gas charged on failure: escrow=75_000, gas_used=21_000, refund=54_000, net=21_000
+        assert_eq!(
+            pipeline.state.read().await.balance(&validator),
+            1_000_000 - 21_000
+        );
     }
 
     #[tokio::test]
@@ -4275,7 +4419,11 @@ mod tests {
         let mut pipeline = make_pipeline(rx);
 
         let (val_kp, validator) = make_sender();
-        pipeline.state.write().await.set_balance(&validator, 10_000);
+        pipeline
+            .state
+            .write()
+            .await
+            .set_balance(&validator, 1_000_000);
 
         let commit_tx = TxKind::CommitCompute {
             validator,
@@ -4284,7 +4432,7 @@ mod tests {
             bls_pubkey: vec![0xFF; 48],
             bls_pop: vec![0xFF; 96],
             nonce: 0,
-            gas_price: 0,
+            gas_price: 1,
         };
         let batch = make_batch(vec![sign(&commit_tx, &val_kp)]);
         let result = pipeline.execute_batch(&batch).await.unwrap();
@@ -4309,8 +4457,17 @@ mod tests {
         let (owner_kp, owner) = make_sender();
         let (val_kp, validator) = make_sender();
         let (req_kp, requester) = make_sender();
-        pipeline.state.write().await.set_balance(&validator, 10_000);
-        pipeline.state.write().await.set_balance(&requester, 10_000);
+        pipeline.state.write().await.set_balance(&owner, 1_000_000);
+        pipeline
+            .state
+            .write()
+            .await
+            .set_balance(&validator, 1_000_000);
+        pipeline
+            .state
+            .write()
+            .await
+            .set_balance(&requester, 1_000_000);
 
         let reg_tx = TxKind::RegisterModel {
             owner,
@@ -4319,7 +4476,7 @@ mod tests {
             compute_cost: 100,
             min_stake: 0,
             nonce: 0,
-            gas_price: 0,
+            gas_price: 1,
         };
         let batch0 = make_batch(vec![sign(&reg_tx, &owner_kp)]);
         pipeline.execute_batch(&batch0).await.unwrap();
@@ -4332,7 +4489,7 @@ mod tests {
             bls_pubkey: bls_pk,
             bls_pop,
             nonce: 0,
-            gas_price: 0,
+            gas_price: 1,
         };
         let batch1 = make_batch_with_anchor([0xBB; 32], vec![sign(&commit_tx, &val_kp)]);
         pipeline.execute_batch(&batch1).await.unwrap();
@@ -4344,7 +4501,7 @@ mod tests {
             reward: 500,
             deadline_round: 100,
             nonce: 0,
-            gas_price: 0,
+            gas_price: 1,
         };
         let batch2 = make_batch_with_anchor([0xCC; 32], vec![sign(&post_tx, &req_kp)]);
         let result = pipeline.execute_batch(&batch2).await.unwrap();

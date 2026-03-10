@@ -21,6 +21,24 @@ Entries are prepended (newest first).
 
 ## Entries
 
+### 2026-03-10 -- blockchain-architect / smart-contract-engineer / security-engineer -- Sprint 041 Complete (M9-S2: Gas Price Enforcement & Transaction Validation)
+**Task:** Sprint 041: Close gas-price bypass vulnerability — enforce gas_price >= base_fee, reject sub-base-fee txs, add gas estimates for all 19 TxKind variants
+**Sprint:** Sprint 041, Phases 1-4
+**Git Ref:** pending
+**Files Changed:**
+- crates/aztibase-node/src/pipeline.rs: Replace gas_price==0 bypass with gas_price < base_fee rejection (error receipt + nonce increment), all ~66 test instances updated gas_price 0→1, test balances increased to cover gas escrow, balance/fee assertions recalculated
+- crates/aztibase-node/src/integration.rs: All ~42 test instances updated gas_price 0→1, balances increased to 10M+ to cover gas escrow, balance assertions recalculated with gas deductions
+- crates/aztibase-execution/src/fee.rs: estimate_gas expanded from 7 to 19 TxKind variants (added RegisterModel 100K, PostTask 42K, SubmitAttestation 50K, CommitCompute 75K, DeregisterCompute 50K, DeregisterModel 60K, CreateProposal 100K, CastVote 40K, Stake/Unstake/Delegate/Undelegate 60K each)
+- crates/aztibase-execution/src/routing.rs: test gas_price 0→1 (16 occurrences)
+- crates/aztibase-execution/src/tx.rs: test gas_price 0→1 (2 occurrences)
+- crates/aztibase-rpc/src/server.rs: test gas_price 0→1 (1 occurrence)
+- crates/aztibase-node/src/mempool.rs: test gas_price 0→1 (3 occurrences), min_gas_price threshold adjusted
+- blockchain-project/sprints/SPRINT-041.md: sprint plan
+**Review Notes:** SECURITY FIX: Previously, txs with gas_price=0 bypassed escrow entirely and executed for free. Now all txs are validated against current base_fee before escrow. Txs below base_fee get failure receipt with "gas price too low" error and nonce increment. No fee-free execution path remains. All ~120+ test gas_price values updated, test balances adjusted for gas escrow coverage.
+**Security Flags:** 0 ELEVATED, 0 MEDIUM. Fee-free execution vulnerability CLOSED. All txs now pay gas fees. No bypass path.
+
+---
+
 ### 2026-03-10 -- blockchain-architect / smart-contract-engineer / node-engineer / security-engineer -- Sprint 040 Complete (M9-S1: u64→u128 Balance Migration)
 **Task:** Sprint 040: Migrate all monetary values (balance, stake, fee, value, amount, reward) from u64 to u128 across entire codebase
 **Sprint:** Sprint 040, Phases 1-4

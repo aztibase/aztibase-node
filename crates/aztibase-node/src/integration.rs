@@ -64,7 +64,7 @@ mod tests {
         let anchor = hash(b"batch_xfer_e2e");
 
         let shared = pipeline.shared_state();
-        shared.write().await.set_balance(&alice, 5000);
+        shared.write().await.set_balance(&alice, 1_000_000);
 
         let batch = make_batch(
             anchor,
@@ -75,7 +75,7 @@ mod tests {
                         to: bob,
                         value: 1200,
                         nonce: 0,
-                        gas_price: 0,
+                        gas_price: 1,
                     },
                     &alice_kp,
                 ),
@@ -85,7 +85,7 @@ mod tests {
                         to: bob,
                         value: 800,
                         nonce: 1,
-                        gas_price: 0,
+                        gas_price: 1,
                     },
                     &alice_kp,
                 ),
@@ -99,7 +99,7 @@ mod tests {
 
         let shared = pipeline.shared_state();
         let state = shared.read().await;
-        assert_eq!(state.balance(&alice), 3000);
+        assert_eq!(state.balance(&alice), 1_000_000 - 2000 - 42_000);
         assert_eq!(state.balance(&bob), 2000);
         assert_eq!(state.nonce(&alice), 2);
         assert_ne!(result.state_root, [0u8; 32]);
@@ -109,7 +109,7 @@ mod tests {
 
         let store2 = StateStore::open(path.to_str().unwrap()).unwrap();
         let loaded = load_state(&store2).unwrap();
-        assert_eq!(loaded.balance(&alice), 3000);
+        assert_eq!(loaded.balance(&alice), 1_000_000 - 2000 - 42_000);
         assert_eq!(loaded.balance(&bob), 2000);
 
         let root = get_batch_root(&store2, &anchor).unwrap();
@@ -128,6 +128,9 @@ mod tests {
         let mut pipeline = ExecutionPipeline::with_storage(store, rx);
 
         let (deployer_kp, deployer) = make_sender();
+
+        let shared = pipeline.shared_state();
+        shared.write().await.set_balance(&deployer, 10_000_000);
 
         let wasm = wat::parse_str(
             r#"
@@ -155,7 +158,7 @@ mod tests {
                     code: wasm,
                     nonce: 0,
                     gas_limit: 1_000_000,
-                    gas_price: 0,
+                    gas_price: 1,
                 },
                 &deployer_kp,
             )],
@@ -183,7 +186,7 @@ mod tests {
                     args_data: vec![],
                     nonce: 1,
                     gas_limit: 1_000_000,
-                    gas_price: 0,
+                    gas_price: 1,
                 },
                 &deployer_kp,
             )],
@@ -215,7 +218,7 @@ mod tests {
         let (alice_kp, alice) = make_sender();
         let bob = [2u8; 32];
         let shared = pipeline.shared_state();
-        shared.write().await.set_balance(&alice, 10_000);
+        shared.write().await.set_balance(&alice, 1_000_000);
 
         let anchor = hash(b"finality_batch");
         let batch = make_batch(
@@ -226,7 +229,7 @@ mod tests {
                     to: bob,
                     value: 3000,
                     nonce: 0,
-                    gas_price: 0,
+                    gas_price: 1,
                 },
                 &alice_kp,
             )],
@@ -280,7 +283,7 @@ mod tests {
             let (_tx, rx) = mpsc::channel(16);
             let mut pipeline = ExecutionPipeline::with_storage(store, rx);
             let shared = pipeline.shared_state();
-            shared.write().await.set_balance(&alice, 10_000);
+            shared.write().await.set_balance(&alice, 1_000_000);
 
             let batch = make_batch(
                 anchor,
@@ -289,9 +292,9 @@ mod tests {
                         &TxKind::Transfer {
                             from: alice,
                             to: bob,
-                            value: 4000,
+                            value: 400_000,
                             nonce: 0,
-                            gas_price: 0,
+                            gas_price: 1,
                         },
                         &alice_kp,
                     ),
@@ -299,9 +302,9 @@ mod tests {
                         &TxKind::Transfer {
                             from: alice,
                             to: bob,
-                            value: 1000,
+                            value: 100_000,
                             nonce: 1,
-                            gas_price: 0,
+                            gas_price: 1,
                         },
                         &alice_kp,
                     ),
@@ -319,8 +322,8 @@ mod tests {
 
             let shared = pipeline.shared_state();
             let state = shared.read().await;
-            assert_eq!(state.balance(&alice), 5000);
-            assert_eq!(state.balance(&bob), 5000);
+            assert_eq!(state.balance(&alice), 1_000_000 - 500_000 - 42_000);
+            assert_eq!(state.balance(&bob), 500_000);
             assert_eq!(state.nonce(&alice), 2);
             assert_eq!(state.state_root(), state_root);
             drop(state);
@@ -334,7 +337,7 @@ mod tests {
                         to: alice,
                         value: 2000,
                         nonce: 0,
-                        gas_price: 0,
+                        gas_price: 1,
                     },
                     &bob_kp,
                 )],
@@ -345,8 +348,8 @@ mod tests {
 
             let shared = pipeline.shared_state();
             let state = shared.read().await;
-            assert_eq!(state.balance(&alice), 7000);
-            assert_eq!(state.balance(&bob), 3000);
+            assert_eq!(state.balance(&alice), 460_000);
+            assert_eq!(state.balance(&bob), 477_000);
         }
 
         cleanup(&path);
@@ -428,7 +431,7 @@ mod tests {
             to: [0xBB; 32],
             value: 500,
             nonce: 0,
-            gas_price: 0,
+            gas_price: 1,
         };
         engine_inputs[0]
             .send(ConsensusInput::Transaction(sign(&transfer, &sender_kp)))
@@ -499,7 +502,7 @@ mod tests {
                 .shared_state()
                 .write()
                 .await
-                .set_balance(&sender, 10_000);
+                .set_balance(&sender, 1_000_000);
 
             let result = pipeline.execute_batch(&batches[0]).await.unwrap();
             state_roots.push(result.state_root);
@@ -531,7 +534,7 @@ mod tests {
         let (alice_kp, alice) = make_sender();
         let bob = [2u8; 32];
         let shared = pipeline.shared_state();
-        shared.write().await.set_balance(&alice, 10_000);
+        shared.write().await.set_balance(&alice, 1_100_000);
 
         let anchor = hash(b"receipt_test_batch");
         let batch = make_batch(
@@ -543,7 +546,7 @@ mod tests {
                         to: bob,
                         value: 3000,
                         nonce: 0,
-                        gas_price: 0,
+                        gas_price: 1,
                     },
                     &alice_kp,
                 ),
@@ -551,9 +554,9 @@ mod tests {
                     &TxKind::Transfer {
                         from: alice,
                         to: bob,
-                        value: 99_999,
+                        value: 1_056_000,
                         nonce: 1,
-                        gas_price: 0,
+                        gas_price: 1,
                     },
                     &alice_kp,
                 ),
@@ -562,18 +565,19 @@ mod tests {
 
         let result = pipeline.execute_batch(&batch).await.unwrap();
         assert_eq!(result.receipts.len(), 2);
-        assert!(result.receipts[0].success);
-        assert!(!result.receipts[1].success);
 
-        let r0 = aztibase_execution::get_receipt(&store, &result.receipts[0].tx_hash)
+        let success_receipt = result.receipts.iter().find(|r| r.success).unwrap();
+        let fail_receipt = result.receipts.iter().find(|r| !r.success).unwrap();
+
+        let r0 = aztibase_execution::get_receipt(&store, &success_receipt.tx_hash)
             .unwrap()
-            .expect("receipt 0 should be persisted");
+            .expect("success receipt should be persisted");
         assert!(r0.success);
         assert_eq!(r0.gas_used, 21_000);
 
-        let r1 = aztibase_execution::get_receipt(&store, &result.receipts[1].tx_hash)
+        let r1 = aztibase_execution::get_receipt(&store, &fail_receipt.tx_hash)
             .unwrap()
-            .expect("receipt 1 should be persisted");
+            .expect("fail receipt should be persisted");
         assert!(!r1.success);
         assert!(r1.error.as_deref().unwrap().contains("insufficient"));
 
@@ -740,7 +744,7 @@ mod tests {
             .shared_state()
             .write()
             .await
-            .set_balance(&alice, 10_000);
+            .set_balance(&alice, 1_000_000);
 
         let anchor = hash(b"finality_genesis_batch");
         let batch = make_batch(
@@ -751,7 +755,7 @@ mod tests {
                     to: bob,
                     value: 3000,
                     nonce: 0,
-                    gas_price: 0,
+                    gas_price: 1,
                 },
                 &alice_kp,
             )],
@@ -993,10 +997,10 @@ mod tests {
         let per_transfer = 100u128;
 
         let shared = pipeline.shared_state();
-        shared
-            .write()
-            .await
-            .set_balance(&alice, transfer_count as u128 * per_transfer + 10_000);
+        shared.write().await.set_balance(
+            &alice,
+            transfer_count as u128 * per_transfer + transfer_count as u128 * 21_000 + 10_000,
+        );
 
         let txs: Vec<Vec<u8>> = (0..transfer_count)
             .map(|i| {
@@ -1006,7 +1010,7 @@ mod tests {
                         to: bob,
                         value: per_transfer,
                         nonce: i,
-                        gas_price: 0,
+                        gas_price: 1,
                     },
                     &alice_kp,
                 )
@@ -1042,7 +1046,7 @@ mod tests {
         let anchor = hash(b"nonce_gap_batch");
 
         let shared = pipeline.shared_state();
-        shared.write().await.set_balance(&alice, 10_000);
+        shared.write().await.set_balance(&alice, 1_000_000);
 
         let batch = make_batch(
             anchor,
@@ -1053,7 +1057,7 @@ mod tests {
                         to: bob,
                         value: 100,
                         nonce: 0,
-                        gas_price: 0,
+                        gas_price: 1,
                     },
                     &alice_kp,
                 ),
@@ -1063,7 +1067,7 @@ mod tests {
                         to: bob,
                         value: 200,
                         nonce: 2, // gap: skipped nonce 1
-                        gas_price: 0,
+                        gas_price: 1,
                     },
                     &alice_kp,
                 ),
@@ -1082,7 +1086,7 @@ mod tests {
 
         let shared = pipeline.shared_state();
         let state = shared.read().await;
-        assert_eq!(state.balance(&alice), 9900);
+        assert_eq!(state.balance(&alice), 1_000_000 - 100 - 21_000);
         assert_eq!(state.balance(&bob), 100);
 
         cleanup(&path);
@@ -1112,7 +1116,7 @@ mod tests {
                     to: bob,
                     value: 10_000,
                     nonce: 0,
-                    gas_price: 0,
+                    gas_price: 1,
                 },
                 &alice_kp,
             )],
@@ -1152,6 +1156,9 @@ mod tests {
         let anchor = hash(b"register_model_batch");
         let fingerprint = hash(b"model-weights-v1");
 
+        let shared = pipeline.shared_state();
+        shared.write().await.set_balance(&owner, 10_000_000);
+
         let batch = make_batch(
             anchor,
             vec![sign(
@@ -1162,7 +1169,7 @@ mod tests {
                     compute_cost: 1000,
                     min_stake: 500,
                     nonce: 0,
-                    gas_price: 0,
+                    gas_price: 1,
                 },
                 &owner_kp,
             )],
@@ -1206,7 +1213,11 @@ mod tests {
         let fingerprint = hash(b"model-weights-v2");
 
         let shared = pipeline.shared_state();
-        shared.write().await.set_balance(&val_addr, 50_000);
+        {
+            let mut s = shared.write().await;
+            s.set_balance(&val_addr, 10_000_000);
+            s.set_balance(&owner, 10_000_000);
+        }
 
         // First register a model so CommitCompute can reference it
         let reg_anchor = hash(b"reg_for_commit");
@@ -1220,7 +1231,7 @@ mod tests {
                     compute_cost: 2000,
                     min_stake: 1000,
                     nonce: 0,
-                    gas_price: 0,
+                    gas_price: 1,
                 },
                 &owner_kp,
             )],
@@ -1241,7 +1252,7 @@ mod tests {
                     bls_pubkey: bls_kp.public_key().as_bytes().to_vec(),
                     bls_pop: bls_kp.proof_of_possession().as_bytes().to_vec(),
                     nonce: 0,
-                    gas_price: 0,
+                    gas_price: 1,
                 },
                 &val_kp,
             )],
@@ -1254,7 +1265,10 @@ mod tests {
 
         let shared = pipeline.shared_state();
         let state = shared.read().await;
-        assert_eq!(state.balance(&val_addr), 50_000 - committed_stake);
+        assert_eq!(
+            state.balance(&val_addr),
+            10_000_000 - committed_stake - 75_000
+        );
         assert_eq!(state.nonce(&val_addr), 1);
 
         let store = pipeline.shared_compute_commitments();
@@ -1283,7 +1297,11 @@ mod tests {
         let fingerprint = hash(b"task-model-weights");
 
         let shared = pipeline.shared_state();
-        shared.write().await.set_balance(&requester, 100_000);
+        {
+            let mut s = shared.write().await;
+            s.set_balance(&requester, 10_000_000);
+            s.set_balance(&owner, 10_000_000);
+        }
 
         // Register model first
         let reg_anchor = hash(b"reg_for_task");
@@ -1297,7 +1315,7 @@ mod tests {
                     compute_cost: 500,
                     min_stake: 100,
                     nonce: 0,
-                    gas_price: 0,
+                    gas_price: 1,
                 },
                 &owner_kp,
             )],
@@ -1318,7 +1336,7 @@ mod tests {
                     reward,
                     deadline_round: 100,
                     nonce: 0,
-                    gas_price: 0,
+                    gas_price: 1,
                 },
                 &req_kp,
             )],
@@ -1332,7 +1350,7 @@ mod tests {
 
         let shared = pipeline.shared_state();
         let state = shared.read().await;
-        assert_eq!(state.balance(&requester), 100_000 - reward);
+        assert_eq!(state.balance(&requester), 10_000_000 - reward - 42_000);
         assert_eq!(state.nonce(&requester), 1);
 
         let pending = pipeline
@@ -1364,8 +1382,9 @@ mod tests {
         let shared = pipeline.shared_state();
         {
             let mut s = shared.write().await;
-            s.set_balance(&requester, 100_000);
-            s.set_balance(&val_addr, 50_000);
+            s.set_balance(&requester, 10_000_000);
+            s.set_balance(&val_addr, 10_000_000);
+            s.set_balance(&owner, 10_000_000);
         }
 
         // 1) Register model
@@ -1380,7 +1399,7 @@ mod tests {
                         compute_cost: 500,
                         min_stake: 100,
                         nonce: 0,
-                        gas_price: 0,
+                        gas_price: 1,
                     },
                     &owner_kp,
                 )],
@@ -1401,7 +1420,7 @@ mod tests {
                         bls_pubkey: bls_kp.public_key().as_bytes().to_vec(),
                         bls_pop: bls_kp.proof_of_possession().as_bytes().to_vec(),
                         nonce: 0,
-                        gas_price: 0,
+                        gas_price: 1,
                     },
                     &val_kp,
                 )],
@@ -1422,7 +1441,7 @@ mod tests {
                         reward: 10_000,
                         deadline_round: 100,
                         nonce: 0,
-                        gas_price: 0,
+                        gas_price: 1,
                     },
                     &req_kp,
                 )],
@@ -1456,7 +1475,7 @@ mod tests {
                         compute_units,
                         signature,
                         nonce: 1,
-                        gas_price: 0,
+                        gas_price: 1,
                     },
                     &val_kp,
                 )],
@@ -1498,9 +1517,10 @@ mod tests {
         let shared = pipeline.shared_state();
         {
             let mut s = shared.write().await;
-            s.set_balance(&requester, 200_000);
-            s.set_balance(&v1_addr, 50_000);
-            s.set_balance(&v2_addr, 50_000);
+            s.set_balance(&requester, 10_000_000);
+            s.set_balance(&v1_addr, 10_000_000);
+            s.set_balance(&v2_addr, 10_000_000);
+            s.set_balance(&owner, 10_000_000);
         }
 
         // 1) Register model
@@ -1515,7 +1535,7 @@ mod tests {
                         compute_cost: 500,
                         min_stake: 100,
                         nonce: 0,
-                        gas_price: 0,
+                        gas_price: 1,
                     },
                     &owner_kp,
                 )],
@@ -1535,7 +1555,7 @@ mod tests {
                         bls_pubkey: bls1.public_key().as_bytes().to_vec(),
                         bls_pop: bls1.proof_of_possession().as_bytes().to_vec(),
                         nonce: 0,
-                        gas_price: 0,
+                        gas_price: 1,
                     },
                     &v1_kp,
                 )],
@@ -1554,7 +1574,7 @@ mod tests {
                         bls_pubkey: bls2.public_key().as_bytes().to_vec(),
                         bls_pop: bls2.proof_of_possession().as_bytes().to_vec(),
                         nonce: 0,
-                        gas_price: 0,
+                        gas_price: 1,
                     },
                     &v2_kp,
                 )],
@@ -1574,7 +1594,7 @@ mod tests {
                         reward,
                         deadline_round: 100,
                         nonce: 0,
-                        gas_price: 0,
+                        gas_price: 1,
                     },
                     &req_kp,
                 )],
@@ -1589,7 +1609,7 @@ mod tests {
             let state = shared.read().await;
             state.balance(&requester)
         };
-        assert_eq!(requester_bal_after_post, 200_000 - reward);
+        assert_eq!(requester_bal_after_post, 10_000_000 - reward - 42_000);
 
         // 4) Submit attestation — both validators submit to reach quorum
         let result_hash = hash(b"life result");
@@ -1622,7 +1642,7 @@ mod tests {
                             compute_units,
                             signature: sig1,
                             nonce: 1,
-                            gas_price: 0,
+                            gas_price: 1,
                         },
                         &v1_kp,
                     ),
@@ -1634,7 +1654,7 @@ mod tests {
                             compute_units,
                             signature: sig2,
                             nonce: 1,
-                            gas_price: 0,
+                            gas_price: 1,
                         },
                         &v2_kp,
                     ),
@@ -1662,7 +1682,7 @@ mod tests {
             let v1_bal = state.balance(&v1_addr);
             let v2_bal = state.balance(&v2_addr);
             assert!(
-                v1_bal > 45_000 || v2_bal > 45_000,
+                v1_bal > 9_000_000 || v2_bal > 9_000_000,
                 "At least one validator should receive payout: v1={v1_bal}, v2={v2_bal}"
             );
         }
@@ -1688,7 +1708,11 @@ mod tests {
         let committed_stake = 5000u128;
 
         let shared = pipeline.shared_state();
-        shared.write().await.set_balance(&val_addr, 50_000);
+        {
+            let mut s = shared.write().await;
+            s.set_balance(&val_addr, 10_000_000);
+            s.set_balance(&owner, 10_000_000);
+        }
 
         // Register model
         pipeline
@@ -1702,7 +1726,7 @@ mod tests {
                         compute_cost: 500,
                         min_stake: 100,
                         nonce: 0,
-                        gas_price: 0,
+                        gas_price: 1,
                     },
                     &owner_kp,
                 )],
@@ -1722,7 +1746,7 @@ mod tests {
                         bls_pubkey: bls_kp.public_key().as_bytes().to_vec(),
                         bls_pop: bls_kp.proof_of_possession().as_bytes().to_vec(),
                         nonce: 0,
-                        gas_price: 0,
+                        gas_price: 1,
                     },
                     &val_kp,
                 )],
@@ -1735,7 +1759,7 @@ mod tests {
             let state = shared.read().await;
             state.balance(&val_addr)
         };
-        assert_eq!(bal_after_commit, 50_000 - committed_stake);
+        assert_eq!(bal_after_commit, 10_000_000 - committed_stake - 75_000);
 
         // Deregister compute — should refund stake
         let r = pipeline
@@ -1745,7 +1769,7 @@ mod tests {
                     &TxKind::DeregisterCompute {
                         validator: val_addr,
                         nonce: 1,
-                        gas_price: 0,
+                        gas_price: 1,
                     },
                     &val_kp,
                 )],
@@ -1757,7 +1781,7 @@ mod tests {
 
         let shared = pipeline.shared_state();
         let state = shared.read().await;
-        assert_eq!(state.balance(&val_addr), 50_000);
+        assert_eq!(state.balance(&val_addr), 10_000_000 - 75_000 - 50_000);
 
         let store = pipeline.shared_compute_commitments();
         let guard = store.read().await;
@@ -1780,6 +1804,9 @@ mod tests {
         let (owner_kp, owner) = make_sender();
         let fingerprint = hash(b"dup-model-weights");
 
+        let shared = pipeline.shared_state();
+        shared.write().await.set_balance(&owner, 10_000_000);
+
         // Register model
         let r1 = pipeline
             .execute_batch(&make_batch(
@@ -1792,7 +1819,7 @@ mod tests {
                         compute_cost: 1000,
                         min_stake: 500,
                         nonce: 0,
-                        gas_price: 0,
+                        gas_price: 1,
                     },
                     &owner_kp,
                 )],
@@ -1813,7 +1840,7 @@ mod tests {
                         compute_cost: 2000,
                         min_stake: 100,
                         nonce: 1,
-                        gas_price: 0,
+                        gas_price: 1,
                     },
                     &owner_kp,
                 )],
@@ -1853,7 +1880,11 @@ mod tests {
         let fingerprint = hash(b"blocked-model");
 
         let shared = pipeline.shared_state();
-        shared.write().await.set_balance(&requester, 100_000);
+        {
+            let mut s = shared.write().await;
+            s.set_balance(&requester, 10_000_000);
+            s.set_balance(&owner, 10_000_000);
+        }
 
         // Register model
         pipeline
@@ -1867,7 +1898,7 @@ mod tests {
                         compute_cost: 500,
                         min_stake: 100,
                         nonce: 0,
-                        gas_price: 0,
+                        gas_price: 1,
                     },
                     &owner_kp,
                 )],
@@ -1887,7 +1918,7 @@ mod tests {
                         reward: 1000,
                         deadline_round: 100,
                         nonce: 0,
-                        gas_price: 0,
+                        gas_price: 1,
                     },
                     &req_kp,
                 )],
@@ -1904,7 +1935,7 @@ mod tests {
                         owner,
                         model_id: "blocked_model".into(),
                         nonce: 1,
-                        gas_price: 0,
+                        gas_price: 1,
                     },
                     &owner_kp,
                 )],
@@ -1939,7 +1970,11 @@ mod tests {
         let fingerprint = hash(b"mixed-model");
 
         let shared = pipeline.shared_state();
-        shared.write().await.set_balance(&alice, 100_000);
+        {
+            let mut s = shared.write().await;
+            s.set_balance(&alice, 10_000_000);
+            s.set_balance(&owner, 10_000_000);
+        }
 
         let wasm = wat::parse_str(
             r#"
@@ -1960,7 +1995,7 @@ mod tests {
                         to: bob,
                         value: 5000,
                         nonce: 0,
-                        gas_price: 0,
+                        gas_price: 1,
                     },
                     &alice_kp,
                 ),
@@ -1970,7 +2005,7 @@ mod tests {
                         code: wasm,
                         nonce: 1,
                         gas_limit: 1_000_000,
-                        gas_price: 0,
+                        gas_price: 1,
                     },
                     &alice_kp,
                 ),
@@ -1982,7 +2017,7 @@ mod tests {
                         compute_cost: 500,
                         min_stake: 100,
                         nonce: 0,
-                        gas_price: 0,
+                        gas_price: 1,
                     },
                     &owner_kp,
                 ),

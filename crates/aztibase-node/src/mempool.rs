@@ -419,7 +419,7 @@ mod tests {
             to: [2u8; 32],
             value: 100,
             nonce,
-            gas_price: 0,
+            gas_price: 1,
         };
         SignedTx::new(tx.encode(), kp).encode()
     }
@@ -466,9 +466,9 @@ mod tests {
     fn insert_checked_rejects_below_base_fee() {
         let mut pool = Mempool::new(100);
         let kp = Keypair::generate();
-        // gas_price=0 < min_gas_price=1, should be rejected
+        // gas_price=1 < min_gas_price=2, should be rejected
         let tx = make_signed_transfer(&kp, 0);
-        assert!(!pool.insert_checked(tx, |_| 0, 1));
+        assert!(!pool.insert_checked(tx, |_| 0, 2));
     }
 
     #[test]
@@ -496,7 +496,7 @@ mod tests {
             to: [2u8; 32],
             value: 100,
             nonce: 0,
-            gas_price: 0,
+            gas_price: 1,
         };
         let signed = SignedTx::new(transfer.encode(), &kp).encode();
         assert_eq!(extract_priority(&signed), 1);

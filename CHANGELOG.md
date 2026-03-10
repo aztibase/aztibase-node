@@ -5,6 +5,20 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ---
 
+## [M9-S2] -- Gas Price Enforcement & Transaction Validation (Sprint 041)
+
+### Fixed
+- **SECURITY**: Closed fee-free execution vulnerability — txs with gas_price=0 previously bypassed escrow entirely (2026-03-10)
+
+### Changed
+- Pipeline: all transactions now validated against current base_fee before escrow (2026-03-10)
+- Txs with gas_price < base_fee rejected with "gas price too low" error receipt (2026-03-10)
+- `estimate_gas()` expanded from 7 to all 19 TxKind variants (2026-03-10)
+- All ~120+ test gas_price values updated from 0 to 1, test balances adjusted for gas escrow (2026-03-10)
+- 766 tests pass, 0 clippy warnings, fmt clean (2026-03-10)
+
+---
+
 ## [M9-S1] -- u64→u128 Balance Migration (Sprint 040)
 
 ### Changed

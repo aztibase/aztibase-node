@@ -2063,7 +2063,7 @@ mod tests {
             to: [2u8; 32],
             value: 100,
             nonce: 0,
-            gas_price: 0,
+            gas_price: 1,
         };
         let signed = aztibase_execution::SignedTx::new(tx.encode(), &kp);
         let tx_hex = hex::encode(signed.encode());

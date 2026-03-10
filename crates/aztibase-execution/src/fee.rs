@@ -113,6 +113,18 @@ impl BaseFeeCalculator {
             0x05 => 50_000,  // EvmCall
             0x06 => 100_000, // AiInfer
             0x07 => 53_000,  // CreateAgent
+            0x08 => 100_000, // RegisterModel
+            0x09 => 42_000,  // PostTask
+            0x0A => 50_000,  // SubmitAttestation
+            0x0B => 75_000,  // CommitCompute
+            0x0C => 50_000,  // DeregisterCompute
+            0x0D => 60_000,  // DeregisterModel
+            0x0E => 100_000, // CreateProposal
+            0x0F => 40_000,  // CastVote
+            0x10 => 60_000,  // Stake
+            0x11 => 60_000,  // Unstake
+            0x12 => 60_000,  // Delegate
+            0x13 => 60_000,  // Undelegate
             _ => 21_000,
         }
     }

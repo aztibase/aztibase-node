@@ -2,8 +2,8 @@
 
 **Last Updated:** 2026-03-10
 **Updated By:** consensus-engineer / node-engineer
-**Current Phase:** M9 -- Mainnet Prep (Sprint 1 COMPLETE)
-**Current Sprint:** Sprint 040 -- COMPLETE (u64→u128 Balance Migration)
+**Current Phase:** M9 -- Mainnet Prep (Sprint 2 COMPLETE)
+**Current Sprint:** Sprint 041 -- COMPLETE (Gas Price Enforcement & Transaction Validation)
 
 ---
 
