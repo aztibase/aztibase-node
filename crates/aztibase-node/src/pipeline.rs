@@ -2,7 +2,8 @@ use std::collections::{HashMap, HashSet, VecDeque};
 use std::sync::Arc;
 
 use aztibase_consensus::{
-    AttestationAggregator, CommittedBatch, ComputeCommitmentStore, InferenceAttestation,
+    AttestationAggregator, CHECKPOINT_INTERVAL, Checkpoint, CommittedBatch, ComputeCommitmentStore,
+    InferenceAttestation,
 };
 use aztibase_core::{Hash, hash};
 use aztibase_execution::{
@@ -2229,6 +2230,23 @@ impl ExecutionPipeline {
 
             let tx_hashes: Vec<[u8; 32]> = receipts.iter().map(|r| r.tx_hash).collect();
             let _ = aztibase_execution::store_batch_txs(store, &batch.anchor_hash, &tx_hashes);
+
+            if batch_number > 0 && batch_number.is_multiple_of(CHECKPOINT_INTERVAL) {
+                let now_ms = std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .map(|d| d.as_millis() as u64)
+                    .unwrap_or(0);
+                let cp = Checkpoint::new(batch_number, state_root, None, now_ms);
+                if let Ok(data) = postcard::to_allocvec(&cp) {
+                    let _ = aztibase_execution::store_checkpoint_raw(store, batch_number, &data);
+                    tracing::info!(
+                        batch = batch_number,
+                        state_root = %format!("{:02x}{:02x}{:02x}{:02x}",
+                            state_root[0], state_root[1], state_root[2], state_root[3]),
+                        "Weak subjectivity checkpoint stored"
+                    );
+                }
+            }
 
             for tx in &routed {
                 let h = compute_tx_hash(tx);

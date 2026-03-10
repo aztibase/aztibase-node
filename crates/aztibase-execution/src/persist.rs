@@ -1,6 +1,7 @@
 use aztibase_storage::{
-    ACCOUNTS_TABLE, BATCH_INDEX_TABLE, BATCH_ROOTS_TABLE, BATCH_TXS_TABLE, CONTRACT_CODE_TABLE,
-    CONTRACT_STORAGE_TABLE, STATE_TABLE, StateStore, StorageResult, TX_TABLE, TableDef,
+    ACCOUNTS_TABLE, BATCH_INDEX_TABLE, BATCH_ROOTS_TABLE, BATCH_TXS_TABLE, CHECKPOINTS_TABLE,
+    CONTRACT_CODE_TABLE, CONTRACT_STORAGE_TABLE, STATE_TABLE, StateStore, StorageResult, TX_TABLE,
+    TableDef,
 };
 
 use crate::state::{AccountState, AccountType};
@@ -275,6 +276,26 @@ pub fn get_transaction(store: &StateStore, tx_hash: &[u8; 32]) -> StorageResult<
     store.get(TX_TABLE, tx_hash)
 }
 
+/// Store a weak subjectivity checkpoint keyed by batch index (raw bytes).
+pub fn store_checkpoint_raw(
+    store: &StateStore,
+    batch_index: u64,
+    data: &[u8],
+) -> StorageResult<()> {
+    store.put(CHECKPOINTS_TABLE, &batch_index.to_be_bytes(), data)
+}
+
+/// Retrieve raw checkpoint bytes by batch index.
+pub fn get_checkpoint_raw(store: &StateStore, batch_index: u64) -> StorageResult<Option<Vec<u8>>> {
+    store.get(CHECKPOINTS_TABLE, &batch_index.to_be_bytes())
+}
+
+/// Retrieve the most recent checkpoint (highest batch index) as raw bytes.
+pub fn latest_checkpoint_raw(store: &StateStore) -> StorageResult<Option<Vec<u8>>> {
+    let entries = store.iter(CHECKPOINTS_TABLE)?;
+    Ok(entries.last().map(|(_, v)| v.clone()))
+}
+
 /// Query a range of batch numbers, returning (batch_number, anchor_hash) pairs.
 /// Enforces a hard limit of `max_results` entries per call.
 pub fn get_batch_range(
@@ -546,6 +567,39 @@ mod tests {
         assert_eq!(loaded, tx_data);
 
         assert!(get_transaction(&store, &[0xEE; 32]).unwrap().is_none());
+
+        cleanup(&path);
+    }
+
+    #[test]
+    fn checkpoint_store_and_retrieve() {
+        let path = test_db_path();
+        let store = StateStore::open(path.to_str().unwrap()).unwrap();
+
+        let data = b"checkpoint-data";
+        store_checkpoint_raw(&store, 1000, data).unwrap();
+
+        let loaded = get_checkpoint_raw(&store, 1000).unwrap().unwrap();
+        assert_eq!(loaded, data);
+
+        assert!(get_checkpoint_raw(&store, 999).unwrap().is_none());
+
+        cleanup(&path);
+    }
+
+    #[test]
+    fn checkpoint_latest() {
+        let path = test_db_path();
+        let store = StateStore::open(path.to_str().unwrap()).unwrap();
+
+        assert!(latest_checkpoint_raw(&store).unwrap().is_none());
+
+        store_checkpoint_raw(&store, 1000, b"cp1").unwrap();
+        store_checkpoint_raw(&store, 2000, b"cp2").unwrap();
+        store_checkpoint_raw(&store, 3000, b"cp3").unwrap();
+
+        let latest = latest_checkpoint_raw(&store).unwrap().unwrap();
+        assert_eq!(latest, b"cp3");
 
         cleanup(&path);
     }

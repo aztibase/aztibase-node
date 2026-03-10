@@ -5,6 +5,25 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ---
 
+## [M9-S7] -- Weak Subjectivity Checkpoints (Sprint 046)
+
+### Added
+- `Checkpoint` struct with optional `FinalityCertificate`, batch_index, state_root, timestamp (2026-03-10)
+- `CHECKPOINT_INTERVAL` constant: checkpoints emitted every 1000 batches (2026-03-10)
+- `CHECKPOINTS_TABLE` in storage: persistent checkpoint storage (2026-03-10)
+- Raw checkpoint persistence API: `store_checkpoint_raw`, `get_checkpoint_raw`, `latest_checkpoint_raw` (2026-03-10)
+- Pipeline: automatic checkpoint emission after every 1000th batch with state root and timestamp (2026-03-10)
+- `--checkpoint <batch_index:state_root_hex>` CLI flag: trusted checkpoint validation on startup (2026-03-10)
+- `aztb_getCheckpoint(batch_index)` RPC: query checkpoint at specific batch (2026-03-10)
+- `aztb_latestCheckpoint` RPC: query most recent checkpoint (2026-03-10)
+- 4 new tests (2 consensus + 2 execution persist), 811 total (2026-03-10)
+
+### Security
+- Weak subjectivity checkpoints prevent long-range attacks on syncing/recovering nodes (2026-03-10)
+- Startup validation aborts if stored checkpoint doesn't match trusted value (2026-03-10)
+
+---
+
 ## [M9-S6] -- Ed25519 Strict Verification & Attestation Domain Separation (Sprint 045)
 
 ### Changed

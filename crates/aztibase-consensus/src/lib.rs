@@ -1,3 +1,4 @@
+pub mod checkpoint;
 pub mod commit;
 pub mod dag;
 pub mod dag_store;
@@ -8,6 +9,7 @@ pub mod pouw;
 pub mod validator;
 pub mod wire;
 
+pub use checkpoint::{CHECKPOINT_INTERVAL, Checkpoint};
 pub use commit::{CommitConfig, CommitRule, LeaderStatus};
 pub use dag::{DagBlock, DagError};
 pub use dag_store::{DagStore, DagStoreError, DagStoreResult};

@@ -1,9 +1,9 @@
 # PROJECT STATUS: Aztibase Network
 
 **Last Updated:** 2026-03-10
-**Updated By:** security-engineer / blockchain-architect
-**Current Phase:** M9 -- Mainnet Prep (Sprint 6 COMPLETE)
-**Current Sprint:** Sprint 045 -- COMPLETE (Ed25519 Strict Verification & Attestation Domain Separation)
+**Updated By:** node-engineer / consensus-engineer
+**Current Phase:** M9 -- Mainnet Prep (Sprint 7 COMPLETE)
+**Current Sprint:** Sprint 046 -- COMPLETE (Weak Subjectivity Checkpoints)
 
 ---
 
@@ -33,7 +33,7 @@
 - Build-phase tracking infrastructure (5 documents)
 - Implementation depth audit (Sprint 001, Task 7)
 - Reference repos cloned (MystiCeti, Sui, Lighthouse, rust-libp2p, redb)
-- cargo build + cargo test pass (804 tests, 0 failures)
+- cargo build + cargo test pass (811 tests, 0 failures)
 - Sprint 001 closed with retrospective
 - Sprint 002 closed: 24/24 tasks, 5 phases complete
 - Sprint 003 closed: 18/18 tasks, 4 phases complete
@@ -77,12 +77,17 @@
 | aztibase-wasm | PARTIAL | p2p-network-engineer | NO | YES |
 
 ### In Progress
-- Nothing currently in progress — Sprint 045 complete, Sprint 046 next
+- Nothing currently in progress — Sprint 046 complete, Sprint 047 next
 
 ### Blocked
 - Nothing currently blocked
 
 ### Recently Completed
+- Sprint 046 Phase 5: Docs — BUILD_LOG, STATUS, CHANGELOG, sprint plan updated
+- Sprint 046 Phase 4: Tests & validation — 0 clippy warnings, fmt clean, 811 tests pass (4 new), 0 ELEVATED, 0 MEDIUM
+- Sprint 046 Phase 3: CLI & RPC — --checkpoint startup validation, aztb_getCheckpoint + aztb_latestCheckpoint endpoints
+- Sprint 046 Phase 2: Storage & emission — raw checkpoint persistence (store/get/latest), pipeline emits every 1000 batches
+- Sprint 046 Phase 1: Checkpoint type — Checkpoint struct with optional finality_cert, CHECKPOINT_INTERVAL=1000
 - Sprint 045 Phase 4: Docs — BUILD_LOG, STATUS, CHANGELOG, sprint plan updated
 - Sprint 045 Phase 3: Tests & validation — 0 clippy warnings, fmt clean, 804 tests pass (4 new), S0-1 RESOLVED, 0 ELEVATED, 0 MEDIUM
 - Sprint 045 Phase 2: Attestation domain separation — already present (AZTB_ATTESTATION_V1\0 prefix), no changes needed
@@ -225,7 +230,7 @@
 - Sprint 005 Phase 1: Consensus-to-execution wiring, TxKind routing, ExecutionPipeline
 
 ### Next Up
-1. Sprint 046 — Next M9 mainnet prep item
+1. Sprint 047 — Next M9 mainnet prep item
 
 ### Deferred to M9+ (Locked in FUTURE_PLANNING.md)
 

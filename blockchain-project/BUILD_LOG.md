@@ -21,6 +21,26 @@ Entries are prepended (newest first).
 
 ## Entries
 
+### 2026-03-10 -- node-engineer / consensus-engineer / security-engineer -- Sprint 046 Complete (M9-S7: Weak Subjectivity Checkpoints)
+**Task:** Sprint 046: Implement weak subjectivity checkpoints — periodic state snapshots every 1000 batches, CLI trusted checkpoint validation, RPC query endpoints
+**Sprint:** Sprint 046, Phases 1-5
+**Git Ref:** pending
+**Files Changed:**
+- crates/aztibase-consensus/src/checkpoint.rs: made finality_cert optional, 2 new tests (checkpoint_creation_without_cert, checkpoint_serialization_without_cert)
+- crates/aztibase-consensus/src/lib.rs: pub mod checkpoint, re-exports Checkpoint + CHECKPOINT_INTERVAL
+- crates/aztibase-storage/src/store.rs: CHECKPOINTS_TABLE definition, ALL_TABLES updated to 13
+- crates/aztibase-storage/src/lib.rs: CHECKPOINTS_TABLE export
+- crates/aztibase-execution/src/persist.rs: store_checkpoint_raw, get_checkpoint_raw, latest_checkpoint_raw (raw byte API), 2 new persist tests
+- crates/aztibase-execution/src/lib.rs: re-export checkpoint persist functions
+- crates/aztibase-node/src/pipeline.rs: checkpoint emission every CHECKPOINT_INTERVAL batches (postcard serialize + store)
+- crates/aztibase-node/src/main.rs: --checkpoint CLI flag, startup validation (parse batch_index:state_root_hex, verify stored checkpoint matches)
+- crates/aztibase-rpc/src/server.rs: aztb_getCheckpoint + aztb_latestCheckpoint dispatch, checkpoint_to_json helper
+- blockchain-project/sprints/SPRINT-046.md: sprint plan marked COMPLETE with retrospective
+**Review Notes:** Raw byte persistence avoids cross-crate dependency (execution→consensus). Checkpoint typed at application layer (pipeline/RPC) only. finality_cert made optional since pipeline doesn't produce finality certs during batch execution. 811 tests pass.
+**Security Flags:** 0 ELEVATED, 0 MEDIUM. Checkpoint validation prevents long-range attacks on syncing nodes.
+
+---
+
 ### 2026-03-10 -- security-engineer / blockchain-architect -- Sprint 045 Complete (M9-S6: Ed25519 Strict Verification & Attestation Domain Separation)
 **Task:** Sprint 045: Switch PublicKey::verify() to verify_strict(), rejecting malleable signatures and weak keys. Confirmed attestation domain separation already present (AZTB_ATTESTATION_V1\0 prefix). Security flag S0-1 RESOLVED.
 **Sprint:** Sprint 045, Phases 1-4

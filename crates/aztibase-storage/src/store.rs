@@ -46,8 +46,11 @@ pub const BATCH_INDEX_TABLE: TableDefinition<&[u8], &[u8]> = TableDefinition::ne
 /// Batch transaction list: anchor hash (32 bytes) → postcard(Vec<[u8; 32]>).
 pub const BATCH_TXS_TABLE: TableDefinition<&[u8], &[u8]> = TableDefinition::new("batch_txs");
 
+/// Weak subjectivity checkpoints: batch index (u64 BE) → postcard(Checkpoint).
+pub const CHECKPOINTS_TABLE: TableDefinition<&[u8], &[u8]> = TableDefinition::new("checkpoints");
+
 /// All table definitions for batch initialization.
-const ALL_TABLES: [TableDefinition<&[u8], &[u8]>; 12] = [
+const ALL_TABLES: [TableDefinition<&[u8], &[u8]>; 13] = [
     BLOCKS_TABLE,
     STATE_TABLE,
     TX_TABLE,
@@ -60,6 +63,7 @@ const ALL_TABLES: [TableDefinition<&[u8], &[u8]>; 12] = [
     BATCH_ROOTS_TABLE,
     BATCH_INDEX_TABLE,
     BATCH_TXS_TABLE,
+    CHECKPOINTS_TABLE,
 ];
 
 // ── Error Type ─────────────────────────────────────────────────────

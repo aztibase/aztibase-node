@@ -429,6 +429,8 @@ async fn dispatch(state: &RpcState, req: &JsonRpcRequest) -> JsonRpcResponse {
         "aztb_getActiveValidators" => handle_get_active_validators(state, req).await,
         "aztb_getUnbondingStatus" => handle_get_unbonding_status(state, req).await,
         "aztb_getAgentPolicy" => handle_get_agent_policy(state, req).await,
+        "aztb_getCheckpoint" => handle_get_checkpoint(state, req).await,
+        "aztb_latestCheckpoint" => handle_latest_checkpoint(state, req).await,
         _ => JsonRpcResponse::error(
             req.id.clone(),
             METHOD_NOT_FOUND,
@@ -1849,6 +1851,79 @@ async fn handle_get_agent_policy(state: &RpcState, req: &JsonRpcRequest) -> Json
         }
         None => JsonRpcResponse::success(req.id.clone(), serde_json::Value::Null),
     }
+}
+
+async fn handle_get_checkpoint(state: &RpcState, req: &JsonRpcRequest) -> JsonRpcResponse {
+    let store = match &state.receipt_store {
+        Some(s) => s,
+        None => {
+            return JsonRpcResponse::error(
+                req.id.clone(),
+                INTERNAL_ERROR,
+                "storage not available".into(),
+            );
+        }
+    };
+
+    let batch_index = match parse_u64_param(&req.params, 0) {
+        Ok(n) => n,
+        Err(e) => return JsonRpcResponse::error(req.id.clone(), INVALID_PARAMS, e),
+    };
+
+    match aztibase_execution::get_checkpoint_raw(store, batch_index) {
+        Ok(Some(bytes)) => match postcard::from_bytes::<aztibase_consensus::Checkpoint>(&bytes) {
+            Ok(cp) => checkpoint_to_json(req, &cp),
+            Err(_) => JsonRpcResponse::error(
+                req.id.clone(),
+                INTERNAL_ERROR,
+                "corrupt checkpoint data".into(),
+            ),
+        },
+        Ok(None) => JsonRpcResponse::success(req.id.clone(), serde_json::Value::Null),
+        Err(e) => JsonRpcResponse::error(req.id.clone(), INTERNAL_ERROR, format!("storage: {e}")),
+    }
+}
+
+async fn handle_latest_checkpoint(state: &RpcState, req: &JsonRpcRequest) -> JsonRpcResponse {
+    let store = match &state.receipt_store {
+        Some(s) => s,
+        None => {
+            return JsonRpcResponse::error(
+                req.id.clone(),
+                INTERNAL_ERROR,
+                "storage not available".into(),
+            );
+        }
+    };
+
+    match aztibase_execution::latest_checkpoint_raw(store) {
+        Ok(Some(bytes)) => match postcard::from_bytes::<aztibase_consensus::Checkpoint>(&bytes) {
+            Ok(cp) => checkpoint_to_json(req, &cp),
+            Err(_) => JsonRpcResponse::error(
+                req.id.clone(),
+                INTERNAL_ERROR,
+                "corrupt checkpoint data".into(),
+            ),
+        },
+        Ok(None) => JsonRpcResponse::success(req.id.clone(), serde_json::Value::Null),
+        Err(e) => JsonRpcResponse::error(req.id.clone(), INTERNAL_ERROR, format!("storage: {e}")),
+    }
+}
+
+fn checkpoint_to_json(
+    req: &JsonRpcRequest,
+    cp: &aztibase_consensus::Checkpoint,
+) -> JsonRpcResponse {
+    let root_hex: String = cp.state_root.iter().map(|b| format!("{b:02x}")).collect();
+    JsonRpcResponse::success(
+        req.id.clone(),
+        serde_json::json!({
+            "batch_index": cp.batch_index,
+            "state_root": format!("0x{root_hex}"),
+            "has_finality_cert": cp.finality_cert.is_some(),
+            "timestamp": cp.timestamp,
+        }),
+    )
 }
 
 fn parse_u64_param(params: &serde_json::Value, index: usize) -> Result<u64, String> {

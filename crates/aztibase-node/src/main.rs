@@ -91,6 +91,10 @@ struct Cli {
     /// Run as an archive node (retain full history, disable eviction and DAG pruning)
     #[arg(long)]
     archive: bool,
+
+    /// Trusted weak subjectivity checkpoint: batch_index:state_root_hex (e.g. 1000:abcdef01...)
+    #[arg(long)]
+    checkpoint: Option<String>,
 }
 
 #[derive(clap::Subcommand, Debug)]
@@ -573,6 +577,63 @@ async fn main() -> Result<()> {
         exec_pipeline.set_archive(true);
         tracing::info!("Archive mode enabled — eviction disabled, full history retained");
     }
+
+    if let Some(ref cp_str) = cli.checkpoint {
+        let parts: Vec<&str> = cp_str.splitn(2, ':').collect();
+        if parts.len() != 2 {
+            anyhow::bail!(
+                "Invalid --checkpoint format. Expected batch_index:state_root_hex (e.g. 1000:abcdef01...)"
+            );
+        }
+        let cp_batch: u64 = parts[0]
+            .parse()
+            .context("--checkpoint batch_index must be a u64")?;
+        let cp_root_hex = parts[1];
+        if cp_root_hex.len() != 64 {
+            anyhow::bail!("--checkpoint state_root must be exactly 64 hex characters (32 bytes)");
+        }
+        let mut cp_root = [0u8; 32];
+        for (i, chunk) in cp_root_hex.as_bytes().chunks(2).enumerate() {
+            let hex_str = std::str::from_utf8(chunk).context("Invalid hex in --checkpoint")?;
+            cp_root[i] = u8::from_str_radix(hex_str, 16).context("Invalid hex in --checkpoint")?;
+        }
+
+        match aztibase_execution::get_checkpoint_raw(&exec_store, cp_batch) {
+            Ok(Some(bytes)) => {
+                match postcard::from_bytes::<aztibase_consensus::Checkpoint>(&bytes) {
+                    Ok(stored) => {
+                        if stored.state_root != cp_root {
+                            let stored_hex: String = stored
+                                .state_root
+                                .iter()
+                                .map(|b| format!("{b:02x}"))
+                                .collect();
+                            anyhow::bail!(
+                                "Checkpoint mismatch at batch {cp_batch}: stored state_root={stored_hex}, trusted={cp_root_hex}. Node may be on wrong chain."
+                            );
+                        }
+                        tracing::info!(
+                            batch = cp_batch,
+                            "Trusted checkpoint verified — state root matches"
+                        );
+                    }
+                    Err(e) => {
+                        tracing::warn!(error = %e, "Failed to deserialize stored checkpoint");
+                    }
+                }
+            }
+            Ok(None) => {
+                tracing::warn!(
+                    batch = cp_batch,
+                    "No stored checkpoint at batch {cp_batch} — will be verified when reached"
+                );
+            }
+            Err(e) => {
+                tracing::warn!(error = %e, "Failed to read checkpoint from storage");
+            }
+        }
+    }
+
     let ai_runtime = Arc::new(TractRuntime::new());
     let models_dir = config.data_dir.join("models");
     if config.ai.enabled {
@@ -1358,6 +1419,7 @@ mod tests {
             light: false,
             webrtc: false,
             archive: false,
+            checkpoint: None,
         };
         let config = cli.apply_overrides(NodeConfig::default());
         assert_eq!(config.data_dir, PathBuf::from("/tmp/test"));
@@ -1380,6 +1442,7 @@ mod tests {
             light: false,
             webrtc: false,
             archive: false,
+            checkpoint: None,
         };
         let config = cli.apply_overrides(NodeConfig::default());
         assert_eq!(config.network.listen_addresses.len(), 1);
@@ -1467,6 +1530,7 @@ mod tests {
             light: false,
             webrtc: false,
             archive: false,
+            checkpoint: None,
         };
         let result = cli.apply_overrides(config);
 
