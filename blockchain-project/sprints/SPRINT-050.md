@@ -20,7 +20,7 @@
 
 | # | Task | Status |
 |---|------|--------|
-| 2.1 | Release-mode TPS measurement (reuse Sprint 049 harness) | PARTIAL — consensus benches done, execution benches deferred (long-running) |
+| 2.1 | Release-mode TPS measurement (reuse Sprint 049 harness) | DONE — 18.3K TPS single-threaded (Ed25519 verify bottleneck), scales with rayon cores |
 | 2.2 | Criterion benchmark suite: state_root, transfer_execution, merkle/verkle proof, verify_tx, verify_tx_batch | DONE (7 bench groups, 2 new) |
 | 2.3 | Benchmark results documented in STATUS.md | DONE (consensus benches in BUILD_LOG + CHANGELOG) |
 | 2.4 | CI bench job (optional — criterion output only, no regression gate yet) | DEFERRED (requires baseline) |

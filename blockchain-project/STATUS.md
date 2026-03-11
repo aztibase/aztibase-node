@@ -77,7 +77,7 @@
 | aztibase-wasm | PARTIAL | p2p-network-engineer | NO | YES |
 
 ### In Progress
-- Sprint 050: Execution benchmarks running (verify_tx, verify_tx_batch, state_root, transfer_execution, merkle/verkle proof)
+- Sprint 051 scoping
 
 ### Blocked
 - Nothing currently blocked

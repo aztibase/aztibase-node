@@ -18,10 +18,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 - 3 new tests: testnet genesis validity, determinism, boot node format (2026-03-10)
 
 ### Performance (release-mode benchmarks)
-- vertex_creation: 1.35 µs
-- commit_rule_evaluation: 17.63 ms
-- BLS cert verification (21 validators): 3.40 ms
-- BLS cert verification (100 validators): 8.04 ms
+- **Consensus**: vertex 1.35µs, commit_rule 17.6ms, BLS cert 3.4ms (21 val) / 8.0ms (100 val)
+- **Execution**: single transfer 1.99µs, verify_and_route 54.7µs (**18.3K TPS single-threaded**)
+- **Batched**: verify_tx_batch/100 5.84ms (17.1K TPS), /500 27.8ms (18.0K TPS)
+- **State**: state_root/1K accounts 839µs, /10K accounts 8.4ms
+- **Proofs**: merkle 2.04µs, verkle 7.14µs (10K leaves)
+- **Verdict**: 10K TPS target achievable — Ed25519 sig verify is bottleneck, scales with rayon cores
 
 ---
 

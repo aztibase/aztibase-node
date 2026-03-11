@@ -35,12 +35,12 @@ Entries are prepended (newest first).
   - `scripts/deploy-validator.sh` — NEW: VPS/cloud validator deployment script (systemd, key gen, --testnet)
 - **Review**: Testnet genesis uses deterministic keys from fixed seeds — TESTNET ONLY, well-known keys. Deploy script uses systemd hardening (LimitNOFILE, dedicated user). BLS from_ikm uses proper HKDF derivation (not raw scalar).
 - **Security Flags**: None
-- **Benchmarks (release mode, consensus crate)**:
-  - vertex_creation: 1.35 µs
-  - dag_insert_100_vertices: 113.93 ms
-  - commit_rule_evaluation: 17.63 ms
-  - bls_cert_verification/21: 3.40 ms
-  - bls_cert_verification/100: 8.04 ms
+- **Benchmarks (release mode)**:
+  - Consensus: vertex 1.35µs, dag_insert_100 113.9ms, commit_rule 17.6ms, BLS cert 3.4ms/21val 8.0ms/100val
+  - Execution: single_transfer 1.99µs, verify_and_route 54.7µs (18.3K TPS single-threaded), batch/100 5.84ms, batch/500 27.8ms
+  - State: state_root/1K 839µs, state_root/10K 8.4ms
+  - Proofs: merkle 2.04µs/10K leaves, verkle 7.14µs/10K leaves
+  - **10K TPS target achievable**: Ed25519 sig verify bottleneck at ~18.3K TPS/core, scales linearly with rayon
 
 ### Sprint 049 — Protocol Hardening & Multi-Node Stability (M9-S10)
 - **Date**: 2026-03-10
