@@ -322,28 +322,38 @@ footer {
 
 <script>
 const params = new URLSearchParams(window.location.search);
-const RPC_URL = params.get('rpc') || 'https://testnet1.aztibase.com';
+const RPC_URL = params.get('rpc') || 'http://127.0.0.1:9944';
 let pollTimer = null;
 let currentTab = 'dashboard';
 let cachedMetrics = null;
 
 async function rpc(method, rpcParams = []) {
-  const res = await fetch(RPC_URL, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ jsonrpc: '2.0', method, params: rpcParams, id: 1 }),
-  });
-  const json = await res.json();
-  if (json.error) throw new Error(json.error.message || JSON.stringify(json.error));
-  return json.result;
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 4000);
+  try {
+    const res = await fetch(RPC_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ jsonrpc: '2.0', method, params: rpcParams, id: 1 }),
+      signal: controller.signal,
+    });
+    const json = await res.json();
+    if (json.error) throw new Error(json.error.message || JSON.stringify(json.error));
+    return json.result;
+  } finally {
+    clearTimeout(timeout);
+  }
 }
 
 async function fetchMetrics() {
   try {
-    const res = await fetch(RPC_URL.replace(/\/$/, '') + '/metrics/json');
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 4000);
+    const res = await fetch(RPC_URL.replace(/\/$/, '') + '/metrics/json', { signal: controller.signal });
+    clearTimeout(timeout);
     cachedMetrics = await res.json();
   } catch (_) {
-    cachedMetrics = null;
+    // keep previous cachedMetrics on failure
   }
   return cachedMetrics;
 }
@@ -382,6 +392,7 @@ function navigate(tab) {
   document.querySelectorAll('nav.tabs button').forEach(b => b.classList.remove('active'));
   document.getElementById('tab-' + tab).classList.add('active');
   stopPolling();
+  dashboardInitialized = false;
 
   if (tab === 'dashboard') showDashboard();
   else if (tab === 'blocks') { showBlocks(); pollTimer = setInterval(showBlocks, 3000); }
@@ -390,9 +401,61 @@ function navigate(tab) {
 
 // --- Dashboard ---
 
+let dashboardInitialized = false;
+
+function buildDashboardShell() {
+  return `
+    <div class="stats-row">
+      <div class="stat"><div class="val" id="d-height">--</div><div class="label">Block Height</div></div>
+      <div class="stat"><div class="val" id="d-commits">--</div><div class="label">Commits</div></div>
+      <div class="stat"><div class="val" id="d-peers">--</div><div class="label">Peers</div></div>
+      <div class="stat"><div class="val" id="d-validators">--</div><div class="label">Validators</div></div>
+      <div class="stat"><div class="val" id="d-staked">--</div><div class="label">Total Staked</div></div>
+      <div class="stat"><div class="val" id="d-mempool">--</div><div class="label">Mempool</div></div>
+      <div class="stat"><div class="val" id="d-latency">--</div><div class="label">Commit Latency</div></div>
+      <div class="stat"><div class="val" id="d-basefee">--</div><div class="label">Base Fee</div></div>
+    </div>
+    <div class="two-col">
+      <div>
+        <div class="view-title">Latest Blocks <span class="badge green">live</span></div>
+        <div id="dash-blocks"><div class="empty-state">Loading...</div></div>
+      </div>
+      <div>
+        <div class="view-title">Network Stats</div>
+        <div class="card">
+          <div class="card-row"><div class="card-label">Vertices Proposed</div><div class="card-value" id="d-vp">--</div></div>
+          <div class="card-row"><div class="card-label">Vertices Received</div><div class="card-value" id="d-vr">--</div></div>
+          <div class="card-row"><div class="card-label">Rounds Advanced</div><div class="card-value" id="d-rounds">--</div></div>
+          <div class="card-row"><div class="card-label">Equivocations</div><div class="card-value" id="d-equiv">--</div></div>
+          <div class="card-row"><div class="card-label">Txs Processed</div><div class="card-value" id="d-txs">--</div></div>
+          <div class="card-row"><div class="card-label">Slashes</div><div class="card-value" id="d-slashes">--</div></div>
+          <div class="card-row"><div class="card-label">Pending Tasks</div><div class="card-value" id="d-pending">--</div></div>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function setVal(id, value) {
+  const el = document.getElementById(id);
+  if (el && el.textContent !== String(value)) el.textContent = value;
+}
+
+function setValColor(id, value, color) {
+  const el = document.getElementById(id);
+  if (el) {
+    if (el.textContent !== String(value)) el.textContent = value;
+    el.style.color = color;
+  }
+}
+
 async function showDashboard() {
   const el = document.getElementById('content');
-  el.innerHTML = '<div class="empty-state">Loading dashboard...</div>';
+
+  if (!dashboardInitialized) {
+    el.innerHTML = buildDashboardShell();
+    dashboardInitialized = true;
+  }
 
   try {
     const [height, gasPrice, metrics] = await Promise.all([
@@ -410,38 +473,23 @@ async function showDashboard() {
     const network = m.network || {};
     const staking = m.staking || {};
 
-    el.innerHTML = `
-      <div class="stats-row">
-        <div class="stat"><div class="val">${formatNumber(h)}</div><div class="label">Block Height</div></div>
-        <div class="stat"><div class="val">${formatNumber(consensus.commits)}</div><div class="label">Commits</div></div>
-        <div class="stat"><div class="val">${formatNumber(network.peer_count)}</div><div class="label">Peers</div></div>
-        <div class="stat"><div class="val">${formatNumber(staking.active_validators)}</div><div class="label">Validators</div></div>
-        <div class="stat"><div class="val">${formatAZTB(staking.total_staked)}</div><div class="label">Total Staked</div></div>
-        <div class="stat"><div class="val">${formatNumber(execution.mempool_size)}</div><div class="label">Mempool</div></div>
-        <div class="stat"><div class="val">${consensus.last_commit_latency_us ? (consensus.last_commit_latency_us / 1000).toFixed(0) + 'ms' : '--'}</div><div class="label">Commit Latency</div></div>
-        <div class="stat"><div class="val">${gasPrice != null ? gasPrice : (execution.base_fee || '--')}</div><div class="label">Base Fee</div></div>
-      </div>
-      <div class="two-col">
-        <div>
-          <div class="view-title">Latest Blocks <span class="badge green">live</span></div>
-          <div id="dash-blocks"><div class="empty-state">Loading...</div></div>
-        </div>
-        <div>
-          <div class="view-title">Network Stats</div>
-          <div class="card">
-            <div class="card-row"><div class="card-label">Vertices Proposed</div><div class="card-value">${formatNumber(consensus.vertices_proposed)}</div></div>
-            <div class="card-row"><div class="card-label">Vertices Received</div><div class="card-value">${formatNumber(consensus.vertices_received)}</div></div>
-            <div class="card-row"><div class="card-label">Rounds Advanced</div><div class="card-value">${formatNumber(consensus.rounds_advanced)}</div></div>
-            <div class="card-row"><div class="card-label">Equivocations</div><div class="card-value" style="color:${consensus.equivocations > 0 ? 'var(--red)' : 'inherit'}">${formatNumber(consensus.equivocations)}</div></div>
-            <div class="card-row"><div class="card-label">Txs Processed</div><div class="card-value">${formatNumber(execution.txs_processed)}</div></div>
-            <div class="card-row"><div class="card-label">Slashes</div><div class="card-value" style="color:${staking.slashes_applied > 0 ? 'var(--red)' : 'inherit'}">${formatNumber(staking.slashes_applied)}</div></div>
-            <div class="card-row"><div class="card-label">Pending Tasks</div><div class="card-value">${formatNumber(execution.pending_tasks)}</div></div>
-          </div>
-        </div>
-      </div>
-    `;
+    setVal('d-height', formatNumber(h));
+    setVal('d-commits', formatNumber(consensus.commits));
+    setVal('d-peers', formatNumber(network.peer_count));
+    setVal('d-validators', formatNumber(staking.active_validators));
+    setVal('d-staked', formatAZTB(staking.total_staked));
+    setVal('d-mempool', formatNumber(execution.mempool_size));
+    setVal('d-latency', consensus.last_commit_latency_us ? (consensus.last_commit_latency_us / 1000).toFixed(0) + 'ms' : '--');
+    setVal('d-basefee', gasPrice != null ? gasPrice : (execution.base_fee || '--'));
 
-    // Load latest 8 blocks for dashboard
+    setVal('d-vp', formatNumber(consensus.vertices_proposed));
+    setVal('d-vr', formatNumber(consensus.vertices_received));
+    setVal('d-rounds', formatNumber(consensus.rounds_advanced));
+    setValColor('d-equiv', formatNumber(consensus.equivocations), consensus.equivocations > 0 ? 'var(--red)' : 'inherit');
+    setVal('d-txs', formatNumber(execution.txs_processed));
+    setValColor('d-slashes', formatNumber(staking.slashes_applied), staking.slashes_applied > 0 ? 'var(--red)' : 'inherit');
+    setVal('d-pending', formatNumber(execution.pending_tasks));
+
     if (h > 0) {
       const from = Math.max(0, h - 7);
       const blocks = await rpc('aztb_getBlockRange', [from, h]);
@@ -459,13 +507,21 @@ async function showDashboard() {
       }
     }
 
-    // Auto-refresh dashboard
-    pollTimer = setInterval(showDashboard, 5000);
+    if (!pollTimer) pollTimer = setInterval(refreshDashboard, 5000);
 
   } catch (e) {
-    el.innerHTML = `<div class="empty-state">Failed to connect to node at ${escapeHtml(RPC_URL)}<br><br>${escapeHtml(e.message)}<br><br>Use ?rpc=https://host:port to set endpoint</div>`;
-    updateHeader(null, false);
+    if (!dashboardInitialized) {
+      el.innerHTML = `<div class="empty-state">Failed to connect to node at ${escapeHtml(RPC_URL)}<br><br>${escapeHtml(e.message)}<br><br>Use ?rpc=http://host:port to set endpoint</div>`;
+      updateHeader(null, false);
+    }
+    // if dashboard is already showing data, silently retry next cycle
+    if (!pollTimer) pollTimer = setInterval(refreshDashboard, 5000);
   }
+}
+
+async function refreshDashboard() {
+  if (currentTab !== 'dashboard') return;
+  try { await showDashboard(); } catch (_) {}
 }
 
 // --- Blocks ---

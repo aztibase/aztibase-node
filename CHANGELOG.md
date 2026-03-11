@@ -5,6 +5,15 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ---
 
+## Sprint 057 — Validator Business-in-a-Box & Cloud Monitoring (M9-S18) (2026-03-11)
+
+### Added
+- **One-click validator setup**: `deploy/setup-validator.sh` — interactive wizard for non-technical operators. Auto-detects OS/arch, installs deps, builds binary, generates keys, configures systemd, opens firewall, runs health check. Supports `--dry-run`, `--uninstall`, `--yes` (non-interactive).
+- **Grafana Cloud monitoring**: Built-in Grafana Alloy integration pushes metrics to free Grafana Cloud tier (10k series). Setup guide at `docs/GRAFANA_CLOUD_SETUP.md`.
+- **VPS recommendations**: Hardware requirements, provider comparison table (6 providers), cost estimates starting at €3.99/mo, step-by-step walkthrough at `docs/VPS_GUIDE.md`.
+
+---
+
 ## Sprint 056 — Full State Snapshots & Mainnet Genesis (M9-S17) (2026-03-11)
 
 ### Added

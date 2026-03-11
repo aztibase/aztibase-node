@@ -538,8 +538,9 @@ impl ConsensusEngine {
             );
         }
 
+        let pending_count = self.pending_txs.len();
         let payload = self.drain_pending_txs();
-        let block = DagBlock::new(round, self.identity, parents, payload, now_ms())
+        let block = DagBlock::new(round, self.identity, parents, payload.clone(), now_ms())
             .context("Failed to create vertex")?;
 
         let hash = block.hash;
@@ -551,7 +552,11 @@ impl ConsensusEngine {
             .context("Failed to insert own vertex")?;
         self.state.record_vertex(round, hash);
 
-        debug!(round, hash = %short_hex(&hash), "Proposed vertex");
+        if pending_count > 0 {
+            info!(round, hash = %short_hex(&hash), txs = pending_count, payload_bytes = payload.len(), "Proposed vertex WITH transactions");
+        } else {
+            debug!(round, hash = %short_hex(&hash), "Proposed vertex");
+        }
         self.metrics
             .vertices_proposed
             .fetch_add(1, AtomicOrdering::Relaxed);
@@ -578,9 +583,10 @@ impl ConsensusEngine {
             }
             ConsensusInput::Transaction(tx) => {
                 if self.pending_txs.len() < self.config.max_pending_txs {
+                    info!(tx_len = tx.len(), pending = self.pending_txs.len() + 1, "Transaction added to consensus pending queue");
                     self.pending_txs.push(tx);
                 } else {
-                    debug!("Pending tx queue full, dropping transaction");
+                    warn!("Pending tx queue full, dropping transaction");
                 }
             }
             ConsensusInput::UpdateValidatorSet(new_set) => {
@@ -708,7 +714,6 @@ impl ConsensusEngine {
                         self.metrics
                             .last_commit_latency_us
                             .store(latency.as_micros() as u64, AtomicOrdering::Relaxed);
-                        self.state.record_commit(hash);
                         self.state.last_committed_wave = Some(wave);
                         if !self.config.archive {
                             self.state.prune_before(wave * wave_len);
@@ -726,6 +731,9 @@ impl ConsensusEngine {
                             self.state.committed_blocks(),
                         ) {
                             Ok(batch) => {
+                                for vh in &batch.vertex_order {
+                                    self.state.record_commit(*vh);
+                                }
                                 if let Err(e) =
                                     self.outbox.try_send(ConsensusOutput::BatchCommitted(batch))
                                 {
@@ -735,6 +743,7 @@ impl ConsensusEngine {
                                 }
                             }
                             Err(e) => {
+                                self.state.record_commit(hash);
                                 tracing::warn!("Failed to extract committed batch: {e}");
                             }
                         }

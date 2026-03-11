@@ -1,0 +1,12 @@
+{
+  "public_key": "09b35b485609328049d13165c963ce2252feda2adcbcf4589be72b01d4f608ef",
+  "address": "6dc3e521a947913c3ff5352c11a4f6dee9029c014d933fe603bfcb5abdb7b904",
+  "encrypted": {
+    "salt": "10e1b7e49b86a9ff634f42b80a10e1ead9f0572c2022fb8fb1f189e849671fd5",
+    "nonce": "e1bd2f132450bde6eb09d7f6",
+    "ciphertext": "4e21ce008f52cd5720022674bf92a57d81557382e1d21f0ac64a38bbef5787fd438c4cef18ba6581a0cc2a5250b71278",
+    "argon2_mem_kib": 262144,
+    "argon2_time": 3,
+    "argon2_parallelism": 1
+  }
+}

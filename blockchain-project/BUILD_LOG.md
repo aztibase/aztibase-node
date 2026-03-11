@@ -21,6 +21,37 @@ Entries are prepended (newest first).
 
 ## Entries
 
+### Testnet Bug Fix — Transaction Inclusion & Faucet Amount (M9-S18.1)
+- **Date**: 2026-03-11
+- **Commit**: (pending)
+- **Files changed**:
+  - `crates/aztibase-consensus/src/engine.rs` — CRITICAL FIX: `record_commit()` was called BEFORE `extract_committed_batch()`, causing the anchor vertex to be excluded from its own committed batch (all transactions lost). Moved to AFTER extraction; now marks ALL vertices in `batch.vertex_order`. Added diagnostic logging for tx-count on vertex proposals and pending queue size.
+  - `crates/aztibase-rpc/src/server.rs` — `FAUCET_DRIP_AMOUNT` 10 → 1,000,000 (transfers need 21,000+ for gas escrow, so 10 was always insufficient)
+  - `crates/aztibase-node/src/main.rs` — Added gossip broadcast for RPC-submitted transactions (was local-only). Added mempool accept/reject logging. Added `node_metrics.set_mempool_size()` updates.
+  - `explorer/index.html` — Minor explorer updates
+- **Review notes**: Two root-cause bugs causing "transfers=0 in every batch":
+  1. Consensus engine commit ordering: anchor hash added to committed_blocks set before batch extraction → filter excluded it → payload transactions lost
+  2. Faucet drip too small: 10 AZTB < 21,003 needed (21,000 gas + 3 value minimum) → gas escrow always failed
+  Verified fix on live 3-node testnet: faucet drip → transfer → sender balance 978,500 (1M - 500 - 21,000 gas), recipient balance 500.
+- **Tests**: 114 consensus + 77 RPC passing, 0 clippy warnings, fmt clean.
+- **Security flags**: None.
+
+---
+
+### Sprint 057 — Validator Business-in-a-Box & Cloud Monitoring (M9-S18)
+- **Date**: 2026-03-11
+- **Commit**: (pending)
+- **Files changed**:
+  - `deploy/setup-validator.sh` — NEW: one-click interactive validator setup script with OS detection, dependency install, build, keypair generation, systemd service, firewall, Grafana Cloud Alloy integration, --dry-run mode, --uninstall mode
+  - `docs/GRAFANA_CLOUD_SETUP.md` — NEW: step-by-step free Grafana Cloud monitoring guide (account creation, Alloy config, dashboard import, alerting)
+  - `docs/VPS_GUIDE.md` — NEW: VPS provider comparison (Hetzner, Contabo, OVH, Vultr, DigitalOcean, Linode), hardware requirements, cost estimates, step-by-step walkthrough
+  - `blockchain-project/sprints/SPRINT-057.md` — Sprint 057 plan
+- **Review notes**: Setup script targets non-technical users with plain-English prompts. Grafana Cloud credentials are stored only in Alloy config (operator-owned machine). No secrets in source. Script passes bash -n syntax check. --dry-run mode allows testing without root.
+- **Tests**: 931 passing (no regressions), 0 clippy warnings, fmt clean.
+- **Security flags**: None. Grafana Cloud token stored in /etc/alloy/config.alloy with root-only access.
+
+---
+
 ### Sprint 056 — Full State Snapshots & Mainnet Genesis (M9-S17)
 - **Date**: 2026-03-11
 - **Commit**: (pending)

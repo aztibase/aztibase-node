@@ -92,7 +92,7 @@ pub struct SubscriptionEvent {
 // ── Shared State ────────────────────────────────────────────────────
 
 const TESTNET_CHAIN_ID: u64 = 0xA27B;
-const FAUCET_DRIP_AMOUNT: u128 = 10;
+const FAUCET_DRIP_AMOUNT: u128 = 1_000_000;
 const FAUCET_COOLDOWN_SECS: u64 = 60;
 const NODE_VERSION: &str = env!("CARGO_PKG_VERSION");
 

@@ -1241,7 +1241,19 @@ async fn main() -> Result<()> {
                             let min_gp = shared_base_fee.load(std::sync::atomic::Ordering::Relaxed);
                             if mempool.insert_checked(data.clone(), |addr| state_guard.nonce(addr), min_gp) {
                                 drop(state_guard);
+                                tracing::info!(
+                                    tx_len = data.len(),
+                                    mempool_size = mempool.len(),
+                                    "Gossip tx accepted into mempool"
+                                );
                                 let _ = consensus_tx.send(ConsensusInput::Transaction(data)).await;
+                                node_metrics.set_mempool_size(mempool.len() as u64);
+                            } else {
+                                drop(state_guard);
+                                tracing::debug!(
+                                    tx_len = data.len(),
+                                    "Gossip tx rejected by mempool (dup/nonce/gas)"
+                                );
                             }
                         }
                     }
@@ -1349,7 +1361,22 @@ async fn main() -> Result<()> {
                 let min_gp = shared_base_fee.load(std::sync::atomic::Ordering::Relaxed);
                 if mempool.insert_checked(raw_tx.clone(), |addr| state_guard.nonce(addr), min_gp) {
                     drop(state_guard);
+                    tracing::info!(
+                        tx_len = raw_tx.len(),
+                        mempool_size = mempool.len(),
+                        "Transaction accepted into mempool — forwarding to consensus"
+                    );
+                    if let Err(e) = transport.publish(&topic_transactions, raw_tx.clone()) {
+                        tracing::debug!(error = %e, "Failed to gossip transaction (no subscribers yet)");
+                    }
                     let _ = consensus_tx.send(ConsensusInput::Transaction(raw_tx)).await;
+                    node_metrics.set_mempool_size(mempool.len() as u64);
+                } else {
+                    drop(state_guard);
+                    tracing::warn!(
+                        tx_len = raw_tx.len(),
+                        "Transaction rejected by mempool (nonce/gas/decode failure)"
+                    );
                 }
             }
             Some(result) = result_rx.recv() => {

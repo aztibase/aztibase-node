@@ -1,9 +1,9 @@
 # PROJECT STATUS: Aztibase Network
 
 **Last Updated:** 2026-03-11
-**Updated By:** node-engineer + blockchain-architect
-**Current Phase:** M9 -- Mainnet Prep (Sprint 17 COMPLETE)
-**Current Sprint:** Sprint 056 -- COMPLETE (Full State Snapshots & Mainnet Genesis)
+**Updated By:** node-engineer + documentation-engineer
+**Current Phase:** M9 -- Mainnet Prep (Sprint 18 COMPLETE)
+**Current Sprint:** Sprint 057 -- COMPLETE (Validator Business-in-a-Box & Cloud Monitoring)
 
 ---
 
@@ -85,6 +85,8 @@
 - Nothing currently blocked
 
 ### Recently Completed
+- Sprint 057: Validator business-in-a-box — one-click setup script, Grafana Cloud free tier monitoring, VPS guide (6 providers, from €3.99/mo)
+- Sprint 056: Full state snapshots & mainnet genesis — ProtocolStoreBundle, snapshot CLI, mainnet_genesis() 400M AZTB, ADR-027
 - Sprint 055: Public testnet launch infrastructure — faucet UI, testnet landing page, seed node configs, systemd service, bootstrap script, ADR-026
 - Sprint 054: Mainnet operational hardening — network profiles, rate limiting, CORS, graceful shutdown, key rotation, 925 tests
 - Sprint 053: Protocol store persistence — 8 stores survive node restart via redb, 906 tests
