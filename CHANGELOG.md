@@ -5,6 +5,19 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ---
 
+## Sprint 055 — Public Testnet Launch Infrastructure (M9-S16) (2026-03-11)
+
+### Added
+- **Canonical testnet genesis**: Pre-generated `testnet/genesis/` with 3 validators, 1 faucet account, node configs
+- **Faucet web UI**: `faucet/index.html` — dark theme, address validation, drip button, 60s cooldown, configurable RPC via `?rpc=`
+- **Testnet landing page**: `testnet/index.html` — network details, developer guide (4 steps), validator guide (6 steps), seed node table, RPC summary
+- **Cloud seed node configs**: `deploy/seed-nodes/seed-{1,2,3}.toml` for testnet{1,2,3}.aztibase.com
+- **Systemd service**: `deploy/systemd/aztibase.service` for Linux service management
+- **Bootstrap script**: `deploy/bootstrap.sh` for Ubuntu 22.04+ (install deps, build, configure, start)
+- **ADR-026**: Public testnet launch infrastructure
+
+---
+
 ## Sprint 054 — Mainnet Operational Hardening (M9-S15) (2026-03-11)
 
 ### Added

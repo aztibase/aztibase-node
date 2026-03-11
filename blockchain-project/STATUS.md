@@ -1,9 +1,9 @@
 # PROJECT STATUS: Aztibase Network
 
 **Last Updated:** 2026-03-11
-**Updated By:** blockchain-architect + security-engineer
-**Current Phase:** M9 -- Mainnet Prep (Sprint 15 COMPLETE)
-**Current Sprint:** Sprint 054 -- COMPLETE (Mainnet Operational Hardening)
+**Updated By:** node-engineer + documentation-engineer
+**Current Phase:** M9 -- Mainnet Prep (Sprint 16 COMPLETE)
+**Current Sprint:** Sprint 055 -- COMPLETE (Public Testnet Launch Infrastructure)
 
 ---
 
@@ -79,12 +79,16 @@
 | aztibase-wasm | PARTIAL | p2p-network-engineer | NO | YES |
 
 ### In Progress
-- Sprint 051: WASM tx signing, block explorer, RPC hardening
+- Nothing currently in progress
 
 ### Blocked
 - Nothing currently blocked
 
 ### Recently Completed
+- Sprint 055: Public testnet launch infrastructure — faucet UI, testnet landing page, seed node configs, systemd service, bootstrap script, ADR-026
+- Sprint 054: Mainnet operational hardening — network profiles, rate limiting, CORS, graceful shutdown, key rotation, 925 tests
+- Sprint 053: Protocol store persistence — 8 stores survive node restart via redb, 906 tests
+- Sprint 052: L1 bridge primitives — RegisterL2, AnchorL2State, BridgeDeposit/Withdraw, 4 RPC endpoints
 - Sprint 051: WASM tx signing (signTransfer, generateKeypair), block explorer, CORS, aztb_getBlockTransactionCount, 874 tests
 - Sprint 050: CI pipeline, testnet genesis (--testnet flag), criterion benchmarks (18.3K TPS), deploy script, RPC docs
 - Sprint 049: Protocol versioning, crash recovery, epoch boundaries, throughput baseline (86 TPS debug)

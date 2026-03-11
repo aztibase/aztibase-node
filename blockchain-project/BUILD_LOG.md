@@ -21,6 +21,25 @@ Entries are prepended (newest first).
 
 ## Entries
 
+### Sprint 055 — Public Testnet Launch Infrastructure (M9-S16)
+- **Date**: 2026-03-11
+- **Commit**: (pending)
+- **Files changed**:
+  - `testnet/genesis/genesis.toml` — Canonical testnet genesis (3 validators, 1 faucet account)
+  - `testnet/genesis/keys/` — Validator + funded account key files
+  - `testnet/genesis/node-{1,2,3}.toml` — Local testnet node configs
+  - `testnet/index.html` — Testnet landing page (network details, developer guide, validator guide)
+  - `faucet/index.html` — Faucet web UI (address input, drip button, cooldown timer)
+  - `deploy/seed-nodes/seed-{1,2,3}.toml` — Cloud seed node configs (testnet profile, public bind)
+  - `deploy/systemd/aztibase.service` — Systemd unit file for Linux service management
+  - `deploy/bootstrap.sh` — Cloud VM bootstrap script (Ubuntu 22.04+, build from source)
+  - `blockchain-project/DECISIONS.md` — ADR-026 (public testnet launch infrastructure)
+  - `blockchain-project/sprints/SPRINT-055.md` — Sprint 055 plan
+- **Review notes**: Security review clean — faucet uses regex validation + textContent (no XSS), bootstrap script uses set -euo pipefail, key perms 600. All static HTML, no server-side rendering.
+- **Security flags**: None.
+
+---
+
 ### Sprint 054 — Mainnet Operational Hardening (M9-S15)
 - **Date**: 2026-03-11
 - **Commit**: (pending)

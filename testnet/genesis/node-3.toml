@@ -1,0 +1,36 @@
+data_dir = 'testnet/genesis\node-3'
+genesis_path = 'testnet/genesis\genesis.toml'
+validator_key = 'testnet/genesis\keys\27191e3c43bc6a0ced33cf14eddb903f409c347a3a4ee62d390a94c929c2cf1a.json'
+profile = "dev"
+archive = false
+
+[network]
+listen_addresses = [
+    "/ip4/127.0.0.1/tcp/30353",
+    "/ip4/127.0.0.1/udp/30353/quic-v1",
+]
+boot_nodes = []
+idle_timeout_secs = 60
+stun_servers = [
+    "stun:stun.l.google.com:19302",
+    "stun:stun1.l.google.com:19302",
+]
+enable_webrtc = false
+webrtc_listen_port = 9000
+
+[rpc]
+listen_addr = "127.0.0.1:9946"
+enabled = true
+rate_limit_per_ip = 100
+max_body_bytes = 1048576
+cors_allowed_origins = []
+
+[log]
+level = "info"
+
+[ai]
+enabled = true
+models = []
+
+[metrics]
+enabled = false

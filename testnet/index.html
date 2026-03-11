@@ -1,0 +1,360 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Aztibase Testnet</title>
+<style>
+:root {
+  --bg: #0d1117;
+  --surface: #161b22;
+  --border: #30363d;
+  --text: #e6edf3;
+  --muted: #8b949e;
+  --accent: #58a6ff;
+  --green: #3fb950;
+  --red: #f85149;
+  --mono: 'SF Mono', 'Cascadia Code', 'Fira Code', monospace;
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  line-height: 1.6;
+}
+a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
+code { font-family: var(--mono); font-size: 13px; background: var(--surface); padding: 2px 6px; border-radius: 4px; }
+pre {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 16px;
+  overflow-x: auto;
+  font-family: var(--mono);
+  font-size: 13px;
+  line-height: 1.7;
+  margin: 12px 0;
+}
+
+header {
+  border-bottom: 1px solid var(--border);
+  padding: 16px 24px;
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  flex-wrap: wrap;
+}
+.logo { font-size: 20px; font-weight: 700; letter-spacing: -0.5px; }
+.logo span { color: var(--accent); }
+nav { display: flex; gap: 16px; font-size: 14px; }
+
+.hero {
+  text-align: center;
+  padding: 64px 24px 48px;
+  max-width: 720px;
+  margin: 0 auto;
+}
+.hero h1 { font-size: 36px; font-weight: 700; margin-bottom: 12px; }
+.hero h1 span { color: var(--accent); }
+.hero p { color: var(--muted); font-size: 16px; max-width: 560px; margin: 0 auto 32px; }
+
+.stats {
+  display: flex;
+  gap: 16px;
+  justify-content: center;
+  flex-wrap: wrap;
+  margin-bottom: 48px;
+}
+.stat-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 20px 28px;
+  text-align: center;
+  min-width: 150px;
+}
+.stat-card .val { font-size: 24px; font-weight: 700; font-family: var(--mono); }
+.stat-card .label { font-size: 12px; color: var(--muted); margin-top: 4px; }
+
+.quick-links {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+  flex-wrap: wrap;
+  margin-bottom: 64px;
+}
+.quick-link {
+  display: inline-block;
+  padding: 10px 24px;
+  background: var(--accent);
+  color: #fff;
+  border-radius: 8px;
+  font-weight: 600;
+  font-size: 14px;
+  transition: opacity 0.2s;
+}
+.quick-link:hover { opacity: 0.9; text-decoration: none; }
+.quick-link.secondary { background: var(--surface); border: 1px solid var(--border); color: var(--text); }
+
+.container { max-width: 800px; margin: 0 auto; padding: 0 24px 64px; }
+
+.section { margin-bottom: 48px; }
+.section h2 {
+  font-size: 22px;
+  font-weight: 600;
+  margin-bottom: 16px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border);
+}
+.section h3 { font-size: 16px; font-weight: 600; margin: 20px 0 8px; }
+.section p, .section li { color: var(--muted); font-size: 14px; }
+.section li { margin-bottom: 6px; }
+.section ol, .section ul { padding-left: 24px; }
+
+.step {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 20px;
+  margin-bottom: 12px;
+}
+.step-num {
+  display: inline-block;
+  width: 24px;
+  height: 24px;
+  background: var(--accent);
+  color: #fff;
+  border-radius: 50%;
+  text-align: center;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 24px;
+  margin-right: 10px;
+}
+.step-title { font-weight: 600; font-size: 15px; }
+.step p { margin-top: 8px; }
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  margin: 12px 0;
+}
+th, td { padding: 10px 14px; border: 1px solid var(--border); text-align: left; }
+th { background: var(--surface); color: var(--muted); font-weight: 500; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px; }
+td { font-family: var(--mono); font-size: 12px; }
+
+footer {
+  border-top: 1px solid var(--border);
+  padding: 16px 24px;
+  text-align: center;
+  font-size: 12px;
+  color: var(--muted);
+}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">Aztibase <span>Testnet</span></div>
+  <nav>
+    <a href="https://explorer.aztibase.com">Explorer</a>
+    <a href="https://faucet.aztibase.com">Faucet</a>
+    <a href="https://aztibase.com">Home</a>
+  </nav>
+</header>
+
+<div class="hero">
+  <h1>Aztibase <span>Testnet</span></h1>
+  <p>The public testnet for Aztibase Network — an AI-native, server-independent Layer 1 blockchain. Build, test, and validate before mainnet.</p>
+
+  <div class="stats" id="stats">
+    <div class="stat-card"><div class="val" id="statChainId">0xA27B</div><div class="label">Chain ID</div></div>
+    <div class="stat-card"><div class="val" id="statValidators">3</div><div class="label">Validators</div></div>
+    <div class="stat-card"><div class="val" id="statBlockTime">400ms</div><div class="label">Target Block Time</div></div>
+    <div class="stat-card"><div class="val" id="statTPS">18K+</div><div class="label">Peak TPS</div></div>
+  </div>
+
+  <div class="quick-links">
+    <a class="quick-link" href="https://faucet.aztibase.com">Get Testnet AZTB</a>
+    <a class="quick-link secondary" href="https://explorer.aztibase.com">Block Explorer</a>
+    <a class="quick-link secondary" href="#join-validator">Run a Validator</a>
+    <a class="quick-link secondary" href="#use-testnet">Developer Guide</a>
+  </div>
+</div>
+
+<div class="container">
+
+  <div class="section">
+    <h2>Network Details</h2>
+    <table>
+      <tr><th>Property</th><th>Value</th></tr>
+      <tr><td>Chain ID</td><td>0xA27B (41595)</td></tr>
+      <tr><td>Native Token</td><td>AZTB</td></tr>
+      <tr><td>Consensus</td><td>Synaptic Consensus (SynBFT + PoUW)</td></tr>
+      <tr><td>Target Block Time</td><td>400ms</td></tr>
+      <tr><td>Finality</td><td>&lt;1 second</td></tr>
+      <tr><td>VM</td><td>WASM + EVM (dual)</td></tr>
+      <tr><td>Faucet</td><td>10 AZTB per request, 60s cooldown</td></tr>
+    </table>
+
+    <h3>Seed Nodes</h3>
+    <table>
+      <tr><th>Node</th><th>P2P Address</th><th>RPC Endpoint</th></tr>
+      <tr><td>Seed 1</td><td>/dns4/testnet1.aztibase.com/tcp/30333</td><td>https://testnet1.aztibase.com:9944</td></tr>
+      <tr><td>Seed 2</td><td>/dns4/testnet2.aztibase.com/tcp/30333</td><td>https://testnet2.aztibase.com:9944</td></tr>
+      <tr><td>Seed 3</td><td>/dns4/testnet3.aztibase.com/tcp/30333</td><td>https://testnet3.aztibase.com:9944</td></tr>
+    </table>
+  </div>
+
+  <div class="section" id="use-testnet">
+    <h2>Developer Guide: Use the Testnet</h2>
+
+    <div class="step">
+      <span class="step-num">1</span><span class="step-title">Get testnet tokens</span>
+      <p>Visit the <a href="https://faucet.aztibase.com">faucet</a> and enter your wallet address. You'll receive 10 AZTB (rate limited to 1 request per 60s).</p>
+    </div>
+
+    <div class="step">
+      <span class="step-num">2</span><span class="step-title">Query your balance</span>
+<pre>curl -X POST https://testnet1.aztibase.com:9944 \
+  -H "Content-Type: application/json" \
+  -d '{"jsonrpc":"2.0","method":"aztb_getBalance","params":["YOUR_ADDRESS"],"id":1}'</pre>
+    </div>
+
+    <div class="step">
+      <span class="step-num">3</span><span class="step-title">Send a transfer</span>
+      <p>Use the WASM SDK or CLI wallet to sign and broadcast a transaction:</p>
+<pre># Generate a wallet
+aztibase wallet generate --mnemonic --passphrase "your-passphrase" --output wallet.json
+
+# Send tokens
+aztibase wallet transfer \
+  --keyfile wallet.json \
+  --passphrase "your-passphrase" \
+  --to RECIPIENT_ADDRESS \
+  --amount 100 \
+  --rpc https://testnet1.aztibase.com:9944</pre>
+    </div>
+
+    <div class="step">
+      <span class="step-num">4</span><span class="step-title">Explore blocks and transactions</span>
+      <p>Use the <a href="https://explorer.aztibase.com">block explorer</a> to view blocks, transactions, and account balances in real time.</p>
+    </div>
+
+    <h3>Available RPC Methods (49 total)</h3>
+    <p>Full API reference: <a href="https://github.com/user/aztibase/blob/dev/docs/rpc-api.md">docs/rpc-api.md</a></p>
+    <table>
+      <tr><th>Category</th><th>Methods</th></tr>
+      <tr><td>Chain</td><td>aztb_chainId, aztb_genesisHash, aztb_blockNumber, aztb_gasPrice</td></tr>
+      <tr><td>Accounts</td><td>aztb_getBalance, aztb_getAccountType, aztb_getNonce</td></tr>
+      <tr><td>Blocks</td><td>aztb_getBlockByNumber, aztb_getBlockByHash, aztb_getBlockRange</td></tr>
+      <tr><td>Transactions</td><td>aztb_sendTransaction, aztb_sendRawTransaction, aztb_getTransactionByHash</td></tr>
+      <tr><td>Staking</td><td>aztb_getValidatorStake, aztb_getDelegation, aztb_getActiveValidators</td></tr>
+      <tr><td>Governance</td><td>aztb_getProposal, aztb_listProposals</td></tr>
+      <tr><td>AI/Compute</td><td>aztb_getModelInfo, aztb_listModels, aztb_getTaskStatus</td></tr>
+      <tr><td>Faucet</td><td>aztb_faucetDrip</td></tr>
+      <tr><td>Node</td><td>aztb_nodeInfo, GET /health, GET /metrics</td></tr>
+    </table>
+  </div>
+
+  <div class="section" id="join-validator">
+    <h2>Run a Validator Node</h2>
+
+    <div class="step">
+      <span class="step-num">1</span><span class="step-title">System requirements</span>
+      <table>
+        <tr><th>Component</th><th>Minimum</th><th>Recommended</th></tr>
+        <tr><td>CPU</td><td>2 cores</td><td>4+ cores</td></tr>
+        <tr><td>RAM</td><td>4 GB</td><td>8+ GB</td></tr>
+        <tr><td>Disk</td><td>40 GB SSD</td><td>100+ GB NVMe</td></tr>
+        <tr><td>Network</td><td>100 Mbps</td><td>1 Gbps</td></tr>
+        <tr><td>OS</td><td colspan="2">Ubuntu 22.04+ / Debian 12+ / any Linux with glibc 2.31+</td></tr>
+      </table>
+    </div>
+
+    <div class="step">
+      <span class="step-num">2</span><span class="step-title">Quick install (Ubuntu)</span>
+      <p>Run the bootstrap script to install, build, and configure automatically:</p>
+<pre>curl -sSf https://raw.githubusercontent.com/user/aztibase/dev/deploy/bootstrap.sh | bash</pre>
+      <p>Or build manually:</p>
+<pre># Install Rust
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+
+# Clone and build
+git clone https://github.com/user/aztibase.git
+cd aztibase
+CARGO_INCREMENTAL=0 cargo build --release -p aztibase-node
+
+# Binary is at target/release/aztibase</pre>
+    </div>
+
+    <div class="step">
+      <span class="step-num">3</span><span class="step-title">Generate validator keys</span>
+<pre># Generate a new validator keypair with BIP-39 mnemonic
+./target/release/aztibase wallet generate \
+  --mnemonic --passphrase "your-secure-passphrase" \
+  --output validator.json
+
+# Show your validator address
+./target/release/aztibase wallet show validator.json \
+  --passphrase "your-secure-passphrase"</pre>
+      <p style="color: var(--red); margin-top: 8px;">IMPORTANT: Back up your validator.json and mnemonic phrase. Loss means loss of stake.</p>
+    </div>
+
+    <div class="step">
+      <span class="step-num">4</span><span class="step-title">Get testnet AZTB and stake</span>
+      <p>Use the <a href="https://faucet.aztibase.com">faucet</a> to fund your validator address. Minimum stake: <code>10,000 AZTB</code>.</p>
+      <p>Send a stake transaction from your validator address to register as a validator.</p>
+    </div>
+
+    <div class="step">
+      <span class="step-num">5</span><span class="step-title">Start your node</span>
+<pre># Run with the testnet profile
+./target/release/aztibase \
+  --testnet \
+  --validator-key validator.json \
+  --data-dir ./data \
+  --metrics
+
+# Or use systemd (if installed via bootstrap.sh)
+sudo systemctl start aztibase
+sudo journalctl -u aztibase -f</pre>
+    </div>
+
+    <div class="step">
+      <span class="step-num">6</span><span class="step-title">Verify your node</span>
+<pre># Check health
+curl http://localhost:9944/health
+
+# Check node info
+curl -X POST http://localhost:9944 \
+  -H "Content-Type: application/json" \
+  -d '{"jsonrpc":"2.0","method":"aztb_nodeInfo","params":[],"id":1}'
+
+# Check metrics
+curl http://localhost:9944/metrics</pre>
+    </div>
+  </div>
+
+  <div class="section">
+    <h2>Testnet Rules</h2>
+    <ul>
+      <li>Testnet tokens (AZTB) have no monetary value.</li>
+      <li>The network may be reset without notice during the testnet phase.</li>
+      <li>Report bugs and issues on <a href="https://github.com/user/aztibase/issues">GitHub</a>.</li>
+      <li>Rate limits apply: 100 RPC requests/second per IP, faucet 1 drip/60s.</li>
+      <li>Validators may be slashed for equivocation or extended downtime.</li>
+    </ul>
+  </div>
+
+</div>
+
+<footer>
+  Aztibase Network &mdash; AI-Native Layer 1 Blockchain &mdash; <a href="https://github.com/user/aztibase">GitHub</a>
+</footer>
+
+</body>
+</html>

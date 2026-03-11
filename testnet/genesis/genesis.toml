@@ -1,0 +1,23 @@
+chain_id = 41595
+timestamp = 1773229863142
+
+[[validators]]
+name = "validator-1"
+address = "abb64e592fda454d6f7fd63689c2b3a6dae5aa79aa0215b7009d3a279833df7e"
+stake = "1000000"
+bls_public_key = "b2a7eb677b42ab9525fd7e40aa941207688b45a66757d1873c387df09990db8eea72b9375c4764f786a824754642adf5"
+
+[[validators]]
+name = "validator-2"
+address = "d9dacfe895d71e409bfeed756522e1d0e32b246dd400b64ecfb11dbca339067b"
+stake = "1000000"
+bls_public_key = "969f217b8ddc1cea2118e08ee4a87b6ae822773533032b60029293695c47682f6f03692d605510b8bed6df5676f7b39f"
+
+[[validators]]
+name = "validator-3"
+address = "27191e3c43bc6a0ced33cf14eddb903f409c347a3a4ee62d390a94c929c2cf1a"
+stake = "1000000"
+bls_public_key = "95685341f461712b914b1345b40fc589dd1b91111fd14b3c2a7bcc42b484c197b6b0a5d749df8498b2448d4b96973d40"
+
+[accounts.f65f86e4008177c2dc5c1147c60ad849dda35c36420b01b6c90ea1a2ba245b8d]
+balance = "10000000"

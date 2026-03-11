@@ -33,6 +33,7 @@ Every non-obvious technical decision is recorded here. Each ADR is immutable onc
 | ADR-023 | L2 bridge design — challenge window, proof format, governance gate | 2026-03-11 | ACCEPTED | blockchain-architect + security-engineer |
 | ADR-024 | Protocol store persistence via STATE_TABLE with postcard serialization | 2026-03-11 | ACCEPTED | node-engineer + blockchain-architect |
 | ADR-025 | Network profiles & mainnet operational hardening | 2026-03-11 | ACCEPTED | blockchain-architect + security-engineer |
+| ADR-026 | Public testnet launch infrastructure | 2026-03-11 | ACCEPTED | node-engineer + documentation-engineer |
 
 ---
 
@@ -761,6 +762,38 @@ The node binary treated testnet and mainnet identically. CORS was always permiss
 - Mainnet nodes reject faucet requests at the RPC layer
 - Dirty-start warning gives operators visibility into unclean shutdowns
 - Key rotation is a single atomic operation from the validator's perspective
+
+---
+
+## ADR-026: Public testnet launch infrastructure
+
+**Date:** 2026-03-11
+**Status:** ACCEPTED
+**Decided By:** node-engineer + documentation-engineer
+**Git Ref:** Sprint 055
+
+### Context
+Sprint 047 proved the node works on a 3-node local testnet. Sprints 050-054 added CI, benchmarks, persistence, and hardening. But there was no public-facing infrastructure for external validators or developers to join a testnet — no canonical genesis distribution, no faucet UI, no join instructions, and no deployment tooling.
+
+### Decision
+1. **Canonical testnet genesis**: Pre-generated `testnet/genesis/` directory with deterministic genesis.toml, validator keys, and per-node TOML configs. Uses the existing `testnet_genesis()` for `--testnet` flag, plus generated configs for cloud seed nodes.
+2. **Seed node configs**: 3 TOML files in `deploy/seed-nodes/` targeting `testnet{1,2,3}.aztibase.com` with profile=testnet, metrics enabled, public bind addresses.
+3. **Faucet web UI**: Static HTML at `faucet/index.html` — vanilla JS, same dark theme as explorer, calls `aztb_faucetDrip` via JSON-RPC, client-side 60s cooldown. Configurable RPC endpoint via `?rpc=` URL param.
+4. **Testnet landing page**: Static HTML at `testnet/index.html` — network details, developer guide (4 steps), validator guide (6 steps), seed node table, RPC method summary.
+5. **Deployment helpers**: systemd unit file (`deploy/systemd/aztibase.service`), cloud bootstrap script (`deploy/bootstrap.sh`) for Ubuntu 22.04+ (install deps, build, configure, start).
+6. **All static pages are Vercel-deployable** (same pattern as explorer) — no server-side rendering needed.
+
+### Rationale
+- Static HTML pages (no framework) match the explorer pattern and deploy trivially to Vercel/Netlify/S3
+- Separate `faucet/` and `testnet/` directories allow independent deployment to faucet.aztibase.com and testnet.aztibase.com
+- Systemd unit is the standard Linux service management — avoids Docker dependency for operators
+- Bootstrap script is idempotent and builds from source (no pre-built binary distribution yet)
+
+### Consequences
+- External validators can join with a single bootstrap command
+- Developers can get testnet tokens without CLI tooling
+- Seed node configs are ready for cloud deployment once DNS records are configured
+- The faucet UI depends on a running RPC node with CORS enabled (testnet profile provides this)
 
 ---
 
