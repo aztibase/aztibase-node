@@ -371,6 +371,30 @@ impl StakingStore {
         self.validators.values().map(|v| v.effective_stake()).sum()
     }
 
+    pub fn rotate_key(&mut self, old_id: Address, new_id: Address) -> Result<(), StakingError> {
+        if !self.validators.contains_key(&old_id) {
+            return Err(StakingError::ValidatorNotFound);
+        }
+        if self.validators.contains_key(&new_id) {
+            return Err(StakingError::ValidatorAlreadyRegistered);
+        }
+        let mut entry = self.validators.remove(&old_id).unwrap();
+        entry.validator_id = new_id;
+        self.validators.insert(new_id, entry);
+
+        for delegation in self.delegations.values_mut() {
+            if delegation.validator_id == old_id {
+                delegation.validator_id = new_id;
+            }
+        }
+        for unbond in &mut self.unbonding_queue {
+            if unbond.owner == old_id {
+                unbond.owner = new_id;
+            }
+        }
+        Ok(())
+    }
+
     /// Build the active validator set as (validator_id, effective_stake) pairs.
     /// Only validators with effective_stake >= min_stake are included.
     /// Sorted by effective_stake descending for deterministic ordering.
@@ -843,5 +867,57 @@ mod tests {
         assert_eq!(history.len(), 1);
         assert_eq!(history[0].offense_type, OffenseType::Equivocation);
         assert_eq!(history[0].amount_slashed, 10_000);
+    }
+
+    #[test]
+    fn rotate_key_happy_path() {
+        let mut store = StakingStore::new();
+        store
+            .register_validator(addr(1), MIN_STAKE, MIN_STAKE, MAX_CAP, ROUND)
+            .unwrap();
+        store.rotate_key(addr(1), addr(2)).unwrap();
+
+        assert!(store.get_validator(&addr(1)).is_none());
+        let v = store.get_validator(&addr(2)).unwrap();
+        assert_eq!(v.self_stake, MIN_STAKE);
+    }
+
+    #[test]
+    fn rotate_key_not_found() {
+        let mut store = StakingStore::new();
+        assert!(matches!(
+            store.rotate_key(addr(99), addr(2)),
+            Err(StakingError::ValidatorNotFound)
+        ));
+    }
+
+    #[test]
+    fn rotate_key_duplicate_target() {
+        let mut store = StakingStore::new();
+        store
+            .register_validator(addr(1), MIN_STAKE, MIN_STAKE, MAX_CAP, ROUND)
+            .unwrap();
+        store
+            .register_validator(addr(2), MIN_STAKE, MIN_STAKE, MAX_CAP, ROUND)
+            .unwrap();
+        assert!(matches!(
+            store.rotate_key(addr(1), addr(2)),
+            Err(StakingError::ValidatorAlreadyRegistered)
+        ));
+    }
+
+    #[test]
+    fn rotate_key_updates_delegations() {
+        let mut store = StakingStore::new();
+        store
+            .register_validator(addr(1), MIN_STAKE, MIN_STAKE, MAX_CAP, ROUND)
+            .unwrap();
+        store
+            .delegate(addr(10), addr(1), 50_000, MAX_CAP, ROUND)
+            .unwrap();
+
+        store.rotate_key(addr(1), addr(2)).unwrap();
+        let d = store.get_delegation(&addr(10)).unwrap();
+        assert_eq!(d.validator_id, addr(2));
     }
 }

@@ -21,6 +21,24 @@ Entries are prepended (newest first).
 
 ## Entries
 
+### Sprint 054 — Mainnet Operational Hardening (M9-S15)
+- **Date**: 2026-03-11
+- **Commit**: (pending)
+- **Files changed**:
+  - `crates/aztibase-node/src/config.rs` — NetworkProfile enum (Dev/Testnet/Mainnet), RPC rate limit/body size/CORS config fields, 7 tests
+  - `crates/aztibase-node/src/main.rs` — `--mainnet` CLI flag, profile-driven startup, sentinel check/write/clear, graceful shutdown, profile wired to RPC
+  - `crates/aztibase-rpc/src/server.rs` — RpcRateLimiter (per-IP token bucket), profile-driven CORS, faucet gate by profile, body size limit, ConnectInfo extraction, 6 new tests
+  - `crates/aztibase-execution/src/persist.rs` — Sentinel functions (write/clear/check via STATE_TABLE), 3 new tests
+  - `crates/aztibase-execution/src/routing.rs` — TxKind::RotateValidatorKey (0x1A), encode/decode/route/sender/gas, 1 new test
+  - `crates/aztibase-execution/src/staking.rs` — rotate_key() method (re-keys validator + delegations + unbonding), 4 new tests
+  - `crates/aztibase-execution/src/fee.rs` — Gas estimate 60K for RotateValidatorKey
+  - `crates/aztibase-execution/src/lib.rs` — Re-exports for sentinel functions
+  - `crates/aztibase-node/src/pipeline.rs` — RotateValidatorKey classification + execution + hash computation
+- **Review notes**: ADR-025 documents design. 925 tests pass (19 new), 0 clippy warnings, fmt clean.
+- **Security flags**: None. Rate limiter is per-process (not distributed); acceptable for single-node. Sentinel is best-effort (no WAL guarantee on crash).
+
+---
+
 ### Sprint 053 — Protocol Store Persistence (M9-S14)
 - **Date**: 2026-03-11
 - **Commit**: (pending)

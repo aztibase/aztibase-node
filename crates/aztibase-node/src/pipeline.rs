@@ -547,6 +547,7 @@ impl ExecutionPipeline {
         let mut bridge_deposits: Vec<BridgeDepositEntry> = Vec::new();
         let mut bridge_withdraws: Vec<BridgeWithdrawEntry> = Vec::new();
         let mut register_l2s: Vec<RegisterL2Entry> = Vec::new();
+        let mut rotate_keys: Vec<([u8; 32], [u8; 32], u64)> = Vec::new();
 
         for tx in &executable {
             match tx {
@@ -907,6 +908,14 @@ impl ExecutionPipeline {
                         *nonce,
                     ));
                 }
+                TxKind::RotateValidatorKey {
+                    validator,
+                    new_pubkey,
+                    nonce,
+                    ..
+                } => {
+                    rotate_keys.push((*validator, *new_pubkey, *nonce));
+                }
             }
         }
 
@@ -933,7 +942,8 @@ impl ExecutionPipeline {
             + anchor_l2_states.len()
             + bridge_deposits.len()
             + bridge_withdraws.len()
-            + register_l2s.len();
+            + register_l2s.len()
+            + rotate_keys.len();
 
         // Phase 2: Execute transactions.
         let mut exec_receipts = Vec::new();
@@ -2417,6 +2427,62 @@ impl ExecutionPipeline {
             }
         }
 
+        for (validator, new_pubkey, nonce) in &rotate_keys {
+            let mut buf = Vec::new();
+            buf.extend_from_slice(validator);
+            buf.extend_from_slice(new_pubkey);
+            buf.extend_from_slice(&nonce.to_le_bytes());
+            let tx_hash = hash(&buf);
+
+            let v_nonce = state.nonce(validator);
+            if *nonce != v_nonce {
+                state.increment_nonce(validator);
+                exec_receipts.push(ExecutionReceipt {
+                    tx_hash,
+                    success: false,
+                    gas_used: 21_000,
+                    contract_address: None,
+                    error: Some(format!("nonce mismatch: expected {v_nonce}, got {nonce}")),
+                    inference_hash: None,
+                    anomaly_score: 0.0,
+                });
+                continue;
+            }
+
+            let mut staking = self.staking_store.write().await;
+            match staking.rotate_key(*validator, *new_pubkey) {
+                Ok(()) => {
+                    state.increment_nonce(validator);
+                    exec_receipts.push(ExecutionReceipt {
+                        tx_hash,
+                        success: true,
+                        gas_used: 60_000,
+                        contract_address: None,
+                        error: None,
+                        inference_hash: None,
+                        anomaly_score: 0.0,
+                    });
+                    tracing::info!(
+                        old = %hex::encode(validator),
+                        new = %hex::encode(new_pubkey),
+                        "Validator key rotated"
+                    );
+                }
+                Err(e) => {
+                    state.increment_nonce(validator);
+                    exec_receipts.push(ExecutionReceipt {
+                        tx_hash,
+                        success: false,
+                        gas_used: 21_000,
+                        contract_address: None,
+                        error: Some(format!("key rotation failed: {e}")),
+                        inference_hash: None,
+                        anomaly_score: 0.0,
+                    });
+                }
+            }
+        }
+
         for (sequencer, l2_chain_id, sr, bdh, l2_start, l2_end, nonce) in &anchor_l2_states {
             let mut buf = Vec::new();
             buf.extend_from_slice(sequencer);
@@ -3200,6 +3266,18 @@ fn compute_tx_hash(tx: &TxKind) -> [u8; 32] {
             let mut buf = Vec::new();
             buf.extend_from_slice(owner);
             buf.extend_from_slice(l2_chain_id);
+            buf.extend_from_slice(&nonce.to_le_bytes());
+            hash(&buf)
+        }
+        TxKind::RotateValidatorKey {
+            validator,
+            new_pubkey,
+            nonce,
+            ..
+        } => {
+            let mut buf = Vec::new();
+            buf.extend_from_slice(validator);
+            buf.extend_from_slice(new_pubkey);
             buf.extend_from_slice(&nonce.to_le_bytes());
             hash(&buf)
         }

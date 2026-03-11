@@ -102,8 +102,12 @@ struct Cli {
     epoch_length: Option<u64>,
 
     /// Use the built-in public testnet genesis config and boot nodes
-    #[arg(long)]
+    #[arg(long, conflicts_with = "mainnet")]
     testnet: bool,
+
+    /// Run with mainnet profile (disables faucet, restricts CORS)
+    #[arg(long, conflicts_with = "testnet")]
+    mainnet: bool,
 }
 
 #[derive(clap::Subcommand, Debug)]
@@ -451,11 +455,19 @@ async fn main() -> Result<()> {
     let config = NodeConfig::load_or_default(cli.config.as_deref())?;
     let mut config = cli.apply_overrides(config);
 
+    if cli.mainnet {
+        config.profile = config::NetworkProfile::Mainnet;
+    } else if cli.testnet {
+        config.profile = config::NetworkProfile::Testnet;
+    }
+
     if cli.testnet && config.network.boot_nodes.is_empty() {
         config.network.boot_nodes = genesis::testnet_boot_nodes();
     }
 
     init_logging(&config.log.level)?;
+
+    tracing::info!(profile = %config.profile, "Network profile selected");
 
     if cli.light {
         return run_light_node(&config).await;
@@ -587,6 +599,14 @@ async fn main() -> Result<()> {
         StateStore::open(exec_storage_str).context("Failed to open execution storage")?;
     let exec_store = Arc::new(exec_store);
     tracing::info!(path = %exec_storage_path.display(), "Execution storage initialized");
+
+    if aztibase_execution::check_sentinel(&exec_store).unwrap_or(false) {
+        tracing::warn!(
+            "Previous shutdown was unclean — sentinel still present. State may be stale."
+        );
+    }
+    aztibase_execution::write_sentinel(&exec_store).context("Failed to write startup sentinel")?;
+    let shutdown_store = Arc::clone(&exec_store);
 
     let (pipeline_tx, pipeline_rx) = tokio::sync::mpsc::channel::<CommittedBatch>(256);
     let (result_tx, mut result_rx) = tokio::sync::mpsc::channel::<pipeline::PipelineResult>(256);
@@ -766,6 +786,13 @@ async fn main() -> Result<()> {
         Some(exec_store),
         exec_pipeline.shared_base_fee(),
     )
+    .with_faucet_enabled(config.profile.faucet_enabled())
+    .with_rate_limit(config.rpc.rate_limit_per_ip)
+    .with_cors_config(
+        config.profile.permissive_cors(),
+        config.rpc.cors_allowed_origins.clone(),
+    )
+    .with_max_body_bytes(config.rpc.max_body_bytes)
     .with_event_bus(Arc::clone(&event_bus))
     .with_pending_task_count(exec_pipeline.shared_pending_task_count())
     .with_compute_commitments(exec_pipeline.shared_compute_commitments())
@@ -1226,6 +1253,12 @@ async fn main() -> Result<()> {
     let _ = consensus_handle.await;
     let _ = pipeline_handle.await;
 
+    if let Err(e) = aztibase_execution::clear_sentinel(&shutdown_store) {
+        tracing::warn!(error = %e, "Failed to clear shutdown sentinel");
+    } else {
+        tracing::info!("Clean shutdown — sentinel cleared");
+    }
+
     tracing::info!("Aztibase node shut down");
     Ok(())
 }
@@ -1525,6 +1558,7 @@ mod tests {
             checkpoint: None,
             epoch_length: None,
             testnet: false,
+            mainnet: false,
         };
         let config = cli.apply_overrides(NodeConfig::default());
         assert_eq!(config.data_dir, PathBuf::from("/tmp/test"));
@@ -1550,6 +1584,7 @@ mod tests {
             checkpoint: None,
             epoch_length: None,
             testnet: false,
+            mainnet: false,
         };
         let config = cli.apply_overrides(NodeConfig::default());
         assert_eq!(config.network.listen_addresses.len(), 1);
@@ -1640,6 +1675,7 @@ mod tests {
             checkpoint: None,
             epoch_length: None,
             testnet: false,
+            mainnet: false,
         };
         let result = cli.apply_overrides(config);
 

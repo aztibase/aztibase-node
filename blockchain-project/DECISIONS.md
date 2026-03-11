@@ -32,6 +32,7 @@ Every non-obvious technical decision is recorded here. Each ADR is immutable onc
 | ADR-022 | Protocol version negotiation via libp2p identify | 2026-03-10 | ACCEPTED | p2p-network-engineer + blockchain-architect |
 | ADR-023 | L2 bridge design — challenge window, proof format, governance gate | 2026-03-11 | ACCEPTED | blockchain-architect + security-engineer |
 | ADR-024 | Protocol store persistence via STATE_TABLE with postcard serialization | 2026-03-11 | ACCEPTED | node-engineer + blockchain-architect |
+| ADR-025 | Network profiles & mainnet operational hardening | 2026-03-11 | ACCEPTED | blockchain-architect + security-engineer |
 
 ---
 
@@ -726,6 +727,40 @@ Sprint 052 adds L1 bridge primitives for sovereign rollups. Several design decis
 - Node restart now recovers full protocol state without replaying from genesis
 - STATE_TABLE size grows by ~100KB per store (negligible vs account state)
 - Adding a new store requires: serde derives, flush/load functions, pipeline wiring
+
+---
+
+## ADR-025: Network profiles & mainnet operational hardening
+
+**Date:** 2026-03-11
+**Status:** ACCEPTED
+**Decided By:** blockchain-architect + security-engineer
+**Git Ref:** Sprint 054
+
+### Context
+The node binary treated testnet and mainnet identically. CORS was always permissive, faucet was available on all chains, there was no per-IP rate limiting, shutdown didn't guarantee a clean state flush, and validators couldn't rotate keys without deregistering.
+
+### Decision
+1. **NetworkProfile enum** (`Dev`, `Testnet`, `Mainnet`) drives configuration behavior: CORS policy, faucet availability, and future genesis defaults.
+2. **Per-IP token bucket rate limiter** for RPC endpoints (default 100 req/s, configurable) prevents abuse.
+3. **Profile-driven CORS**: `Mainnet` → explicit origin whitelist; `Testnet`/`Dev` → permissive (`Allow-Any`).
+4. **Faucet gating by profile**: `aztb_faucetDrip` disabled when `profile = Mainnet`.
+5. **DB sentinel pattern**: write `b"running"` to STATE_TABLE on startup, clear on clean shutdown. Dirty-start detection warns the operator.
+6. **Graceful shutdown**: SIGINT handler flushes all protocol stores, clears sentinel, then exits.
+7. **Validator key rotation** via `TxKind::RotateValidatorKey` (0x1A): old key signs a tx authorizing migration to a new pubkey. StakingStore atomically re-keys validator entry + delegations + unbonding queue.
+8. **Configurable request body size limit** (default 1 MiB) to prevent oversized payloads.
+
+### Rationale
+- Profile enum is cheaper than a full "chain spec" abstraction and covers all current divergence points
+- Token bucket is simple, stateless (per-process), and sufficient for single-node RPC protection
+- Sentinel pattern is a proven database health check (SQLite WAL, PostgreSQL pg_control)
+- Key rotation as a first-class TxKind avoids the unstake→restake dance that would cause temporary liveness loss
+
+### Consequences
+- Operators must use `--mainnet` flag for mainnet deployments (default is `dev`)
+- Mainnet nodes reject faucet requests at the RPC layer
+- Dirty-start warning gives operators visibility into unclean shutdowns
+- Key rotation is a single atomic operation from the validator's perspective
 
 ---
 

@@ -5,6 +5,23 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ---
 
+## Sprint 054 — Mainnet Operational Hardening (M9-S15) (2026-03-11)
+
+### Added
+- **Network profiles**: `NetworkProfile` enum (Dev/Testnet/Mainnet) drives CORS, faucet, and startup behavior
+- **`--mainnet` CLI flag**: mutually exclusive with `--testnet`, sets profile to Mainnet
+- **Per-IP RPC rate limiter**: token bucket (default 100 req/s, configurable via `rate_limit_per_ip`)
+- **Profile-driven CORS**: Mainnet restricts to explicit origin whitelist; Dev/Testnet allow any origin
+- **Faucet gating**: `aztb_faucetDrip` disabled when profile = Mainnet
+- **DB sentinel**: write/clear sentinel on startup/shutdown; dirty-start detection warns operator
+- **Graceful shutdown**: SIGINT handler flushes all protocol stores and clears sentinel before exit
+- **Validator key rotation**: `TxKind::RotateValidatorKey` (0x1A) atomically re-keys validator + delegations + unbonding queue
+- **Request body size limit**: configurable (default 1 MiB) to prevent oversized RPC payloads
+- **ADR-025**: Network profiles & mainnet operational hardening
+- 19 new tests (7 config + 3 sentinel + 4 staking + 1 routing + 4 RPC), 925 total
+
+---
+
 ## Sprint 053 — Protocol Store Persistence (M9-S14) (2026-03-11)
 
 ### Added

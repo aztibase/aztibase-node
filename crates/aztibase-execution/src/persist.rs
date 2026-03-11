@@ -512,6 +512,24 @@ pub fn flush_protocol_stores(
     flush_bridge_stores(store, l2_registry, l2_anchors, bridge_escrow, bridge_proofs)
 }
 
+// ── Node Sentinel (clean/dirty shutdown detection) ──────────────────
+
+const SENTINEL_KEY: &[u8] = b"node_sentinel";
+const SENTINEL_RUNNING: &[u8] = b"running";
+
+pub fn write_sentinel(store: &StateStore) -> StorageResult<()> {
+    store.put(STATE_TABLE, SENTINEL_KEY, SENTINEL_RUNNING)
+}
+
+pub fn clear_sentinel(store: &StateStore) -> StorageResult<()> {
+    let _ = store.delete(STATE_TABLE, SENTINEL_KEY)?;
+    Ok(())
+}
+
+pub fn check_sentinel(store: &StateStore) -> StorageResult<bool> {
+    Ok(store.get(STATE_TABLE, SENTINEL_KEY)?.is_some())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1217,6 +1235,54 @@ mod tests {
 
             let (_, _, escrow, _) = load_bridge_stores(&store).unwrap();
             assert_eq!(escrow.balance(&chain_id, &[5u8; 32]), 42_000);
+        }
+
+        cleanup(&path);
+    }
+
+    #[test]
+    fn sentinel_write_and_check() {
+        let path = test_db_path();
+        let store = StateStore::open(path.to_str().unwrap()).unwrap();
+
+        assert!(!check_sentinel(&store).unwrap());
+        write_sentinel(&store).unwrap();
+        assert!(check_sentinel(&store).unwrap());
+
+        cleanup(&path);
+    }
+
+    #[test]
+    fn sentinel_clear_resets() {
+        let path = test_db_path();
+        let store = StateStore::open(path.to_str().unwrap()).unwrap();
+
+        write_sentinel(&store).unwrap();
+        assert!(check_sentinel(&store).unwrap());
+
+        clear_sentinel(&store).unwrap();
+        assert!(!check_sentinel(&store).unwrap());
+
+        cleanup(&path);
+    }
+
+    #[test]
+    fn sentinel_dirty_start_detection() {
+        let path = test_db_path();
+
+        {
+            let store = StateStore::open(path.to_str().unwrap()).unwrap();
+            write_sentinel(&store).unwrap();
+            // simulate crash: drop without clearing
+        }
+
+        {
+            let store = StateStore::open(path.to_str().unwrap()).unwrap();
+            assert!(
+                check_sentinel(&store).unwrap(),
+                "dirty shutdown not detected"
+            );
+            clear_sentinel(&store).unwrap();
         }
 
         cleanup(&path);

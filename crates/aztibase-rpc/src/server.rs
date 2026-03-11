@@ -2,6 +2,7 @@ use std::collections::HashMap;
 use std::net::{IpAddr, SocketAddr};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::time::Instant;
 
 use axum::extract::ws::{Message, WebSocket};
 use axum::extract::{ConnectInfo, DefaultBodyLimit, State, WebSocketUpgrade};
@@ -14,7 +15,7 @@ use axum::{
 use futures::{SinkExt, StreamExt};
 use serde::{Deserialize, Serialize};
 use tokio::sync::{RwLock, broadcast, mpsc};
-use tower_http::cors::{Any, CorsLayer};
+use tower_http::cors::{AllowOrigin, Any, CorsLayer};
 use tracing::{debug, info};
 
 use aztibase_consensus::ComputeCommitmentStore;
@@ -119,6 +120,11 @@ pub struct RpcState {
     pub chain_id: u64,
     pub genesis_hash: Option<[u8; 32]>,
     faucet_tracker: Arc<std::sync::Mutex<HashMap<[u8; 32], std::time::Instant>>>,
+    pub faucet_enabled: bool,
+    pub rate_limiter: Arc<RpcRateLimiter>,
+    pub permissive_cors: bool,
+    pub cors_allowed_origins: Vec<String>,
+    pub max_body_bytes: usize,
 }
 
 impl Clone for RpcState {
@@ -147,6 +153,11 @@ impl Clone for RpcState {
             chain_id: self.chain_id,
             genesis_hash: self.genesis_hash,
             faucet_tracker: Arc::clone(&self.faucet_tracker),
+            faucet_enabled: self.faucet_enabled,
+            rate_limiter: Arc::clone(&self.rate_limiter),
+            permissive_cors: self.permissive_cors,
+            cors_allowed_origins: self.cors_allowed_origins.clone(),
+            max_body_bytes: self.max_body_bytes,
         }
     }
 }
@@ -185,6 +196,58 @@ impl IpConnectionTracker {
                 counts.remove(&ip);
             }
         }
+    }
+}
+
+// ── Per-IP Rate Limiter (token bucket) ──────────────────────────────
+
+const DEFAULT_RATE_LIMIT: u32 = 100;
+const BUCKET_REFILL_INTERVAL_MS: u64 = 1000;
+
+struct IpBucket {
+    tokens: u32,
+    last_refill: Instant,
+}
+
+pub struct RpcRateLimiter {
+    buckets: std::sync::Mutex<HashMap<IpAddr, IpBucket>>,
+    limit_per_second: u32,
+}
+
+impl RpcRateLimiter {
+    pub fn new(limit_per_second: u32) -> Self {
+        Self {
+            buckets: std::sync::Mutex::new(HashMap::new()),
+            limit_per_second: if limit_per_second == 0 {
+                DEFAULT_RATE_LIMIT
+            } else {
+                limit_per_second
+            },
+        }
+    }
+
+    pub fn check(&self, ip: IpAddr) -> bool {
+        let mut buckets = self.buckets.lock().unwrap_or_else(|e| e.into_inner());
+        let now = Instant::now();
+        let bucket = buckets.entry(ip).or_insert(IpBucket {
+            tokens: self.limit_per_second,
+            last_refill: now,
+        });
+        let elapsed_ms = bucket.last_refill.elapsed().as_millis() as u64;
+        if elapsed_ms >= BUCKET_REFILL_INTERVAL_MS {
+            bucket.tokens = self.limit_per_second;
+            bucket.last_refill = now;
+        }
+        if bucket.tokens > 0 {
+            bucket.tokens -= 1;
+            true
+        } else {
+            false
+        }
+    }
+
+    pub fn limit_per_second(&self) -> u32 {
+        self.limit_per_second
     }
 }
 
@@ -267,8 +330,34 @@ impl RpcServer {
                 chain_id: TESTNET_CHAIN_ID,
                 genesis_hash: None,
                 faucet_tracker: Arc::new(std::sync::Mutex::new(HashMap::new())),
+                faucet_enabled: true,
+                rate_limiter: Arc::new(RpcRateLimiter::new(DEFAULT_RATE_LIMIT)),
+                permissive_cors: true,
+                cors_allowed_origins: Vec::new(),
+                max_body_bytes: MAX_WS_FRAME_SIZE,
             },
         }
+    }
+
+    pub fn with_faucet_enabled(mut self, enabled: bool) -> Self {
+        self.state.faucet_enabled = enabled;
+        self
+    }
+
+    pub fn with_rate_limit(mut self, limit_per_second: u32) -> Self {
+        self.state.rate_limiter = Arc::new(RpcRateLimiter::new(limit_per_second));
+        self
+    }
+
+    pub fn with_cors_config(mut self, permissive: bool, allowed_origins: Vec<String>) -> Self {
+        self.state.permissive_cors = permissive;
+        self.state.cors_allowed_origins = allowed_origins;
+        self
+    }
+
+    pub fn with_max_body_bytes(mut self, max_bytes: usize) -> Self {
+        self.state.max_body_bytes = max_bytes;
+        self
     }
 
     pub fn with_chain_id(mut self, chain_id: u64) -> Self {
@@ -360,14 +449,30 @@ impl RpcServer {
                 .route("/metrics", get(handle_metrics_prometheus))
                 .route("/metrics/json", get(handle_metrics_json));
         }
-        let cors = CorsLayer::new()
-            .allow_origin(Any)
-            .allow_methods(Any)
-            .allow_headers(Any);
+
+        let cors = if self.state.permissive_cors {
+            CorsLayer::new()
+                .allow_origin(Any)
+                .allow_methods(Any)
+                .allow_headers(Any)
+        } else if self.state.cors_allowed_origins.is_empty() {
+            CorsLayer::new().allow_methods(Any).allow_headers(Any)
+        } else {
+            let origins: Vec<axum::http::HeaderValue> = self
+                .state
+                .cors_allowed_origins
+                .iter()
+                .filter_map(|o| o.parse().ok())
+                .collect();
+            CorsLayer::new()
+                .allow_origin(AllowOrigin::list(origins))
+                .allow_methods(Any)
+                .allow_headers(Any)
+        };
 
         router
             .layer(cors)
-            .layer(DefaultBodyLimit::max(MAX_WS_FRAME_SIZE))
+            .layer(DefaultBodyLimit::max(self.state.max_body_bytes))
             .with_state(self.state.clone())
     }
 
@@ -386,7 +491,22 @@ impl RpcServer {
 
 // ── HTTP Request Handler ────────────────────────────────────────────
 
-async fn handle_rpc(State(state): State<RpcState>, body: String) -> impl IntoResponse {
+async fn handle_rpc(
+    ConnectInfo(addr): ConnectInfo<SocketAddr>,
+    State(state): State<RpcState>,
+    body: String,
+) -> impl IntoResponse {
+    if !state.rate_limiter.check(addr.ip()) {
+        return (
+            StatusCode::TOO_MANY_REQUESTS,
+            Json(JsonRpcResponse::error(
+                serde_json::Value::Null,
+                -32000,
+                "rate limited".into(),
+            )),
+        );
+    }
+
     let request: JsonRpcRequest = match serde_json::from_str(&body) {
         Ok(r) => r,
         Err(e) => {
@@ -1149,11 +1269,11 @@ fn model_to_json(meta: &ModelMetadata) -> serde_json::Value {
 // ── Faucet + Node Info Endpoints ────────────────────────────────────
 
 async fn handle_faucet_drip(state: &RpcState, req: &JsonRpcRequest) -> JsonRpcResponse {
-    if state.chain_id != TESTNET_CHAIN_ID {
+    if !state.faucet_enabled {
         return JsonRpcResponse::error(
             req.id.clone(),
             -32000,
-            "faucet is only available on testnet".into(),
+            "faucet is disabled on this network".into(),
         );
     }
 
@@ -2235,6 +2355,11 @@ mod tests {
             chain_id: TESTNET_CHAIN_ID,
             genesis_hash: None,
             faucet_tracker: Arc::new(std::sync::Mutex::new(HashMap::new())),
+            faucet_enabled: true,
+            rate_limiter: Arc::new(RpcRateLimiter::new(DEFAULT_RATE_LIMIT)),
+            permissive_cors: true,
+            cors_allowed_origins: Vec::new(),
+            max_body_bytes: MAX_WS_FRAME_SIZE,
         };
         (state, rx)
     }
@@ -2271,6 +2396,11 @@ mod tests {
             chain_id: TESTNET_CHAIN_ID,
             genesis_hash: None,
             faucet_tracker: Arc::new(std::sync::Mutex::new(HashMap::new())),
+            faucet_enabled: true,
+            rate_limiter: Arc::new(RpcRateLimiter::new(DEFAULT_RATE_LIMIT)),
+            permissive_cors: true,
+            cors_allowed_origins: Vec::new(),
+            max_body_bytes: MAX_WS_FRAME_SIZE,
         };
         (state, rx)
     }
@@ -2280,12 +2410,15 @@ mod tests {
             .route("/", post(handle_rpc))
             .with_state(state.clone());
 
-        let request = Request::builder()
+        let mut request = Request::builder()
             .method("POST")
             .uri("/")
             .header("content-type", "application/json")
             .body(Body::from(body.to_string()))
             .unwrap();
+        request
+            .extensions_mut()
+            .insert(ConnectInfo(SocketAddr::from(([127, 0, 0, 1], 0))));
 
         let response = router.oneshot(request).await.unwrap();
         let bytes = axum::body::to_bytes(response.into_body(), 1_048_576)
@@ -2516,6 +2649,11 @@ mod tests {
             chain_id: TESTNET_CHAIN_ID,
             genesis_hash: None,
             faucet_tracker: Arc::new(std::sync::Mutex::new(HashMap::new())),
+            faucet_enabled: true,
+            rate_limiter: Arc::new(RpcRateLimiter::new(DEFAULT_RATE_LIMIT)),
+            permissive_cors: true,
+            cors_allowed_origins: Vec::new(),
+            max_body_bytes: MAX_WS_FRAME_SIZE,
         };
         (state, rx, path)
     }
@@ -2903,6 +3041,11 @@ mod tests {
             chain_id: TESTNET_CHAIN_ID,
             genesis_hash: None,
             faucet_tracker: Arc::new(std::sync::Mutex::new(HashMap::new())),
+            faucet_enabled: true,
+            rate_limiter: Arc::new(RpcRateLimiter::new(DEFAULT_RATE_LIMIT)),
+            permissive_cors: true,
+            cors_allowed_origins: Vec::new(),
+            max_body_bytes: MAX_WS_FRAME_SIZE,
         };
         (state, rx)
     }
@@ -2999,6 +3142,11 @@ mod tests {
             chain_id: TESTNET_CHAIN_ID,
             genesis_hash: None,
             faucet_tracker: Arc::new(std::sync::Mutex::new(HashMap::new())),
+            faucet_enabled: true,
+            rate_limiter: Arc::new(RpcRateLimiter::new(100)),
+            permissive_cors: true,
+            cors_allowed_origins: vec![],
+            max_body_bytes: 2 * 1024 * 1024,
         };
 
         let task_hex = hex::encode(task_id);
@@ -3561,5 +3709,57 @@ mod tests {
         let resp = rpc_call(&state, &body).await;
         assert!(resp["error"].is_null());
         assert_eq!(resp["result"]["used"], false);
+    }
+
+    #[test]
+    fn rate_limiter_allows_within_budget() {
+        let limiter = RpcRateLimiter::new(5);
+        let ip: IpAddr = "127.0.0.1".parse().unwrap();
+        for _ in 0..5 {
+            assert!(limiter.check(ip));
+        }
+        assert!(!limiter.check(ip), "6th request should be rejected");
+    }
+
+    #[test]
+    fn rate_limiter_isolates_ips() {
+        let limiter = RpcRateLimiter::new(2);
+        let a: IpAddr = "10.0.0.1".parse().unwrap();
+        let b: IpAddr = "10.0.0.2".parse().unwrap();
+        assert!(limiter.check(a));
+        assert!(limiter.check(a));
+        assert!(!limiter.check(a));
+        assert!(limiter.check(b), "different IP should have own budget");
+    }
+
+    #[test]
+    fn rate_limiter_zero_defaults_to_100() {
+        let limiter = RpcRateLimiter::new(0);
+        assert_eq!(limiter.limit_per_second(), DEFAULT_RATE_LIMIT);
+    }
+
+    #[tokio::test]
+    async fn faucet_disabled_on_mainnet_profile() {
+        let (mut state, _rx) = test_state();
+        state.faucet_enabled = false;
+        let body = r#"{"jsonrpc":"2.0","method":"aztb_faucetDrip","params":["0x0000000000000000000000000000000000000000000000000000000000000001"],"id":1}"#;
+        let resp = rpc_call(&state, body).await;
+        assert!(resp["error"].is_object(), "faucet should be disabled");
+    }
+
+    #[tokio::test]
+    async fn faucet_enabled_on_testnet_profile() {
+        let (mut state, _rx) = test_state();
+        state.faucet_enabled = true;
+        let body = r#"{"jsonrpc":"2.0","method":"aztb_faucetDrip","params":["0x0000000000000000000000000000000000000000000000000000000000000001"],"id":1}"#;
+        let resp = rpc_call(&state, body).await;
+        let has_disabled_error = resp["error"]["message"]
+            .as_str()
+            .map(|s| s.contains("disabled"))
+            .unwrap_or(false);
+        assert!(
+            !has_disabled_error,
+            "faucet should not be disabled on testnet"
+        );
     }
 }

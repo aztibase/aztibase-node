@@ -2,8 +2,8 @@
 
 **Last Updated:** 2026-03-11
 **Updated By:** blockchain-architect + security-engineer
-**Current Phase:** M9 -- Mainnet Prep (Sprint 14 COMPLETE)
-**Current Sprint:** Sprint 053 -- COMPLETE (Protocol Store Persistence)
+**Current Phase:** M9 -- Mainnet Prep (Sprint 15 COMPLETE)
+**Current Sprint:** Sprint 054 -- COMPLETE (Mainnet Operational Hardening)
 
 ---
 
