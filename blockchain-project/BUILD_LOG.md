@@ -21,6 +21,24 @@ Entries are prepended (newest first).
 
 ## Entries
 
+### Sprint 053 — Protocol Store Persistence (M9-S14)
+- **Date**: 2026-03-11
+- **Commit**: (pending)
+- **Files changed**:
+  - `crates/aztibase-execution/src/staking.rs` — Added Serialize/Deserialize derives to ValidatorStake, Delegation, UnbondingEntry, OffenseType, SlashRecord, StakingStore
+  - `crates/aztibase-execution/src/governance.rs` — Added Serialize/Deserialize to GovernanceStore
+  - `crates/aztibase-execution/src/tokenomics.rs` — Added Serialize/Deserialize to EmissionTracker, impl Default
+  - `crates/aztibase-execution/src/chain_params.rs` — Added Serialize/Deserialize to ParamValue, ChainParams
+  - `crates/aztibase-execution/src/agent.rs` — Added Serialize/Deserialize to AgentPolicy, AgentSpendRecord, AgentPolicyStore
+  - `crates/aztibase-execution/src/l2_bridge.rs` — Added Serialize/Deserialize to L2Registry, L2AnchorStore, BridgeEscrow, BridgeWithdrawProofs
+  - `crates/aztibase-execution/src/persist.rs` — 9 STATE_TABLE keys, generic flush/load helpers, individual flush/load for all 8 stores, flush_protocol_stores convenience fn, 9 new tests
+  - `crates/aztibase-execution/src/lib.rs` — Updated re-exports for all new flush/load functions
+  - `crates/aztibase-node/src/pipeline.rs` — with_storage() loads all stores from disk, execute_batch() flushes all stores after state
+- **Review notes**: ADR-024 documents design. 0 clippy warnings, fmt clean. 214/215 node tests pass (1 pre-existing flaky: validator_crash_and_recovery). 29/29 persist tests pass.
+- **Security flags**: None. Deserialization failures fall back to defaults with tracing::warn.
+
+---
+
 ### Sprint 052 — L1 Bridge Primitives for Sovereign Rollups (M9-S13)
 - **Date**: 2026-03-11
 - **Commit**: (pending)

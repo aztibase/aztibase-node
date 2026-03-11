@@ -12,8 +12,10 @@ use aztibase_execution::{
     ExecutionReceipt, FeeEscrow, GovernanceStore, L2Anchor, L2AnchorStore, L2Registration,
     L2Registry, OffenseType, StakingStore, TransferTx, TxKind,
     block_stm::{BlockSTMExecutor, apply_block_stm_to_state},
-    escrow_fee, evm, execute_contract_txs, flush_state, latest_batch_index, load_base_fee,
-    load_state,
+    escrow_fee, evm, execute_contract_txs, flush_agent_policies, flush_bridge_stores,
+    flush_chain_params, flush_emission, flush_governance, flush_staking, flush_state,
+    latest_batch_index, load_agent_policies, load_base_fee, load_bridge_stores, load_chain_params,
+    load_emission, load_governance, load_staking, load_state,
     model_registry::{MODEL_REGISTRY_ADDRESS, ModelRegistry},
     refund_unused,
     state::AccountType,
@@ -132,6 +134,50 @@ impl ExecutionPipeline {
         let calculator = BaseFeeCalculator::new(initial_base_fee);
         let base_fee = Arc::new(std::sync::atomic::AtomicU64::new(calculator.base_fee()));
         let (slash_tx_init, slash_rx_init) = mpsc::channel(64);
+
+        let staking = load_staking(&store).unwrap_or_else(|e| {
+            tracing::warn!(error = %e, "Failed to load staking, starting fresh");
+            StakingStore::new()
+        });
+        let governance = load_governance(&store).unwrap_or_else(|e| {
+            tracing::warn!(error = %e, "Failed to load governance, starting fresh");
+            GovernanceStore::new()
+        });
+        let emission = load_emission(&store).unwrap_or_else(|e| {
+            tracing::warn!(error = %e, "Failed to load emission tracker, starting fresh");
+            EmissionTracker::new(aztibase_execution::tokenomics::DEFAULT_EPOCH_LENGTH)
+        });
+        let chain_params = load_chain_params(&store).unwrap_or_else(|e| {
+            tracing::warn!(error = %e, "Failed to load chain params, starting fresh");
+            ChainParams::defaults()
+        });
+        let agent_policies = load_agent_policies(&store).unwrap_or_else(|e| {
+            tracing::warn!(error = %e, "Failed to load agent policies, starting fresh");
+            AgentPolicyStore::new()
+        });
+        let (l2_registry, l2_anchors, escrow, withdraw_proofs) = load_bridge_stores(&store)
+            .unwrap_or_else(|e| {
+                tracing::warn!(error = %e, "Failed to load bridge stores, starting fresh");
+                (
+                    L2Registry::new(),
+                    L2AnchorStore::new(),
+                    BridgeEscrowStore::new(),
+                    BridgeWithdrawProofs::new(),
+                )
+            });
+
+        if recovered_batch_count > 0 {
+            tracing::info!(
+                staking = "loaded",
+                governance = "loaded",
+                emission = "loaded",
+                chain_params = "loaded",
+                agent_policies = "loaded",
+                bridge = "loaded",
+                "Protocol stores recovered from disk"
+            );
+        }
+
         Self {
             state: Arc::new(RwLock::new(state)),
             store: Some(store),
@@ -150,21 +196,19 @@ impl ExecutionPipeline {
             attestation_buffer: HashMap::new(),
             attestation_aggregator: AttestationAggregator::new(2),
             compute_commitments: Arc::new(RwLock::new(ComputeCommitmentStore::new())),
-            governance: Arc::new(RwLock::new(GovernanceStore::new())),
-            chain_params: Arc::new(RwLock::new(ChainParams::defaults())),
-            emission_tracker: Arc::new(RwLock::new(EmissionTracker::new(
-                aztibase_execution::tokenomics::DEFAULT_EPOCH_LENGTH,
-            ))),
-            staking_store: Arc::new(RwLock::new(StakingStore::new())),
+            governance: Arc::new(RwLock::new(governance)),
+            chain_params: Arc::new(RwLock::new(chain_params)),
+            emission_tracker: Arc::new(RwLock::new(emission)),
+            staking_store: Arc::new(RwLock::new(staking)),
             slash_rx: slash_rx_init,
             slash_tx: slash_tx_init,
             consensus_tx: None,
             epoch_participation: HashSet::new(),
-            agent_policy_store: Arc::new(RwLock::new(AgentPolicyStore::new())),
-            l2_registry: Arc::new(RwLock::new(L2Registry::new())),
-            l2_anchor_store: Arc::new(RwLock::new(L2AnchorStore::new())),
-            bridge_escrow: Arc::new(RwLock::new(BridgeEscrowStore::new())),
-            bridge_withdraw_proofs: Arc::new(RwLock::new(BridgeWithdrawProofs::new())),
+            agent_policy_store: Arc::new(RwLock::new(agent_policies)),
+            l2_registry: Arc::new(RwLock::new(l2_registry)),
+            l2_anchor_store: Arc::new(RwLock::new(l2_anchors)),
+            bridge_escrow: Arc::new(RwLock::new(escrow)),
+            bridge_withdraw_proofs: Arc::new(RwLock::new(withdraw_proofs)),
             archive: false,
         }
     }
@@ -2697,6 +2741,25 @@ impl ExecutionPipeline {
                 .map_err(|e| anyhow::anyhow!("fatal: store_receipts failed: {e}"))?;
             store_base_fee(store, self.base_fee_calculator.base_fee())
                 .map_err(|e| anyhow::anyhow!("fatal: store_base_fee failed: {e}"))?;
+
+            flush_staking(store, &*self.staking_store.read().await)
+                .map_err(|e| anyhow::anyhow!("fatal: flush_staking failed: {e}"))?;
+            flush_governance(store, &*self.governance.read().await)
+                .map_err(|e| anyhow::anyhow!("fatal: flush_governance failed: {e}"))?;
+            flush_emission(store, &*self.emission_tracker.read().await)
+                .map_err(|e| anyhow::anyhow!("fatal: flush_emission failed: {e}"))?;
+            flush_chain_params(store, &*self.chain_params.read().await)
+                .map_err(|e| anyhow::anyhow!("fatal: flush_chain_params failed: {e}"))?;
+            flush_agent_policies(store, &*self.agent_policy_store.read().await)
+                .map_err(|e| anyhow::anyhow!("fatal: flush_agent_policies failed: {e}"))?;
+            flush_bridge_stores(
+                store,
+                &*self.l2_registry.read().await,
+                &*self.l2_anchor_store.read().await,
+                &*self.bridge_escrow.read().await,
+                &*self.bridge_withdraw_proofs.read().await,
+            )
+            .map_err(|e| anyhow::anyhow!("fatal: flush_bridge_stores failed: {e}"))?;
 
             let batch_number = self.batch_count.load(std::sync::atomic::Ordering::Relaxed);
             let _ = aztibase_execution::store_batch_index(store, batch_number, &batch.anchor_hash);

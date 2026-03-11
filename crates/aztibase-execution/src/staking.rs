@@ -1,6 +1,8 @@
 use std::cmp::Reverse;
 use std::collections::{HashMap, VecDeque};
 
+use serde::{Deserialize, Serialize};
+
 type Address = [u8; 32];
 
 pub const EQUIVOCATION_SLASH_BPS: u32 = 1000;
@@ -9,7 +11,7 @@ pub const DOWNTIME_THRESHOLD_ROUNDS: u64 = 1000;
 pub const MAX_UNBONDING_ENTRIES: usize = 10_000;
 pub const DEFAULT_COMMISSION_BPS: u32 = 1000;
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ValidatorStake {
     pub validator_id: Address,
     pub self_stake: u128,
@@ -24,7 +26,7 @@ impl ValidatorStake {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Delegation {
     pub delegator: Address,
     pub validator_id: Address,
@@ -32,20 +34,20 @@ pub struct Delegation {
     pub round_delegated: u64,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct UnbondingEntry {
     pub owner: Address,
     pub amount: u128,
     pub available_round: u64,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum OffenseType {
     Equivocation,
     Downtime,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SlashRecord {
     pub validator_id: Address,
     pub offense_type: OffenseType,
@@ -87,7 +89,7 @@ impl std::fmt::Display for StakingError {
 
 impl std::error::Error for StakingError {}
 
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct StakingStore {
     validators: HashMap<Address, ValidatorStake>,
     delegations: HashMap<Address, Delegation>,

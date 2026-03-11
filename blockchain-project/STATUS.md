@@ -2,8 +2,8 @@
 
 **Last Updated:** 2026-03-11
 **Updated By:** blockchain-architect + security-engineer
-**Current Phase:** M9 -- Mainnet Prep (Sprint 13 COMPLETE)
-**Current Sprint:** Sprint 052 -- COMPLETE (L1 Bridge Primitives for Sovereign Rollups)
+**Current Phase:** M9 -- Mainnet Prep (Sprint 14 COMPLETE)
+**Current Sprint:** Sprint 053 -- COMPLETE (Protocol Store Persistence)
 
 ---
 
@@ -33,8 +33,9 @@
 - Build-phase tracking infrastructure (5 documents)
 - Implementation depth audit (Sprint 001, Task 7)
 - Reference repos cloned (MystiCeti, Sui, Lighthouse, rust-libp2p, redb)
-- Sprint 052 complete: L1 bridge primitives (RegisterL2, AnchorL2State, BridgeDeposit, BridgeWithdraw), 4 RPC endpoints, 897 tests
-- cargo build + cargo test pass (897 tests, 0 failures)
+- Sprint 052 complete: L1 bridge primitives (RegisterL2, AnchorL2State, BridgeDeposit, BridgeWithdraw), 4 RPC endpoints
+- Sprint 053 complete: Protocol store persistence — 8 stores survive node restart via redb, 906 tests
+- cargo build + cargo test pass (906 tests, 0 failures)
 - Sprint 001 closed with retrospective
 - Sprint 002 closed: 24/24 tasks, 5 phases complete
 - Sprint 003 closed: 18/18 tasks, 4 phases complete

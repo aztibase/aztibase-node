@@ -5,6 +5,18 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ---
 
+## Sprint 053 — Protocol Store Persistence (M9-S14) (2026-03-11)
+
+### Added
+- **Protocol store persistence**: 8 in-memory stores now survive node restart via redb STATE_TABLE serialization (2026-03-11)
+- Persisted stores: StakingStore, GovernanceStore, EmissionTracker, ChainParams, AgentPolicyStore, L2Registry, L2AnchorStore, BridgeEscrow, BridgeWithdrawProofs
+- Generic `flush_serializable`/`load_serializable` helpers using postcard binary serialization (2026-03-11)
+- Pipeline startup loads all stores from disk; batch commit flushes all stores atomically (2026-03-11)
+- ADR-024: Protocol store persistence design (STATE_TABLE prefixed keys, postcard, flush-after-batch) (2026-03-11)
+- 9 new persistence roundtrip tests (staking, governance, emission, chain_params, agent_policies, bridge, empty_db, crash_recovery, full_protocol) (2026-03-11)
+
+---
+
 ## Sprint 052 — L1 Bridge Primitives for Sovereign Rollups (M9-S13) (2026-03-11)
 
 ### Added

@@ -31,6 +31,7 @@ Every non-obvious technical decision is recorded here. Each ADR is immutable onc
 | ADR-021 | No mempool persistence — re-gossip from peers on restart | 2026-03-10 | ACCEPTED | node-engineer + blockchain-architect |
 | ADR-022 | Protocol version negotiation via libp2p identify | 2026-03-10 | ACCEPTED | p2p-network-engineer + blockchain-architect |
 | ADR-023 | L2 bridge design — challenge window, proof format, governance gate | 2026-03-11 | ACCEPTED | blockchain-architect + security-engineer |
+| ADR-024 | Protocol store persistence via STATE_TABLE with postcard serialization | 2026-03-11 | ACCEPTED | node-engineer + blockchain-architect |
 
 ---
 
@@ -695,6 +696,36 @@ Sprint 052 adds L1 bridge primitives for sovereign rollups. Several design decis
 - Withdrawals are delayed by ~40s finality window (acceptable for cross-layer transfers)
 - Future L2-specific proof verification can be added without changing L1 wire format
 - 4 new TxKinds (0x16-0x19) consume prefix space (245 remaining)
+
+---
+
+## ADR-024: Protocol store persistence via STATE_TABLE with postcard serialization
+
+**Date:** 2026-03-11
+**Status:** ACCEPTED
+**Decided By:** node-engineer + blockchain-architect
+**Git Ref:** Sprint 053
+
+### Context
+8 in-memory protocol stores (StakingStore, GovernanceStore, EmissionTracker, ChainParams, AgentPolicyStore, L2Registry, L2AnchorStore, BridgeEscrow, BridgeWithdrawProofs) were lost on node restart. This is a mainnet showstopper — validators would lose stake records, governance proposals, emission tracking, and bridge escrow balances.
+
+### Decision
+1. **Reuse STATE_TABLE with prefixed keys** — Rather than creating 9 new redb tables, serialize each store as a single blob under a domain-prefixed key (e.g., `b"staking_store"`) in the existing STATE_TABLE.
+2. **postcard serialization** — Use postcard (already a workspace dependency) for binary serialization. Compact, fast, no-std compatible.
+3. **Flush-after-batch pattern** — All stores are flushed atomically after each batch commit, alongside flush_state and store_base_fee.
+4. **Load-on-startup with defaults** — On startup, each store is loaded from disk with graceful fallback to defaults if the key is missing or deserialization fails.
+5. **Serde derives on all store types** — Added `Serialize, Deserialize` to all store structs and their contained types.
+
+### Rationale
+- Single-table approach avoids redb table proliferation (14 tables already exist)
+- postcard is 10-100x faster than JSON for serialization and produces smaller blobs
+- Flush-after-batch ensures consistency: protocol state matches account state at every batch boundary
+- Default fallback ensures forward compatibility when new stores are added
+
+### Consequences
+- Node restart now recovers full protocol state without replaying from genesis
+- STATE_TABLE size grows by ~100KB per store (negligible vs account state)
+- Adding a new store requires: serde derives, flush/load functions, pipeline wiring
 
 ---
 

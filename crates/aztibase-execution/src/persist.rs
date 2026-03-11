@@ -1,10 +1,16 @@
 use aztibase_storage::{
     ACCOUNTS_TABLE, BATCH_INDEX_TABLE, BATCH_ROOTS_TABLE, BATCH_TXS_TABLE, CHECKPOINTS_TABLE,
     CONTRACT_CODE_TABLE, CONTRACT_STORAGE_TABLE, EQUIVOCATION_PROOFS_TABLE, STATE_TABLE,
-    StateStore, StorageResult, TX_TABLE, TableDef,
+    StateStore, StorageError, StorageResult, TX_TABLE, TableDef,
 };
 
+use crate::agent::AgentPolicyStore;
+use crate::chain_params::ChainParams;
+use crate::governance::GovernanceStore;
+use crate::l2_bridge::{BridgeEscrow, BridgeWithdrawProofs, L2AnchorStore, L2Registry};
+use crate::staking::StakingStore;
 use crate::state::{AccountState, AccountType};
+use crate::tokenomics::EmissionTracker;
 
 type Address = [u8; 32];
 
@@ -371,6 +377,139 @@ pub fn get_batch_range(
         })
         .collect();
     Ok(results)
+}
+
+// ---------------------------------------------------------------------------
+// Protocol state persistence (Sprint 053)
+// ---------------------------------------------------------------------------
+
+const STAKING_KEY: &[u8] = b"staking_store";
+const GOVERNANCE_KEY: &[u8] = b"governance_store";
+const EMISSION_KEY: &[u8] = b"emission_tracker";
+const CHAIN_PARAMS_KEY: &[u8] = b"chain_params";
+const AGENT_POLICIES_KEY: &[u8] = b"agent_policies";
+const L2_REGISTRY_KEY: &[u8] = b"l2_registry";
+const L2_ANCHORS_KEY: &[u8] = b"l2_anchors";
+const BRIDGE_ESCROW_KEY: &[u8] = b"bridge_escrow";
+const BRIDGE_PROOFS_KEY: &[u8] = b"bridge_proofs";
+
+fn flush_serializable<T: serde::Serialize>(
+    store: &StateStore,
+    key: &[u8],
+    value: &T,
+) -> StorageResult<()> {
+    let data = postcard::to_allocvec(value).map_err(|_| StorageError::NotFound)?;
+    store.put(STATE_TABLE, key, &data)
+}
+
+fn load_serializable<T: serde::de::DeserializeOwned + Default>(
+    store: &StateStore,
+    key: &[u8],
+) -> StorageResult<T> {
+    match store.get(STATE_TABLE, key)? {
+        Some(data) => match postcard::from_bytes(&data) {
+            Ok(val) => Ok(val),
+            Err(_) => {
+                tracing::warn!(
+                    key = %String::from_utf8_lossy(key),
+                    "Failed to deserialize, using default"
+                );
+                Ok(T::default())
+            }
+        },
+        None => Ok(T::default()),
+    }
+}
+
+pub fn flush_staking(store: &StateStore, staking: &StakingStore) -> StorageResult<()> {
+    flush_serializable(store, STAKING_KEY, staking)
+}
+
+pub fn load_staking(store: &StateStore) -> StorageResult<StakingStore> {
+    load_serializable(store, STAKING_KEY)
+}
+
+pub fn flush_governance(store: &StateStore, governance: &GovernanceStore) -> StorageResult<()> {
+    flush_serializable(store, GOVERNANCE_KEY, governance)
+}
+
+pub fn load_governance(store: &StateStore) -> StorageResult<GovernanceStore> {
+    load_serializable(store, GOVERNANCE_KEY)
+}
+
+pub fn flush_emission(store: &StateStore, tracker: &EmissionTracker) -> StorageResult<()> {
+    flush_serializable(store, EMISSION_KEY, tracker)
+}
+
+pub fn load_emission(store: &StateStore) -> StorageResult<EmissionTracker> {
+    load_serializable(store, EMISSION_KEY)
+}
+
+pub fn flush_chain_params(store: &StateStore, params: &ChainParams) -> StorageResult<()> {
+    flush_serializable(store, CHAIN_PARAMS_KEY, params)
+}
+
+pub fn load_chain_params(store: &StateStore) -> StorageResult<ChainParams> {
+    load_serializable(store, CHAIN_PARAMS_KEY)
+}
+
+pub fn flush_agent_policies(store: &StateStore, policies: &AgentPolicyStore) -> StorageResult<()> {
+    flush_serializable(store, AGENT_POLICIES_KEY, policies)
+}
+
+pub fn load_agent_policies(store: &StateStore) -> StorageResult<AgentPolicyStore> {
+    load_serializable(store, AGENT_POLICIES_KEY)
+}
+
+pub fn flush_bridge_stores(
+    store: &StateStore,
+    registry: &L2Registry,
+    anchors: &L2AnchorStore,
+    escrow: &BridgeEscrow,
+    proofs: &BridgeWithdrawProofs,
+) -> StorageResult<()> {
+    flush_serializable(store, L2_REGISTRY_KEY, registry)?;
+    flush_serializable(store, L2_ANCHORS_KEY, anchors)?;
+    flush_serializable(store, BRIDGE_ESCROW_KEY, escrow)?;
+    flush_serializable(store, BRIDGE_PROOFS_KEY, proofs)
+}
+
+pub fn load_bridge_stores(
+    store: &StateStore,
+) -> StorageResult<(
+    L2Registry,
+    L2AnchorStore,
+    BridgeEscrow,
+    BridgeWithdrawProofs,
+)> {
+    Ok((
+        load_serializable(store, L2_REGISTRY_KEY)?,
+        load_serializable(store, L2_ANCHORS_KEY)?,
+        load_serializable(store, BRIDGE_ESCROW_KEY)?,
+        load_serializable(store, BRIDGE_PROOFS_KEY)?,
+    ))
+}
+
+/// Flush all protocol stores in sequence.
+#[allow(clippy::too_many_arguments)]
+pub fn flush_protocol_stores(
+    store: &StateStore,
+    staking: &StakingStore,
+    governance: &GovernanceStore,
+    emission: &EmissionTracker,
+    chain_params: &ChainParams,
+    agent_policies: &AgentPolicyStore,
+    l2_registry: &L2Registry,
+    l2_anchors: &L2AnchorStore,
+    bridge_escrow: &BridgeEscrow,
+    bridge_proofs: &BridgeWithdrawProofs,
+) -> StorageResult<()> {
+    flush_staking(store, staking)?;
+    flush_governance(store, governance)?;
+    flush_emission(store, emission)?;
+    flush_chain_params(store, chain_params)?;
+    flush_agent_policies(store, agent_policies)?;
+    flush_bridge_stores(store, l2_registry, l2_anchors, bridge_escrow, bridge_proofs)
 }
 
 #[cfg(test)]
@@ -816,6 +955,268 @@ mod tests {
             let root = get_batch_root(&store, &anchor_b).unwrap();
             assert!(root.is_some());
             assert_eq!(root.unwrap(), loaded.state_root());
+        }
+
+        cleanup(&path);
+    }
+
+    #[test]
+    fn staking_store_roundtrip() {
+        let path = test_db_path();
+        let store = StateStore::open(path.to_str().unwrap()).unwrap();
+
+        let mut staking = StakingStore::new();
+        staking
+            .register_validator([1u8; 32], 100_000, 50_000, 1_000_000, 42)
+            .unwrap();
+        staking
+            .delegate([2u8; 32], [1u8; 32], 5_000, 1_000_000, 42)
+            .unwrap();
+
+        flush_staking(&store, &staking).unwrap();
+        let loaded = load_staking(&store).unwrap();
+
+        let v = loaded.get_validator(&[1u8; 32]).unwrap();
+        assert_eq!(v.self_stake, 100_000);
+        assert_eq!(v.total_delegated, 5_000);
+        assert!(v.active);
+
+        let d = loaded.get_delegation(&[2u8; 32]).unwrap();
+        assert_eq!(d.amount, 5_000);
+
+        cleanup(&path);
+    }
+
+    #[test]
+    fn governance_store_roundtrip() {
+        let path = test_db_path();
+        let store = StateStore::open(path.to_str().unwrap()).unwrap();
+
+        let mut gov = GovernanceStore::new();
+        let mut snapshot = std::collections::HashMap::new();
+        snapshot.insert([0xB0; 32], 1000u128);
+        snapshot.insert([0xB1; 32], 500u128);
+        gov.create_proposal(crate::governance::CreateProposalParams {
+            id: [0x01; 32],
+            proposer: [0xA0; 32],
+            description: "Test proposal for persistence".into(),
+            param_key: "base_fee_floor".into(),
+            param_value: "5".into(),
+            current_round: 100,
+            voting_period: 50,
+            snapshot_balances: snapshot,
+        })
+        .unwrap();
+        gov.cast_vote([0xB0; 32], [0x01; 32], true, 1000).unwrap();
+
+        flush_governance(&store, &gov).unwrap();
+        let loaded = load_governance(&store).unwrap();
+
+        let p = loaded.get(&[0x01; 32]).unwrap();
+        assert_eq!(p.description, "Test proposal for persistence");
+        let tally = loaded.tally(&[0x01; 32]).unwrap();
+        assert_eq!(tally.approve_weight, 1000);
+        assert_eq!(tally.voter_count, 1);
+
+        cleanup(&path);
+    }
+
+    #[test]
+    fn emission_tracker_roundtrip() {
+        let path = test_db_path();
+        let store = StateStore::open(path.to_str().unwrap()).unwrap();
+
+        let mut tracker = EmissionTracker::new(1000);
+        tracker.advance_epoch();
+        tracker.advance_epoch();
+        let epoch_before = tracker.current_epoch;
+        let emitted_before = tracker.total_emitted;
+
+        flush_emission(&store, &tracker).unwrap();
+        let loaded = load_emission(&store).unwrap();
+        assert_eq!(loaded.current_epoch, epoch_before);
+        assert_eq!(loaded.total_emitted, emitted_before);
+        assert_eq!(loaded.epoch_length, 1000);
+
+        cleanup(&path);
+    }
+
+    #[test]
+    fn chain_params_roundtrip() {
+        let path = test_db_path();
+        let store = StateStore::open(path.to_str().unwrap()).unwrap();
+
+        let mut params = ChainParams::defaults();
+        params
+            .set("base_fee_floor", crate::chain_params::ParamValue::U64(42))
+            .unwrap();
+
+        flush_chain_params(&store, &params).unwrap();
+        let loaded = load_chain_params(&store).unwrap();
+        assert_eq!(loaded.get_u64("base_fee_floor"), Some(42));
+
+        cleanup(&path);
+    }
+
+    #[test]
+    fn agent_policies_roundtrip() {
+        let path = test_db_path();
+        let store = StateStore::open(path.to_str().unwrap()).unwrap();
+
+        let mut policies = AgentPolicyStore::new();
+        policies.set_policy(
+            [1u8; 32],
+            crate::agent::AgentPolicy {
+                owner: [2u8; 32],
+                per_tx_limit: 1000,
+                per_epoch_limit: 5000,
+                allowed_tx_kinds: vec![0x01],
+                expiry_epoch: 100,
+            },
+        );
+
+        flush_agent_policies(&store, &policies).unwrap();
+        let loaded = load_agent_policies(&store).unwrap();
+
+        let p = loaded.get_policy(&[1u8; 32]).unwrap();
+        assert_eq!(p.per_tx_limit, 1000);
+        assert_eq!(p.owner, [2u8; 32]);
+
+        cleanup(&path);
+    }
+
+    #[test]
+    fn bridge_stores_roundtrip() {
+        let path = test_db_path();
+        let store = StateStore::open(path.to_str().unwrap()).unwrap();
+
+        let mut registry = L2Registry::new();
+        let chain_id = [0xAA; 32];
+        registry
+            .register(crate::l2_bridge::L2Registration {
+                owner: [1u8; 32],
+                l2_chain_id: chain_id,
+                name: "Test L2".into(),
+                sequencer_set: vec![[2u8; 32]],
+                bridge_address: [3u8; 32],
+            })
+            .unwrap();
+
+        let mut anchors = L2AnchorStore::new();
+        anchors
+            .anchor(
+                &chain_id,
+                crate::l2_bridge::L2Anchor {
+                    sequencer: [2u8; 32],
+                    state_root: [0xBB; 32],
+                    batch_data_hash: [0xCC; 32],
+                    l2_block_start: 0,
+                    l2_block_end: 10,
+                    l1_batch_index: 50,
+                },
+            )
+            .unwrap();
+
+        let mut escrow = BridgeEscrow::new();
+        escrow.lock(&chain_id, &[5u8; 32], 1000);
+
+        let mut proofs = BridgeWithdrawProofs::new();
+        proofs.mark_used([0xFF; 32], [6u8; 32]).unwrap();
+
+        flush_bridge_stores(&store, &registry, &anchors, &escrow, &proofs).unwrap();
+        let (lr, la, le, lp) = load_bridge_stores(&store).unwrap();
+
+        assert_eq!(lr.get(&chain_id).unwrap().name, "Test L2");
+        assert_eq!(la.latest(&chain_id).unwrap().state_root, [0xBB; 32]);
+        assert_eq!(le.balance(&chain_id, &[5u8; 32]), 1000);
+        assert!(lp.is_used(&[0xFF; 32]));
+
+        cleanup(&path);
+    }
+
+    #[test]
+    fn empty_db_returns_defaults() {
+        let path = test_db_path();
+        let store = StateStore::open(path.to_str().unwrap()).unwrap();
+
+        let staking = load_staking(&store).unwrap();
+        assert_eq!(staking.validator_count(), 0);
+
+        let gov = load_governance(&store).unwrap();
+        assert!(gov.list(None).is_empty());
+
+        let emission = load_emission(&store).unwrap();
+        assert_eq!(emission.current_epoch, 0);
+
+        let params = load_chain_params(&store).unwrap();
+        assert_eq!(params.get_u64("base_fee_floor"), Some(1));
+
+        let policies = load_agent_policies(&store).unwrap();
+        assert_eq!(policies.policy_count(), 0);
+
+        let (reg, anchors, escrow, proofs) = load_bridge_stores(&store).unwrap();
+        assert!(reg.list().is_empty());
+        assert!(anchors.latest(&[0u8; 32]).is_none());
+        assert_eq!(escrow.balance(&[0u8; 32], &[0u8; 32]), 0);
+        assert!(!proofs.is_used(&[0u8; 32]));
+
+        cleanup(&path);
+    }
+
+    #[test]
+    fn protocol_stores_crash_recovery() {
+        let path = test_db_path();
+        let chain_id = [0xAA; 32];
+
+        {
+            let store = StateStore::open(path.to_str().unwrap()).unwrap();
+            let mut staking = StakingStore::new();
+            staking
+                .register_validator([1u8; 32], 100_000, 50_000, 1_000_000, 0)
+                .unwrap();
+            let mut gov = GovernanceStore::new();
+            let mut snap = std::collections::HashMap::new();
+            snap.insert([0xB0; 32], 1000u128);
+            snap.insert([0xB1; 32], 500u128);
+            gov.create_proposal(crate::governance::CreateProposalParams {
+                id: [0x99; 32],
+                proposer: [0xA0; 32],
+                description: "Crash test proposal for recovery".into(),
+                param_key: "epoch_length".into(),
+                param_value: "5000".into(),
+                current_round: 0,
+                voting_period: 100,
+                snapshot_balances: snap,
+            })
+            .unwrap();
+            let mut escrow = BridgeEscrow::new();
+            escrow.lock(&chain_id, &[5u8; 32], 42_000);
+
+            flush_staking(&store, &staking).unwrap();
+            flush_governance(&store, &gov).unwrap();
+            flush_bridge_stores(
+                &store,
+                &L2Registry::new(),
+                &L2AnchorStore::new(),
+                &escrow,
+                &BridgeWithdrawProofs::new(),
+            )
+            .unwrap();
+        }
+
+        {
+            let store = StateStore::open(path.to_str().unwrap()).unwrap();
+            let staking = load_staking(&store).unwrap();
+            assert_eq!(
+                staking.get_validator(&[1u8; 32]).unwrap().self_stake,
+                100_000
+            );
+
+            let gov = load_governance(&store).unwrap();
+            assert!(gov.get(&[0x99; 32]).is_some());
+
+            let (_, _, escrow, _) = load_bridge_stores(&store).unwrap();
+            assert_eq!(escrow.balance(&chain_id, &[5u8; 32]), 42_000);
         }
 
         cleanup(&path);

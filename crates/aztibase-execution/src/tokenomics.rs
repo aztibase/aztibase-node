@@ -423,7 +423,7 @@ pub fn check_anti_concentration(allocations: &[GenesisAllocationEntry]) -> bool 
 // EmissionTracker (runtime state)
 // ---------------------------------------------------------------------------
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct EmissionTracker {
     pub current_epoch: u64,
     pub total_emitted: u128,
@@ -476,6 +476,12 @@ impl EmissionTracker {
 
     pub fn total_supply_in_existence(&self) -> u128 {
         GENESIS_MINT + self.total_emitted
+    }
+}
+
+impl Default for EmissionTracker {
+    fn default() -> Self {
+        Self::new(DEFAULT_EPOCH_LENGTH)
     }
 }
 

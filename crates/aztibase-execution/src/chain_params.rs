@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::fmt;
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum ParamValue {
     U64(u64),
     Bool(bool),
@@ -202,6 +202,7 @@ static PARAM_DEFS: &[ParamDef] = &[
     },
 ];
 
+#[derive(serde::Serialize, serde::Deserialize)]
 pub struct ChainParams {
     values: HashMap<String, ParamValue>,
 }

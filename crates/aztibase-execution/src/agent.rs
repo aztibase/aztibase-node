@@ -1,5 +1,7 @@
 use std::collections::BTreeMap;
 
+use serde::{Deserialize, Serialize};
+
 type Address = [u8; 32];
 
 /// Maximum allowed tx kinds in a policy to prevent abuse.
@@ -7,7 +9,7 @@ const MAX_ALLOWED_TX_KINDS: usize = 32;
 
 /// Policy constraints for an autonomous AI agent.
 /// Set by the agent's owner (creator) to limit what the agent can do.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AgentPolicy {
     pub owner: Address,
     pub per_tx_limit: u128,
@@ -16,7 +18,7 @@ pub struct AgentPolicy {
     pub expiry_epoch: u64,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AgentSpendRecord {
     pub epoch: u64,
     pub total_spent: u128,
@@ -43,7 +45,7 @@ pub enum AgentError {
 }
 
 /// In-memory store for agent policies.
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct AgentPolicyStore {
     policies: BTreeMap<Address, AgentPolicy>,
     spend_tracker: BTreeMap<Address, AgentSpendRecord>,
