@@ -30,6 +30,7 @@ Every non-obvious technical decision is recorded here. Each ADR is immutable onc
 | ADR-020 | Quorum-signed DHT records (anti-poisoning) | 2026-03-10 | ACCEPTED | p2p-network-engineer + security-engineer |
 | ADR-021 | No mempool persistence — re-gossip from peers on restart | 2026-03-10 | ACCEPTED | node-engineer + blockchain-architect |
 | ADR-022 | Protocol version negotiation via libp2p identify | 2026-03-10 | ACCEPTED | p2p-network-engineer + blockchain-architect |
+| ADR-023 | L2 bridge design — challenge window, proof format, governance gate | 2026-03-11 | ACCEPTED | blockchain-architect + security-engineer |
 
 ---
 
@@ -661,6 +662,39 @@ Add a `PROTOCOL_VERSION` constant (starting at 1). Include it in the libp2p iden
 - All nodes must be upgraded together for major version bumps (expected for pre-mainnet)
 - Minor version differences are tolerated (only major version triggers disconnect)
 - Future: version negotiation can gate feature flags (e.g., compact blocks, new TxKinds)
+
+---
+
+## ADR-023: L2 bridge design — challenge window, proof format, governance gate
+
+**Date:** 2026-03-11
+**Status:** ACCEPTED
+**Decided By:** blockchain-architect + security-engineer
+**Git Ref:** Sprint 052
+
+### Context
+Sprint 052 adds L1 bridge primitives for sovereign rollups. Several design decisions had to be made about the bridge architecture: how L2 chains are registered, how state roots are anchored, how deposits/withdrawals work, and how to prevent double-spend.
+
+### Decision
+1. **Amount type: u128** — FP-004 spec used u64 for bridge amounts. Changed to u128 for consistency with Transfer, Stake, Delegate, and all other monetary types. Prevents silent truncation at high values.
+2. **RegisterL2 governance-gated** — Only governance-approved addresses can register L2 chains. Provides on-chain L2 discovery via L2Registry.
+3. **Challenge window: 100 batches** — L2 state roots become "finalized" after 100 L1 batches (~40s at 400ms block time). Withdrawals require a finalized state root.
+4. **Proof format: opaque bytes** — `l2_burn_proof` is treated as opaque; L1 only checks proof hash uniqueness (double-spend prevention via BridgeWithdrawProofs). Actual proof verification is L2-specific and deferred to Phase 2.
+5. **Sequencer authorization** — Only sequencers listed in the L2 registry's sequencer_set can submit AnchorL2State for that l2_chain_id.
+6. **Escrow consistency** — Bridge escrow balances are decremented on successful withdraw (not just on deposit), ensuring escrow.balance() accurately reflects locked funds.
+
+### Rationale
+- u128 avoids a class of bugs where large bridge amounts silently truncate
+- Governance gating prevents spam L2 registrations and provides a trust anchor
+- 100-batch finality window balances security (time for challenges) against UX (not too long)
+- Opaque proofs allow supporting any L2 proof system without L1 changes
+- Escrow unlock on withdraw was caught in security review — without it, escrow balances would only increase, creating a misleading view of locked funds
+
+### Consequences
+- L2 registration requires governance approval (slower onboarding, but more secure)
+- Withdrawals are delayed by ~40s finality window (acceptable for cross-layer transfers)
+- Future L2-specific proof verification can be added without changing L1 wire format
+- 4 new TxKinds (0x16-0x19) consume prefix space (245 remaining)
 
 ---
 

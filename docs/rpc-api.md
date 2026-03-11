@@ -638,6 +638,48 @@ Unsubscribe from events.
 
 ---
 
+## L2 Bridge
+
+### aztb_getL2State
+
+Get the latest anchored L2 state for a registered L2 chain.
+
+**Parameters:** `[l2_chain_id]` — 32-byte hex chain ID
+
+**Returns:** `{ state_root, block_range, sequencer, batch_index, finalized }` or `null` if L2 not registered / no anchors
+
+---
+
+### aztb_listL2s
+
+List all registered L2 chains.
+
+**Parameters:** none
+
+**Returns:** `[ { l2_chain_id, name, sequencer_set, bridge_address } ]`
+
+---
+
+### aztb_getBridgeBalance
+
+Get locked AZTB balance in bridge escrow for an account on a specific L2.
+
+**Parameters:** `[l2_chain_id, account]` — both 32-byte hex
+
+**Returns:** `{ locked: string }` (u128 as decimal string)
+
+---
+
+### aztb_getBridgeProofStatus
+
+Check whether a withdrawal proof hash has already been used.
+
+**Parameters:** `[proof_hash]` — 32-byte hex
+
+**Returns:** `{ used: bool }`
+
+---
+
 ## Error Codes
 
 | Code | Meaning |

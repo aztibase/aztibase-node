@@ -6,6 +6,7 @@ pub mod cross_vm;
 pub mod evm;
 pub mod fee;
 pub mod governance;
+pub mod l2_bridge;
 pub mod light_client;
 pub mod model_registry;
 pub mod parallel;
@@ -31,6 +32,10 @@ pub use fee::{BaseFeeCalculator, FeeEscrow, escrow_fee, refund_unused};
 pub use governance::{
     CreateProposalParams, GovernanceError, GovernanceStore, Proposal, ProposalStatus, Vote,
     VoteTally,
+};
+pub use l2_bridge::{
+    BRIDGE_FINALITY_BATCHES, BridgeError, BridgeEscrow, BridgeWithdrawProofs, L2Anchor,
+    L2AnchorStore, L2Registration, L2Registry,
 };
 pub use light_client::{build_light_client_proof, verify_light_client_proof};
 pub use model_registry::{MODEL_REGISTRY_ADDRESS, ModelMetadata, ModelRegistry, RegistryError};

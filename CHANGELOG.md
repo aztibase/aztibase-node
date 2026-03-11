@@ -5,6 +5,23 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ---
 
+## Sprint 052 — L1 Bridge Primitives for Sovereign Rollups (M9-S13) (2026-03-11)
+
+### Added
+- 4 new TxKind variants: `RegisterL2` (0x19), `AnchorL2State` (0x16), `BridgeDeposit` (0x17), `BridgeWithdraw` (0x18) (2026-03-11)
+- `L2Registry`: governance-gated L2 chain registration with sequencer_set authorization (2026-03-11)
+- `L2AnchorStore`: anchored L2 state roots with 100-batch finality window, last-10 history (2026-03-11)
+- `BridgeEscrow`: lock/unlock AZTB per (l2_chain_id, depositor) for cross-layer transfers (2026-03-11)
+- `BridgeWithdrawProofs`: proof hash dedup table preventing double-spend withdrawals (2026-03-11)
+- 4 new RPC endpoints: `aztb_getL2State`, `aztb_listL2s`, `aztb_getBridgeBalance`, `aztb_getBridgeProofStatus` (2026-03-11)
+- ADR-023: L2 bridge design (challenge window, proof format, governance gate, escrow consistency) (2026-03-11)
+- 23 new tests (10 l2_bridge unit + 6 routing roundtrip + 4 RPC + 3 e2e integration) (2026-03-11)
+
+### Fixed
+- Bridge escrow now correctly decrements on successful withdraw (found in security review) (2026-03-11)
+
+---
+
 ## Sprint 051 — WASM Tx Signing & Block Explorer (M9-S12) (2026-03-11)
 
 ### Added

@@ -127,6 +127,10 @@ impl BaseFeeCalculator {
             0x13 => 60_000,  // Undelegate
             0x14 => 60_000,  // SetAgentPolicy
             0x15 => 80_000,  // AgentExecute
+            0x16 => 80_000,  // AnchorL2State
+            0x17 => 50_000,  // BridgeDeposit
+            0x18 => 70_000,  // BridgeWithdraw
+            0x19 => 100_000, // RegisterL2
             _ => 21_000,
         }
     }

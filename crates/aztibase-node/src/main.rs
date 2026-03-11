@@ -773,7 +773,11 @@ async fn main() -> Result<()> {
     .with_chain_params(exec_pipeline.shared_chain_params())
     .with_emission_tracker(exec_pipeline.shared_emission_tracker())
     .with_staking_store(exec_pipeline.shared_staking_store())
-    .with_agent_policy_store(exec_pipeline.shared_agent_policy_store());
+    .with_agent_policy_store(exec_pipeline.shared_agent_policy_store())
+    .with_l2_registry(exec_pipeline.shared_l2_registry())
+    .with_l2_anchor_store(exec_pipeline.shared_l2_anchor_store())
+    .with_bridge_escrow(exec_pipeline.shared_bridge_escrow())
+    .with_bridge_withdraw_proofs(exec_pipeline.shared_bridge_withdraw_proofs());
 
     if let Some(ref gen_cfg) = genesis_config {
         rpc_server = rpc_server.with_genesis_hash(genesis::genesis_hash(gen_cfg));

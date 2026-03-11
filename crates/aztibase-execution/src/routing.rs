@@ -23,6 +23,10 @@ const PREFIX_DELEGATE: u8 = 0x12;
 const PREFIX_UNDELEGATE: u8 = 0x13;
 const PREFIX_SET_AGENT_POLICY: u8 = 0x14;
 const PREFIX_AGENT_EXECUTE: u8 = 0x15;
+const PREFIX_ANCHOR_L2_STATE: u8 = 0x16;
+const PREFIX_BRIDGE_DEPOSIT: u8 = 0x17;
+const PREFIX_BRIDGE_WITHDRAW: u8 = 0x18;
+const PREFIX_REGISTER_L2: u8 = 0x19;
 
 /// Maximum encoded transaction size (1 MB). Rejects oversized payloads before
 /// deserialization to prevent memory-bomb attacks via oversized payloads.
@@ -189,6 +193,42 @@ pub enum TxKind {
         nonce: u64,
         gas_price: u64,
     },
+    AnchorL2State {
+        sequencer: Address,
+        l2_chain_id: [u8; 32],
+        state_root: [u8; 32],
+        batch_data_hash: [u8; 32],
+        l2_block_start: u64,
+        l2_block_end: u64,
+        nonce: u64,
+        gas_price: u64,
+    },
+    BridgeDeposit {
+        depositor: Address,
+        l2_chain_id: [u8; 32],
+        l2_recipient: Address,
+        amount: u128,
+        nonce: u64,
+        gas_price: u64,
+    },
+    BridgeWithdraw {
+        withdrawer: Address,
+        l2_chain_id: [u8; 32],
+        amount: u128,
+        l2_burn_proof: Vec<u8>,
+        l2_state_root: [u8; 32],
+        nonce: u64,
+        gas_price: u64,
+    },
+    RegisterL2 {
+        owner: Address,
+        l2_chain_id: [u8; 32],
+        name: String,
+        sequencer_set: Vec<Address>,
+        bridge_address: Address,
+        nonce: u64,
+        gas_price: u64,
+    },
 }
 
 impl TxKind {
@@ -216,6 +256,10 @@ impl TxKind {
             TxKind::Undelegate { .. } => PREFIX_UNDELEGATE,
             TxKind::SetAgentPolicy { .. } => PREFIX_SET_AGENT_POLICY,
             TxKind::AgentExecute { .. } => PREFIX_AGENT_EXECUTE,
+            TxKind::AnchorL2State { .. } => PREFIX_ANCHOR_L2_STATE,
+            TxKind::BridgeDeposit { .. } => PREFIX_BRIDGE_DEPOSIT,
+            TxKind::BridgeWithdraw { .. } => PREFIX_BRIDGE_WITHDRAW,
+            TxKind::RegisterL2 { .. } => PREFIX_REGISTER_L2,
         };
         let payload = postcard::to_allocvec(self).expect("TxKind serialization cannot fail");
         let mut buf = Vec::with_capacity(1 + payload.len());
@@ -246,7 +290,11 @@ impl TxKind {
             | TxKind::Delegate { nonce, .. }
             | TxKind::Undelegate { nonce, .. }
             | TxKind::SetAgentPolicy { nonce, .. }
-            | TxKind::AgentExecute { nonce, .. } => *nonce,
+            | TxKind::AgentExecute { nonce, .. }
+            | TxKind::AnchorL2State { nonce, .. }
+            | TxKind::BridgeDeposit { nonce, .. }
+            | TxKind::BridgeWithdraw { nonce, .. }
+            | TxKind::RegisterL2 { nonce, .. } => *nonce,
         }
     }
 
@@ -272,7 +320,11 @@ impl TxKind {
             | TxKind::Delegate { gas_price, .. }
             | TxKind::Undelegate { gas_price, .. }
             | TxKind::SetAgentPolicy { gas_price, .. }
-            | TxKind::AgentExecute { gas_price, .. } => *gas_price,
+            | TxKind::AgentExecute { gas_price, .. }
+            | TxKind::AnchorL2State { gas_price, .. }
+            | TxKind::BridgeDeposit { gas_price, .. }
+            | TxKind::BridgeWithdraw { gas_price, .. }
+            | TxKind::RegisterL2 { gas_price, .. } => *gas_price,
         }
     }
 
@@ -301,6 +353,10 @@ impl TxKind {
             TxKind::Undelegate { .. } => 60_000,
             TxKind::SetAgentPolicy { .. } => 60_000,
             TxKind::AgentExecute { .. } => 80_000,
+            TxKind::AnchorL2State { .. } => 80_000,
+            TxKind::BridgeDeposit { .. } => 50_000,
+            TxKind::BridgeWithdraw { .. } => 70_000,
+            TxKind::RegisterL2 { .. } => 100_000,
         }
     }
 
@@ -327,6 +383,10 @@ impl TxKind {
             TxKind::Undelegate { delegator, .. } => delegator,
             TxKind::SetAgentPolicy { owner, .. } => owner,
             TxKind::AgentExecute { agent, .. } => agent,
+            TxKind::AnchorL2State { sequencer, .. } => sequencer,
+            TxKind::BridgeDeposit { depositor, .. } => depositor,
+            TxKind::BridgeWithdraw { withdrawer, .. } => withdrawer,
+            TxKind::RegisterL2 { owner, .. } => owner,
         }
     }
 
@@ -353,6 +413,10 @@ impl TxKind {
             TxKind::Undelegate { .. } => PREFIX_UNDELEGATE,
             TxKind::SetAgentPolicy { .. } => PREFIX_SET_AGENT_POLICY,
             TxKind::AgentExecute { .. } => PREFIX_AGENT_EXECUTE,
+            TxKind::AnchorL2State { .. } => PREFIX_ANCHOR_L2_STATE,
+            TxKind::BridgeDeposit { .. } => PREFIX_BRIDGE_DEPOSIT,
+            TxKind::BridgeWithdraw { .. } => PREFIX_BRIDGE_WITHDRAW,
+            TxKind::RegisterL2 { .. } => PREFIX_REGISTER_L2,
         }
     }
 }
@@ -431,7 +495,11 @@ pub fn route_tx(raw: &[u8]) -> Result<TxKind, RoutingError> {
         | PREFIX_DELEGATE
         | PREFIX_UNDELEGATE
         | PREFIX_SET_AGENT_POLICY
-        | PREFIX_AGENT_EXECUTE => {}
+        | PREFIX_AGENT_EXECUTE
+        | PREFIX_ANCHOR_L2_STATE
+        | PREFIX_BRIDGE_DEPOSIT
+        | PREFIX_BRIDGE_WITHDRAW
+        | PREFIX_REGISTER_L2 => {}
         other => return Err(RoutingError::UnknownPrefix(other)),
     }
     let (decoded, remaining): (TxKind, &[u8]) =
@@ -487,6 +555,23 @@ pub fn route_tx(raw: &[u8]) -> Result<TxKind, RoutingError> {
         return Err(RoutingError::DecodeFailed(
             "empty proposal description".into(),
         ));
+    }
+    if let TxKind::RegisterL2 {
+        ref name,
+        ref sequencer_set,
+        ..
+    } = decoded
+    {
+        if name.is_empty() || name.len() > 128 {
+            return Err(RoutingError::DecodeFailed(
+                "L2 name must be 1-128 characters".into(),
+            ));
+        }
+        if sequencer_set.is_empty() {
+            return Err(RoutingError::DecodeFailed(
+                "sequencer set must not be empty".into(),
+            ));
+        }
     }
     Ok(decoded)
 }
@@ -1032,5 +1117,117 @@ mod tests {
         assert_eq!(decoded, tx);
         assert_eq!(decoded.gas_limit(), 80_000);
         assert_eq!(*decoded.sender(), [0xA6; 32]);
+    }
+
+    #[test]
+    fn anchor_l2_state_roundtrip() {
+        let tx = TxKind::AnchorL2State {
+            sequencer: [0xB1; 32],
+            l2_chain_id: [0xC1; 32],
+            state_root: [0xD1; 32],
+            batch_data_hash: [0xE1; 32],
+            l2_block_start: 0,
+            l2_block_end: 100,
+            nonce: 5,
+            gas_price: 2,
+        };
+        let encoded = tx.encode();
+        assert_eq!(encoded[0], PREFIX_ANCHOR_L2_STATE);
+        let decoded = route_tx(&encoded).unwrap();
+        assert_eq!(decoded, tx);
+        assert_eq!(decoded.gas_limit(), 80_000);
+        assert_eq!(*decoded.sender(), [0xB1; 32]);
+    }
+
+    #[test]
+    fn bridge_deposit_roundtrip() {
+        let tx = TxKind::BridgeDeposit {
+            depositor: [0xB2; 32],
+            l2_chain_id: [0xC2; 32],
+            l2_recipient: [0xD2; 32],
+            amount: 500_000,
+            nonce: 3,
+            gas_price: 1,
+        };
+        let encoded = tx.encode();
+        assert_eq!(encoded[0], PREFIX_BRIDGE_DEPOSIT);
+        let decoded = route_tx(&encoded).unwrap();
+        assert_eq!(decoded, tx);
+        assert_eq!(decoded.gas_limit(), 50_000);
+        assert_eq!(*decoded.sender(), [0xB2; 32]);
+    }
+
+    #[test]
+    fn bridge_withdraw_roundtrip() {
+        let tx = TxKind::BridgeWithdraw {
+            withdrawer: [0xB3; 32],
+            l2_chain_id: [0xC3; 32],
+            amount: 250_000,
+            l2_burn_proof: vec![0xAA; 64],
+            l2_state_root: [0xD3; 32],
+            nonce: 7,
+            gas_price: 2,
+        };
+        let encoded = tx.encode();
+        assert_eq!(encoded[0], PREFIX_BRIDGE_WITHDRAW);
+        let decoded = route_tx(&encoded).unwrap();
+        assert_eq!(decoded, tx);
+        assert_eq!(decoded.gas_limit(), 70_000);
+        assert_eq!(*decoded.sender(), [0xB3; 32]);
+    }
+
+    #[test]
+    fn register_l2_roundtrip() {
+        let tx = TxKind::RegisterL2 {
+            owner: [0xB4; 32],
+            l2_chain_id: [0xC4; 32],
+            name: "Community Task Chain".into(),
+            sequencer_set: vec![[0xD4; 32], [0xE4; 32]],
+            bridge_address: [0xF4; 32],
+            nonce: 1,
+            gas_price: 3,
+        };
+        let encoded = tx.encode();
+        assert_eq!(encoded[0], PREFIX_REGISTER_L2);
+        let decoded = route_tx(&encoded).unwrap();
+        assert_eq!(decoded, tx);
+        assert_eq!(decoded.gas_limit(), 100_000);
+        assert_eq!(*decoded.sender(), [0xB4; 32]);
+    }
+
+    #[test]
+    fn register_l2_empty_name_rejected() {
+        let tx = TxKind::RegisterL2 {
+            owner: [0xB4; 32],
+            l2_chain_id: [0xC4; 32],
+            name: "".into(),
+            sequencer_set: vec![[0xD4; 32]],
+            bridge_address: [0xF4; 32],
+            nonce: 0,
+            gas_price: 1,
+        };
+        let encoded = tx.encode();
+        assert!(matches!(
+            route_tx(&encoded),
+            Err(RoutingError::DecodeFailed(_))
+        ));
+    }
+
+    #[test]
+    fn register_l2_empty_sequencer_set_rejected() {
+        let tx = TxKind::RegisterL2 {
+            owner: [0xB4; 32],
+            l2_chain_id: [0xC4; 32],
+            name: "Test L2".into(),
+            sequencer_set: vec![],
+            bridge_address: [0xF4; 32],
+            nonce: 0,
+            gas_price: 1,
+        };
+        let encoded = tx.encode();
+        assert!(matches!(
+            route_tx(&encoded),
+            Err(RoutingError::DecodeFailed(_))
+        ));
     }
 }

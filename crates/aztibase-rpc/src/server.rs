@@ -21,7 +21,8 @@ use aztibase_consensus::ComputeCommitmentStore;
 use aztibase_execution::AccountState;
 use aztibase_execution::model_registry::{MODEL_REGISTRY_ADDRESS, ModelMetadata, ModelRegistry};
 use aztibase_execution::{
-    AgentPolicyStore, ChainParams, EmissionTracker, GovernanceStore, StakingStore,
+    AgentPolicyStore, BridgeEscrow, BridgeWithdrawProofs, ChainParams, EmissionTracker,
+    GovernanceStore, L2AnchorStore, L2Registry, StakingStore,
 };
 use aztibase_storage::StateStore;
 
@@ -111,6 +112,10 @@ pub struct RpcState {
     pub emission_tracker: Option<Arc<RwLock<EmissionTracker>>>,
     pub staking_store: Option<Arc<RwLock<StakingStore>>>,
     pub agent_policy_store: Option<Arc<RwLock<AgentPolicyStore>>>,
+    pub l2_registry: Option<Arc<RwLock<L2Registry>>>,
+    pub l2_anchor_store: Option<Arc<RwLock<L2AnchorStore>>>,
+    pub bridge_escrow: Option<Arc<RwLock<BridgeEscrow>>>,
+    pub bridge_withdraw_proofs: Option<Arc<RwLock<BridgeWithdrawProofs>>>,
     pub chain_id: u64,
     pub genesis_hash: Option<[u8; 32]>,
     faucet_tracker: Arc<std::sync::Mutex<HashMap<[u8; 32], std::time::Instant>>>,
@@ -135,6 +140,10 @@ impl Clone for RpcState {
             emission_tracker: self.emission_tracker.clone(),
             staking_store: self.staking_store.clone(),
             agent_policy_store: self.agent_policy_store.clone(),
+            l2_registry: self.l2_registry.clone(),
+            l2_anchor_store: self.l2_anchor_store.clone(),
+            bridge_escrow: self.bridge_escrow.clone(),
+            bridge_withdraw_proofs: self.bridge_withdraw_proofs.clone(),
             chain_id: self.chain_id,
             genesis_hash: self.genesis_hash,
             faucet_tracker: Arc::clone(&self.faucet_tracker),
@@ -251,6 +260,10 @@ impl RpcServer {
                 emission_tracker: None,
                 staking_store: None,
                 agent_policy_store: None,
+                l2_registry: None,
+                l2_anchor_store: None,
+                bridge_escrow: None,
+                bridge_withdraw_proofs: None,
                 chain_id: TESTNET_CHAIN_ID,
                 genesis_hash: None,
                 faucet_tracker: Arc::new(std::sync::Mutex::new(HashMap::new())),
@@ -310,6 +323,26 @@ impl RpcServer {
 
     pub fn with_agent_policy_store(mut self, store: Arc<RwLock<AgentPolicyStore>>) -> Self {
         self.state.agent_policy_store = Some(store);
+        self
+    }
+
+    pub fn with_l2_registry(mut self, store: Arc<RwLock<L2Registry>>) -> Self {
+        self.state.l2_registry = Some(store);
+        self
+    }
+
+    pub fn with_l2_anchor_store(mut self, store: Arc<RwLock<L2AnchorStore>>) -> Self {
+        self.state.l2_anchor_store = Some(store);
+        self
+    }
+
+    pub fn with_bridge_escrow(mut self, store: Arc<RwLock<BridgeEscrow>>) -> Self {
+        self.state.bridge_escrow = Some(store);
+        self
+    }
+
+    pub fn with_bridge_withdraw_proofs(mut self, store: Arc<RwLock<BridgeWithdrawProofs>>) -> Self {
+        self.state.bridge_withdraw_proofs = Some(store);
         self
     }
 
@@ -440,6 +473,10 @@ async fn dispatch(state: &RpcState, req: &JsonRpcRequest) -> JsonRpcResponse {
         "aztb_latestCheckpoint" => handle_latest_checkpoint(state, req).await,
         "aztb_getBlockTransactionCount" => handle_get_block_tx_count(state, req).await,
         "aztb_sendRawTransaction" => handle_send_transaction(state, req).await,
+        "aztb_getL2State" => handle_get_l2_state(state, req).await,
+        "aztb_listL2s" => handle_list_l2s(state, req).await,
+        "aztb_getBridgeBalance" => handle_get_bridge_balance(state, req).await,
+        "aztb_getBridgeProofStatus" => handle_get_bridge_proof_status(state, req).await,
         _ => JsonRpcResponse::error(
             req.id.clone(),
             METHOD_NOT_FOUND,
@@ -1960,6 +1997,143 @@ fn checkpoint_to_json(
     )
 }
 
+// ── L2 Bridge RPC Handlers ──────────────────────────────────────────
+
+async fn handle_get_l2_state(state: &RpcState, req: &JsonRpcRequest) -> JsonRpcResponse {
+    let registry = match &state.l2_registry {
+        Some(s) => s,
+        None => {
+            return JsonRpcResponse::error(
+                req.id.clone(),
+                -32000,
+                "l2 registry not available".into(),
+            );
+        }
+    };
+    let anchor_store = match &state.l2_anchor_store {
+        Some(s) => s,
+        None => {
+            return JsonRpcResponse::error(
+                req.id.clone(),
+                -32000,
+                "l2 anchor store not available".into(),
+            );
+        }
+    };
+
+    let l2_chain_id = match parse_hash_param(&req.params, 0) {
+        Ok(h) => h,
+        Err(e) => return JsonRpcResponse::error(req.id.clone(), INVALID_PARAMS, e),
+    };
+
+    let reg = registry.read().await;
+    if reg.get(&l2_chain_id).is_none() {
+        return JsonRpcResponse::success(req.id.clone(), serde_json::Value::Null);
+    }
+    drop(reg);
+
+    let store = anchor_store.read().await;
+    match store.latest(&l2_chain_id) {
+        Some(anchor) => {
+            let current_batch = state.batch_count.load(Ordering::Relaxed);
+            let finalized = current_batch.saturating_sub(anchor.l1_batch_index)
+                >= aztibase_execution::BRIDGE_FINALITY_BATCHES;
+            JsonRpcResponse::success(
+                req.id.clone(),
+                serde_json::json!({
+                    "state_root": format!("0x{}", hex::encode(anchor.state_root)),
+                    "block_range": [anchor.l2_block_start, anchor.l2_block_end],
+                    "sequencer": format!("0x{}", hex::encode(anchor.sequencer)),
+                    "batch_index": anchor.l1_batch_index,
+                    "finalized": finalized,
+                }),
+            )
+        }
+        None => JsonRpcResponse::success(req.id.clone(), serde_json::Value::Null),
+    }
+}
+
+async fn handle_list_l2s(state: &RpcState, req: &JsonRpcRequest) -> JsonRpcResponse {
+    let registry = match &state.l2_registry {
+        Some(s) => s,
+        None => {
+            return JsonRpcResponse::error(
+                req.id.clone(),
+                -32000,
+                "l2 registry not available".into(),
+            );
+        }
+    };
+
+    let reg = registry.read().await;
+    let chains: Vec<serde_json::Value> = reg
+        .list()
+        .into_iter()
+        .map(|r| {
+            serde_json::json!({
+                "l2_chain_id": format!("0x{}", hex::encode(r.l2_chain_id)),
+                "name": r.name,
+                "sequencer_set": r.sequencer_set.iter()
+                    .map(|s| format!("0x{}", hex::encode(s)))
+                    .collect::<Vec<_>>(),
+                "bridge_address": format!("0x{}", hex::encode(r.bridge_address)),
+            })
+        })
+        .collect();
+    JsonRpcResponse::success(req.id.clone(), serde_json::json!(chains))
+}
+
+async fn handle_get_bridge_balance(state: &RpcState, req: &JsonRpcRequest) -> JsonRpcResponse {
+    let escrow = match &state.bridge_escrow {
+        Some(s) => s,
+        None => {
+            return JsonRpcResponse::error(
+                req.id.clone(),
+                -32000,
+                "bridge escrow not available".into(),
+            );
+        }
+    };
+
+    let l2_chain_id = match parse_hash_param(&req.params, 0) {
+        Ok(h) => h,
+        Err(e) => return JsonRpcResponse::error(req.id.clone(), INVALID_PARAMS, e),
+    };
+    let account = match parse_hash_param(&req.params, 1) {
+        Ok(h) => h,
+        Err(e) => return JsonRpcResponse::error(req.id.clone(), INVALID_PARAMS, e),
+    };
+
+    let store = escrow.read().await;
+    let locked = store.balance(&l2_chain_id, &account);
+    JsonRpcResponse::success(
+        req.id.clone(),
+        serde_json::json!({ "locked": locked.to_string() }),
+    )
+}
+
+async fn handle_get_bridge_proof_status(state: &RpcState, req: &JsonRpcRequest) -> JsonRpcResponse {
+    let proofs = match &state.bridge_withdraw_proofs {
+        Some(s) => s,
+        None => {
+            return JsonRpcResponse::error(
+                req.id.clone(),
+                -32000,
+                "bridge withdraw proofs not available".into(),
+            );
+        }
+    };
+
+    let proof_hash = match parse_hash_param(&req.params, 0) {
+        Ok(h) => h,
+        Err(e) => return JsonRpcResponse::error(req.id.clone(), INVALID_PARAMS, e),
+    };
+
+    let store = proofs.read().await;
+    let used = store.is_used(&proof_hash);
+    JsonRpcResponse::success(req.id.clone(), serde_json::json!({ "used": used }))
+}
+
 fn parse_u64_param(params: &serde_json::Value, index: usize) -> Result<u64, String> {
     let val = params
         .get(index)
@@ -2054,6 +2228,10 @@ mod tests {
             emission_tracker: None,
             staking_store: None,
             agent_policy_store: None,
+            l2_registry: None,
+            l2_anchor_store: None,
+            bridge_escrow: None,
+            bridge_withdraw_proofs: None,
             chain_id: TESTNET_CHAIN_ID,
             genesis_hash: None,
             faucet_tracker: Arc::new(std::sync::Mutex::new(HashMap::new())),
@@ -2086,6 +2264,10 @@ mod tests {
             emission_tracker: None,
             staking_store: None,
             agent_policy_store: None,
+            l2_registry: None,
+            l2_anchor_store: None,
+            bridge_escrow: None,
+            bridge_withdraw_proofs: None,
             chain_id: TESTNET_CHAIN_ID,
             genesis_hash: None,
             faucet_tracker: Arc::new(std::sync::Mutex::new(HashMap::new())),
@@ -2327,6 +2509,10 @@ mod tests {
             emission_tracker: None,
             staking_store: None,
             agent_policy_store: None,
+            l2_registry: None,
+            l2_anchor_store: None,
+            bridge_escrow: None,
+            bridge_withdraw_proofs: None,
             chain_id: TESTNET_CHAIN_ID,
             genesis_hash: None,
             faucet_tracker: Arc::new(std::sync::Mutex::new(HashMap::new())),
@@ -2710,6 +2896,10 @@ mod tests {
             emission_tracker: None,
             staking_store: None,
             agent_policy_store: None,
+            l2_registry: None,
+            l2_anchor_store: None,
+            bridge_escrow: None,
+            bridge_withdraw_proofs: None,
             chain_id: TESTNET_CHAIN_ID,
             genesis_hash: None,
             faucet_tracker: Arc::new(std::sync::Mutex::new(HashMap::new())),
@@ -2802,6 +2992,10 @@ mod tests {
             emission_tracker: None,
             staking_store: None,
             agent_policy_store: None,
+            l2_registry: None,
+            l2_anchor_store: None,
+            bridge_escrow: None,
+            bridge_withdraw_proofs: None,
             chain_id: TESTNET_CHAIN_ID,
             genesis_hash: None,
             faucet_tracker: Arc::new(std::sync::Mutex::new(HashMap::new())),
@@ -3295,5 +3489,77 @@ mod tests {
             headers.contains_key("access-control-allow-origin"),
             "CORS allow-origin header missing"
         );
+    }
+
+    // ── L2 Bridge RPC tests ─────────────────────────────────────────
+
+    #[tokio::test]
+    async fn get_l2_state_empty() {
+        let (mut state, _rx) = test_state();
+        state.l2_registry = Some(Arc::new(RwLock::new(L2Registry::new())));
+        state.l2_anchor_store = Some(Arc::new(RwLock::new(L2AnchorStore::new())));
+        let chain_hex = hex::encode([0xAA; 32]);
+        let body = format!(
+            r#"{{"jsonrpc":"2.0","method":"aztb_getL2State","params":["0x{chain_hex}"],"id":1}}"#
+        );
+        let resp = rpc_call(&state, &body).await;
+        assert!(resp["error"].is_null());
+        assert!(resp["result"].is_null());
+    }
+
+    #[tokio::test]
+    async fn list_l2s_returns_registered() {
+        let (mut state, _rx) = test_state();
+        let registry = Arc::new(RwLock::new(L2Registry::new()));
+        {
+            let mut reg = registry.write().await;
+            reg.register(aztibase_execution::L2Registration {
+                owner: [1u8; 32],
+                l2_chain_id: [0xBB; 32],
+                name: "TestRollup".into(),
+                sequencer_set: vec![[2u8; 32]],
+                bridge_address: [3u8; 32],
+            })
+            .unwrap();
+        }
+        state.l2_registry = Some(registry);
+        let body = r#"{"jsonrpc":"2.0","method":"aztb_listL2s","params":[],"id":1}"#;
+        let resp = rpc_call(&state, body).await;
+        assert!(resp["error"].is_null());
+        let list = resp["result"].as_array().unwrap();
+        assert_eq!(list.len(), 1);
+        assert_eq!(list[0]["name"], "TestRollup");
+    }
+
+    #[tokio::test]
+    async fn get_bridge_balance_returns_locked() {
+        let (mut state, _rx) = test_state();
+        let escrow = Arc::new(RwLock::new(BridgeEscrow::new()));
+        {
+            let mut e = escrow.write().await;
+            e.lock(&[0xCC; 32], &[0xDD; 32], 5000);
+        }
+        state.bridge_escrow = Some(escrow);
+        let chain_hex = hex::encode([0xCC; 32]);
+        let acct_hex = hex::encode([0xDD; 32]);
+        let body = format!(
+            r#"{{"jsonrpc":"2.0","method":"aztb_getBridgeBalance","params":["0x{chain_hex}","0x{acct_hex}"],"id":1}}"#
+        );
+        let resp = rpc_call(&state, &body).await;
+        assert!(resp["error"].is_null());
+        assert_eq!(resp["result"]["locked"], "5000");
+    }
+
+    #[tokio::test]
+    async fn get_bridge_proof_status_unused() {
+        let (mut state, _rx) = test_state();
+        state.bridge_withdraw_proofs = Some(Arc::new(RwLock::new(BridgeWithdrawProofs::new())));
+        let proof_hex = hex::encode([0xEE; 32]);
+        let body = format!(
+            r#"{{"jsonrpc":"2.0","method":"aztb_getBridgeProofStatus","params":["0x{proof_hex}"],"id":1}}"#
+        );
+        let resp = rpc_call(&state, &body).await;
+        assert!(resp["error"].is_null());
+        assert_eq!(resp["result"]["used"], false);
     }
 }

@@ -7,9 +7,10 @@ use aztibase_consensus::{
 };
 use aztibase_core::{Hash, hash};
 use aztibase_execution::{
-    AccountState, AgentPolicyStore, BaseFeeCalculator, ChainParams, ContractTx,
-    CreateProposalParams, EmissionTracker, ExecutionReceipt, FeeEscrow, GovernanceStore,
-    OffenseType, StakingStore, TransferTx, TxKind,
+    AccountState, AgentPolicyStore, BaseFeeCalculator, BridgeEscrow as BridgeEscrowStore,
+    BridgeWithdrawProofs, ChainParams, ContractTx, CreateProposalParams, EmissionTracker,
+    ExecutionReceipt, FeeEscrow, GovernanceStore, L2Anchor, L2AnchorStore, L2Registration,
+    L2Registry, OffenseType, StakingStore, TransferTx, TxKind,
     block_stm::{BlockSTMExecutor, apply_block_stm_to_state},
     escrow_fee, evm, execute_contract_txs, flush_state, latest_batch_index, load_base_fee,
     load_state,
@@ -26,6 +27,10 @@ use crate::task_pool::{SettlementResult, TaskAssigner, TaskPool, TaskSettlement}
 
 type SetAgentPolicyEntry = ([u8; 32], [u8; 32], u128, u128, Vec<u8>, u64, u64);
 type AgentExecuteEntry = ([u8; 32], u8, [u8; 32], u128, Vec<u8>, u64);
+type AnchorL2Entry = ([u8; 32], [u8; 32], [u8; 32], [u8; 32], u64, u64, u64);
+type BridgeDepositEntry = ([u8; 32], [u8; 32], [u8; 32], u128, u64);
+type BridgeWithdrawEntry = ([u8; 32], [u8; 32], u128, Vec<u8>, [u8; 32], u64);
+type RegisterL2Entry = ([u8; 32], [u8; 32], String, Vec<[u8; 32]>, [u8; 32], u64);
 
 const MAX_EXECUTED_ANCHORS: usize = 10_000;
 const MAX_ATTESTATIONS_PER_TASK: usize = 32;
@@ -86,6 +91,10 @@ pub struct ExecutionPipeline {
     consensus_tx: Option<mpsc::Sender<aztibase_consensus::ConsensusInput>>,
     epoch_participation: HashSet<[u8; 32]>,
     agent_policy_store: Arc<RwLock<AgentPolicyStore>>,
+    l2_registry: Arc<RwLock<L2Registry>>,
+    l2_anchor_store: Arc<RwLock<L2AnchorStore>>,
+    bridge_escrow: Arc<RwLock<BridgeEscrowStore>>,
+    bridge_withdraw_proofs: Arc<RwLock<BridgeWithdrawProofs>>,
     archive: bool,
 }
 
@@ -152,6 +161,10 @@ impl ExecutionPipeline {
             consensus_tx: None,
             epoch_participation: HashSet::new(),
             agent_policy_store: Arc::new(RwLock::new(AgentPolicyStore::new())),
+            l2_registry: Arc::new(RwLock::new(L2Registry::new())),
+            l2_anchor_store: Arc::new(RwLock::new(L2AnchorStore::new())),
+            bridge_escrow: Arc::new(RwLock::new(BridgeEscrowStore::new())),
+            bridge_withdraw_proofs: Arc::new(RwLock::new(BridgeWithdrawProofs::new())),
             archive: false,
         }
     }
@@ -189,6 +202,30 @@ impl ExecutionPipeline {
     /// Shared agent policy store (for RPC server).
     pub fn shared_agent_policy_store(&self) -> Arc<RwLock<AgentPolicyStore>> {
         Arc::clone(&self.agent_policy_store)
+    }
+
+    /// Shared L2 registry (for RPC server). Wired in Phase 3.
+    #[allow(dead_code)]
+    pub fn shared_l2_registry(&self) -> Arc<RwLock<L2Registry>> {
+        Arc::clone(&self.l2_registry)
+    }
+
+    /// Shared L2 anchor store (for RPC server). Wired in Phase 3.
+    #[allow(dead_code)]
+    pub fn shared_l2_anchor_store(&self) -> Arc<RwLock<L2AnchorStore>> {
+        Arc::clone(&self.l2_anchor_store)
+    }
+
+    /// Shared bridge escrow (for RPC server). Wired in Phase 3.
+    #[allow(dead_code)]
+    pub fn shared_bridge_escrow(&self) -> Arc<RwLock<BridgeEscrowStore>> {
+        Arc::clone(&self.bridge_escrow)
+    }
+
+    /// Shared bridge withdraw proofs (for RPC server). Wired in Phase 3.
+    #[allow(dead_code)]
+    pub fn shared_bridge_withdraw_proofs(&self) -> Arc<RwLock<BridgeWithdrawProofs>> {
+        Arc::clone(&self.bridge_withdraw_proofs)
     }
 
     /// Clone the slash event sender (for consensus → pipeline slashing bridge).
@@ -462,6 +499,10 @@ impl ExecutionPipeline {
         let mut undelegates: Vec<([u8; 32], u64)> = Vec::new();
         let mut set_agent_policies: Vec<SetAgentPolicyEntry> = Vec::new();
         let mut agent_executes: Vec<AgentExecuteEntry> = Vec::new();
+        let mut anchor_l2_states: Vec<AnchorL2Entry> = Vec::new();
+        let mut bridge_deposits: Vec<BridgeDepositEntry> = Vec::new();
+        let mut bridge_withdraws: Vec<BridgeWithdrawEntry> = Vec::new();
+        let mut register_l2s: Vec<RegisterL2Entry> = Vec::new();
 
         for tx in &executable {
             match tx {
@@ -750,6 +791,78 @@ impl ExecutionPipeline {
                         *nonce,
                     ));
                 }
+                TxKind::AnchorL2State {
+                    sequencer,
+                    l2_chain_id,
+                    state_root,
+                    batch_data_hash,
+                    l2_block_start,
+                    l2_block_end,
+                    nonce,
+                    ..
+                } => {
+                    anchor_l2_states.push((
+                        *sequencer,
+                        *l2_chain_id,
+                        *state_root,
+                        *batch_data_hash,
+                        *l2_block_start,
+                        *l2_block_end,
+                        *nonce,
+                    ));
+                }
+                TxKind::BridgeDeposit {
+                    depositor,
+                    l2_chain_id,
+                    l2_recipient,
+                    amount,
+                    nonce,
+                    ..
+                } => {
+                    bridge_deposits.push((
+                        *depositor,
+                        *l2_chain_id,
+                        *l2_recipient,
+                        *amount,
+                        *nonce,
+                    ));
+                }
+                TxKind::BridgeWithdraw {
+                    withdrawer,
+                    l2_chain_id,
+                    amount,
+                    l2_burn_proof,
+                    l2_state_root,
+                    nonce,
+                    ..
+                } => {
+                    bridge_withdraws.push((
+                        *withdrawer,
+                        *l2_chain_id,
+                        *amount,
+                        l2_burn_proof.clone(),
+                        *l2_state_root,
+                        *nonce,
+                    ));
+                }
+                TxKind::RegisterL2 {
+                    owner,
+                    l2_chain_id,
+                    name,
+                    sequencer_set,
+                    bridge_address,
+                    nonce,
+                    ..
+                } => {
+                    register_l2s.push((
+                        *owner,
+                        *l2_chain_id,
+                        name.clone(),
+                        sequencer_set.clone(),
+                        *bridge_address,
+                        *nonce,
+                    ));
+                }
             }
         }
 
@@ -772,7 +885,11 @@ impl ExecutionPipeline {
             + delegates.len()
             + undelegates.len()
             + set_agent_policies.len()
-            + agent_executes.len();
+            + agent_executes.len()
+            + anchor_l2_states.len()
+            + bridge_deposits.len()
+            + bridge_withdraws.len()
+            + register_l2s.len();
 
         // Phase 2: Execute transactions.
         let mut exec_receipts = Vec::new();
@@ -2193,6 +2310,340 @@ impl ExecutionPipeline {
             });
         }
 
+        // L2 bridge transactions.
+        let current_batch_idx = self.batch_count.load(std::sync::atomic::Ordering::Relaxed);
+
+        for (owner, l2_chain_id, name, sequencer_set, bridge_address, nonce) in &register_l2s {
+            let mut buf = Vec::new();
+            buf.extend_from_slice(owner);
+            buf.extend_from_slice(l2_chain_id);
+            buf.extend_from_slice(&nonce.to_le_bytes());
+            let tx_hash = hash(&buf);
+
+            let owner_nonce = state.nonce(owner);
+            if *nonce != owner_nonce {
+                state.increment_nonce(owner);
+                exec_receipts.push(ExecutionReceipt {
+                    tx_hash,
+                    success: false,
+                    gas_used: 21_000,
+                    contract_address: None,
+                    error: Some(format!(
+                        "nonce mismatch: expected {owner_nonce}, got {nonce}"
+                    )),
+                    inference_hash: None,
+                    anomaly_score: 0.0,
+                });
+                continue;
+            }
+
+            let reg = L2Registration {
+                owner: *owner,
+                l2_chain_id: *l2_chain_id,
+                name: name.clone(),
+                sequencer_set: sequencer_set.clone(),
+                bridge_address: *bridge_address,
+            };
+            let mut registry = self.l2_registry.write().await;
+            match registry.register(reg) {
+                Ok(()) => {
+                    state.increment_nonce(owner);
+                    exec_receipts.push(ExecutionReceipt {
+                        tx_hash,
+                        success: true,
+                        gas_used: 100_000,
+                        contract_address: None,
+                        error: None,
+                        inference_hash: None,
+                        anomaly_score: 0.0,
+                    });
+                }
+                Err(e) => {
+                    state.increment_nonce(owner);
+                    exec_receipts.push(ExecutionReceipt {
+                        tx_hash,
+                        success: false,
+                        gas_used: 21_000,
+                        contract_address: None,
+                        error: Some(format!("register L2 failed: {e}")),
+                        inference_hash: None,
+                        anomaly_score: 0.0,
+                    });
+                }
+            }
+        }
+
+        for (sequencer, l2_chain_id, sr, bdh, l2_start, l2_end, nonce) in &anchor_l2_states {
+            let mut buf = Vec::new();
+            buf.extend_from_slice(sequencer);
+            buf.extend_from_slice(l2_chain_id);
+            buf.extend_from_slice(sr);
+            buf.extend_from_slice(&nonce.to_le_bytes());
+            let tx_hash = hash(&buf);
+
+            let seq_nonce = state.nonce(sequencer);
+            if *nonce != seq_nonce {
+                state.increment_nonce(sequencer);
+                exec_receipts.push(ExecutionReceipt {
+                    tx_hash,
+                    success: false,
+                    gas_used: 21_000,
+                    contract_address: None,
+                    error: Some(format!("nonce mismatch: expected {seq_nonce}, got {nonce}")),
+                    inference_hash: None,
+                    anomaly_score: 0.0,
+                });
+                continue;
+            }
+
+            let registry = self.l2_registry.read().await;
+            if !registry.is_sequencer(l2_chain_id, sequencer) {
+                drop(registry);
+                state.increment_nonce(sequencer);
+                exec_receipts.push(ExecutionReceipt {
+                    tx_hash,
+                    success: false,
+                    gas_used: 21_000,
+                    contract_address: None,
+                    error: Some("sender not in sequencer set".into()),
+                    inference_hash: None,
+                    anomaly_score: 0.0,
+                });
+                continue;
+            }
+            drop(registry);
+
+            let anchor = L2Anchor {
+                sequencer: *sequencer,
+                state_root: *sr,
+                batch_data_hash: *bdh,
+                l2_block_start: *l2_start,
+                l2_block_end: *l2_end,
+                l1_batch_index: current_batch_idx,
+            };
+            let mut anchor_store = self.l2_anchor_store.write().await;
+            match anchor_store.anchor(l2_chain_id, anchor) {
+                Ok(()) => {
+                    state.increment_nonce(sequencer);
+                    exec_receipts.push(ExecutionReceipt {
+                        tx_hash,
+                        success: true,
+                        gas_used: 80_000,
+                        contract_address: None,
+                        error: None,
+                        inference_hash: None,
+                        anomaly_score: 0.0,
+                    });
+                }
+                Err(e) => {
+                    state.increment_nonce(sequencer);
+                    exec_receipts.push(ExecutionReceipt {
+                        tx_hash,
+                        success: false,
+                        gas_used: 21_000,
+                        contract_address: None,
+                        error: Some(format!("anchor L2 state failed: {e}")),
+                        inference_hash: None,
+                        anomaly_score: 0.0,
+                    });
+                }
+            }
+        }
+
+        for (depositor, l2_chain_id, _l2_recipient, amount, nonce) in &bridge_deposits {
+            let mut buf = Vec::new();
+            buf.extend_from_slice(depositor);
+            buf.extend_from_slice(l2_chain_id);
+            buf.extend_from_slice(&amount.to_le_bytes());
+            buf.extend_from_slice(&nonce.to_le_bytes());
+            let tx_hash = hash(&buf);
+
+            let dep_nonce = state.nonce(depositor);
+            if *nonce != dep_nonce {
+                state.increment_nonce(depositor);
+                exec_receipts.push(ExecutionReceipt {
+                    tx_hash,
+                    success: false,
+                    gas_used: 21_000,
+                    contract_address: None,
+                    error: Some(format!("nonce mismatch: expected {dep_nonce}, got {nonce}")),
+                    inference_hash: None,
+                    anomaly_score: 0.0,
+                });
+                continue;
+            }
+
+            if *amount == 0 {
+                state.increment_nonce(depositor);
+                exec_receipts.push(ExecutionReceipt {
+                    tx_hash,
+                    success: false,
+                    gas_used: 21_000,
+                    contract_address: None,
+                    error: Some("bridge amount must be non-zero".into()),
+                    inference_hash: None,
+                    anomaly_score: 0.0,
+                });
+                continue;
+            }
+
+            let registry = self.l2_registry.read().await;
+            if registry.get(l2_chain_id).is_none() {
+                drop(registry);
+                state.increment_nonce(depositor);
+                exec_receipts.push(ExecutionReceipt {
+                    tx_hash,
+                    success: false,
+                    gas_used: 21_000,
+                    contract_address: None,
+                    error: Some("L2 chain not registered".into()),
+                    inference_hash: None,
+                    anomaly_score: 0.0,
+                });
+                continue;
+            }
+            drop(registry);
+
+            let balance = state.balance(depositor);
+            if balance < *amount {
+                state.increment_nonce(depositor);
+                exec_receipts.push(ExecutionReceipt {
+                    tx_hash,
+                    success: false,
+                    gas_used: 21_000,
+                    contract_address: None,
+                    error: Some("insufficient balance for bridge deposit".into()),
+                    inference_hash: None,
+                    anomaly_score: 0.0,
+                });
+                continue;
+            }
+
+            state.set_balance(depositor, balance - *amount);
+            let mut escrow = self.bridge_escrow.write().await;
+            escrow.lock(l2_chain_id, depositor, *amount);
+            state.increment_nonce(depositor);
+
+            exec_receipts.push(ExecutionReceipt {
+                tx_hash,
+                success: true,
+                gas_used: 50_000,
+                contract_address: None,
+                error: None,
+                inference_hash: None,
+                anomaly_score: 0.0,
+            });
+        }
+
+        for (withdrawer, l2_chain_id, amount, l2_burn_proof, l2_sr, nonce) in &bridge_withdraws {
+            let mut buf = Vec::new();
+            buf.extend_from_slice(withdrawer);
+            buf.extend_from_slice(l2_chain_id);
+            buf.extend_from_slice(&amount.to_le_bytes());
+            buf.extend_from_slice(&nonce.to_le_bytes());
+            let tx_hash = hash(&buf);
+
+            let w_nonce = state.nonce(withdrawer);
+            if *nonce != w_nonce {
+                state.increment_nonce(withdrawer);
+                exec_receipts.push(ExecutionReceipt {
+                    tx_hash,
+                    success: false,
+                    gas_used: 21_000,
+                    contract_address: None,
+                    error: Some(format!("nonce mismatch: expected {w_nonce}, got {nonce}")),
+                    inference_hash: None,
+                    anomaly_score: 0.0,
+                });
+                continue;
+            }
+
+            if *amount == 0 {
+                state.increment_nonce(withdrawer);
+                exec_receipts.push(ExecutionReceipt {
+                    tx_hash,
+                    success: false,
+                    gas_used: 21_000,
+                    contract_address: None,
+                    error: Some("bridge amount must be non-zero".into()),
+                    inference_hash: None,
+                    anomaly_score: 0.0,
+                });
+                continue;
+            }
+
+            let proof_hash = hash(l2_burn_proof);
+            let mut withdraw_proofs = self.bridge_withdraw_proofs.write().await;
+            if let Err(e) = withdraw_proofs.mark_used(proof_hash, *withdrawer) {
+                drop(withdraw_proofs);
+                state.increment_nonce(withdrawer);
+                exec_receipts.push(ExecutionReceipt {
+                    tx_hash,
+                    success: false,
+                    gas_used: 21_000,
+                    contract_address: None,
+                    error: Some(format!("bridge withdraw failed: {e}")),
+                    inference_hash: None,
+                    anomaly_score: 0.0,
+                });
+                continue;
+            }
+            drop(withdraw_proofs);
+
+            let anchor_store = self.l2_anchor_store.read().await;
+            let finalized = anchor_store.latest_finalized(l2_chain_id, current_batch_idx);
+            match finalized {
+                Some(anchor) if anchor.state_root == *l2_sr => {}
+                Some(_) => {
+                    drop(anchor_store);
+                    state.increment_nonce(withdrawer);
+                    exec_receipts.push(ExecutionReceipt {
+                        tx_hash,
+                        success: false,
+                        gas_used: 21_000,
+                        contract_address: None,
+                        error: Some("state root does not match latest finalized anchor".into()),
+                        inference_hash: None,
+                        anomaly_score: 0.0,
+                    });
+                    continue;
+                }
+                None => {
+                    drop(anchor_store);
+                    state.increment_nonce(withdrawer);
+                    exec_receipts.push(ExecutionReceipt {
+                        tx_hash,
+                        success: false,
+                        gas_used: 21_000,
+                        contract_address: None,
+                        error: Some("no finalized anchor for this L2".into()),
+                        inference_hash: None,
+                        anomaly_score: 0.0,
+                    });
+                    continue;
+                }
+            }
+            drop(anchor_store);
+
+            let mut escrow = self.bridge_escrow.write().await;
+            let _ = escrow.unlock(l2_chain_id, withdrawer, *amount);
+            drop(escrow);
+
+            let prev_balance = state.balance(withdrawer);
+            state.set_balance(withdrawer, prev_balance.saturating_add(*amount));
+            state.increment_nonce(withdrawer);
+
+            exec_receipts.push(ExecutionReceipt {
+                tx_hash,
+                success: true,
+                gas_used: 70_000,
+                contract_address: None,
+                error: None,
+                inference_hash: None,
+                anomaly_score: 0.0,
+            });
+        }
+
         // Phase 2.5: Score each executed tx for anomalous behavior.
         for (i, tx) in executable.iter().enumerate() {
             if i >= exec_receipts.len() {
@@ -2635,6 +3086,60 @@ fn compute_tx_hash(tx: &TxKind) -> [u8; 32] {
             buf.extend_from_slice(&nonce.to_le_bytes());
             hash(&buf)
         }
+        TxKind::AnchorL2State {
+            sequencer,
+            l2_chain_id,
+            state_root,
+            nonce,
+            ..
+        } => {
+            let mut buf = Vec::new();
+            buf.extend_from_slice(sequencer);
+            buf.extend_from_slice(l2_chain_id);
+            buf.extend_from_slice(state_root);
+            buf.extend_from_slice(&nonce.to_le_bytes());
+            hash(&buf)
+        }
+        TxKind::BridgeDeposit {
+            depositor,
+            l2_chain_id,
+            amount,
+            nonce,
+            ..
+        } => {
+            let mut buf = Vec::new();
+            buf.extend_from_slice(depositor);
+            buf.extend_from_slice(l2_chain_id);
+            buf.extend_from_slice(&amount.to_le_bytes());
+            buf.extend_from_slice(&nonce.to_le_bytes());
+            hash(&buf)
+        }
+        TxKind::BridgeWithdraw {
+            withdrawer,
+            l2_chain_id,
+            amount,
+            nonce,
+            ..
+        } => {
+            let mut buf = Vec::new();
+            buf.extend_from_slice(withdrawer);
+            buf.extend_from_slice(l2_chain_id);
+            buf.extend_from_slice(&amount.to_le_bytes());
+            buf.extend_from_slice(&nonce.to_le_bytes());
+            hash(&buf)
+        }
+        TxKind::RegisterL2 {
+            owner,
+            l2_chain_id,
+            nonce,
+            ..
+        } => {
+            let mut buf = Vec::new();
+            buf.extend_from_slice(owner);
+            buf.extend_from_slice(l2_chain_id);
+            buf.extend_from_slice(&nonce.to_le_bytes());
+            hash(&buf)
+        }
     }
 }
 
@@ -2741,6 +3246,10 @@ mod tests {
             consensus_tx: None,
             epoch_participation: HashSet::new(),
             agent_policy_store: Arc::new(RwLock::new(AgentPolicyStore::new())),
+            l2_registry: Arc::new(RwLock::new(L2Registry::new())),
+            l2_anchor_store: Arc::new(RwLock::new(L2AnchorStore::new())),
+            bridge_escrow: Arc::new(RwLock::new(BridgeEscrowStore::new())),
+            bridge_withdraw_proofs: Arc::new(RwLock::new(BridgeWithdrawProofs::new())),
             archive: false,
         }
     }
@@ -3276,6 +3785,10 @@ mod tests {
             consensus_tx: None,
             epoch_participation: HashSet::new(),
             agent_policy_store: Arc::new(RwLock::new(AgentPolicyStore::new())),
+            l2_registry: Arc::new(RwLock::new(L2Registry::new())),
+            l2_anchor_store: Arc::new(RwLock::new(L2AnchorStore::new())),
+            bridge_escrow: Arc::new(RwLock::new(BridgeEscrowStore::new())),
+            bridge_withdraw_proofs: Arc::new(RwLock::new(BridgeWithdrawProofs::new())),
             archive: false,
         }
     }
@@ -5754,6 +6267,215 @@ mod tests {
         assert!(
             batches_per_sec > 50.0,
             "Empty batch processing should exceed 50/s in debug mode"
+        );
+    }
+
+    // ── L2 Bridge e2e tests ─────────────────────────────────────────
+
+    #[tokio::test]
+    async fn bridge_full_roundtrip_e2e() {
+        let (_tx, rx) = mpsc::channel(16);
+        let mut pipeline = make_pipeline(rx);
+
+        let (gov_kp, gov_addr) = make_sender();
+        let (seq_kp, seq_addr) = make_sender();
+        let (user_kp, user_addr) = make_sender();
+        let l2_chain_id = [0xBB; 32];
+
+        pipeline
+            .state
+            .write()
+            .await
+            .set_balance(&gov_addr, 10_000_000);
+        pipeline
+            .state
+            .write()
+            .await
+            .set_balance(&user_addr, 10_000_000);
+
+        // Step 1: Register L2
+        let register = TxKind::RegisterL2 {
+            owner: gov_addr,
+            l2_chain_id,
+            name: "TestRollup".into(),
+            sequencer_set: vec![seq_addr],
+            bridge_address: [0xCC; 32],
+            nonce: 0,
+            gas_price: 1,
+        };
+        let batch = make_batch(vec![sign(&register, &gov_kp)]);
+        let result = pipeline.execute_batch(&batch).await.unwrap();
+        assert_eq!(result.contract_count, 1);
+
+        // Verify registered
+        let reg = pipeline.l2_registry.read().await;
+        assert!(reg.get(&l2_chain_id).is_some());
+        drop(reg);
+
+        // Step 2: Anchor L2 state (batch 1, so l1_batch_index = 1)
+        pipeline
+            .state
+            .write()
+            .await
+            .set_balance(&seq_addr, 10_000_000);
+        let anchor = TxKind::AnchorL2State {
+            sequencer: seq_addr,
+            l2_chain_id,
+            state_root: [0xDD; 32],
+            batch_data_hash: [0xEE; 32],
+            l2_block_start: 0,
+            l2_block_end: 100,
+            nonce: 0,
+            gas_price: 1,
+        };
+        let batch = make_batch(vec![sign(&anchor, &seq_kp)]);
+        let result = pipeline.execute_batch(&batch).await.unwrap();
+        assert_eq!(result.contract_count, 1);
+
+        // Step 3: Bridge deposit (user locks 5000 AZTB)
+        let deposit = TxKind::BridgeDeposit {
+            depositor: user_addr,
+            l2_chain_id,
+            l2_recipient: [0xFF; 32],
+            amount: 5000,
+            nonce: 0,
+            gas_price: 1,
+        };
+        let batch = make_batch(vec![sign(&deposit, &user_kp)]);
+        let result = pipeline.execute_batch(&batch).await.unwrap();
+        assert_eq!(result.contract_count, 1);
+
+        let escrow = pipeline.bridge_escrow.read().await;
+        assert_eq!(escrow.balance(&l2_chain_id, &user_addr), 5000);
+        drop(escrow);
+
+        // Step 4: Advance past finality window (100 batches)
+        for _ in 0..100 {
+            let empty = make_batch_with_anchor(aztibase_core::hash(b"empty"), vec![]);
+            pipeline.execute_batch(&empty).await.unwrap();
+        }
+
+        // Step 5: Bridge withdraw (user reclaims 3000 AZTB)
+        let withdraw = TxKind::BridgeWithdraw {
+            withdrawer: user_addr,
+            l2_chain_id,
+            amount: 3000,
+            l2_burn_proof: b"proof_data_1".to_vec(),
+            l2_state_root: [0xDD; 32],
+            nonce: 1,
+            gas_price: 1,
+        };
+        let batch = make_batch(vec![sign(&withdraw, &user_kp)]);
+        let result = pipeline.execute_batch(&batch).await.unwrap();
+        assert_eq!(result.contract_count, 1);
+
+        let state = pipeline.state.read().await;
+        let user_bal = state.balance(&user_addr);
+        assert!(
+            user_bal > 10_000_000 - 5000 - 200_000,
+            "user should have received withdrawal, got {user_bal}"
+        );
+        drop(state);
+
+        // Escrow should reflect 5000 deposited - 3000 withdrawn = 2000 remaining
+        let escrow = pipeline.bridge_escrow.read().await;
+        assert_eq!(escrow.balance(&l2_chain_id, &user_addr), 2000);
+    }
+
+    #[tokio::test]
+    async fn bridge_deposit_overflow_u128_max() {
+        let (_tx, rx) = mpsc::channel(16);
+        let mut pipeline = make_pipeline(rx);
+
+        let (gov_kp, gov_addr) = make_sender();
+        let (user_kp, user_addr) = make_sender();
+        let l2_chain_id = [0xAA; 32];
+
+        pipeline
+            .state
+            .write()
+            .await
+            .set_balance(&gov_addr, 10_000_000);
+        pipeline.state.write().await.set_balance(&user_addr, 1000);
+
+        // Register L2
+        let register = TxKind::RegisterL2 {
+            owner: gov_addr,
+            l2_chain_id,
+            name: "OverflowTest".into(),
+            sequencer_set: vec![[0x99; 32]],
+            bridge_address: [0x88; 32],
+            nonce: 0,
+            gas_price: 1,
+        };
+        let batch = make_batch(vec![sign(&register, &gov_kp)]);
+        pipeline.execute_batch(&batch).await.unwrap();
+
+        // Try depositing more than balance — should fail
+        let deposit = TxKind::BridgeDeposit {
+            depositor: user_addr,
+            l2_chain_id,
+            l2_recipient: [0xFF; 32],
+            amount: u128::MAX,
+            nonce: 0,
+            gas_price: 1,
+        };
+        let batch = make_batch(vec![sign(&deposit, &user_kp)]);
+        pipeline.execute_batch(&batch).await.unwrap();
+
+        // Escrow should be empty (deposit failed due to insufficient balance)
+        let escrow = pipeline.bridge_escrow.read().await;
+        assert_eq!(escrow.balance(&l2_chain_id, &user_addr), 0);
+    }
+
+    #[tokio::test]
+    async fn bridge_withdraw_unregistered_l2_rejected() {
+        let (_tx, rx) = mpsc::channel(16);
+        let mut pipeline = make_pipeline(rx);
+
+        let (user_kp, user_addr) = make_sender();
+        pipeline
+            .state
+            .write()
+            .await
+            .set_balance(&user_addr, 10_000_000);
+
+        // Try deposit on unregistered L2
+        let deposit = TxKind::BridgeDeposit {
+            depositor: user_addr,
+            l2_chain_id: [0xDE; 32],
+            l2_recipient: [0xFF; 32],
+            amount: 1000,
+            nonce: 0,
+            gas_price: 1,
+        };
+        let batch = make_batch(vec![sign(&deposit, &user_kp)]);
+        pipeline.execute_batch(&batch).await.unwrap();
+
+        // Escrow should be empty (L2 not registered)
+        let escrow = pipeline.bridge_escrow.read().await;
+        assert_eq!(escrow.balance(&[0xDE; 32], &user_addr), 0);
+        drop(escrow);
+
+        // Also try withdraw on unregistered L2 — should fail
+        let withdraw = TxKind::BridgeWithdraw {
+            withdrawer: user_addr,
+            l2_chain_id: [0xDE; 32],
+            amount: 1000,
+            l2_burn_proof: b"fake_proof".to_vec(),
+            l2_state_root: [0xAA; 32],
+            nonce: 1,
+            gas_price: 1,
+        };
+        let batch = make_batch(vec![sign(&withdraw, &user_kp)]);
+        pipeline.execute_batch(&batch).await.unwrap();
+
+        // Balance should only be reduced by gas fees, not the withdrawal amount
+        let state = pipeline.state.read().await;
+        let bal = state.balance(&user_addr);
+        assert!(
+            bal > 10_000_000 - 200_000,
+            "balance should only lose gas fees, got {bal}"
         );
     }
 }

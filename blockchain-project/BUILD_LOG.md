@@ -21,6 +21,24 @@ Entries are prepended (newest first).
 
 ## Entries
 
+### Sprint 052 — L1 Bridge Primitives for Sovereign Rollups (M9-S13)
+- **Date**: 2026-03-11
+- **Commit**: (pending)
+- **Files changed**:
+  - `crates/aztibase-execution/src/l2_bridge.rs` — NEW: L2Registry, L2AnchorStore, BridgeEscrow, BridgeWithdrawProofs, BridgeError, 10 unit tests
+  - `crates/aztibase-execution/src/routing.rs` — 4 new TxKind variants (AnchorL2State 0x16, BridgeDeposit 0x17, BridgeWithdraw 0x18, RegisterL2 0x19), prefix constants, encode/decode/route/sender/gas for all 4, 6 routing tests
+  - `crates/aztibase-execution/src/fee.rs` — 4 new gas estimates (80K/50K/70K/100K)
+  - `crates/aztibase-execution/src/lib.rs` — l2_bridge module declaration + 8 re-exports
+  - `crates/aztibase-node/src/pipeline.rs` — 4 bridge store fields, tx classification, execute_register_l2/anchor/deposit/withdraw, escrow unlock on withdraw, 3 e2e tests
+  - `crates/aztibase-node/src/main.rs` — RPC bridge store wiring (4 with_* calls)
+  - `crates/aztibase-rpc/src/server.rs` — 4 new RPC handlers (getL2State, listL2s, getBridgeBalance, getBridgeProofStatus), 4 RpcState fields, 4 builder methods, 4 tests
+  - `docs/rpc-api.md` — 4 new endpoint docs (L2 Bridge section)
+  - `blockchain-project/DECISIONS.md` — ADR-023 (L2 bridge design)
+  - `blockchain-project/sprints/SPRINT-052.md` — NEW: Sprint 052 plan
+- **Review**: Security review found escrow not decremented on withdraw — FIXED. Double-spend prevention via proof hash dedup: SAFE. Sequencer auth via registry: SAFE. u128 overflow protection via saturating ops + bounds checks: SAFE.
+- **Security Flags**: None. 1 issue found and fixed (escrow unlock on withdraw).
+- **Tests**: 897 pass (23 new: 10 l2_bridge + 6 routing + 4 RPC + 3 e2e), 0 clippy warnings, fmt clean
+
 ### Sprint 051 — WASM Tx Signing & Block Explorer (M9-S12)
 - **Date**: 2026-03-11
 - **Commit**: (pending)
