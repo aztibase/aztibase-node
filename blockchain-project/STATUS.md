@@ -3,7 +3,7 @@
 **Last Updated:** 2026-03-10
 **Updated By:** node-engineer / consensus-engineer / p2p-network-engineer
 **Current Phase:** M9 -- Mainnet Prep (Sprint 11 IN PROGRESS)
-**Current Sprint:** Sprint 050 -- IN PROGRESS (CI Pipeline & Public Testnet Infrastructure)
+**Current Sprint:** Sprint 051 -- IN PROGRESS (WASM Tx Signing & Block Explorer)
 
 ---
 
@@ -77,13 +77,14 @@
 | aztibase-wasm | PARTIAL | p2p-network-engineer | NO | YES |
 
 ### In Progress
-- Sprint 051 scoping
+- Sprint 051: WASM tx signing, block explorer, RPC hardening
 
 ### Blocked
 - Nothing currently blocked
 
 ### Recently Completed
-- Sprint 050 Phase 1-4: CI pipeline, testnet genesis (--testnet flag), criterion benchmarks, deploy script
+- Sprint 051: WASM tx signing (signTransfer, generateKeypair), block explorer, CORS, aztb_getBlockTransactionCount, 874 tests
+- Sprint 050: CI pipeline, testnet genesis (--testnet flag), criterion benchmarks (18.3K TPS), deploy script, RPC docs
 - Sprint 049: Protocol versioning, crash recovery, epoch boundaries, throughput baseline (86 TPS debug)
 - Sprint 048 Phase 10: S8-1 — Quorum-signed DHT records (≥2 sigs, round freshness, 8 tests), ADR-020
 - Sprint 048 Phase 9: S4-1 — Browser wallet spending limits (per-tx 100 AZTB, session 10K, WASM exports, 5 tests), ADR-019
@@ -246,8 +247,9 @@
 - Sprint 005 Phase 1: Consensus-to-execution wiring, TxKind routing, ExecutionPipeline
 
 ### Next Up
-1. Sprint 050 completion — execution benchmark results, doc sync commit
-2. Sprint 051 scoping — block explorer, wallet UI, public launch prep
+1. Sprint 051 Phase 1: WASM tx signing exports
+2. Sprint 051 Phase 2: Block explorer (static HTML + RPC)
+3. Sprint 051 Phase 3: RPC hardening (new endpoints, CORS)
 
 ### Deferred to M9+ (Locked in FUTURE_PLANNING.md)
 

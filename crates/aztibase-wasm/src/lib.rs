@@ -1,6 +1,7 @@
 pub mod browser_wallet;
 mod proof;
 mod sync;
+pub mod tx_signing;
 
 use wasm_bindgen::prelude::*;
 

@@ -946,6 +946,7 @@ dependencies = [
  "tokio",
  "tokio-tungstenite 0.26.2",
  "tower",
+ "tower-http",
  "tracing",
 ]
 
@@ -985,8 +986,11 @@ name = "aztibase-wasm"
 version = "0.1.0"
 dependencies = [
  "blake3",
+ "ed25519-dalek",
+ "getrandom 0.2.17",
  "js-sys",
  "postcard",
+ "rand 0.8.5",
  "serde",
  "serde_json",
  "wasm-bindgen",

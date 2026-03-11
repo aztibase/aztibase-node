@@ -5,6 +5,20 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ---
 
+## Sprint 051 — WASM Tx Signing & Block Explorer (M9-S12) (2026-03-11)
+
+### Added
+- WASM `signTransfer()`: construct + Ed25519-sign Transfer transactions in the browser, returns hex envelope (2026-03-11)
+- WASM `generateKeypair()` + `addressFromSecret()`: key management exports (2026-03-11)
+- WASM RPC request builders: `buildSendTxRequest`, `buildGetNonceRequest`, `buildGetBalanceRequest`, `buildEstimateGasRequest` (2026-03-11)
+- Block explorer (`explorer/index.html`): vanilla HTML/JS, dark theme, responsive, latest blocks view, block/tx/account detail, `?rpc=` endpoint override (2026-03-11)
+- `aztb_getBlockTransactionCount` RPC: returns tx count for a block by number (2026-03-11)
+- `aztb_sendRawTransaction` RPC: alias for `aztb_sendTransaction` (browser wallet compat) (2026-03-11)
+- CORS headers on all RPC routes via `tower-http` CorsLayer (`Access-Control-Allow-Origin: *`) (2026-03-11)
+- 11 new tests: 8 WASM tx signing + 3 RPC (block tx count, sendRaw alias, CORS preflight) (2026-03-11)
+
+---
+
 ## Sprint 050 — CI Pipeline & Public Testnet Infrastructure (M9-S11) (2026-03-10)
 
 ### Added

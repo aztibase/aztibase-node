@@ -14,6 +14,7 @@ use axum::{
 use futures::{SinkExt, StreamExt};
 use serde::{Deserialize, Serialize};
 use tokio::sync::{RwLock, broadcast, mpsc};
+use tower_http::cors::{Any, CorsLayer};
 use tracing::{debug, info};
 
 use aztibase_consensus::ComputeCommitmentStore;
@@ -326,7 +327,13 @@ impl RpcServer {
                 .route("/metrics", get(handle_metrics_prometheus))
                 .route("/metrics/json", get(handle_metrics_json));
         }
+        let cors = CorsLayer::new()
+            .allow_origin(Any)
+            .allow_methods(Any)
+            .allow_headers(Any);
+
         router
+            .layer(cors)
             .layer(DefaultBodyLimit::max(MAX_WS_FRAME_SIZE))
             .with_state(self.state.clone())
     }
@@ -431,6 +438,8 @@ async fn dispatch(state: &RpcState, req: &JsonRpcRequest) -> JsonRpcResponse {
         "aztb_getAgentPolicy" => handle_get_agent_policy(state, req).await,
         "aztb_getCheckpoint" => handle_get_checkpoint(state, req).await,
         "aztb_latestCheckpoint" => handle_latest_checkpoint(state, req).await,
+        "aztb_getBlockTransactionCount" => handle_get_block_tx_count(state, req).await,
+        "aztb_sendRawTransaction" => handle_send_transaction(state, req).await,
         _ => JsonRpcResponse::error(
             req.id.clone(),
             METHOD_NOT_FOUND,
@@ -775,6 +784,31 @@ async fn handle_send_transaction(state: &RpcState, req: &JsonRpcRequest) -> Json
 async fn handle_block_number(state: &RpcState, req: &JsonRpcRequest) -> JsonRpcResponse {
     let count = state.batch_count.load(Ordering::Relaxed);
     JsonRpcResponse::success(req.id.clone(), serde_json::json!(format!("0x{count:x}")))
+}
+
+async fn handle_get_block_tx_count(state: &RpcState, req: &JsonRpcRequest) -> JsonRpcResponse {
+    let num = match parse_u64_param(&req.params, 0) {
+        Ok(n) => n,
+        Err(e) => return JsonRpcResponse::error(req.id.clone(), INVALID_PARAMS, e),
+    };
+    let store = match &state.receipt_store {
+        Some(s) => s,
+        None => {
+            return JsonRpcResponse::error(req.id.clone(), -32000, "store not available".into());
+        }
+    };
+    match aztibase_execution::get_batch_by_number(store, num) {
+        Ok(Some(anchor_hash)) => {
+            let count = aztibase_execution::get_batch_txs(store, &anchor_hash)
+                .ok()
+                .flatten()
+                .map(|txs| txs.len())
+                .unwrap_or(0);
+            JsonRpcResponse::success(req.id.clone(), serde_json::json!(count))
+        }
+        Ok(None) => JsonRpcResponse::success(req.id.clone(), serde_json::Value::Null),
+        Err(e) => JsonRpcResponse::error(req.id.clone(), -32000, format!("storage error: {e}")),
+    }
 }
 
 async fn handle_get_state_root(state: &RpcState, req: &JsonRpcRequest) -> JsonRpcResponse {
@@ -3210,5 +3244,56 @@ mod tests {
         let resp = rpc_call(&state, &body).await;
         assert!(resp["error"].is_null());
         assert!(resp["result"].is_null());
+    }
+
+    #[tokio::test]
+    async fn get_block_tx_count_no_store() {
+        let (state, _rx) = test_state();
+        let body =
+            r#"{"jsonrpc":"2.0","method":"aztb_getBlockTransactionCount","params":[0],"id":1}"#;
+        let resp = rpc_call(&state, body).await;
+        assert!(resp["error"].is_object());
+    }
+
+    #[tokio::test]
+    async fn send_raw_transaction_alias() {
+        let (state, _rx) = test_state();
+        let body =
+            r#"{"jsonrpc":"2.0","method":"aztb_sendRawTransaction","params":["aabb"],"id":1}"#;
+        let resp = rpc_call(&state, body).await;
+        assert!(
+            !resp["error"]["message"]
+                .as_str()
+                .unwrap_or("")
+                .contains("not found")
+        );
+    }
+
+    #[tokio::test]
+    async fn cors_preflight_returns_headers() {
+        let (state, _rx) = test_state();
+        let cors = CorsLayer::new()
+            .allow_origin(Any)
+            .allow_methods(Any)
+            .allow_headers(Any);
+        let router = Router::new()
+            .route("/", post(handle_rpc))
+            .layer(cors)
+            .with_state(state);
+
+        let request = Request::builder()
+            .method("OPTIONS")
+            .uri("/")
+            .header("origin", "http://localhost:3000")
+            .header("access-control-request-method", "POST")
+            .body(Body::empty())
+            .unwrap();
+
+        let response = router.oneshot(request).await.unwrap();
+        let headers = response.headers();
+        assert!(
+            headers.contains_key("access-control-allow-origin"),
+            "CORS allow-origin header missing"
+        );
     }
 }

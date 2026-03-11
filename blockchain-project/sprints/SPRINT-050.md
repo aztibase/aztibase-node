@@ -71,4 +71,20 @@
 ---
 
 ## Retrospective
-*(To be filled at sprint close)*
+
+**What went well:**
+- CI pipeline stood up quickly — GitHub Actions + rust-cache keeps builds fast
+- Criterion benchmarks confirmed 18.3K TPS single-threaded — 10K target is achievable with rayon parallelism
+- `--testnet` flag makes onboarding trivial (single binary, zero config)
+- Deploy script with systemd hardening is production-ready
+- All 43 RPC methods documented in one pass
+
+**What could improve:**
+- CI bench regression gate deferred (needs baseline artifact storage)
+- Execution benchmarks initially took >30min (criterion 100 samples × 7 groups) — future runs should use `--sample-size 10` for CI
+
+**Key metrics:**
+- 863 tests, 0 clippy warnings, fmt clean
+- 18.3K TPS single-threaded (Ed25519 verify bottleneck)
+- 22 ADRs, 0 SECURITY-ELEVATED flags
+- Sprint delivered in 1 session

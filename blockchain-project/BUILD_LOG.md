@@ -21,6 +21,22 @@ Entries are prepended (newest first).
 
 ## Entries
 
+### Sprint 051 — WASM Tx Signing & Block Explorer (M9-S12)
+- **Date**: 2026-03-11
+- **Commit**: (pending)
+- **Files changed**:
+  - `crates/aztibase-wasm/Cargo.toml` — Added ed25519-dalek, rand, getrandom (js feature)
+  - `crates/aztibase-wasm/src/tx_signing.rs` — NEW: signTransfer, generateKeypair, addressFromSecret, RPC request builders, 8 tests
+  - `crates/aztibase-wasm/src/lib.rs` — tx_signing module declaration
+  - `crates/aztibase-rpc/Cargo.toml` — Added tower-http (CORS)
+  - `crates/aztibase-rpc/src/server.rs` — CorsLayer (Allow-Origin: *), aztb_getBlockTransactionCount, aztb_sendRawTransaction alias, 3 tests
+  - `Cargo.toml` — tower-http workspace dep
+  - `explorer/index.html` — NEW: Block explorer (vanilla HTML/JS, dark theme, responsive)
+  - `docs/rpc-api.md` — Added getBlockTransactionCount, sendRawTransaction docs
+- **Review**: WASM tx signing uses same domain separation (AZTB_TX_V1) and envelope format as node. Explorer uses textContent-based XSS escaping. CORS is testnet-appropriate (restrict for mainnet).
+- **Security Flags**: None. CORS `*` acceptable for testnet only.
+- **Tests**: 874 pass (11 new: 8 wasm + 3 rpc), 0 clippy warnings, fmt clean
+
 ### Sprint 050 — CI Pipeline & Public Testnet Infrastructure (M9-S11)
 - **Date**: 2026-03-10
 - **Commit**: (pending)

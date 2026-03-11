@@ -154,6 +154,32 @@ Retrieve a range of blocks (max 100).
 
 **Returns:** Array of `{ "number": "0x...", "hash": "0x..." }`
 
+### aztb_getBlockTransactionCount
+
+Returns the number of transactions in a block.
+
+**Parameters:** `[number]` — u64 block number
+
+**Returns:** Integer tx count, or `null` if block not found
+
+```bash
+curl -X POST http://localhost:9944 -H 'Content-Type: application/json' \
+  -d '{"jsonrpc":"2.0","method":"aztb_getBlockTransactionCount","params":[42],"id":1}'
+```
+
+### aztb_sendRawTransaction
+
+Submit a signed transaction envelope (alias for `aztb_sendTransaction`).
+
+**Parameters:** `[hex_encoded_envelope]` — hex string of the signed tx envelope
+
+**Returns:** `"ok"` on success
+
+```bash
+curl -X POST http://localhost:9944 -H 'Content-Type: application/json' \
+  -d '{"jsonrpc":"2.0","method":"aztb_sendRawTransaction","params":["aa..."],"id":1}'
+```
+
 ### aztb_getBatchRoot
 
 Get the state root for a specific batch.
