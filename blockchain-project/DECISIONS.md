@@ -34,6 +34,7 @@ Every non-obvious technical decision is recorded here. Each ADR is immutable onc
 | ADR-024 | Protocol store persistence via STATE_TABLE with postcard serialization | 2026-03-11 | ACCEPTED | node-engineer + blockchain-architect |
 | ADR-025 | Network profiles & mainnet operational hardening | 2026-03-11 | ACCEPTED | blockchain-architect + security-engineer |
 | ADR-026 | Public testnet launch infrastructure | 2026-03-11 | ACCEPTED | node-engineer + documentation-engineer |
+| ADR-027 | Full state snapshots & mainnet genesis ceremony | 2026-03-11 | ACCEPTED | node-engineer + blockchain-architect |
 
 ---
 
@@ -794,6 +795,37 @@ Sprint 047 proved the node works on a 3-node local testnet. Sprints 050-054 adde
 - Developers can get testnet tokens without CLI tooling
 - Seed node configs are ready for cloud deployment once DNS records are configured
 - The faucet UI depends on a running RPC node with CORS enabled (testnet profile provides this)
+
+---
+
+## ADR-027: Full state snapshots & mainnet genesis ceremony
+
+**Date:** 2026-03-11
+**Status:** ACCEPTED
+**Decided By:** node-engineer + blockchain-architect
+**Git Ref:** Sprint 056
+
+### Context
+The snapshot module (Sprint 046+) captured AccountState but not protocol stores (staking, governance, emission, chain params, agent policies, L2 bridge). New validators had to replay from genesis, which becomes impractical at scale. Mainnet also required a genesis ceremony with auditable 400M AZTB tokenomics allocations.
+
+### Decision
+1. **ProtocolStoreBundle**: New struct bundling all 9 protocol stores + base_fee, serialized alongside AccountState in snapshots. SNAPSHOT_VERSION bumped 2→3.
+2. **Snapshot file format**: `[32-byte BLAKE3 hash][postcard-serialized StateSnapshot]`. MAX_SNAPSHOT_SIZE raised to 128 MiB. Integrity verified on read — hash mismatch rejects the file.
+3. **CLI integration**: `aztibase snapshot export --output <path>` writes snapshot from running DB. `aztibase --snapshot <path>` bootstraps a fresh node from file, skipping genesis replay.
+4. **Mainnet genesis**: `mainnet_genesis(n_validators)` allocates 400M AZTB across 8 categories (team 15%, investors 10%, ecosystem 25%, community 20%, treasury 15%, validators 5%, advisors 5%, reserve 5%). Placeholder keys derived from BLAKE3 seeds — replaced with real keys at ceremony.
+5. **Backward compatibility**: `protocol_stores` field is `Option<ProtocolStoreBundle>` — old snapshots deserialize with `None`, defaulting to empty stores.
+
+### Rationale
+- BLAKE3 integrity hash catches file corruption and tampering before deserialization
+- postcard serialization is compact and matches existing persistence layer (ADR-024)
+- Version bump with Option field gives clean forward migration without breaking old snapshots
+- Deterministic placeholder keys allow testing the full allocation math before ceremony
+
+### Consequences
+- Validators can bootstrap from a snapshot file in seconds instead of replaying history
+- Mainnet genesis is auditable: 8 categories, percentages verifiable in source code
+- Snapshot version 2 files still readable (no protocol stores = default empty)
+- Ceremony requires replacing placeholder addresses with real multisig keys
 
 ---
 

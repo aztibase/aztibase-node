@@ -113,7 +113,7 @@ pub struct CreateProposalParams {
     pub snapshot_balances: HashMap<Address, u128>,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct GovernanceStore {
     proposals: HashMap<[u8; 32], Proposal>,
     votes: HashMap<[u8; 32], Vec<Vote>>,

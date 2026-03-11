@@ -202,7 +202,7 @@ static PARAM_DEFS: &[ParamDef] = &[
     },
 ];
 
-#[derive(serde::Serialize, serde::Deserialize)]
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct ChainParams {
     values: HashMap<String, ParamValue>,
 }

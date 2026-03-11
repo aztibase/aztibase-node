@@ -14,6 +14,7 @@
   --accent: #58a6ff;
   --green: #3fb950;
   --red: #f85149;
+  --yellow: #d29922;
   --mono: 'SF Mono', 'Cascadia Code', 'Fira Code', monospace;
 }
 * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -28,31 +29,59 @@ a:hover { text-decoration: underline; }
 
 header {
   border-bottom: 1px solid var(--border);
-  padding: 16px 24px;
+  padding: 12px 24px;
   display: flex;
   align-items: center;
-  gap: 24px;
+  gap: 20px;
   flex-wrap: wrap;
 }
-.logo {
-  font-size: 20px;
-  font-weight: 700;
-  letter-spacing: -0.5px;
-}
+.logo { font-size: 20px; font-weight: 700; letter-spacing: -0.5px; }
 .logo span { color: var(--accent); }
-.chain-info {
+
+nav.tabs {
+  display: flex;
+  gap: 4px;
+}
+nav.tabs button {
+  background: none;
+  border: 1px solid transparent;
+  color: var(--muted);
+  padding: 6px 14px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+nav.tabs button:hover { color: var(--text); background: var(--surface); }
+nav.tabs button.active { color: var(--text); background: var(--surface); border-color: var(--border); }
+
+.hdr-meta {
   display: flex;
   gap: 16px;
-  font-size: 13px;
+  font-size: 12px;
   color: var(--muted);
+  margin-left: auto;
+  align-items: center;
 }
-.chain-info .val { color: var(--text); font-family: var(--mono); font-size: 12px; }
+.hdr-meta .val { color: var(--text); font-family: var(--mono); }
+
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  display: inline-block;
+}
+.status-dot.ok { background: var(--green); }
+.status-dot.err { background: var(--red); }
+.status-dot.pending { background: var(--muted); }
 
 .search-bar {
-  flex: 1;
-  min-width: 280px;
+  width: 100%;
   display: flex;
   gap: 8px;
+  padding: 0 24px 12px;
+  border-bottom: 1px solid var(--border);
 }
 .search-bar input {
   flex: 1;
@@ -77,7 +106,35 @@ header {
   font-size: 14px;
 }
 
-main { max-width: 1100px; margin: 0 auto; padding: 24px; }
+main { max-width: 1200px; margin: 0 auto; padding: 24px; }
+
+/* Stats row */
+.stats-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 12px;
+  margin-bottom: 24px;
+}
+.stat {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 16px;
+  text-align: center;
+}
+.stat .val {
+  font-size: 22px;
+  font-weight: 700;
+  font-family: var(--mono);
+  line-height: 1.2;
+}
+.stat .label {
+  font-size: 11px;
+  color: var(--muted);
+  margin-top: 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
 
 .view-title {
   font-size: 18px;
@@ -95,6 +152,7 @@ main { max-width: 1100px; margin: 0 auto; padding: 24px; }
   border-radius: 12px;
   font-weight: 600;
 }
+.view-title .badge.green { background: var(--green); }
 
 .card {
   background: var(--surface);
@@ -113,7 +171,7 @@ main { max-width: 1100px; margin: 0 auto; padding: 24px; }
 .card-row:last-child { border-bottom: none; }
 .card-label {
   color: var(--muted);
-  min-width: 120px;
+  min-width: 140px;
   flex-shrink: 0;
   font-size: 13px;
 }
@@ -137,11 +195,7 @@ main { max-width: 1100px; margin: 0 auto; padding: 24px; }
   transition: border-color 0.15s;
 }
 .block-card:hover { border-color: var(--accent); }
-.block-num {
-  font-size: 16px;
-  font-weight: 600;
-  margin-bottom: 8px;
-}
+.block-num { font-size: 16px; font-weight: 600; margin-bottom: 8px; }
 .block-meta {
   font-size: 12px;
   color: var(--muted);
@@ -155,6 +209,32 @@ main { max-width: 1100px; margin: 0 auto; padding: 24px; }
   margin-top: 8px;
   word-break: break-all;
 }
+
+/* Table */
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  margin-bottom: 16px;
+}
+.data-table th {
+  text-align: left;
+  padding: 10px 14px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  color: var(--muted);
+  font-weight: 500;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.data-table td {
+  padding: 10px 14px;
+  border: 1px solid var(--border);
+  font-family: var(--mono);
+  font-size: 12px;
+}
+.data-table tr:hover td { background: rgba(88,166,255,0.04); }
 
 .tx-row {
   display: flex;
@@ -172,16 +252,6 @@ main { max-width: 1100px; margin: 0 auto; padding: 24px; }
   word-break: break-all;
 }
 
-.status-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  display: inline-block;
-}
-.status-dot.ok { background: var(--green); }
-.status-dot.err { background: var(--red); }
-.status-dot.pending { background: var(--muted); }
-
 .empty-state {
   text-align: center;
   padding: 48px;
@@ -195,18 +265,29 @@ main { max-width: 1100px; margin: 0 auto; padding: 24px; }
   display: inline-block;
 }
 
-.account-bal {
-  font-size: 24px;
-  font-weight: 700;
-  margin: 8px 0;
+.two-col {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 24px;
 }
 
-@media (max-width: 640px) {
+footer {
+  border-top: 1px solid var(--border);
+  padding: 16px 24px;
+  text-align: center;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+@media (max-width: 768px) {
   header { padding: 12px 16px; }
   main { padding: 16px; }
   .block-grid { grid-template-columns: 1fr; }
+  .two-col { grid-template-columns: 1fr; }
   .card-row { flex-direction: column; gap: 4px; }
   .card-label { min-width: auto; }
+  .stats-row { grid-template-columns: repeat(2, 1fr); }
+  .hdr-meta { display: none; }
 }
 </style>
 </head>
@@ -214,25 +295,37 @@ main { max-width: 1100px; margin: 0 auto; padding: 24px; }
 
 <header>
   <div class="logo">Aztibase <span>Explorer</span></div>
-  <div class="chain-info">
+  <nav class="tabs">
+    <button id="tab-dashboard" class="active" onclick="navigate('dashboard')">Dashboard</button>
+    <button id="tab-blocks" onclick="navigate('blocks')">Blocks</button>
+    <button id="tab-validators" onclick="navigate('validators')">Validators</button>
+  </nav>
+  <div class="hdr-meta">
     <div>Chain: <span class="val" id="hdr-chain">--</span></div>
     <div>Height: <span class="val" id="hdr-height">--</span></div>
     <div><span class="status-dot" id="hdr-status"></span></div>
   </div>
-  <div class="search-bar">
-    <input id="search-input" placeholder="Block number, tx hash, or address (0x...)" />
-    <button onclick="doSearch()">Search</button>
-  </div>
 </header>
+
+<div class="search-bar">
+  <input id="search-input" placeholder="Search by block number, tx hash, or address (0x...)" />
+  <button onclick="doSearch()">Search</button>
+</div>
 
 <main id="content">
   <div class="empty-state">Connecting to node...</div>
 </main>
 
+<footer>
+  Aztibase Network &mdash; Chain ID 0xA27B &mdash; <a href="https://testnet.aztibase.com">Testnet</a> &mdash; <a href="https://faucet.aztibase.com">Faucet</a> &mdash; <a href="https://github.com/user/aztibase">GitHub</a>
+</footer>
+
 <script>
 const params = new URLSearchParams(window.location.search);
-const RPC_URL = params.get('rpc') || 'http://localhost:9944';
+const RPC_URL = params.get('rpc') || 'https://testnet1.aztibase.com';
 let pollTimer = null;
+let currentTab = 'dashboard';
+let cachedMetrics = null;
 
 async function rpc(method, rpcParams = []) {
   const res = await fetch(RPC_URL, {
@@ -245,9 +338,19 @@ async function rpc(method, rpcParams = []) {
   return json.result;
 }
 
+async function fetchMetrics() {
+  try {
+    const res = await fetch(RPC_URL.replace(/\/$/, '') + '/metrics/json');
+    cachedMetrics = await res.json();
+  } catch (_) {
+    cachedMetrics = null;
+  }
+  return cachedMetrics;
+}
+
 function shortHash(h) {
   if (!h || h.length < 16) return h || '--';
-  return h.slice(0, 10) + '...' + h.slice(-8);
+  return h.slice(0, 10) + '\u2026' + h.slice(-8);
 }
 
 function escapeHtml(s) {
@@ -256,24 +359,134 @@ function escapeHtml(s) {
   return d.innerHTML;
 }
 
-// --- Views ---
+function formatNumber(n) {
+  if (n === undefined || n === null) return '--';
+  return Number(n).toLocaleString();
+}
 
-async function showLatestBlocks() {
+function formatAZTB(raw) {
+  const n = Number(raw || 0);
+  if (n >= 1_000_000) return (n / 1_000_000).toFixed(1) + 'M';
+  if (n >= 1_000) return (n / 1_000).toFixed(1) + 'K';
+  return n.toLocaleString();
+}
+
+function isAddr(v) {
+  return typeof v === 'string' && /^(0x)?[0-9a-fA-F]{64}$/.test(v);
+}
+
+// --- Navigation ---
+
+function navigate(tab) {
+  currentTab = tab;
+  document.querySelectorAll('nav.tabs button').forEach(b => b.classList.remove('active'));
+  document.getElementById('tab-' + tab).classList.add('active');
+  stopPolling();
+
+  if (tab === 'dashboard') showDashboard();
+  else if (tab === 'blocks') { showBlocks(); pollTimer = setInterval(showBlocks, 3000); }
+  else if (tab === 'validators') showValidators();
+}
+
+// --- Dashboard ---
+
+async function showDashboard() {
   const el = document.getElementById('content');
-  el.innerHTML = '<div class="view-title">Latest Blocks <span class="badge">live</span></div><div class="block-grid" id="block-grid"><div class="empty-state">Loading...</div></div>';
+  el.innerHTML = '<div class="empty-state">Loading dashboard...</div>';
+
+  try {
+    const [height, gasPrice, metrics] = await Promise.all([
+      rpc('aztb_blockNumber'),
+      rpc('aztb_gasPrice').catch(() => null),
+      fetchMetrics(),
+    ]);
+
+    const h = typeof height === 'string' ? parseInt(height, 16) : (height || 0);
+    updateHeader(h, true);
+
+    const m = metrics || {};
+    const consensus = m.consensus || {};
+    const execution = m.execution || {};
+    const network = m.network || {};
+    const staking = m.staking || {};
+
+    el.innerHTML = `
+      <div class="stats-row">
+        <div class="stat"><div class="val">${formatNumber(h)}</div><div class="label">Block Height</div></div>
+        <div class="stat"><div class="val">${formatNumber(consensus.commits)}</div><div class="label">Commits</div></div>
+        <div class="stat"><div class="val">${formatNumber(network.peer_count)}</div><div class="label">Peers</div></div>
+        <div class="stat"><div class="val">${formatNumber(staking.active_validators)}</div><div class="label">Validators</div></div>
+        <div class="stat"><div class="val">${formatAZTB(staking.total_staked)}</div><div class="label">Total Staked</div></div>
+        <div class="stat"><div class="val">${formatNumber(execution.mempool_size)}</div><div class="label">Mempool</div></div>
+        <div class="stat"><div class="val">${consensus.last_commit_latency_us ? (consensus.last_commit_latency_us / 1000).toFixed(0) + 'ms' : '--'}</div><div class="label">Commit Latency</div></div>
+        <div class="stat"><div class="val">${gasPrice != null ? gasPrice : (execution.base_fee || '--')}</div><div class="label">Base Fee</div></div>
+      </div>
+      <div class="two-col">
+        <div>
+          <div class="view-title">Latest Blocks <span class="badge green">live</span></div>
+          <div id="dash-blocks"><div class="empty-state">Loading...</div></div>
+        </div>
+        <div>
+          <div class="view-title">Network Stats</div>
+          <div class="card">
+            <div class="card-row"><div class="card-label">Vertices Proposed</div><div class="card-value">${formatNumber(consensus.vertices_proposed)}</div></div>
+            <div class="card-row"><div class="card-label">Vertices Received</div><div class="card-value">${formatNumber(consensus.vertices_received)}</div></div>
+            <div class="card-row"><div class="card-label">Rounds Advanced</div><div class="card-value">${formatNumber(consensus.rounds_advanced)}</div></div>
+            <div class="card-row"><div class="card-label">Equivocations</div><div class="card-value" style="color:${consensus.equivocations > 0 ? 'var(--red)' : 'inherit'}">${formatNumber(consensus.equivocations)}</div></div>
+            <div class="card-row"><div class="card-label">Txs Processed</div><div class="card-value">${formatNumber(execution.txs_processed)}</div></div>
+            <div class="card-row"><div class="card-label">Slashes</div><div class="card-value" style="color:${staking.slashes_applied > 0 ? 'var(--red)' : 'inherit'}">${formatNumber(staking.slashes_applied)}</div></div>
+            <div class="card-row"><div class="card-label">Pending Tasks</div><div class="card-value">${formatNumber(execution.pending_tasks)}</div></div>
+          </div>
+        </div>
+      </div>
+    `;
+
+    // Load latest 8 blocks for dashboard
+    if (h > 0) {
+      const from = Math.max(0, h - 7);
+      const blocks = await rpc('aztb_getBlockRange', [from, h]);
+      const container = document.getElementById('dash-blocks');
+      if (blocks && blocks.length > 0) {
+        container.innerHTML = '<div class="card">' + blocks.reverse().map(b => {
+          const num = typeof b.number === 'string' ? parseInt(b.number, 16) : b.number;
+          const txCount = b.transactions ? b.transactions.length : (b.tx_count || 0);
+          return `<div class="card-row" style="cursor:pointer" onclick="showBlock(${num})">
+            <div class="card-label" style="color:var(--accent);font-weight:600">#${num}</div>
+            <div class="card-value" style="flex:1">${shortHash(b.hash)}</div>
+            <div style="color:var(--muted);font-size:12px">${txCount} tx</div>
+          </div>`;
+        }).join('') + '</div>';
+      }
+    }
+
+    // Auto-refresh dashboard
+    pollTimer = setInterval(showDashboard, 5000);
+
+  } catch (e) {
+    el.innerHTML = `<div class="empty-state">Failed to connect to node at ${escapeHtml(RPC_URL)}<br><br>${escapeHtml(e.message)}<br><br>Use ?rpc=https://host:port to set endpoint</div>`;
+    updateHeader(null, false);
+  }
+}
+
+// --- Blocks ---
+
+async function showBlocks() {
+  const el = document.getElementById('content');
+  if (!document.getElementById('block-grid')) {
+    el.innerHTML = '<div class="view-title">Latest Blocks <span class="badge green">live</span></div><div class="block-grid" id="block-grid"><div class="empty-state">Loading...</div></div>';
+  }
 
   try {
     const height = await rpc('aztb_blockNumber');
     const h = typeof height === 'string' ? parseInt(height, 16) : (height || 0);
-    document.getElementById('hdr-height').textContent = h;
-    document.getElementById('hdr-status').className = 'status-dot ok';
+    updateHeader(h, true);
 
     if (h === 0) {
       document.getElementById('block-grid').innerHTML = '<div class="empty-state">No blocks yet</div>';
       return;
     }
 
-    const from = Math.max(0, h - 19);
+    const from = Math.max(0, h - 23);
     const blocks = await rpc('aztb_getBlockRange', [from, h]);
     const grid = document.getElementById('block-grid');
 
@@ -295,65 +508,125 @@ async function showLatestBlocks() {
       </div>`;
     }).join('');
   } catch (e) {
-    el.innerHTML = `<div class="empty-state">Failed to connect to node at ${escapeHtml(RPC_URL)}<br><br>${escapeHtml(e.message)}<br><br>Use ?rpc=http://host:port to set endpoint</div>`;
-    document.getElementById('hdr-status').className = 'status-dot err';
+    document.getElementById('content').innerHTML = `<div class="empty-state">Failed to connect: ${escapeHtml(e.message)}</div>`;
+    updateHeader(null, false);
   }
 }
 
+// --- Validators ---
+
+async function showValidators() {
+  const el = document.getElementById('content');
+  el.innerHTML = '<div class="empty-state">Loading validators...</div>';
+
+  try {
+    const [validators, metrics] = await Promise.all([
+      rpc('aztb_getActiveValidators').catch(() => []),
+      fetchMetrics(),
+    ]);
+
+    const staking = (metrics || {}).staking || {};
+
+    let tableRows = '';
+    if (Array.isArray(validators) && validators.length > 0) {
+      tableRows = validators.map((v, i) => {
+        const addr = v.address || v;
+        const stake = v.stake != null ? formatAZTB(v.stake) : '--';
+        const status = v.active !== false ? '<span style="color:var(--green)">Active</span>' : '<span style="color:var(--red)">Inactive</span>';
+        return `<tr>
+          <td>${i + 1}</td>
+          <td><a onclick="showAccount('${escapeHtml(typeof addr === 'string' ? addr : '')}')">${shortHash(typeof addr === 'string' ? addr : JSON.stringify(addr))}</a></td>
+          <td>${stake} AZTB</td>
+          <td>${status}</td>
+        </tr>`;
+      }).join('');
+    } else {
+      tableRows = '<tr><td colspan="4" style="text-align:center;color:var(--muted)">No validator data available</td></tr>';
+    }
+
+    el.innerHTML = `
+      <div class="stats-row" style="margin-bottom:24px">
+        <div class="stat"><div class="val">${formatNumber(staking.active_validators || (Array.isArray(validators) ? validators.length : '--'))}</div><div class="label">Active Validators</div></div>
+        <div class="stat"><div class="val">${formatAZTB(staking.total_staked)}</div><div class="label">Total Staked</div></div>
+        <div class="stat"><div class="val">${formatNumber(staking.slashes_applied)}</div><div class="label">Slashes</div></div>
+      </div>
+      <div class="view-title">Validator Set</div>
+      <table class="data-table">
+        <thead><tr><th>#</th><th>Address</th><th>Stake</th><th>Status</th></tr></thead>
+        <tbody>${tableRows}</tbody>
+      </table>
+    `;
+  } catch (e) {
+    el.innerHTML = `<div class="empty-state">Error: ${escapeHtml(e.message)}</div>`;
+  }
+}
+
+// --- Detail Views ---
+
 async function showBlock(num) {
   stopPolling();
+  setActiveTab(null);
   const el = document.getElementById('content');
   el.innerHTML = '<div class="empty-state">Loading block...</div>';
 
   try {
     const block = await rpc('aztb_getBlockByNumber', [num]);
     if (!block) {
-      el.innerHTML = `<a class="nav-link" onclick="startPolling()">Back to latest</a><div class="empty-state">Block #${num} not found</div>`;
+      el.innerHTML = `<a class="nav-link" onclick="navigate('blocks')">Back to blocks</a><div class="empty-state">Block #${num} not found</div>`;
       return;
     }
 
     const txs = block.transactions || [];
     const hash = block.hash || '--';
     const stateRoot = block.stateRoot || block.state_root || '--';
+    const parentHash = block.parentHash || block.parent_hash || '--';
+    const timestamp = block.timestamp ? new Date(block.timestamp * 1000).toISOString() : '--';
+
+    const prevBtn = num > 0 ? `<a onclick="showBlock(${num - 1})" style="margin-right:12px">Block #${num-1}</a>` : '';
+    const nextBtn = `<a onclick="showBlock(${num + 1})">Block #${num+1}</a>`;
 
     el.innerHTML = `
-      <a class="nav-link" onclick="startPolling()">Back to latest</a>
+      <a class="nav-link" onclick="navigate('blocks')">Back to blocks</a>
       <div class="view-title">Block #${num}</div>
       <div class="card">
         <div class="card-row"><div class="card-label">Hash</div><div class="card-value">${escapeHtml(hash)}</div></div>
         <div class="card-row"><div class="card-label">Height</div><div class="card-value">${num}</div></div>
-        <div class="card-row"><div class="card-label">Transactions</div><div class="card-value">${txs.length}</div></div>
+        <div class="card-row"><div class="card-label">Parent Hash</div><div class="card-value">${escapeHtml(parentHash)}</div></div>
         <div class="card-row"><div class="card-label">State Root</div><div class="card-value">${escapeHtml(stateRoot)}</div></div>
+        <div class="card-row"><div class="card-label">Timestamp</div><div class="card-value">${escapeHtml(timestamp)}</div></div>
+        <div class="card-row"><div class="card-label">Transactions</div><div class="card-value">${txs.length}</div></div>
+        <div class="card-row"><div class="card-label">Navigate</div><div class="card-value">${prevBtn}${nextBtn}</div></div>
       </div>
       ${txs.length > 0 ? `
         <div class="view-title" style="margin-top:24px">Transactions</div>
         <div class="card">
           ${txs.map((tx, i) => `<div class="tx-row">
-            <span style="color:var(--muted)">${i}</span>
+            <span style="color:var(--muted);width:24px">${i}</span>
             <a class="tx-hash" onclick="showTx('${escapeHtml(tx)}')">${escapeHtml(tx)}</a>
           </div>`).join('')}
         </div>` : ''}
     `;
   } catch (e) {
-    el.innerHTML = `<a class="nav-link" onclick="startPolling()">Back to latest</a><div class="empty-state">Error: ${escapeHtml(e.message)}</div>`;
+    el.innerHTML = `<a class="nav-link" onclick="navigate('blocks')">Back to blocks</a><div class="empty-state">Error: ${escapeHtml(e.message)}</div>`;
   }
 }
 
 async function showTx(hash) {
   stopPolling();
+  setActiveTab(null);
   const el = document.getElementById('content');
   el.innerHTML = '<div class="empty-state">Loading transaction...</div>';
 
   try {
     const tx = await rpc('aztb_getTransactionByHash', [hash]);
     if (!tx) {
-      el.innerHTML = `<a class="nav-link" onclick="startPolling()">Back to latest</a><div class="empty-state">Transaction not found</div>`;
+      el.innerHTML = `<a class="nav-link" onclick="navigate('dashboard')">Back to dashboard</a><div class="empty-state">Transaction not found</div>`;
       return;
     }
 
     const fields = Object.entries(tx).filter(([k]) => k !== 'hash');
     el.innerHTML = `
-      <a class="nav-link" onclick="startPolling()">Back to latest</a>
+      <a class="nav-link" onclick="navigate('dashboard')">Back to dashboard</a>
       <div class="view-title">Transaction</div>
       <div class="card">
         <div class="card-row"><div class="card-label">Hash</div><div class="card-value">${escapeHtml(hash)}</div></div>
@@ -364,41 +637,61 @@ async function showTx(hash) {
       </div>
     `;
   } catch (e) {
-    el.innerHTML = `<a class="nav-link" onclick="startPolling()">Back to latest</a><div class="empty-state">Error: ${escapeHtml(e.message)}</div>`;
+    el.innerHTML = `<a class="nav-link" onclick="navigate('dashboard')">Back to dashboard</a><div class="empty-state">Error: ${escapeHtml(e.message)}</div>`;
   }
 }
 
 async function showAccount(addr) {
   stopPolling();
+  setActiveTab(null);
   const el = document.getElementById('content');
   el.innerHTML = '<div class="empty-state">Loading account...</div>';
 
   try {
-    const [balance, nonce, accType] = await Promise.all([
+    const [balance, nonce, accType, stake, delegation] = await Promise.all([
       rpc('aztb_getBalance', [addr]).catch(() => '0'),
       rpc('aztb_getNonce', [addr]).catch(() => '0'),
       rpc('aztb_getAccountType', [addr]).catch(() => 'Unknown'),
+      rpc('aztb_getValidatorStake', [addr]).catch(() => null),
+      rpc('aztb_getDelegation', [addr]).catch(() => null),
     ]);
 
     const bal = typeof balance === 'string' ? balance : String(balance || 0);
 
+    let stakingHtml = '';
+    if (stake != null && stake !== '0' && stake !== 0) {
+      stakingHtml = `<div class="card-row"><div class="card-label">Validator Stake</div><div class="card-value">${formatAZTB(stake)} AZTB</div></div>`;
+    }
+    if (delegation != null && typeof delegation === 'object') {
+      stakingHtml += `<div class="card-row"><div class="card-label">Delegation</div><div class="card-value">${escapeHtml(JSON.stringify(delegation))}</div></div>`;
+    }
+
     el.innerHTML = `
-      <a class="nav-link" onclick="startPolling()">Back to latest</a>
+      <a class="nav-link" onclick="navigate('dashboard')">Back to dashboard</a>
       <div class="view-title">Account</div>
       <div class="card">
         <div class="card-row"><div class="card-label">Address</div><div class="card-value">${escapeHtml(addr)}</div></div>
-        <div class="card-row"><div class="card-label">Balance</div><div class="card-value">${escapeHtml(bal)} base units</div></div>
+        <div class="card-row"><div class="card-label">Balance</div><div class="card-value">${formatNumber(bal)} AZTB</div></div>
         <div class="card-row"><div class="card-label">Nonce</div><div class="card-value">${escapeHtml(String(nonce))}</div></div>
         <div class="card-row"><div class="card-label">Type</div><div class="card-value">${escapeHtml(String(accType))}</div></div>
+        ${stakingHtml}
       </div>
     `;
   } catch (e) {
-    el.innerHTML = `<a class="nav-link" onclick="startPolling()">Back to latest</a><div class="empty-state">Error: ${escapeHtml(e.message)}</div>`;
+    el.innerHTML = `<a class="nav-link" onclick="navigate('dashboard')">Back to dashboard</a><div class="empty-state">Error: ${escapeHtml(e.message)}</div>`;
   }
 }
 
-function isAddr(v) {
-  return typeof v === 'string' && /^(0x)?[0-9a-fA-F]{64}$/.test(v);
+// --- Helpers ---
+
+function updateHeader(height, connected) {
+  if (height != null) document.getElementById('hdr-height').textContent = height;
+  document.getElementById('hdr-status').className = connected ? 'status-dot ok' : 'status-dot err';
+}
+
+function setActiveTab(tab) {
+  document.querySelectorAll('nav.tabs button').forEach(b => b.classList.remove('active'));
+  if (tab) document.getElementById('tab-' + tab).classList.add('active');
 }
 
 function doSearch() {
@@ -422,22 +715,18 @@ document.getElementById('search-input').addEventListener('keydown', e => {
   if (e.key === 'Enter') doSearch();
 });
 
-function startPolling() {
-  showLatestBlocks();
-  if (pollTimer) clearInterval(pollTimer);
-  pollTimer = setInterval(showLatestBlocks, 3000);
-}
-
 function stopPolling() {
   if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
 }
+
+// --- Init ---
 
 (async () => {
   try {
     const chainId = await rpc('aztb_chainId');
     document.getElementById('hdr-chain').textContent = chainId || '--';
   } catch (_) {}
-  startPolling();
+  navigate('dashboard');
 })();
 </script>
 </body>

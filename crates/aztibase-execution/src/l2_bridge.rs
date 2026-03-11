@@ -72,7 +72,7 @@ impl std::fmt::Display for BridgeError {
 impl std::error::Error for BridgeError {}
 
 /// On-chain registry of L2 chains. Governance-gated registration.
-#[derive(Default, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct L2Registry {
     chains: HashMap<[u8; 32], L2Registration>,
 }
@@ -112,7 +112,7 @@ impl L2Registry {
 }
 
 /// Stores anchored L2 state roots on L1, keeping the last N anchors per chain.
-#[derive(Default, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct L2AnchorStore {
     anchors: HashMap<[u8; 32], Vec<L2Anchor>>,
 }
@@ -162,7 +162,7 @@ impl L2AnchorStore {
 }
 
 /// Tracks locked AZTB per (l2_chain_id, depositor) for bridge escrow.
-#[derive(Default, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct BridgeEscrow {
     balances: HashMap<([u8; 32], Address), u128>,
 }
@@ -202,7 +202,7 @@ impl BridgeEscrow {
 }
 
 /// Tracks used withdrawal proofs to prevent double-spend.
-#[derive(Default, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct BridgeWithdrawProofs {
     used: HashMap<[u8; 32], Address>,
 }

@@ -504,6 +504,76 @@ pub fn testnet_genesis() -> GenesisConfig {
     }
 }
 
+/// Mainnet genesis with real tokenomics allocations.
+/// 400M AZTB total supply across 8 categories.
+/// Validator keys and allocation addresses are placeholders — replace at ceremony.
+#[allow(dead_code)] // Activated during mainnet genesis ceremony
+pub fn mainnet_genesis(n_validators: usize) -> GeneratedGenesis {
+    const TOTAL_SUPPLY: u128 = 400_000_000;
+
+    // Allocation percentages (must sum to 100)
+    let allocations: [(&str, u128); 8] = [
+        ("team", TOTAL_SUPPLY * 15 / 100),      // 60M
+        ("investors", TOTAL_SUPPLY * 10 / 100), // 40M
+        ("ecosystem", TOTAL_SUPPLY * 25 / 100), // 100M
+        ("community", TOTAL_SUPPLY * 20 / 100), // 80M
+        ("treasury", TOTAL_SUPPLY * 15 / 100),  // 60M
+        ("validators", TOTAL_SUPPLY * 5 / 100), // 20M
+        ("advisors", TOTAL_SUPPLY * 5 / 100),   // 20M
+        ("reserve", TOTAL_SUPPLY * 5 / 100),    // 20M
+    ];
+
+    let validator_pool = allocations[5].1;
+    let stake_per_validator = validator_pool / n_validators as u128;
+
+    let mut validators = Vec::with_capacity(n_validators);
+    let mut validator_keys = Vec::with_capacity(n_validators);
+
+    for i in 0..n_validators {
+        let kp = Keypair::generate();
+        let bls_kp = BlsKeypair::generate();
+        let addr = address_from_pubkey(kp.public_key().as_bytes());
+        let hex_addr = hex_encode(&addr);
+        let bls_pub_hex = hex_encode(bls_kp.public_key().as_bytes());
+        validators.push(ValidatorEntry {
+            name: format!("mainnet-validator-{}", i + 1),
+            address: hex_addr.clone(),
+            stake: stake_per_validator,
+            bls_public_key: Some(bls_pub_hex),
+        });
+        validator_keys.push((hex_addr, kp, bls_kp));
+    }
+
+    let mut accounts = BTreeMap::new();
+    let mut funded_keys = Vec::new();
+
+    // Create allocation accounts (skip validators — they get stake directly)
+    for &(name, amount) in &allocations {
+        if name == "validators" {
+            continue;
+        }
+        let seed = blake3::hash(format!("aztibase-mainnet-{name}").as_bytes());
+        let kp = Keypair::from_secret_bytes(seed.as_bytes());
+        let addr = address_from_pubkey(kp.public_key().as_bytes());
+        let hex_addr = hex_encode(&addr);
+        accounts.insert(hex_addr.clone(), AccountEntry { balance: amount });
+        funded_keys.push((hex_addr, kp));
+    }
+
+    let config = GenesisConfig {
+        chain_id: CHAIN_ID,
+        timestamp: 0, // Set at ceremony
+        validators,
+        accounts,
+    };
+
+    GeneratedGenesis {
+        config,
+        validator_keys,
+        funded_keys,
+    }
+}
+
 pub fn testnet_boot_nodes() -> Vec<String> {
     vec![
         "/dns4/testnet1.aztibase.com/tcp/30333".into(),
@@ -865,5 +935,29 @@ mod tests {
         assert_eq!(key_files.len(), 3);
 
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn mainnet_genesis_valid() {
+        let result = mainnet_genesis(4);
+        let cfg = &result.config;
+
+        assert_eq!(cfg.chain_id, CHAIN_ID);
+        assert_eq!(cfg.validators.len(), 4);
+        assert_eq!(cfg.accounts.len(), 7); // 8 categories minus validators
+
+        let validator_total: u128 = cfg.validators.iter().map(|v| v.stake).sum();
+        let account_total: u128 = cfg.accounts.values().map(|a| a.balance).sum();
+        assert_eq!(validator_total + account_total, 400_000_000);
+
+        // Each validator gets equal share of 5% pool (20M / 4 = 5M)
+        for v in &cfg.validators {
+            assert_eq!(v.stake, 5_000_000);
+            assert!(v.bls_public_key.is_some());
+        }
+
+        // No faucet account
+        let has_faucet = cfg.accounts.keys().any(|k| k.contains("faucet"));
+        assert!(!has_faucet);
     }
 }

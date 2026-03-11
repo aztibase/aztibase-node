@@ -5,6 +5,17 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ---
 
+## Sprint 056 — Full State Snapshots & Mainnet Genesis (M9-S17) (2026-03-11)
+
+### Added
+- **Full state snapshots**: `ProtocolStoreBundle` captures all 9 protocol stores + base_fee alongside AccountState. SNAPSHOT_VERSION bumped to 3.
+- **Snapshot file I/O**: `write_snapshot_file` / `read_snapshot_file` with BLAKE3 integrity verification (corruption detected before deserialization)
+- **Snapshot CLI**: `aztibase snapshot export --output <path>` and `aztibase --snapshot <path>` for node bootstrap from file
+- **Mainnet genesis ceremony**: `mainnet_genesis()` allocates 400M AZTB across 8 categories (team 15%, investors 10%, ecosystem 25%, community 20%, treasury 15%, validators 5%, advisors 5%, reserve 5%)
+- **ADR-027**: Full state snapshots & mainnet genesis design
+
+---
+
 ## Sprint 055 — Public Testnet Launch Infrastructure (M9-S16) (2026-03-11)
 
 ### Added

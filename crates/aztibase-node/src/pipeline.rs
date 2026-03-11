@@ -300,6 +300,21 @@ impl ExecutionPipeline {
         }
     }
 
+    /// Restore all protocol stores from a snapshot bundle.
+    pub async fn apply_protocol_bundle(&self, bundle: aztibase_execution::ProtocolStoreBundle) {
+        *self.staking_store.write().await = bundle.staking;
+        *self.governance.write().await = bundle.governance;
+        *self.emission_tracker.write().await = bundle.emission;
+        *self.chain_params.write().await = bundle.chain_params;
+        *self.agent_policy_store.write().await = bundle.agent_policies;
+        *self.l2_registry.write().await = bundle.l2_registry;
+        *self.l2_anchor_store.write().await = bundle.l2_anchors;
+        *self.bridge_escrow.write().await = bundle.bridge_escrow;
+        *self.bridge_withdraw_proofs.write().await = bundle.bridge_proofs;
+        self.base_fee
+            .store(bundle.base_fee, std::sync::atomic::Ordering::Relaxed);
+    }
+
     /// Attach an AI runtime for inference transaction execution.
     pub fn set_ai_runtime(&mut self, runtime: Arc<dyn AIRuntime>) {
         self.ai_runtime = Some(runtime);

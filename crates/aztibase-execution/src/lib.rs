@@ -53,8 +53,10 @@ pub use persist::{
 pub use receipt::{ExecutionReceipt, evict_old_receipts, get_receipt, store_receipts};
 pub use routing::{RoutingError, TxKind, route_batch, route_tx};
 pub use snapshot::{
-    SnapshotError, StateSnapshot, apply_snapshot, create_snapshot, create_snapshot_with_finality,
-    deserialize_snapshot, serialize_snapshot, snapshot_hash, snapshot_header_hash,
+    ProtocolStoreBundle, SnapshotError, StateSnapshot, apply_full_snapshot, apply_snapshot,
+    create_full_snapshot, create_snapshot, create_snapshot_with_finality, deserialize_snapshot,
+    read_snapshot_file, serialize_snapshot, snapshot_hash, snapshot_header_hash,
+    write_snapshot_file,
 };
 pub use staking::{
     DEFAULT_COMMISSION_BPS, DOWNTIME_SLASH_BPS, DOWNTIME_THRESHOLD_ROUNDS, Delegation,

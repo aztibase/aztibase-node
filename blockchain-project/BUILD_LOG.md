@@ -21,6 +21,26 @@ Entries are prepended (newest first).
 
 ## Entries
 
+### Sprint 056 — Full State Snapshots & Mainnet Genesis (M9-S17)
+- **Date**: 2026-03-11
+- **Commit**: (pending)
+- **Files changed**:
+  - `crates/aztibase-execution/src/snapshot.rs` — ProtocolStoreBundle, create_full_snapshot, apply_full_snapshot, write_snapshot_file, read_snapshot_file, SNAPSHOT_VERSION 3, 6 new tests
+  - `crates/aztibase-execution/src/lib.rs` — Re-exports for new snapshot types/functions
+  - `crates/aztibase-execution/src/governance.rs` — Added Clone, Debug derives to GovernanceStore
+  - `crates/aztibase-execution/src/chain_params.rs` — Added Clone, Debug derives to ChainParams
+  - `crates/aztibase-execution/src/l2_bridge.rs` — Added Clone, Debug derives to L2Registry, L2AnchorStore, BridgeEscrow, BridgeWithdrawProofs
+  - `crates/aztibase-node/src/main.rs` — Snapshot subcommand (export/info), --snapshot CLI flag, snapshot bootstrap on startup
+  - `crates/aztibase-node/src/pipeline.rs` — apply_protocol_bundle() method
+  - `crates/aztibase-node/src/genesis.rs` — mainnet_genesis() with 400M AZTB across 8 allocations, 1 new test
+  - `blockchain-project/DECISIONS.md` — ADR-027 (full state snapshots & mainnet genesis)
+  - `blockchain-project/sprints/SPRINT-056.md` — Sprint 056 plan
+- **Review notes**: Security review — snapshot file uses BLAKE3 integrity hash verified before deserialization, MAX_SNAPSHOT_SIZE 128 MiB prevents memory exhaustion, file path comes from CLI (operator-controlled). Mainnet genesis uses deterministic placeholder keys from BLAKE3 seeds — no secrets in source.
+- **Tests**: 931 passing (6 new snapshot + 1 new genesis), 0 clippy warnings, fmt clean.
+- **Security flags**: None.
+
+---
+
 ### Sprint 055 — Public Testnet Launch Infrastructure (M9-S16)
 - **Date**: 2026-03-11
 - **Commit**: (pending)

@@ -108,6 +108,10 @@ struct Cli {
     /// Run with mainnet profile (disables faucet, restricts CORS)
     #[arg(long, conflicts_with = "testnet")]
     mainnet: bool,
+
+    /// Bootstrap from a snapshot file instead of replaying from genesis
+    #[arg(long)]
+    snapshot: Option<PathBuf>,
 }
 
 #[derive(clap::Subcommand, Debug)]
@@ -127,10 +131,33 @@ enum Command {
         #[arg(long)]
         docker: bool,
     },
+    /// Export a full state snapshot from the node database
+    Snapshot {
+        #[command(subcommand)]
+        action: SnapshotAction,
+    },
     /// Wallet key management and transaction signing
     Wallet {
         #[command(subcommand)]
         action: WalletAction,
+    },
+}
+
+#[derive(clap::Subcommand, Debug)]
+enum SnapshotAction {
+    /// Export current state to a snapshot file
+    Export {
+        /// Path to the node database directory
+        #[arg(long)]
+        data_dir: PathBuf,
+        /// Output snapshot file path
+        #[arg(long, default_value = "snapshot.aztb")]
+        output: PathBuf,
+    },
+    /// Inspect a snapshot file without importing
+    Info {
+        /// Path to snapshot file
+        path: PathBuf,
     },
 }
 
@@ -308,6 +335,97 @@ async fn main() -> Result<()> {
                     funded,
                     validators,
                 );
+            }
+            return Ok(());
+        }
+        Some(Command::Snapshot { action }) => {
+            match action {
+                SnapshotAction::Export { data_dir, output } => {
+                    let storage_path = data_dir.join("execution_db");
+                    let store = StateStore::open(storage_path.to_str().unwrap_or("execution_db"))
+                        .context("Failed to open database")?;
+                    let state = aztibase_execution::load_state(&store)
+                        .map_err(|e| anyhow::anyhow!("{e}"))?;
+                    let batch_index = aztibase_execution::latest_batch_index(&store)
+                        .map_err(|e| anyhow::anyhow!("{e}"))?
+                        .unwrap_or(0);
+                    let base_fee = aztibase_execution::load_base_fee(&store)
+                        .map_err(|e| anyhow::anyhow!("{e}"))?
+                        .unwrap_or(1_000);
+                    let staking = aztibase_execution::load_staking(&store)
+                        .map_err(|e| anyhow::anyhow!("{e}"))?;
+                    let governance = aztibase_execution::load_governance(&store)
+                        .map_err(|e| anyhow::anyhow!("{e}"))?;
+                    let emission = aztibase_execution::load_emission(&store)
+                        .map_err(|e| anyhow::anyhow!("{e}"))?;
+                    let chain_params = aztibase_execution::load_chain_params(&store)
+                        .map_err(|e| anyhow::anyhow!("{e}"))?;
+                    let agent_policies = aztibase_execution::load_agent_policies(&store)
+                        .map_err(|e| anyhow::anyhow!("{e}"))?;
+                    let (l2_registry, l2_anchors, bridge_escrow, bridge_proofs) =
+                        aztibase_execution::load_bridge_stores(&store)
+                            .map_err(|e| anyhow::anyhow!("{e}"))?;
+
+                    let bundle = aztibase_execution::ProtocolStoreBundle {
+                        staking,
+                        governance,
+                        emission,
+                        chain_params,
+                        agent_policies,
+                        l2_registry,
+                        l2_anchors,
+                        bridge_escrow,
+                        bridge_proofs,
+                        base_fee,
+                    };
+
+                    let account_count = state.account_count();
+                    let snapshot = aztibase_execution::create_full_snapshot(
+                        &state,
+                        batch_index,
+                        batch_index,
+                        vec![],
+                        bundle,
+                    );
+                    aztibase_execution::write_snapshot_file(&output, &snapshot)
+                        .map_err(|e| anyhow::anyhow!("{e}"))?;
+
+                    println!("Snapshot exported to {}", output.display());
+                    println!("  Batch index: {batch_index}");
+                    println!("  Accounts:    {account_count}");
+                    println!(
+                        "  State root:  {}",
+                        genesis::hex_encode(&snapshot.state_root)
+                    );
+                    println!("  Base fee:    {base_fee}");
+                }
+                SnapshotAction::Info { path } => {
+                    let snapshot = aztibase_execution::read_snapshot_file(&path)
+                        .map_err(|e| anyhow::anyhow!("{e}"))?;
+                    println!("Snapshot: {}", path.display());
+                    println!("  Version:     {}", snapshot.version());
+                    println!("  Batch index: {}", snapshot.batch_index);
+                    println!("  Height:      {}", snapshot.height);
+                    println!(
+                        "  State root:  {}",
+                        genesis::hex_encode(&snapshot.state_root)
+                    );
+                    println!(
+                        "  Finality:    {} bytes",
+                        snapshot.finality_certificate.len()
+                    );
+                    println!(
+                        "  Protocol:    {}",
+                        if snapshot.protocol_stores.is_some() {
+                            "included"
+                        } else {
+                            "not included"
+                        }
+                    );
+                    if let Some(ref bundle) = snapshot.protocol_stores {
+                        println!("  Base fee:    {}", bundle.base_fee);
+                    }
+                }
             }
             return Ok(());
         }
@@ -740,6 +858,33 @@ async fn main() -> Result<()> {
     }
     exec_pipeline.set_ai_runtime(ai_runtime);
     tracing::info!("Execution pipeline initialized (AI runtime: tract)");
+
+    // Bootstrap from snapshot file if --snapshot is provided
+    if let Some(ref snapshot_path) = cli.snapshot {
+        let shared = exec_pipeline.shared_state();
+        let state_guard = shared.read().await;
+        if state_guard.account_count() == 0 {
+            drop(state_guard);
+            tracing::info!(path = %snapshot_path.display(), "Loading snapshot file");
+            let snap = aztibase_execution::read_snapshot_file(snapshot_path)
+                .map_err(|e| anyhow::anyhow!("Failed to load snapshot: {e}"))?;
+            let (restored_state, bundle) = aztibase_execution::apply_full_snapshot(&snap)
+                .map_err(|e| anyhow::anyhow!("Failed to apply snapshot: {e}"))?;
+            let mut state_guard = shared.write().await;
+            *state_guard = restored_state;
+            tracing::info!(
+                batch_index = snap.batch_index,
+                accounts = state_guard.account_count(),
+                state_root = %genesis::hex_encode(&snap.state_root),
+                "State bootstrapped from snapshot"
+            );
+            drop(state_guard);
+            exec_pipeline.apply_protocol_bundle(bundle).await;
+            tracing::info!("Protocol stores restored from snapshot");
+        } else {
+            tracing::info!("Database already has state — ignoring --snapshot flag");
+        }
+    }
 
     if let Some(ref gen_cfg) = genesis_config {
         let shared = exec_pipeline.shared_state();
@@ -1559,6 +1704,7 @@ mod tests {
             epoch_length: None,
             testnet: false,
             mainnet: false,
+            snapshot: None,
         };
         let config = cli.apply_overrides(NodeConfig::default());
         assert_eq!(config.data_dir, PathBuf::from("/tmp/test"));
@@ -1585,6 +1731,7 @@ mod tests {
             epoch_length: None,
             testnet: false,
             mainnet: false,
+            snapshot: None,
         };
         let config = cli.apply_overrides(NodeConfig::default());
         assert_eq!(config.network.listen_addresses.len(), 1);
@@ -1676,6 +1823,7 @@ mod tests {
             epoch_length: None,
             testnet: false,
             mainnet: false,
+            snapshot: None,
         };
         let result = cli.apply_overrides(config);
 
