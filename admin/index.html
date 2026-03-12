@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Aztibase Admin</title>
+<link rel="stylesheet" href="css/dashboard.css">
+</head>
+<body>
+
+<header>
+  <div class="logo">Aztibase <span>Admin</span></div>
+  <nav id="mainNav">
+    <button class="nav-btn active" data-page="nodes">Nodes</button>
+    <button class="nav-btn" data-page="validators">Validators</button>
+    <button class="nav-btn" data-page="operations">Operations</button>
+    <button class="nav-btn" data-page="accounts">Accounts</button>
+  </nav>
+  <div class="header-status">
+    <span id="connStatus" class="status-dot offline"></span>
+    <select id="nodeSelect">
+      <option value="http://127.0.0.1:9944">Node 1 :9944</option>
+      <option value="http://127.0.0.1:9945">Node 2 :9945</option>
+      <option value="http://127.0.0.1:9946">Node 3 :9946</option>
+    </select>
+  </div>
+</header>
+
+<main>
+  <div id="page-nodes" class="page active"></div>
+  <div id="page-validators" class="page"></div>
+  <div id="page-operations" class="page"></div>
+  <div id="page-accounts" class="page"></div>
+</main>
+
+<footer>
+  Aztibase Network &mdash; Internal Admin Dashboard &mdash; Not for public use
+</footer>
+
+<script src="js/rpc.js"></script>
+<script src="js/router.js"></script>
+<script src="js/nodes.js"></script>
+<script src="js/validators.js"></script>
+<script src="js/operations.js"></script>
+<script src="js/accounts.js"></script>
+</body>
+</html>

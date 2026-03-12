@@ -21,6 +21,17 @@ Entries are prepended (newest first).
 
 ## Entries
 
+### Admin Dashboard & Testnet Hardening (M9-S18.2)
+- **Date**: 2026-03-12
+- **Commit**: (this commit)
+- **Files changed**:
+  - `crates/aztibase-node/src/pipeline.rs` — TX storage fix: serialize ALL transactions before nonce filtering so `getTransactionByHash` returns data for rejected txs too. Removed nonce increment on gas-too-low and escrow-failure paths (txs that can't pay gas shouldn't consume a nonce slot).
+  - `crates/aztibase-rpc/src/server.rs` — Documented faucet as node-local testnet limitation with rustdoc comment.
+  - `monitoring/grafana/dashboards/node-health.json` — Added Active Validators, Total Staked, Slashing Events, and Block Production Rate panels.
+  - `admin/` — NEW: Internal admin dashboard (8 files). Multi-file vanilla JS, 4 pages: Nodes (multi-node health), Validators (stake lookup), Operations (faucet, chain params, governance, emission), Accounts (address/tx/batch lookup). Dark theme matching explorer.
+- **Review Notes**: All 621 tests pass (321 execution + 223 node + 77 RPC). Zero clippy warnings. wallet.json test file cleaned from project root.
+- **Security Flags**: None
+
 ### Testnet Bug Fix — Transaction Inclusion & Faucet Amount (M9-S18.1)
 - **Date**: 2026-03-11
 - **Commit**: (pending)

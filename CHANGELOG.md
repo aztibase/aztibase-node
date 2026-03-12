@@ -5,6 +5,19 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ---
 
+## Admin Dashboard & Testnet Hardening (2026-03-12)
+
+### Added
+- **Internal admin dashboard**: `admin/` — multi-file vanilla JS dashboard for Aztibase team. 4 pages: Nodes (multi-node health overview with live metrics), Validators (active set + stake lookup), Operations (faucet, chain params, governance, emission), Accounts (address/tx/batch lookup). Served on port 8081.
+- **Grafana dashboard enhancements**: Added Active Validators, Total Staked, Slashing Events, and Block Production Rate panels to node-health dashboard.
+
+### Fixed
+- **TX lookup returning null**: `getTransactionByHash` now returns data for all transactions (including nonce-rejected ones), not just successfully executed txs.
+- **Nonce increment on failed escrow**: Transactions that fail gas-price or escrow checks no longer consume a nonce slot. Matches standard behavior: if you can't pay, no nonce consumed.
+- **Faucet documented as node-local**: Added rustdoc comment clarifying faucet drips are node-local (not consensus txs) and recipients must transact on the same node.
+
+---
+
 ## Sprint 057 — Validator Business-in-a-Box & Cloud Monitoring (M9-S18) (2026-03-11)
 
 ### Added
