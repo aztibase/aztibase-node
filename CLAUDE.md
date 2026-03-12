@@ -12,6 +12,38 @@ This is the Aztibase Network blockchain project. A Layer-1 AI-native, server-ind
 - Orchestration: `blockchain-project/ORCHESTRATION.md`
 - Visual Explainer: `blockchain-project/aztibase-visual-explainer.html`
 
+## External SSD — EVOLVE (D:)
+An external 1TB HIKVISION SSD is available at `D:\aztibase\` for backups and archives.
+- **Connection**: USB 3.0 SSD via USB 2.0 port (~19 MB/s write, ~500 MB/s read)
+- **NOT for build artifacts** — too slow for `target/` at current USB 2.0 speeds
+- **Use for**: backups, archives, testnet snapshots, reference repos
+
+### Directory structure
+```
+D:\aztibase\
+├── backups/            # git bundle backups (full repo snapshots)
+├── archives/           # old sprint data, large exports, release artifacts
+├── testnet-snapshots/  # testnet db/state snapshots before resets
+└── references/         # can offload reference repos here if C: gets tight
+```
+
+### Quick commands
+```bash
+# Create a git bundle backup
+git bundle create /d/aztibase/backups/aztibase-$(date +%Y%m%d-%H%M).bundle --all
+
+# Snapshot testnet data before reset
+cp -r data/node1/db /d/aztibase/testnet-snapshots/node1-$(date +%Y%m%d)/
+
+# Restore from bundle
+git clone /d/aztibase/backups/aztibase-YYYYMMDD-HHMM.bundle restored-repo
+```
+
+### When to back up
+- Before destructive operations (reset, rebase, branch delete)
+- After completing a sprint
+- Before major refactors
+
 ## Branch Strategy
 - **main**: Protected. Only receives merges from `dev` via PR. Never commit directly to main.
 - **dev**: Active development branch. All work happens here. Push to `dev`, PR to `main`.
