@@ -47,6 +47,8 @@ pub struct ValidatorEntry {
     #[serde(with = "serde_u128_as_string")]
     pub stake: u128,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub public_key: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub bls_public_key: Option<String>,
 }
 
@@ -122,10 +124,12 @@ pub fn generate_genesis(n_validators: usize, n_funded: usize, timestamp: u64) ->
         let addr = address_from_pubkey(kp.public_key().as_bytes());
         let hex_addr = hex_encode(&addr);
         let bls_pub_hex = hex_encode(bls_kp.public_key().as_bytes());
+        let ed25519_pub_hex = hex_encode(kp.public_key().as_bytes());
         validators.push(ValidatorEntry {
             name: format!("validator-{}", i + 1),
             address: hex_addr.clone(),
             stake: 1_000_000,
+            public_key: Some(ed25519_pub_hex),
             bls_public_key: Some(bls_pub_hex),
         });
         validator_keys.push((hex_addr, kp, bls_kp));
@@ -297,9 +301,10 @@ pub fn write_docker_configs(genesis: &GeneratedGenesis, output_dir: &Path) -> Re
     Ok(())
 }
 
-pub fn genesis_hash(config: &GenesisConfig) -> [u8; 32] {
-    let serialized = toml::to_string_pretty(config).expect("genesis config serializable");
-    blake3::hash(serialized.as_bytes()).into()
+pub fn genesis_hash(config: &GenesisConfig) -> Result<[u8; 32]> {
+    let serialized =
+        toml::to_string_pretty(config).context("failed to serialize genesis config")?;
+    Ok(blake3::hash(serialized.as_bytes()).into())
 }
 
 pub fn load_keyfile(path: &Path) -> Result<(Keypair, Address)> {
@@ -482,6 +487,7 @@ pub fn testnet_genesis() -> GenesisConfig {
             name: format!("testnet-{}", i + 1),
             address: hex_encode(&addr),
             stake: 1_000_000,
+            public_key: Some(hex_encode(kp.public_key().as_bytes())),
             bls_public_key: Some(bls_pub_hex),
         });
     }
@@ -539,6 +545,7 @@ pub fn mainnet_genesis(n_validators: usize) -> GeneratedGenesis {
             name: format!("mainnet-validator-{}", i + 1),
             address: hex_addr.clone(),
             stake: stake_per_validator,
+            public_key: Some(hex_encode(kp.public_key().as_bytes())),
             bls_public_key: Some(bls_pub_hex),
         });
         validator_keys.push((hex_addr, kp, bls_kp));
@@ -602,6 +609,7 @@ mod tests {
                 name: "v1".into(),
                 address: hex_encode(&[0x01; 32]),
                 stake: 100_000,
+                public_key: None,
                 bls_public_key: Some(hex_encode(&[0xAA; 48])),
             }],
             accounts: BTreeMap::from([(hex_encode(&[0x02; 32]), AccountEntry { balance: 50_000 })]),
@@ -772,6 +780,7 @@ mod tests {
                 name: "v1".into(),
                 address: hex_encode(&addr),
                 stake: 1_000_000,
+                public_key: Some(hex_encode(kp.public_key().as_bytes())),
                 bls_public_key: None,
             }],
             accounts: BTreeMap::new(),
@@ -881,7 +890,7 @@ mod tests {
     fn testnet_genesis_is_deterministic() {
         let a = testnet_genesis();
         let b = testnet_genesis();
-        assert_eq!(genesis_hash(&a), genesis_hash(&b));
+        assert_eq!(genesis_hash(&a).unwrap(), genesis_hash(&b).unwrap());
         for i in 0..3 {
             assert_eq!(a.validators[i].address, b.validators[i].address);
             assert_eq!(

@@ -38,7 +38,7 @@ fn bench_vertex_creation(c: &mut Criterion) {
     c.bench_function("vertex_creation", |b| {
         let mut round = 1u64;
         b.iter(|| {
-            let _ = DagBlock::new(round, author, vec![parent], vec![0u8; 128], ts);
+            let _ = DagBlock::new(round, author, vec![parent], vec![0u8; 128], ts, None);
             round += 1;
         });
     });
@@ -64,9 +64,15 @@ fn bench_dag_insertion(c: &mut Criterion) {
                 for round in 1..=34 {
                     let mut new_hashes = Vec::new();
                     for id in &ids {
-                        let block =
-                            DagBlock::new(round, *id, prev_hashes.clone(), vec![], 1000 + round)
-                                .unwrap();
+                        let block = DagBlock::new(
+                            round,
+                            *id,
+                            prev_hashes.clone(),
+                            vec![],
+                            1000 + round,
+                            None,
+                        )
+                        .unwrap();
                         new_hashes.push(block.hash);
                         dag.insert(block).unwrap();
                     }
@@ -96,7 +102,8 @@ fn bench_commit_evaluation(c: &mut Criterion) {
                     let mut next = Vec::new();
                     for id in &ids {
                         let block =
-                            DagBlock::new(round, *id, prev.clone(), vec![], 1000 + round).unwrap();
+                            DagBlock::new(round, *id, prev.clone(), vec![], 1000 + round, None)
+                                .unwrap();
                         next.push(block.hash);
                         dag.insert(block).unwrap();
                     }

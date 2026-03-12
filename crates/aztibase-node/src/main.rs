@@ -311,7 +311,7 @@ async fn main() -> Result<()> {
             let generated = genesis::generate_genesis(validators, funded, timestamp);
             if docker {
                 genesis::write_docker_configs(&generated, &output)?;
-                let hash = genesis::genesis_hash(&generated.config);
+                let hash = genesis::genesis_hash(&generated.config)?;
                 println!(
                     "Docker testnet written to {} ({} validators, {} funded accounts)",
                     output.display(),
@@ -440,7 +440,10 @@ async fn main() -> Result<()> {
                         let pass = passphrase.unwrap_or_else(|| {
                             eprintln!("Enter passphrase for keyfile encryption:");
                             let mut buf = String::new();
-                            std::io::stdin().read_line(&mut buf).unwrap();
+                            std::io::stdin().read_line(&mut buf).unwrap_or_else(|e| {
+                                eprintln!("Failed to read from stdin: {e}");
+                                std::process::exit(1);
+                            });
                             buf.trim().to_string()
                         });
                         let phrase = wallet::generate_key_with_mnemonic(&output, &pass)?;
@@ -475,7 +478,10 @@ async fn main() -> Result<()> {
                         let pass = passphrase.unwrap_or_else(|| {
                             eprintln!("Enter passphrase for keyfile encryption:");
                             let mut buf = String::new();
-                            std::io::stdin().read_line(&mut buf).unwrap();
+                            std::io::stdin().read_line(&mut buf).unwrap_or_else(|e| {
+                                eprintln!("Failed to read from stdin: {e}");
+                                std::process::exit(1);
+                            });
                             buf.trim().to_string()
                         });
                         let encrypted = wallet::encrypt_keyfile_pub(&kp.secret_bytes(), &pass)?;
@@ -623,7 +629,7 @@ async fn main() -> Result<()> {
                 errors.len()
             );
         }
-        let ghash = genesis::genesis_hash(gen_cfg);
+        let ghash = genesis::genesis_hash(gen_cfg)?;
         tracing::info!(
             genesis_hash = %genesis::hex_encode(&ghash),
             validators = gen_cfg.validators.len(),
@@ -651,6 +657,14 @@ async fn main() -> Result<()> {
                     .and_then(|bytes| <[u8; 48]>::try_from(bytes.as_slice()).ok())
                     .and_then(aztibase_core::BlsPublicKey::from_bytes);
                 vs.add_with_bls(addr, entry.stake, bls_pk);
+                if let Some(ed_pk) = entry
+                    .public_key
+                    .as_ref()
+                    .and_then(|hex| genesis::hex_decode(hex))
+                    .and_then(|bytes| <[u8; 32]>::try_from(bytes.as_slice()).ok())
+                {
+                    vs.set_ed25519_key(&addr, ed_pk);
+                }
             }
         }
         let id = if let Some((_, key_addr)) = &validator_keypair {
@@ -693,9 +707,15 @@ async fn main() -> Result<()> {
     let (consensus_tx, consensus_rx) = tokio::sync::mpsc::channel::<ConsensusInput>(256);
     let (output_tx, mut output_rx) = tokio::sync::mpsc::channel::<ConsensusOutput>(256);
 
+    let signing_key = if let Some((ref kp, _)) = validator_keypair {
+        kp.clone()
+    } else {
+        aztibase_core::Keypair::from_secret_bytes(&identity)
+    };
     let mut engine = ConsensusEngine::new(
         consensus_config,
         identity,
+        signing_key,
         dag,
         validators,
         consensus_rx,
@@ -952,7 +972,7 @@ async fn main() -> Result<()> {
     .with_bridge_withdraw_proofs(exec_pipeline.shared_bridge_withdraw_proofs());
 
     if let Some(ref gen_cfg) = genesis_config {
-        rpc_server = rpc_server.with_genesis_hash(genesis::genesis_hash(gen_cfg));
+        rpc_server = rpc_server.with_genesis_hash(genesis::genesis_hash(gen_cfg)?);
     }
 
     if config.metrics.enabled || cli.metrics {
@@ -987,7 +1007,10 @@ async fn main() -> Result<()> {
         .iter()
         .filter_map(|s| s.parse().ok())
         .collect();
-    let transport_genesis_hash = genesis_config.as_ref().map(genesis::genesis_hash);
+    let transport_genesis_hash = match genesis_config.as_ref() {
+        Some(cfg) => Some(genesis::genesis_hash(cfg)?),
+        None => None,
+    };
     let transport_config = TransportConfig {
         idle_timeout_secs: config.network.idle_timeout_secs,
         reputation_store: Some(rep_store),
@@ -1493,7 +1516,7 @@ async fn run_light_node(config: &NodeConfig) -> Result<()> {
         .genesis_path
         .as_ref()
         .and_then(|p| genesis::load_genesis(p).ok())
-        .map(|g| genesis::genesis_hash(&g));
+        .and_then(|g| genesis::genesis_hash(&g).ok());
     let transport_config = TransportConfig {
         idle_timeout_secs: config.network.idle_timeout_secs,
         reputation_store: Some(light_rep_store),

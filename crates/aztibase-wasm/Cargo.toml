@@ -17,6 +17,7 @@ wasm-bindgen = { workspace = true }
 js-sys = { workspace = true }
 ed25519-dalek = { workspace = true }
 rand = { workspace = true }
+zeroize = { workspace = true }
 getrandom = { version = "0.2", features = ["js"] }
 
 [dev-dependencies]

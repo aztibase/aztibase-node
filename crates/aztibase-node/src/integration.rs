@@ -38,6 +38,43 @@ mod tests {
         (kp, addr)
     }
 
+    fn test_keypair(seed: u8) -> Keypair {
+        Keypair::from_secret_bytes(&[seed; 32])
+    }
+
+    fn test_keypairs_3() -> ([Keypair; 3], [[u8; 32]; 3]) {
+        let kps = [test_keypair(1), test_keypair(2), test_keypair(3)];
+        let ids = [
+            *kps[0].public_key().as_bytes(),
+            *kps[1].public_key().as_bytes(),
+            *kps[2].public_key().as_bytes(),
+        ];
+        (kps, ids)
+    }
+
+    fn test_keypairs_4() -> ([Keypair; 4], [[u8; 32]; 4]) {
+        let kps = [
+            test_keypair(1),
+            test_keypair(2),
+            test_keypair(3),
+            test_keypair(4),
+        ];
+        let ids = [
+            *kps[0].public_key().as_bytes(),
+            *kps[1].public_key().as_bytes(),
+            *kps[2].public_key().as_bytes(),
+            *kps[3].public_key().as_bytes(),
+        ];
+        (kps, ids)
+    }
+
+    fn keypair_for_id(id: &[u8; 32], kps: &[Keypair]) -> Keypair {
+        kps.iter()
+            .find(|kp| kp.public_key().as_bytes() == id)
+            .expect("no keypair for validator id")
+            .clone()
+    }
+
     fn sign(tx: &TxKind, kp: &Keypair) -> Vec<u8> {
         SignedTx::new(tx.encode(), kp).encode()
     }
@@ -362,14 +399,15 @@ mod tests {
         use aztibase_consensus::DagBlock;
         use std::time::Duration;
 
-        let v1 = [1u8; 32];
-        let v2 = [2u8; 32];
-        let v3 = [3u8; 32];
+        let (kps, [v1, v2, v3]) = test_keypairs_3();
 
         let mut validators = ValidatorSet::new();
         validators.add(v1, 100);
         validators.add(v2, 100);
         validators.add(v3, 100);
+        validators.set_ed25519_key(&v1, v1);
+        validators.set_ed25519_key(&v2, v2);
+        validators.set_ed25519_key(&v3, v3);
 
         let config = ConsensusConfig {
             round_duration: Duration::from_millis(200),
@@ -405,8 +443,15 @@ mod tests {
             let (in_tx, in_rx) = mpsc::channel::<ConsensusInput>(512);
             let (out_tx, mut out_rx) = mpsc::channel::<ConsensusOutput>(512);
 
-            let mut engine =
-                ConsensusEngine::new(config.clone(), id, dag, validators.clone(), in_rx, out_tx);
+            let mut engine = ConsensusEngine::new(
+                config.clone(),
+                id,
+                keypair_for_id(&id, &kps),
+                dag,
+                validators.clone(),
+                in_rx,
+                out_tx,
+            );
 
             engine_inputs.push(in_tx);
 
@@ -602,19 +647,14 @@ mod tests {
 
         let mut validators = ValidatorSet::new();
         let mut validator_ids: Vec<[u8; 32]> = Vec::new();
-        for entry in &generated.config.validators {
-            if let Some(addr) = genesis::hex_decode(&entry.address)
-                .and_then(|b| <[u8; 32]>::try_from(b.as_slice()).ok())
-            {
-                let bls_pk = entry
-                    .bls_public_key
-                    .as_ref()
-                    .and_then(|hex| genesis::hex_decode(hex))
-                    .and_then(|bytes| <[u8; 48]>::try_from(bytes.as_slice()).ok())
-                    .and_then(aztibase_core::BlsPublicKey::from_bytes);
-                validators.add_with_bls(addr, entry.stake, bls_pk);
-                validator_ids.push(addr);
-            }
+        let mut validator_keypairs: Vec<Keypair> = Vec::new();
+        for (_, kp, bls_kp) in &generated.validator_keys {
+            let id = *kp.public_key().as_bytes();
+            let bls_pk = Some(bls_kp.public_key().clone());
+            validators.add_with_bls(id, 1_000_000, bls_pk);
+            validators.set_ed25519_key(&id, id);
+            validator_ids.push(id);
+            validator_keypairs.push(kp.clone());
         }
         assert_eq!(validators.len(), 3);
 
@@ -650,8 +690,15 @@ mod tests {
             let (in_tx, in_rx) = mpsc::channel::<ConsensusInput>(512);
             let (out_tx, mut out_rx) = mpsc::channel::<ConsensusOutput>(512);
 
-            let mut engine =
-                ConsensusEngine::new(config.clone(), id, dag, validators.clone(), in_rx, out_tx);
+            let mut engine = ConsensusEngine::new(
+                config.clone(),
+                id,
+                validator_keypairs[i].clone(),
+                dag,
+                validators.clone(),
+                in_rx,
+                out_tx,
+            );
             engine_inputs.push(in_tx);
 
             handles.push(tokio::spawn(async move {
@@ -729,7 +776,7 @@ mod tests {
 
         // Build ValidatorSet with BLS keys from genesis
         let mut validators = ValidatorSet::new();
-        for entry in &generated.config.validators {
+        for (i, entry) in generated.config.validators.iter().enumerate() {
             if let Some(addr) = genesis::hex_decode(&entry.address)
                 .and_then(|b| <[u8; 32]>::try_from(b.as_slice()).ok())
             {
@@ -740,6 +787,8 @@ mod tests {
                     .and_then(|bytes| <[u8; 48]>::try_from(bytes.as_slice()).ok())
                     .and_then(aztibase_core::BlsPublicKey::from_bytes);
                 validators.add_with_bls(addr, entry.stake, bls_pk);
+                let (_, kp, _) = &generated.validator_keys[i];
+                validators.set_ed25519_key(&addr, *kp.public_key().as_bytes());
             }
         }
 
@@ -799,16 +848,17 @@ mod tests {
         use aztibase_consensus::DagBlock;
         use std::time::Duration;
 
-        let v1 = [1u8; 32];
-        let v2 = [2u8; 32];
-        let v3 = [3u8; 32];
-        let v4 = [4u8; 32];
+        let (kps, [v1, v2, v3, v4]) = test_keypairs_4();
 
         let mut validators = ValidatorSet::new();
         validators.add(v1, 100);
         validators.add(v2, 100);
         validators.add(v3, 100);
         validators.add(v4, 100);
+        validators.set_ed25519_key(&v1, v1);
+        validators.set_ed25519_key(&v2, v2);
+        validators.set_ed25519_key(&v3, v3);
+        validators.set_ed25519_key(&v4, v4);
 
         let config = ConsensusConfig {
             round_duration: Duration::from_millis(200),
@@ -846,8 +896,15 @@ mod tests {
             let (in_tx, in_rx) = mpsc::channel::<ConsensusInput>(512);
             let (out_tx, mut out_rx) = mpsc::channel::<ConsensusOutput>(512);
 
-            let mut engine =
-                ConsensusEngine::new(config.clone(), id, dag, validators.clone(), in_rx, out_tx);
+            let mut engine = ConsensusEngine::new(
+                config.clone(),
+                id,
+                keypair_for_id(&id, &kps),
+                dag,
+                validators.clone(),
+                in_rx,
+                out_tx,
+            );
             engine_inputs.push(in_tx);
 
             handles.push(tokio::spawn(async move {
@@ -866,10 +923,24 @@ mod tests {
         drop(router_tx);
 
         // Byzantine v4 sends two conflicting vertices for round 1
-        let equivocation_a =
-            DagBlock::new(1, v4, genesis_hashes.clone(), vec![0xAA], 2000).unwrap();
-        let equivocation_b =
-            DagBlock::new(1, v4, genesis_hashes.clone(), vec![0xBB], 2000).unwrap();
+        let equivocation_a = DagBlock::new(
+            1,
+            v4,
+            genesis_hashes.clone(),
+            vec![0xAA],
+            2000,
+            Some(&kps[3]),
+        )
+        .unwrap();
+        let equivocation_b = DagBlock::new(
+            1,
+            v4,
+            genesis_hashes.clone(),
+            vec![0xBB],
+            2000,
+            Some(&kps[3]),
+        )
+        .unwrap();
         assert_ne!(equivocation_a.hash, equivocation_b.hash);
 
         let data_a = aztibase_consensus::encode_vertex(&equivocation_a).unwrap();
@@ -2063,16 +2134,17 @@ mod tests {
         use aztibase_consensus::DagBlock;
         use std::time::Duration;
 
-        let v1 = [1u8; 32];
-        let v2 = [2u8; 32];
-        let v3 = [3u8; 32];
-        let v4 = [4u8; 32];
+        let (kps, [v1, v2, v3, v4]) = test_keypairs_4();
 
         let mut validators = ValidatorSet::new();
         validators.add(v1, 100);
         validators.add(v2, 100);
         validators.add(v3, 100);
         validators.add(v4, 100);
+        validators.set_ed25519_key(&v1, v1);
+        validators.set_ed25519_key(&v2, v2);
+        validators.set_ed25519_key(&v3, v3);
+        validators.set_ed25519_key(&v4, v4);
 
         let config = ConsensusConfig {
             round_duration: Duration::from_millis(200),
@@ -2108,8 +2180,15 @@ mod tests {
             let (in_tx, in_rx) = mpsc::channel::<ConsensusInput>(512);
             let (out_tx, mut out_rx) = mpsc::channel::<ConsensusOutput>(512);
 
-            let mut engine =
-                ConsensusEngine::new(config.clone(), id, dag, validators.clone(), in_rx, out_tx);
+            let mut engine = ConsensusEngine::new(
+                config.clone(),
+                id,
+                keypair_for_id(&id, &kps),
+                dag,
+                validators.clone(),
+                in_rx,
+                out_tx,
+            );
             engine_inputs.push(in_tx);
 
             handles.push(tokio::spawn(async move {
@@ -2283,8 +2362,15 @@ mod tests {
     /// Spawns N consensus engines with a FaultRouter controlling message delivery.
     /// Returns committed batches per node after running until all expected nodes
     /// commit or deadline expires.
+    fn make_adversarial_keypairs(n: usize) -> (Vec<Keypair>, Vec<[u8; 32]>) {
+        let kps: Vec<Keypair> = (1..=n).map(|i| test_keypair(i as u8)).collect();
+        let ids: Vec<[u8; 32]> = kps.iter().map(|kp| *kp.public_key().as_bytes()).collect();
+        (kps, ids)
+    }
+
     async fn run_adversarial_testbed(
         validator_ids: &[[u8; 32]],
+        keypairs: &[Keypair],
         fault_router: FaultRouter,
         expect_commit_from: &[usize],
         deadline_secs: u64,
@@ -2296,6 +2382,7 @@ mod tests {
         let mut validators = ValidatorSet::new();
         for &id in validator_ids {
             validators.add(id, 100);
+            validators.set_ed25519_key(&id, id);
         }
 
         let config = ConsensusConfig {
@@ -2336,8 +2423,15 @@ mod tests {
             let (in_tx, in_rx) = mpsc::channel::<ConsensusInput>(1024);
             let (out_tx, mut out_rx) = mpsc::channel::<ConsensusOutput>(1024);
 
-            let mut engine =
-                ConsensusEngine::new(config.clone(), id, dag, validators.clone(), in_rx, out_tx);
+            let mut engine = ConsensusEngine::new(
+                config.clone(),
+                id,
+                keypairs[i].clone(),
+                dag,
+                validators.clone(),
+                in_rx,
+                out_tx,
+            );
             engine_inputs.push(in_tx);
 
             handles.push(tokio::spawn(async move {
@@ -2465,15 +2559,14 @@ mod tests {
     async fn leader_equivocation_rejected() {
         use aztibase_consensus::DagBlock;
 
-        let v1 = [1u8; 32];
-        let v2 = [2u8; 32];
-        let v3 = [3u8; 32];
-        let v4 = [4u8; 32];
+        let (all_kps, all_ids) = make_adversarial_keypairs(4);
+        let [v1, v2, v3, v4] = [all_ids[0], all_ids[1], all_ids[2], all_ids[3]];
 
         let validator_ids = [v1, v2, v3, v4];
         let mut validators = ValidatorSet::new();
         for &id in &validator_ids {
             validators.add(id, 100);
+            validators.set_ed25519_key(&id, id);
         }
 
         let genesis_blocks: Vec<DagBlock> = validator_ids
@@ -2484,12 +2577,27 @@ mod tests {
 
         // Determine the leader for round 0
         let leader = validators.leader_for_round(0).unwrap();
+        let leader_kp = keypair_for_id(&leader, &all_kps);
 
         // Create two conflicting leader vertices for round 1
-        let equivocation_a =
-            DagBlock::new(1, leader, genesis_hashes.clone(), vec![0xAA], 2000).unwrap();
-        let equivocation_b =
-            DagBlock::new(1, leader, genesis_hashes.clone(), vec![0xBB], 2000).unwrap();
+        let equivocation_a = DagBlock::new(
+            1,
+            leader,
+            genesis_hashes.clone(),
+            vec![0xAA],
+            2000,
+            Some(&leader_kp),
+        )
+        .unwrap();
+        let equivocation_b = DagBlock::new(
+            1,
+            leader,
+            genesis_hashes.clone(),
+            vec![0xBB],
+            2000,
+            Some(&leader_kp),
+        )
+        .unwrap();
         assert_ne!(equivocation_a.hash, equivocation_b.hash);
 
         // Run 3 honest non-leader validators
@@ -2498,10 +2606,15 @@ mod tests {
             .copied()
             .filter(|id| *id != leader)
             .collect();
+        let honest_kps: Vec<Keypair> = honest_ids
+            .iter()
+            .map(|id| keypair_for_id(id, &all_kps))
+            .collect();
 
         let router = FaultRouter::new();
         let expect: Vec<usize> = (0..honest_ids.len()).collect();
-        let (committed, db_paths) = run_adversarial_testbed(&honest_ids, router, &expect, 10).await;
+        let (committed, db_paths) =
+            run_adversarial_testbed(&honest_ids, &honest_kps, router, &expect, 10).await;
 
         // Honest nodes should not crash — they should either commit or timeout gracefully
         // The key assertion: no panic occurred during equivocation processing
@@ -2528,7 +2641,7 @@ mod tests {
     #[tokio::test]
     async fn multi_byzantine_below_threshold() {
         // 7 validators, 2 Byzantine (< 1/3). Honest 5/7 > 2/3 must commit.
-        let ids: Vec<[u8; 32]> = (1..=7u8).map(|i| [i; 32]).collect();
+        let (all_kps, ids) = make_adversarial_keypairs(7);
 
         // Only run honest nodes (first 5). Byzantine nodes 6,7 are absent.
         let _honest_ids: Vec<[u8; 32]> = ids[..5].to_vec();
@@ -2538,7 +2651,7 @@ mod tests {
         // We pass the full validator set to the testbed by running only honest
         // nodes. The 2 missing validators simulate Byzantine nodes going silent.
         let (committed, db_paths) =
-            run_adversarial_testbed(&ids, FaultRouter::new(), &expect, 15).await;
+            run_adversarial_testbed(&ids, &all_kps, FaultRouter::new(), &expect, 15).await;
 
         // With 5 of 7 honest, consensus should succeed
         // Note: the testbed only runs engines for all ids, but Byzantine nodes
@@ -2572,14 +2685,15 @@ mod tests {
         use aztibase_consensus::{ConsensusEngine as CE, DagBlock};
         use std::time::Duration;
 
-        let v1 = [1u8; 32];
-        let v2 = [2u8; 32];
-        let v3 = [3u8; 32];
+        let (kps, [v1, v2, v3]) = test_keypairs_3();
 
         let mut validators = ValidatorSet::new();
         validators.add(v1, 100);
         validators.add(v2, 100);
         validators.add(v3, 100);
+        validators.set_ed25519_key(&v1, v1);
+        validators.set_ed25519_key(&v2, v2);
+        validators.set_ed25519_key(&v3, v3);
 
         let path = test_db_path("flood");
         let store = StateStore::open(path.to_str().unwrap()).unwrap();
@@ -2595,23 +2709,27 @@ mod tests {
 
         let (_in_tx, in_rx) = mpsc::channel::<ConsensusInput>(64);
         let (out_tx, _out_rx) = mpsc::channel::<ConsensusOutput>(64);
-        let mut engine = CE::new(config, v1, dag, validators, in_rx, out_tx);
+        let mut engine = CE::new(config, v1, kps[0].clone(), dag, validators, in_rx, out_tx);
         engine.insert_genesis().unwrap();
 
         // Feed orphan vertices directly via handle_received_vertex.
-        // MAX_BUFFERED_VERTICES is 64, so excess should be silently dropped.
-        // Use different (round, author) pairs to avoid equivocation detection.
-        // Wire decode rejects rounds > current_round + 10 (max_future=10),
-        // so with current_round=0, rounds 1..10 are valid.
+        // Wire decode rejects rounds > current_round + 100 (max_future=100),
+        // so with current_round=0, rounds 1..10 are valid for testing.
         // 2 authors × 10 rounds = 20 unique (round, author) slots accepted.
-        // Remaining vertices get rejected at wire decode (future round), not buffered.
-        let authors = [v2, v3];
+        let authors_kps = [(&kps[1], v2), (&kps[2], v3)];
         let mut buffered_attempts = 0u32;
         for round in 1..=10u64 {
-            for &author in &authors {
+            for &(kp, author) in &authors_kps {
                 let fake_parent =
                     aztibase_core::hash(&[round.to_le_bytes().as_slice(), &author].concat());
-                let block = DagBlock::new(round, author, vec![fake_parent], vec![], 3000 + round);
+                let block = DagBlock::new(
+                    round,
+                    author,
+                    vec![fake_parent],
+                    vec![],
+                    3000 + round,
+                    Some(kp),
+                );
                 if let Ok(block) = block {
                     let data = aztibase_consensus::encode_vertex(&block).unwrap();
                     engine.handle_received_vertex(&data).unwrap();
@@ -2645,14 +2763,15 @@ mod tests {
         use aztibase_consensus::{ConsensusEngine as CE, DagBlock};
         use std::time::Duration;
 
-        let v1 = [1u8; 32];
-        let v2 = [2u8; 32];
-        let v3 = [3u8; 32];
+        let (kps, [v1, v2, v3]) = test_keypairs_3();
 
         let mut validators = ValidatorSet::new();
         validators.add(v1, 100);
         validators.add(v2, 100);
         validators.add(v3, 100);
+        validators.set_ed25519_key(&v1, v1);
+        validators.set_ed25519_key(&v2, v2);
+        validators.set_ed25519_key(&v3, v3);
 
         let path = test_db_path("inv_parent");
         let store = StateStore::open(path.to_str().unwrap()).unwrap();
@@ -2668,12 +2787,12 @@ mod tests {
 
         let (_in_tx, in_rx) = mpsc::channel::<ConsensusInput>(64);
         let (out_tx, _out_rx) = mpsc::channel::<ConsensusOutput>(64);
-        let mut engine = CE::new(config, v1, dag, validators, in_rx, out_tx);
+        let mut engine = CE::new(config, v1, kps[0].clone(), dag, validators, in_rx, out_tx);
         engine.insert_genesis().unwrap();
 
         // Vertex with fake parent — accepted via relaxed insert
         let fake_parent = aztibase_core::hash(b"does_not_exist");
-        let block = DagBlock::new(1, v2, vec![fake_parent], vec![], 2000).unwrap();
+        let block = DagBlock::new(1, v2, vec![fake_parent], vec![], 2000, Some(&kps[1])).unwrap();
         let data = aztibase_consensus::encode_vertex(&block).unwrap();
         engine.handle_received_vertex(&data).unwrap();
         assert_eq!(engine.state.vertices_at_round(1).len(), 1);
@@ -2685,6 +2804,7 @@ mod tests {
             engine.state.vertices_at_round(0).to_vec(),
             vec![],
             2000,
+            Some(&kps[2]),
         )
         .unwrap();
         bad_block.hash = [0xDE; 32];
@@ -2704,14 +2824,15 @@ mod tests {
         use aztibase_consensus::{ConsensusEngine as CE, DagBlock};
         use std::time::Duration;
 
-        let v1 = [1u8; 32];
-        let v2 = [2u8; 32];
-        let v3 = [3u8; 32];
+        let (kps, [v1, v2, v3]) = test_keypairs_3();
 
         let mut validators = ValidatorSet::new();
         validators.add(v1, 100);
         validators.add(v2, 100);
         validators.add(v3, 100);
+        validators.set_ed25519_key(&v1, v1);
+        validators.set_ed25519_key(&v2, v2);
+        validators.set_ed25519_key(&v3, v3);
 
         let path = test_db_path("dup_vtx");
         let store = StateStore::open(path.to_str().unwrap()).unwrap();
@@ -2727,11 +2848,11 @@ mod tests {
 
         let (_in_tx, in_rx) = mpsc::channel::<ConsensusInput>(64);
         let (out_tx, _out_rx) = mpsc::channel::<ConsensusOutput>(64);
-        let mut engine = CE::new(config, v1, dag, validators, in_rx, out_tx);
+        let mut engine = CE::new(config, v1, kps[0].clone(), dag, validators, in_rx, out_tx);
         engine.insert_genesis().unwrap();
 
         let genesis_hashes: Vec<_> = engine.state.vertices_at_round(0).to_vec();
-        let block = DagBlock::new(1, v2, genesis_hashes, vec![42], 2000).unwrap();
+        let block = DagBlock::new(1, v2, genesis_hashes, vec![42], 2000, Some(&kps[1])).unwrap();
         let data = aztibase_consensus::encode_vertex(&block).unwrap();
 
         // Send same vertex 5 times
@@ -2752,13 +2873,13 @@ mod tests {
     async fn network_partition_and_heal() {
         // 4 validators split into {0,1} and {2,3}. Neither partition has
         // supermajority (2/4 = 50% < 67%). After healing, consensus resumes.
-        let ids: Vec<[u8; 32]> = (1..=4u8).map(|i| [i; 32]).collect();
+        let (all_kps, ids) = make_adversarial_keypairs(4);
 
         // Phase A: Partitioned — run with partition, expect NO commits
         let partitioned_router = FaultRouter::new().with_partitions(vec![vec![0, 1], vec![2, 3]]);
 
         let (committed_partitioned, db_paths_a) =
-            run_adversarial_testbed(&ids, partitioned_router, &[0, 1, 2, 3], 5).await;
+            run_adversarial_testbed(&ids, &all_kps, partitioned_router, &[0, 1, 2, 3], 5).await;
 
         // Under partition, neither side has >2/3 — commits should be absent or limited
         // (Some waves might commit if the commit rule finds enough local vertices)
@@ -2794,7 +2915,7 @@ mod tests {
         // Phase B: Healed — run without partition, should commit
         let healed_router = FaultRouter::new();
         let (committed_healed, db_paths_b) =
-            run_adversarial_testbed(&ids, healed_router, &[0, 1, 2, 3], 10).await;
+            run_adversarial_testbed(&ids, &all_kps, healed_router, &[0, 1, 2, 3], 10).await;
 
         let healed_commit_count = committed_healed.iter().filter(|c| !c.is_empty()).count();
         assert!(
@@ -2819,7 +2940,7 @@ mod tests {
     async fn consensus_stall_minority_online() {
         // Only 2 of 7 validators online — consensus must NOT commit
         // (2/7 < 2/3 threshold). This verifies safety: no false commits.
-        let ids: Vec<[u8; 32]> = (1..=7u8).map(|i| [i; 32]).collect();
+        let (all_kps, ids) = make_adversarial_keypairs(7);
 
         // Only pass first 2 validator ids to the testbed runner,
         // but those engines know about all 7 validators.
@@ -2827,6 +2948,7 @@ mod tests {
         let mut validators = ValidatorSet::new();
         for &id in &ids {
             validators.add(id, 100);
+            validators.set_ed25519_key(&id, id);
         }
 
         // Run only 2 nodes but with full 7-validator set
@@ -2866,6 +2988,7 @@ mod tests {
             let mut engine = ConsensusEngine::new(
                 config.clone(),
                 ids[i],
+                all_kps[i].clone(),
                 dag,
                 validators.clone(),
                 in_rx,
@@ -2948,6 +3071,10 @@ mod tests {
         validators.add_with_bls(v2, 100, Some(kp2.public_key().clone()));
         validators.add_with_bls(v3, 100, Some(kp3.public_key().clone()));
         validators.add_with_bls(v4, 100, Some(kp4.public_key().clone()));
+        validators.set_ed25519_key(&v1, v1);
+        validators.set_ed25519_key(&v2, v2);
+        validators.set_ed25519_key(&v3, v3);
+        validators.set_ed25519_key(&v4, v4);
 
         let batch_hash = hash(b"test_batch");
         let state_root = hash(b"test_state");
@@ -3009,14 +3136,15 @@ mod tests {
         use aztibase_consensus::{ConsensusEngine as CE, DagBlock};
         use std::time::Duration;
 
-        let v1 = [1u8; 32];
-        let v2 = [2u8; 32];
-        let v3 = [3u8; 32];
+        let (kps, [v1, v2, v3]) = test_keypairs_3();
 
         let mut validators = ValidatorSet::new();
         validators.add(v1, 100);
         validators.add(v2, 100);
         validators.add(v3, 100);
+        validators.set_ed25519_key(&v1, v1);
+        validators.set_ed25519_key(&v2, v2);
+        validators.set_ed25519_key(&v3, v3);
 
         let path = test_db_path("buf_exhaust");
         let store = StateStore::open(path.to_str().unwrap()).unwrap();
@@ -3032,19 +3160,26 @@ mod tests {
 
         let (_in_tx, in_rx) = mpsc::channel::<ConsensusInput>(64);
         let (out_tx, _out_rx) = mpsc::channel::<ConsensusOutput>(64);
-        let mut engine = CE::new(config, v1, dag, validators, in_rx, out_tx);
+        let mut engine = CE::new(config, v1, kps[0].clone(), dag, validators, in_rx, out_tx);
         engine.insert_genesis().unwrap();
 
         // Generate orphan vertices using different (round, author) pairs.
-        // Wire decode allows rounds 1..10 (max_future=10 from current_round=0).
+        // Wire decode allows rounds 1..100 (max_future=100 from current_round=0).
         // 2 authors × 10 rounds = 20 unique vertices that pass wire validation.
-        let authors = [v2, v3];
+        let authors_kps = [(&kps[1], v2), (&kps[2], v3)];
         let mut accepted = 0u32;
         for round in 1..=10u64 {
-            for &author in &authors {
+            for &(kp, author) in &authors_kps {
                 let fake_parent =
                     aztibase_core::hash(&[round.to_le_bytes().as_slice(), &author].concat());
-                let block = DagBlock::new(round, author, vec![fake_parent], vec![], 3000 + round);
+                let block = DagBlock::new(
+                    round,
+                    author,
+                    vec![fake_parent],
+                    vec![],
+                    3000 + round,
+                    Some(kp),
+                );
                 if let Ok(block) = block {
                     let data = aztibase_consensus::encode_vertex(&block).unwrap();
                     engine.handle_received_vertex(&data).unwrap();
@@ -3072,12 +3207,13 @@ mod tests {
     async fn message_reordering_convergence() {
         // Deliver vertices in randomized order — consensus should still commit
         // thanks to vertex buffering and drain_buffered().
-        let ids: Vec<[u8; 32]> = (1..=4u8).map(|i| [i; 32]).collect();
+        let (all_kps, ids) = make_adversarial_keypairs(4);
 
         let router = FaultRouter::new().with_reorder();
         let expect: Vec<usize> = (0..4).collect();
 
-        let (committed, db_paths) = run_adversarial_testbed(&ids, router, &expect, 15).await;
+        let (committed, db_paths) =
+            run_adversarial_testbed(&ids, &all_kps, router, &expect, 15).await;
 
         let committed_count = committed.iter().filter(|c| !c.is_empty()).count();
         assert!(

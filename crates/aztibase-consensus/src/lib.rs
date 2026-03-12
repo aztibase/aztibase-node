@@ -51,7 +51,7 @@ mod tests {
     fn test_block_with_parents() {
         let parent_hash = hash(b"parent");
         let author = [2u8; 32];
-        let block = DagBlock::new(1, author, vec![parent_hash], vec![1, 2, 3], 2000).unwrap();
+        let block = DagBlock::new(1, author, vec![parent_hash], vec![1, 2, 3], 2000, None).unwrap();
         assert!(!block.is_genesis());
         assert_eq!(block.round, 1);
         assert_eq!(block.parents.len(), 1);
@@ -64,14 +64,14 @@ mod tests {
         let p1 = hash(b"parent_a");
         let p2 = hash(b"parent_b");
         let p3 = hash(b"parent_c");
-        let block = DagBlock::new(2, [3u8; 32], vec![p1, p2, p3], vec![], 3000).unwrap();
+        let block = DagBlock::new(2, [3u8; 32], vec![p1, p2, p3], vec![], 3000, None).unwrap();
         assert_eq!(block.parents.len(), 3);
         assert_eq!(block.round, 2);
     }
 
     #[test]
     fn test_non_genesis_requires_parents() {
-        let result = DagBlock::new(1, [4u8; 32], vec![], vec![], 4000);
+        let result = DagBlock::new(1, [4u8; 32], vec![], vec![], 4000, None);
         assert!(result.is_err());
         assert!(matches!(result.unwrap_err(), DagError::NoParents));
     }
@@ -79,7 +79,7 @@ mod tests {
     #[test]
     fn test_round_monotonicity_valid() {
         let parent_hash = hash(b"parent");
-        let block = DagBlock::new(5, [5u8; 32], vec![parent_hash], vec![], 5000).unwrap();
+        let block = DagBlock::new(5, [5u8; 32], vec![parent_hash], vec![], 5000, None).unwrap();
         let result = block.validate_parent_rounds(&[(parent_hash, 4)]);
         assert!(result.is_ok());
     }
@@ -87,7 +87,7 @@ mod tests {
     #[test]
     fn test_round_monotonicity_invalid() {
         let parent_hash = hash(b"parent");
-        let block = DagBlock::new(5, [6u8; 32], vec![parent_hash], vec![], 6000).unwrap();
+        let block = DagBlock::new(5, [6u8; 32], vec![parent_hash], vec![], 6000, None).unwrap();
         let result = block.validate_parent_rounds(&[(parent_hash, 5)]);
         assert!(result.is_err());
         assert!(matches!(
@@ -100,8 +100,8 @@ mod tests {
     fn test_block_hash_deterministic() {
         let author = [7u8; 32];
         let parent = hash(b"p");
-        let b1 = DagBlock::new(1, author, vec![parent], vec![42], 7000).unwrap();
-        let b2 = DagBlock::new(1, author, vec![parent], vec![42], 7000).unwrap();
+        let b1 = DagBlock::new(1, author, vec![parent], vec![42], 7000, None).unwrap();
+        let b2 = DagBlock::new(1, author, vec![parent], vec![42], 7000, None).unwrap();
         assert_eq!(b1.hash, b2.hash);
     }
 
@@ -109,8 +109,8 @@ mod tests {
     fn test_block_hash_differs_on_different_input() {
         let author = [8u8; 32];
         let parent = hash(b"p");
-        let b1 = DagBlock::new(1, author, vec![parent], vec![1], 8000).unwrap();
-        let b2 = DagBlock::new(1, author, vec![parent], vec![2], 8000).unwrap();
+        let b1 = DagBlock::new(1, author, vec![parent], vec![1], 8000, None).unwrap();
+        let b2 = DagBlock::new(1, author, vec![parent], vec![2], 8000, None).unwrap();
         assert_ne!(b1.hash, b2.hash);
     }
 
@@ -294,7 +294,7 @@ mod tests {
         dag.insert(g1).unwrap();
         dag.insert(g2).unwrap();
 
-        let child = DagBlock::new(1, [1u8; 32], vec![g1h, g2h], vec![], 2000).unwrap();
+        let child = DagBlock::new(1, [1u8; 32], vec![g1h, g2h], vec![], 2000, None).unwrap();
         let ch = child.hash;
         dag.insert(child).unwrap();
 
@@ -310,7 +310,7 @@ mod tests {
     fn test_dag_store_rejects_missing_parent() {
         let (mut dag, path) = make_dag_store();
         let fake_parent = hash(b"nonexistent");
-        let block = DagBlock::new(1, [1u8; 32], vec![fake_parent], vec![], 2000).unwrap();
+        let block = DagBlock::new(1, [1u8; 32], vec![fake_parent], vec![], 2000, None).unwrap();
         let result = dag.insert(block);
 
         assert!(result.is_err());
@@ -347,11 +347,11 @@ mod tests {
         let gh = g.hash;
         dag.insert(g).unwrap();
 
-        let b1 = DagBlock::new(1, [2u8; 32], vec![gh], vec![], 2000).unwrap();
+        let b1 = DagBlock::new(1, [2u8; 32], vec![gh], vec![], 2000, None).unwrap();
         let b1h = b1.hash;
         dag.insert(b1).unwrap();
 
-        let b2 = DagBlock::new(2, [3u8; 32], vec![b1h], vec![], 3000).unwrap();
+        let b2 = DagBlock::new(2, [3u8; 32], vec![b1h], vec![], 3000, None).unwrap();
         let b2h = b2.hash;
         dag.insert(b2).unwrap();
 
@@ -374,7 +374,7 @@ mod tests {
         dag.insert(g1).unwrap();
         dag.insert(g2).unwrap();
 
-        let b1 = DagBlock::new(1, [1u8; 32], vec![g1h, g2h], vec![], 2000).unwrap();
+        let b1 = DagBlock::new(1, [1u8; 32], vec![g1h, g2h], vec![], 2000, None).unwrap();
         let b1h = b1.hash;
         dag.insert(b1).unwrap();
 
@@ -400,7 +400,7 @@ mod tests {
         dag.insert(g).unwrap();
         assert_eq!(dag.highest_round(), Some(0));
 
-        let b = DagBlock::new(1, [2u8; 32], vec![gh], vec![], 2000).unwrap();
+        let b = DagBlock::new(1, [2u8; 32], vec![gh], vec![], 2000, None).unwrap();
         dag.insert(b).unwrap();
         assert_eq!(dag.highest_round(), Some(1));
 
@@ -445,7 +445,7 @@ mod tests {
         // Voting round (round 1): all 3 validators reference the leader block.
         let voting_blocks: Vec<DagBlock> = [v1, v2, v3]
             .iter()
-            .map(|v| DagBlock::new(1, *v, vec![lh], vec![], 2000).unwrap())
+            .map(|v| DagBlock::new(1, *v, vec![lh], vec![], 2000, None).unwrap())
             .collect();
         for vb in voting_blocks {
             dag.insert(vb).unwrap();
@@ -499,13 +499,13 @@ mod tests {
         }
 
         // Round 1: only 1 validator votes for wave-0 leader (not enough for direct).
-        let vb1 = DagBlock::new(1, v1, vec![lh0], vec![], 2000).unwrap();
+        let vb1 = DagBlock::new(1, v1, vec![lh0], vec![], 2000, None).unwrap();
         let vb1h = vb1.hash;
         dag.insert(vb1).unwrap();
 
         // Wave 1: leader at round 2.
         let leader_w1 = vs.leader_for_round(2).unwrap();
-        let lb1 = DagBlock::new(2, leader_w1, vec![vb1h], vec![], 3000).unwrap();
+        let lb1 = DagBlock::new(2, leader_w1, vec![vb1h], vec![], 3000, None).unwrap();
         let lh1 = lb1.hash;
         dag.insert(lb1).unwrap();
 
@@ -598,7 +598,7 @@ mod tests {
 
         let voting_blocks: Vec<DagBlock> = [v1, v2, v3]
             .iter()
-            .map(|v| DagBlock::new(1, *v, vec![lh], vec![], 2000).unwrap())
+            .map(|v| DagBlock::new(1, *v, vec![lh], vec![], 2000, None).unwrap())
             .collect();
         for vb in voting_blocks {
             dag.insert(vb).unwrap();

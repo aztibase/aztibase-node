@@ -19,6 +19,7 @@ pub struct ValidatorInfo {
 struct ValidatorRecord {
     stake: u128,
     bls_pubkey: Option<BlsPublicKey>,
+    ed25519_pubkey: Option<[u8; 32]>,
 }
 
 /// Manages the active validator set with stake-weighted operations.
@@ -51,9 +52,14 @@ impl ValidatorSet {
         stake: u128,
         bls_pubkey: Option<BlsPublicKey>,
     ) -> Option<u128> {
-        let old = self
-            .validators
-            .insert(id, ValidatorRecord { stake, bls_pubkey });
+        let old = self.validators.insert(
+            id,
+            ValidatorRecord {
+                stake,
+                bls_pubkey,
+                ed25519_pubkey: None,
+            },
+        );
         if let Some(old_rec) = &old {
             self.total_stake = self.total_stake - old_rec.stake + stake;
         } else {
@@ -75,6 +81,18 @@ impl ValidatorSet {
     /// Look up a validator's stake. Returns `None` if not in the set.
     pub fn get(&self, id: &ValidatorId) -> Option<u128> {
         self.validators.get(id).map(|r| r.stake)
+    }
+
+    /// Store the Ed25519 public key for a validator (used for signature verification).
+    pub fn set_ed25519_key(&mut self, id: &ValidatorId, pubkey: [u8; 32]) {
+        if let Some(rec) = self.validators.get_mut(id) {
+            rec.ed25519_pubkey = Some(pubkey);
+        }
+    }
+
+    /// Look up a validator's Ed25519 public key.
+    pub fn ed25519_key(&self, id: &ValidatorId) -> Option<[u8; 32]> {
+        self.validators.get(id).and_then(|r| r.ed25519_pubkey)
     }
 
     /// Look up a validator's BLS public key.
@@ -116,6 +134,10 @@ impl ValidatorSet {
 
     /// Check if a set of validators meets the quorum threshold (>=2/3 of total stake).
     /// Used by the threshold clock to gate round advancement.
+    ///
+    /// Note: with n=3 equal-stake validators, both quorum (>=2/3) and supermajority
+    /// (>2/3) require all 3 validators. The minimum viable committee for liveness
+    /// under a single fault is n=4, where quorum can be met with 3 of 4.
     pub fn has_quorum(&self, voter_ids: &[ValidatorId]) -> bool {
         let voting_stake: u128 = voter_ids
             .iter()

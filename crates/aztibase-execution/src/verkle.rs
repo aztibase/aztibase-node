@@ -81,9 +81,32 @@ impl VerkleTree {
 
     pub fn insert(&mut self, key: &[u8; 32], value_hash: [u8; 32]) {
         let stem: Vec<u8> = key.to_vec();
+        let is_update = self.contains_key(&self.root, &stem, 0);
         self.root = Self::insert_node(std::mem::take(&mut self.root), &stem, value_hash, 0);
-        self.leaf_count += 1;
+        if !is_update {
+            self.leaf_count += 1;
+        }
         self.recompute_commitments();
+    }
+
+    fn contains_key(&self, node: &VerkleNode, stem: &[u8], depth: usize) -> bool {
+        match node {
+            VerkleNode::Empty => false,
+            VerkleNode::Leaf {
+                stem: existing_stem,
+                ..
+            } => existing_stem == stem,
+            VerkleNode::Inner { children, .. } => {
+                if depth >= stem.len() {
+                    return false;
+                }
+                let idx = stem[depth] as usize;
+                match &children[idx] {
+                    Some(child) => self.contains_key(child, stem, depth + 1),
+                    None => false,
+                }
+            }
+        }
     }
 
     fn insert_node(
@@ -248,7 +271,10 @@ impl VerkleTree {
             if level.child_commitments[level.child_index as usize] != expected_child {
                 return false;
             }
-            let arr: [_; 256] = level.child_commitments.as_slice().try_into().unwrap();
+            let arr: [_; 256] = match level.child_commitments.as_slice().try_into() {
+                Ok(a) => a,
+                Err(_) => return false,
+            };
             expected_child = inner_commitment(&arr);
         }
 

@@ -51,6 +51,7 @@ pub struct DagStore {
     index: HashMap<BlockHash, DagEntry>,
     rounds: HashMap<u64, Vec<BlockHash>>,
     pruned_through: u64,
+    orphan_parents: HashSet<BlockHash>,
 }
 
 impl DagStore {
@@ -62,6 +63,7 @@ impl DagStore {
             index: HashMap::new(),
             rounds: HashMap::new(),
             pruned_through: 0,
+            orphan_parents: HashSet::new(),
         };
         dag.rebuild_index()?;
         Ok(dag)
@@ -135,7 +137,18 @@ impl DagStore {
         for parent_hash in &block.parents {
             if let Some(parent_entry) = self.index.get_mut(parent_hash) {
                 parent_entry.children.insert(hash);
+            } else {
+                tracing::warn!(
+                    parent = ?parent_hash,
+                    block = ?hash,
+                    "phantom parent: block references non-existent parent"
+                );
+                self.orphan_parents.insert(*parent_hash);
             }
+        }
+
+        if self.orphan_parents.remove(&hash) {
+            debug!(block = ?hash, "resolved orphan parent");
         }
 
         self.rounds.entry(block.round).or_default().push(hash);
@@ -443,7 +456,7 @@ mod tests {
             let parents: Vec<BlockHash> = dag.blocks_at_round(round - 1).to_vec();
             for v in validators {
                 let block =
-                    DagBlock::new(round, *v, parents.clone(), vec![], 1000 + round).unwrap();
+                    DagBlock::new(round, *v, parents.clone(), vec![], 1000 + round, None).unwrap();
                 dag.insert(block).unwrap();
             }
         }

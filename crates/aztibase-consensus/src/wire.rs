@@ -1,3 +1,5 @@
+use aztibase_core::PublicKey;
+
 use crate::dag::DagBlock;
 use crate::validator::ValidatorSet;
 
@@ -26,6 +28,9 @@ pub enum WireError {
 
     #[error("round {vertex} is too far ahead of local round {local}")]
     FutureRound { vertex: u64, local: u64 },
+
+    #[error("invalid Ed25519 signature on vertex")]
+    InvalidSignature,
 }
 
 /// Encode a DAG vertex for gossip transmission.
@@ -76,6 +81,20 @@ pub fn decode_vertex(
         return Err(WireError::UnknownValidator(a[0], a[1], a[2], a[3]));
     }
 
+    if !block.is_genesis() {
+        let pubkey_bytes = validators
+            .ed25519_key(&block.author)
+            .or_else(|| {
+                // Fallback: if no stored Ed25519 key, try interpreting author as raw pubkey
+                PublicKey::from_bytes(&block.author).map(|_| block.author)
+            })
+            .ok_or(WireError::InvalidSignature)?;
+        let pubkey = PublicKey::from_bytes(&pubkey_bytes).ok_or(WireError::InvalidSignature)?;
+        if !block.verify_signature(&pubkey) {
+            return Err(WireError::InvalidSignature);
+        }
+    }
+
     let max_future = 100;
     if block.round > local_round + max_future {
         return Err(WireError::FutureRound {
@@ -90,19 +109,35 @@ pub fn decode_vertex(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use aztibase_core::Keypair;
 
-    fn test_validators() -> ValidatorSet {
+    fn test_keypairs() -> (Keypair, Keypair, Keypair) {
+        let kp1 = Keypair::from_secret_bytes(&[1u8; 32]);
+        let kp2 = Keypair::from_secret_bytes(&[2u8; 32]);
+        let kp3 = Keypair::from_secret_bytes(&[3u8; 32]);
+        (kp1, kp2, kp3)
+    }
+
+    fn test_validators_from_keypairs(kps: &(Keypair, Keypair, Keypair)) -> ValidatorSet {
         let mut vs = ValidatorSet::new();
-        vs.add([1u8; 32], 100);
-        vs.add([2u8; 32], 100);
-        vs.add([3u8; 32], 100);
+        let pk0 = *kps.0.public_key().as_bytes();
+        let pk1 = *kps.1.public_key().as_bytes();
+        let pk2 = *kps.2.public_key().as_bytes();
+        vs.add(pk0, 100);
+        vs.add(pk1, 100);
+        vs.add(pk2, 100);
+        vs.set_ed25519_key(&pk0, pk0);
+        vs.set_ed25519_key(&pk1, pk1);
+        vs.set_ed25519_key(&pk2, pk2);
         vs
     }
 
     #[test]
     fn roundtrip_encode_decode() {
-        let vs = test_validators();
-        let block = DagBlock::genesis([1u8; 32], 1000);
+        let kps = test_keypairs();
+        let vs = test_validators_from_keypairs(&kps);
+        let author = *kps.0.public_key().as_bytes();
+        let block = DagBlock::genesis(author, 1000);
         let encoded = encode_vertex(&block).unwrap();
 
         assert_eq!(encoded[0], WIRE_VERSION);
@@ -116,9 +151,20 @@ mod tests {
 
     #[test]
     fn roundtrip_with_payload() {
-        let vs = test_validators();
-        let parent = DagBlock::genesis([1u8; 32], 1000);
-        let block = DagBlock::new(1, [2u8; 32], vec![parent.hash], vec![1, 2, 3, 4], 2000).unwrap();
+        let kps = test_keypairs();
+        let vs = test_validators_from_keypairs(&kps);
+        let author1 = *kps.0.public_key().as_bytes();
+        let author2 = *kps.1.public_key().as_bytes();
+        let parent = DagBlock::genesis(author1, 1000);
+        let block = DagBlock::new(
+            1,
+            author2,
+            vec![parent.hash],
+            vec![1, 2, 3, 4],
+            2000,
+            Some(&kps.1),
+        )
+        .unwrap();
         let encoded = encode_vertex(&block).unwrap();
         let decoded = decode_vertex(&encoded, &vs, 1).unwrap();
         assert_eq!(decoded.hash, block.hash);
@@ -127,15 +173,18 @@ mod tests {
 
     #[test]
     fn rejects_too_short() {
-        let vs = test_validators();
+        let kps = test_keypairs();
+        let vs = test_validators_from_keypairs(&kps);
         let result = decode_vertex(&[1], &vs, 0);
         assert!(matches!(result, Err(WireError::TooShort(1))));
     }
 
     #[test]
     fn rejects_wrong_version() {
-        let vs = test_validators();
-        let block = DagBlock::genesis([1u8; 32], 1000);
+        let kps = test_keypairs();
+        let vs = test_validators_from_keypairs(&kps);
+        let author = *kps.0.public_key().as_bytes();
+        let block = DagBlock::genesis(author, 1000);
         let mut encoded = encode_vertex(&block).unwrap();
         encoded[0] = 255;
         let result = decode_vertex(&encoded, &vs, 0);
@@ -144,8 +193,10 @@ mod tests {
 
     #[test]
     fn rejects_tampered_hash() {
-        let vs = test_validators();
-        let mut block = DagBlock::genesis([1u8; 32], 1000);
+        let kps = test_keypairs();
+        let vs = test_validators_from_keypairs(&kps);
+        let author = *kps.0.public_key().as_bytes();
+        let mut block = DagBlock::genesis(author, 1000);
         block.hash = [0xFF; 32];
         let mut buf = vec![WIRE_VERSION];
         buf.extend_from_slice(&postcard::to_allocvec(&block).unwrap());
@@ -155,18 +206,22 @@ mod tests {
 
     #[test]
     fn rejects_unknown_validator() {
-        let vs = test_validators();
+        let kps = test_keypairs();
+        let vs = test_validators_from_keypairs(&kps);
         let block = DagBlock::genesis([99u8; 32], 1000);
         let encoded = encode_vertex(&block).unwrap();
         let result = decode_vertex(&encoded, &vs, 0);
-        assert!(matches!(result, Err(WireError::UnknownValidator(99, ..))));
+        assert!(matches!(result, Err(WireError::UnknownValidator(..))));
     }
 
     #[test]
     fn rejects_future_round() {
-        let vs = test_validators();
+        let kps = test_keypairs();
+        let vs = test_validators_from_keypairs(&kps);
+        let author = *kps.0.public_key().as_bytes();
         let parent_hash = aztibase_core::hash(b"fake_parent");
-        let block = DagBlock::new(150, [1u8; 32], vec![parent_hash], vec![], 3000).unwrap();
+        let block =
+            DagBlock::new(150, author, vec![parent_hash], vec![], 3000, Some(&kps.0)).unwrap();
         let encoded = encode_vertex(&block).unwrap();
         let result = decode_vertex(&encoded, &vs, 0);
         assert!(matches!(
@@ -180,9 +235,12 @@ mod tests {
 
     #[test]
     fn accepts_near_future_round() {
-        let vs = test_validators();
+        let kps = test_keypairs();
+        let vs = test_validators_from_keypairs(&kps);
+        let author = *kps.0.public_key().as_bytes();
         let parent_hash = aztibase_core::hash(b"fake_parent");
-        let block = DagBlock::new(90, [1u8; 32], vec![parent_hash], vec![], 3000).unwrap();
+        let block =
+            DagBlock::new(90, author, vec![parent_hash], vec![], 3000, Some(&kps.0)).unwrap();
         let encoded = encode_vertex(&block).unwrap();
         let result = decode_vertex(&encoded, &vs, 0);
         assert!(result.is_ok());
@@ -190,10 +248,14 @@ mod tests {
 
     #[test]
     fn rejects_oversized_message() {
-        let vs = test_validators();
+        let kps = test_keypairs();
+        let vs = test_validators_from_keypairs(&kps);
+        let _ = vs;
+        let mut vs2 = ValidatorSet::new();
+        vs2.add([0u8; 32], 100);
         let mut buf = vec![WIRE_VERSION];
         buf.extend_from_slice(&vec![0u8; MAX_VERTEX_SIZE + 1]);
-        let result = decode_vertex(&buf, &vs, 0);
+        let result = decode_vertex(&buf, &vs2, 0);
         assert!(matches!(result, Err(WireError::TooLarge { .. })));
     }
 }

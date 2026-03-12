@@ -51,12 +51,12 @@ impl MVMemory {
     }
 
     pub fn write(&self, tx_index: TxIndex, key: StateKey, value: StateValue) {
-        let mut data = self.data.lock().unwrap();
+        let mut data = self.data.lock().unwrap_or_else(|e| e.into_inner());
         data.entry(key).or_default().insert(tx_index, value);
     }
 
     pub fn apply_write_set(&self, tx_index: TxIndex, write_set: &WriteSet) {
-        let mut data = self.data.lock().unwrap();
+        let mut data = self.data.lock().unwrap_or_else(|e| e.into_inner());
         for (key, value) in write_set {
             data.entry(key.clone())
                 .or_default()
@@ -67,7 +67,7 @@ impl MVMemory {
     /// Read the latest version of `key` written by a tx with index < `reader_index`.
     /// Returns (writer_tx_index, value) or None if no prior tx wrote this key.
     pub fn read(&self, key: &StateKey, reader_index: TxIndex) -> Option<(TxIndex, StateValue)> {
-        let data = self.data.lock().unwrap();
+        let data = self.data.lock().unwrap_or_else(|e| e.into_inner());
         let versions = data.get(key)?;
         versions
             .range(..reader_index)
@@ -76,7 +76,7 @@ impl MVMemory {
     }
 
     pub fn delete_writes(&self, tx_index: TxIndex) {
-        let mut data = self.data.lock().unwrap();
+        let mut data = self.data.lock().unwrap_or_else(|e| e.into_inner());
         for versions in data.values_mut() {
             versions.remove(&tx_index);
         }
@@ -361,17 +361,26 @@ impl BlockSTMExecutor {
         outputs: &Arc<Vec<Mutex<Option<TxOutput>>>>,
     ) {
         loop {
-            let task = scheduler.lock().unwrap().next_task();
+            let task = scheduler
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .next_task();
             match task {
                 SchedulerTask::Execute(idx) => {
                     Self::execute_tx(
                         idx, txs, base_state, mv_memory, read_sets, write_sets, outputs,
                     );
-                    scheduler.lock().unwrap().finish_execution(idx);
+                    scheduler
+                        .lock()
+                        .unwrap_or_else(|e| e.into_inner())
+                        .finish_execution(idx);
                 }
                 SchedulerTask::Validate(idx) => {
                     let valid = Self::validate_tx(idx, base_state, mv_memory, read_sets);
-                    scheduler.lock().unwrap().finish_validation(idx, valid);
+                    scheduler
+                        .lock()
+                        .unwrap_or_else(|e| e.into_inner())
+                        .finish_validation(idx, valid);
                 }
                 SchedulerTask::Done => break,
                 SchedulerTask::Wait => break,
@@ -399,15 +408,21 @@ impl BlockSTMExecutor {
 
                 s.spawn(move |_| {
                     loop {
-                        let task = sched.lock().unwrap().next_task();
+                        let task = sched.lock().unwrap_or_else(|e| e.into_inner()).next_task();
                         match task {
                             SchedulerTask::Execute(idx) => {
                                 Self::execute_tx(idx, txs, base_state, &mv, &rs, &ws, &outs);
-                                sched.lock().unwrap().finish_execution(idx);
+                                sched
+                                    .lock()
+                                    .unwrap_or_else(|e| e.into_inner())
+                                    .finish_execution(idx);
                             }
                             SchedulerTask::Validate(idx) => {
                                 let valid = Self::validate_tx(idx, base_state, &mv, &rs);
-                                sched.lock().unwrap().finish_validation(idx, valid);
+                                sched
+                                    .lock()
+                                    .unwrap_or_else(|e| e.into_inner())
+                                    .finish_validation(idx, valid);
                             }
                             SchedulerTask::Done => break,
                             SchedulerTask::Wait => {
@@ -440,10 +455,10 @@ impl BlockSTMExecutor {
                 StateKey::Nonce(tx.from),
                 StateValue::Nonce(sender_nonce + 1),
             )];
-            *read_sets[idx].lock().unwrap() = view.into_read_set();
+            *read_sets[idx].lock().unwrap_or_else(|e| e.into_inner()) = view.into_read_set();
             mv_memory.apply_write_set(idx, &ws);
-            *write_sets[idx].lock().unwrap() = ws;
-            *outputs[idx].lock().unwrap() = Some(TxOutput {
+            *write_sets[idx].lock().unwrap_or_else(|e| e.into_inner()) = ws;
+            *outputs[idx].lock().unwrap_or_else(|e| e.into_inner()) = Some(TxOutput {
                 tx_index: idx,
                 success: false,
                 gas_used: 21_000,
@@ -461,10 +476,10 @@ impl BlockSTMExecutor {
                 StateKey::Nonce(tx.from),
                 StateValue::Nonce(sender_nonce + 1),
             )];
-            *read_sets[idx].lock().unwrap() = view.into_read_set();
+            *read_sets[idx].lock().unwrap_or_else(|e| e.into_inner()) = view.into_read_set();
             mv_memory.apply_write_set(idx, &ws);
-            *write_sets[idx].lock().unwrap() = ws;
-            *outputs[idx].lock().unwrap() = Some(TxOutput {
+            *write_sets[idx].lock().unwrap_or_else(|e| e.into_inner()) = ws;
+            *outputs[idx].lock().unwrap_or_else(|e| e.into_inner()) = Some(TxOutput {
                 tx_index: idx,
                 success: false,
                 gas_used: 21_000,
@@ -491,10 +506,10 @@ impl BlockSTMExecutor {
             ),
         ];
 
-        *read_sets[idx].lock().unwrap() = read_set;
+        *read_sets[idx].lock().unwrap_or_else(|e| e.into_inner()) = read_set;
         mv_memory.apply_write_set(idx, &ws);
-        *write_sets[idx].lock().unwrap() = ws;
-        *outputs[idx].lock().unwrap() = Some(TxOutput {
+        *write_sets[idx].lock().unwrap_or_else(|e| e.into_inner()) = ws;
+        *outputs[idx].lock().unwrap_or_else(|e| e.into_inner()) = Some(TxOutput {
             tx_index: idx,
             success: true,
             gas_used: 21_000,
@@ -508,7 +523,7 @@ impl BlockSTMExecutor {
         mv_memory: &MVMemory,
         read_sets: &[Mutex<ReadSet>],
     ) -> bool {
-        let rs = read_sets[idx].lock().unwrap();
+        let rs = read_sets[idx].lock().unwrap_or_else(|e| e.into_inner());
         for entry in rs.iter() {
             let current = mv_memory.read(&entry.key, idx);
             match (&entry.version, current) {

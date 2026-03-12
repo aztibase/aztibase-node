@@ -70,6 +70,10 @@ pub fn verify_header_chain(
         return Err("empty aggregate signature".into());
     }
 
+    // SECURITY: BLS verification deferred — WASM cannot link blst (C dependency). Verify via full node.
+    // The checks above (quorum threshold, non-empty signature) provide structural validation,
+    // but cryptographic BLS aggregate verification must happen on a full node.
+
     Ok(())
 }
 

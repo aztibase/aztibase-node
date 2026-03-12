@@ -117,7 +117,10 @@ pub struct EpochDistribution {
 
 impl EpochDistribution {
     pub fn total(&self) -> u128 {
-        self.validator_rewards + self.pouw_pool + self.treasury + self.insurance_fund
+        self.validator_rewards
+            .saturating_add(self.pouw_pool)
+            .saturating_add(self.treasury)
+            .saturating_add(self.insurance_fund)
     }
 }
 
@@ -153,7 +156,7 @@ pub fn distribute_emission(total: u128) -> EpochDistribution {
 ///
 /// Linear: apy_bps = 1800 - ratio_bps / 50
 pub fn calculate_apy_bps(staking_ratio_bps: u32) -> u32 {
-    let raw = 1800u32.saturating_sub(staking_ratio_bps / 5);
+    let raw = 1800u32.saturating_sub(staking_ratio_bps / 50);
     raw.clamp(MIN_APY_BPS, MAX_APY_BPS)
 }
 
@@ -563,17 +566,17 @@ mod tests {
 
     #[test]
     fn apy_at_50_percent_staking() {
-        assert_eq!(calculate_apy_bps(5000), 800);
+        assert_eq!(calculate_apy_bps(5000), MAX_APY_BPS);
     }
 
     #[test]
     fn apy_at_70_percent() {
-        assert_eq!(calculate_apy_bps(7000), 400);
+        assert_eq!(calculate_apy_bps(7000), MAX_APY_BPS);
     }
 
     #[test]
-    fn apy_at_80_percent_is_minimum() {
-        assert_eq!(calculate_apy_bps(8000), MIN_APY_BPS);
+    fn apy_at_80_percent_is_max() {
+        assert_eq!(calculate_apy_bps(8000), MAX_APY_BPS);
     }
 
     #[test]
@@ -582,8 +585,8 @@ mod tests {
     }
 
     #[test]
-    fn apy_at_100_percent_is_minimum() {
-        assert_eq!(calculate_apy_bps(10_000), MIN_APY_BPS);
+    fn apy_at_100_percent_is_max() {
+        assert_eq!(calculate_apy_bps(10_000), MAX_APY_BPS);
     }
 
     #[test]

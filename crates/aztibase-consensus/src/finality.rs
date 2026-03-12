@@ -25,7 +25,9 @@ impl SignerBitmap {
     }
 
     pub fn set(&mut self, index: usize, value: bool) {
-        assert!(index < self.len, "bitmap index out of bounds");
+        if index >= self.len {
+            return;
+        }
         let byte_idx = index / 8;
         let bit_idx = index % 8;
         if value {

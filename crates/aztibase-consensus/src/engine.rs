@@ -1,4 +1,4 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering as AtomicOrdering};
 use std::time::{Duration, Instant};
@@ -7,7 +7,7 @@ use anyhow::{Context, Result};
 use tokio::sync::mpsc;
 use tracing::{debug, info, warn};
 
-use aztibase_core::{BlockHash, ValidatorId};
+use aztibase_core::{BlockHash, Keypair, ValidatorId};
 
 use crate::commit::{CommitConfig, CommitRule, LeaderStatus};
 use crate::dag::DagBlock;
@@ -263,10 +263,11 @@ pub struct StateRootAnnounce {
 pub struct ConsensusEngine {
     config: ConsensusConfig,
     identity: ValidatorId,
+    signing_key: Keypair,
     dag: DagStore,
     validators: ValidatorSet,
     pub state: RoundState,
-    pending_txs: Vec<Vec<u8>>,
+    pending_txs: VecDeque<Vec<u8>>,
     vrf_seed: [u8; 32],
     inbox: mpsc::Receiver<ConsensusInput>,
     outbox: mpsc::Sender<ConsensusOutput>,
@@ -283,6 +284,7 @@ impl ConsensusEngine {
     pub fn new(
         config: ConsensusConfig,
         identity: ValidatorId,
+        signing_key: Keypair,
         dag: DagStore,
         validators: ValidatorSet,
         inbox: mpsc::Receiver<ConsensusInput>,
@@ -291,10 +293,11 @@ impl ConsensusEngine {
         Self {
             config,
             identity,
+            signing_key,
             dag,
             validators,
             state: RoundState::new(),
-            pending_txs: Vec::new(),
+            pending_txs: VecDeque::new(),
             vrf_seed: [0u8; 32],
             inbox,
             outbox,
@@ -540,8 +543,15 @@ impl ConsensusEngine {
 
         let pending_count = self.pending_txs.len();
         let payload = self.drain_pending_txs();
-        let block = DagBlock::new(round, self.identity, parents, payload.clone(), now_ms())
-            .context("Failed to create vertex")?;
+        let block = DagBlock::new(
+            round,
+            self.identity,
+            parents,
+            payload.clone(),
+            now_ms(),
+            Some(&self.signing_key),
+        )
+        .context("Failed to create vertex")?;
 
         let hash = block.hash;
         let encoded = wire::encode_vertex(&block).context("Failed to encode vertex")?;
@@ -583,8 +593,12 @@ impl ConsensusEngine {
             }
             ConsensusInput::Transaction(tx) => {
                 if self.pending_txs.len() < self.config.max_pending_txs {
-                    info!(tx_len = tx.len(), pending = self.pending_txs.len() + 1, "Transaction added to consensus pending queue");
-                    self.pending_txs.push(tx);
+                    info!(
+                        tx_len = tx.len(),
+                        pending = self.pending_txs.len() + 1,
+                        "Transaction added to consensus pending queue"
+                    );
+                    self.pending_txs.push_back(tx);
                 } else {
                     warn!("Pending tx queue full, dropping transaction");
                 }
@@ -734,12 +748,27 @@ impl ConsensusEngine {
                                 for vh in &batch.vertex_order {
                                     self.state.record_commit(*vh);
                                 }
-                                if let Err(e) =
-                                    self.outbox.try_send(ConsensusOutput::BatchCommitted(batch))
-                                {
-                                    tracing::error!(
-                                        "Failed to send committed batch to execution: {e} — batch may be lost"
-                                    );
+                                let mut pending = Some(ConsensusOutput::BatchCommitted(batch));
+                                for attempt in 0..100 {
+                                    let m = pending.take().expect("retry invariant");
+                                    match self.outbox.try_send(m) {
+                                        Ok(()) => break,
+                                        Err(mpsc::error::TrySendError::Full(returned)) => {
+                                            if attempt == 0 {
+                                                tracing::warn!(
+                                                    "Outbox full, retrying committed batch delivery"
+                                                );
+                                            }
+                                            pending = Some(returned);
+                                            std::thread::sleep(Duration::from_millis(10));
+                                        }
+                                        Err(mpsc::error::TrySendError::Closed(_)) => {
+                                            tracing::error!(
+                                                "Outbox closed, cannot deliver committed batch"
+                                            );
+                                            break;
+                                        }
+                                    }
                                 }
                             }
                             Err(e) => {
@@ -794,11 +823,11 @@ impl ConsensusEngine {
         }
         let mut payload = Vec::new();
         let max_payload = 1024 * 256; // 256KB per vertex
-        while let Some(tx) = self.pending_txs.first() {
+        while let Some(tx) = self.pending_txs.front() {
             if payload.len() + tx.len() + 4 > max_payload {
                 break;
             }
-            let tx = self.pending_txs.remove(0);
+            let tx = self.pending_txs.pop_front().unwrap();
             payload.extend_from_slice(&(tx.len() as u32).to_le_bytes());
             payload.extend_from_slice(&tx);
         }
@@ -840,6 +869,14 @@ mod tests {
         let _ = std::fs::remove_file(lock);
     }
 
+    fn test_keypair(seed: u8) -> aztibase_core::Keypair {
+        aztibase_core::Keypair::from_secret_bytes(&[seed; 32])
+    }
+
+    fn test_validator_id(seed: u8) -> [u8; 32] {
+        *test_keypair(seed).public_key().as_bytes()
+    }
+
     fn make_test_engine() -> (
         ConsensusEngine,
         mpsc::Sender<ConsensusInput>,
@@ -850,13 +887,20 @@ mod tests {
         let store = StateStore::open(path.to_str().unwrap()).unwrap();
         let dag = DagStore::new(store).unwrap();
 
+        let kp1 = test_keypair(1);
+        let kp2 = test_keypair(2);
+        let kp3 = test_keypair(3);
+        let v1 = *kp1.public_key().as_bytes();
+        let v2 = *kp2.public_key().as_bytes();
+        let v3 = *kp3.public_key().as_bytes();
+
         let mut validators = ValidatorSet::new();
-        let v1 = [1u8; 32];
-        let v2 = [2u8; 32];
-        let v3 = [3u8; 32];
         validators.add(v1, 100);
         validators.add(v2, 100);
         validators.add(v3, 100);
+        validators.set_ed25519_key(&v1, v1);
+        validators.set_ed25519_key(&v2, v2);
+        validators.set_ed25519_key(&v3, v3);
 
         let config = ConsensusConfig {
             round_duration: Duration::from_millis(50),
@@ -869,7 +913,7 @@ mod tests {
         let (in_tx, in_rx) = mpsc::channel(64);
         let (out_tx, out_rx) = mpsc::channel(64);
 
-        let engine = ConsensusEngine::new(config, v1, dag, validators, in_rx, out_tx);
+        let engine = ConsensusEngine::new(config, v1, kp1, dag, validators, in_rx, out_tx);
 
         (engine, in_tx, out_rx, path)
     }
@@ -944,8 +988,10 @@ mod tests {
         let (mut engine, _in_tx, _out_rx, path) = make_test_engine();
         engine.insert_genesis().unwrap();
 
+        let kp2 = test_keypair(2);
+        let v2 = test_validator_id(2);
         let genesis_hashes: Vec<BlockHash> = engine.state.vertices_at_round(0).to_vec();
-        let block = DagBlock::new(1, [2u8; 32], genesis_hashes, vec![], now_ms()).unwrap();
+        let block = DagBlock::new(1, v2, genesis_hashes, vec![], now_ms(), Some(&kp2)).unwrap();
         let data = crate::wire::encode_vertex(&block).unwrap();
 
         engine.handle_received_vertex(&data).unwrap();
@@ -958,8 +1004,10 @@ mod tests {
         let (mut engine, _in_tx, _out_rx, path) = make_test_engine();
         engine.insert_genesis().unwrap();
 
+        let kp99 = test_keypair(99);
+        let v99 = *kp99.public_key().as_bytes();
         let genesis_hashes: Vec<BlockHash> = engine.state.vertices_at_round(0).to_vec();
-        let block = DagBlock::new(1, [99u8; 32], genesis_hashes, vec![], now_ms()).unwrap();
+        let block = DagBlock::new(1, v99, genesis_hashes, vec![], now_ms(), Some(&kp99)).unwrap();
         let data = crate::wire::encode_vertex(&block).unwrap();
 
         engine.handle_received_vertex(&data).unwrap();
@@ -969,10 +1017,11 @@ mod tests {
 
     #[test]
     fn vertex_serialization_roundtrip() {
-        let block = DagBlock::genesis([1u8; 32], 1000);
+        let v1 = test_validator_id(1);
+        let block = DagBlock::genesis(v1, 1000);
         let encoded = crate::wire::encode_vertex(&block).unwrap();
         let mut vs = ValidatorSet::new();
-        vs.add([1u8; 32], 100);
+        vs.add(v1, 100);
         let decoded = crate::wire::decode_vertex(&encoded, &vs, 0).unwrap();
         assert_eq!(decoded.hash, block.hash);
         assert_eq!(decoded.round, block.round);
@@ -984,8 +1033,10 @@ mod tests {
         let (mut engine, _in_tx, _out_rx, path) = make_test_engine();
         engine.insert_genesis().unwrap();
 
+        let kp2 = test_keypair(2);
+        let v2 = test_validator_id(2);
         let genesis_hashes: Vec<BlockHash> = engine.state.vertices_at_round(0).to_vec();
-        let mut block = DagBlock::new(1, [2u8; 32], genesis_hashes, vec![], now_ms()).unwrap();
+        let mut block = DagBlock::new(1, v2, genesis_hashes, vec![], now_ms(), Some(&kp2)).unwrap();
         block.hash = [0xFFu8; 32];
         let mut data = vec![1u8]; // version byte
         data.extend_from_slice(&postcard::to_allocvec(&block).unwrap());
@@ -999,8 +1050,10 @@ mod tests {
     async fn engine_rejects_future_round_vertex() {
         let (mut engine, _in_tx, _out_rx, path) = make_test_engine();
         engine.insert_genesis().unwrap();
+        let kp2 = test_keypair(2);
+        let v2 = test_validator_id(2);
         let genesis_hashes: Vec<BlockHash> = engine.state.vertices_at_round(0).to_vec();
-        let block = DagBlock::new(150, [2u8; 32], genesis_hashes, vec![], now_ms()).unwrap();
+        let block = DagBlock::new(150, v2, genesis_hashes, vec![], now_ms(), Some(&kp2)).unwrap();
         let data = crate::wire::encode_vertex(&block).unwrap();
 
         engine.handle_received_vertex(&data).unwrap();
@@ -1012,8 +1065,10 @@ mod tests {
     async fn engine_accepts_near_future_vertex() {
         let (mut engine, _in_tx, _out_rx, path) = make_test_engine();
         engine.insert_genesis().unwrap();
+        let kp2 = test_keypair(2);
+        let v2 = test_validator_id(2);
         let genesis_hashes: Vec<BlockHash> = engine.state.vertices_at_round(0).to_vec();
-        let block = DagBlock::new(5, [2u8; 32], genesis_hashes, vec![], now_ms()).unwrap();
+        let block = DagBlock::new(5, v2, genesis_hashes, vec![], now_ms(), Some(&kp2)).unwrap();
         let data = crate::wire::encode_vertex(&block).unwrap();
 
         engine.handle_received_vertex(&data).unwrap();
@@ -1032,14 +1087,15 @@ mod tests {
         let mut engine = ConsensusEngine::new(
             ConsensusConfig::default(),
             [1u8; 32],
+            aztibase_core::Keypair::from_secret_bytes(&[1u8; 32]),
             dag,
             validators,
             in_rx,
             out_tx,
         );
 
-        engine.pending_txs.push(vec![1, 2, 3]);
-        engine.pending_txs.push(vec![4, 5]);
+        engine.pending_txs.push_back(vec![1, 2, 3]);
+        engine.pending_txs.push_back(vec![4, 5]);
         let payload = engine.drain_pending_txs();
 
         // 4 bytes len + 3 bytes data + 4 bytes len + 2 bytes data = 13
@@ -1080,18 +1136,20 @@ mod tests {
         let (mut engine, _in_tx, _out_rx, path) = make_test_engine();
         engine.insert_genesis().unwrap();
 
+        let kp2 = test_keypair(2);
+        let v2 = test_validator_id(2);
         let genesis_hashes: Vec<BlockHash> = engine.state.vertices_at_round(0).to_vec();
 
         // First vertex from v2 at round 1
         let block_a =
-            DagBlock::new(1, [2u8; 32], genesis_hashes.clone(), vec![1], now_ms()).unwrap();
+            DagBlock::new(1, v2, genesis_hashes.clone(), vec![1], now_ms(), Some(&kp2)).unwrap();
         let data_a = crate::wire::encode_vertex(&block_a).unwrap();
         engine.handle_received_vertex(&data_a).unwrap();
         assert_eq!(engine.state.vertices_at_round(1).len(), 1);
         assert_eq!(engine.equivocations_detected(), 0);
 
         // Second, different vertex from v2 at round 1 (equivocation)
-        let block_b = DagBlock::new(1, [2u8; 32], genesis_hashes, vec![2], now_ms()).unwrap();
+        let block_b = DagBlock::new(1, v2, genesis_hashes, vec![2], now_ms(), Some(&kp2)).unwrap();
         let data_b = crate::wire::encode_vertex(&block_b).unwrap();
         engine.handle_received_vertex(&data_b).unwrap();
         assert_eq!(engine.state.vertices_at_round(1).len(), 1); // not added
@@ -1105,14 +1163,18 @@ mod tests {
         let (mut engine, _in_tx, _out_rx, path) = make_test_engine();
         engine.insert_genesis().unwrap();
 
+        let kp2 = test_keypair(2);
+        let kp3 = test_keypair(3);
+        let v2 = test_validator_id(2);
+        let v3 = test_validator_id(3);
         let genesis_hashes: Vec<BlockHash> = engine.state.vertices_at_round(0).to_vec();
 
         let block_r1 =
-            DagBlock::new(1, [2u8; 32], genesis_hashes.clone(), vec![], now_ms()).unwrap();
+            DagBlock::new(1, v2, genesis_hashes.clone(), vec![], now_ms(), Some(&kp2)).unwrap();
         let r1_hash = block_r1.hash;
 
         // Round-2 vertex referencing round-1 (which doesn't exist yet in DAG).
-        let block_r2 = DagBlock::new(2, [3u8; 32], vec![r1_hash], vec![], now_ms()).unwrap();
+        let block_r2 = DagBlock::new(2, v3, vec![r1_hash], vec![], now_ms(), Some(&kp3)).unwrap();
         let data_r2 = crate::wire::encode_vertex(&block_r2).unwrap();
 
         // Relaxed insert: r2 goes in even though parent r1 is missing.
@@ -1140,7 +1202,15 @@ mod tests {
             max_pending_txs: 3,
             ..ConsensusConfig::default()
         };
-        let mut engine = ConsensusEngine::new(config, [1u8; 32], dag, validators, in_rx, out_tx);
+        let mut engine = ConsensusEngine::new(
+            config,
+            [1u8; 32],
+            aztibase_core::Keypair::from_secret_bytes(&[1u8; 32]),
+            dag,
+            validators,
+            in_rx,
+            out_tx,
+        );
 
         for i in 0..5u8 {
             engine
@@ -1166,8 +1236,10 @@ mod tests {
         let snap_after = metrics.snapshot();
         assert_eq!(snap_after.vertices_proposed, 1);
 
+        let kp2 = test_keypair(2);
+        let v2 = test_validator_id(2);
         let genesis_hashes: Vec<BlockHash> = engine.state.vertices_at_round(0).to_vec();
-        let block = DagBlock::new(1, [2u8; 32], genesis_hashes, vec![], now_ms()).unwrap();
+        let block = DagBlock::new(1, v2, genesis_hashes, vec![], now_ms(), Some(&kp2)).unwrap();
         let data = crate::wire::encode_vertex(&block).unwrap();
         engine.handle_received_vertex(&data).unwrap();
         let snap_recv = metrics.snapshot();
@@ -1181,17 +1253,19 @@ mod tests {
         let (mut engine, _in_tx, mut out_rx, path) = make_test_engine();
         engine.insert_genesis().unwrap();
 
+        let kp2 = test_keypair(2);
+        let v2 = test_validator_id(2);
         let genesis_hashes: Vec<BlockHash> = engine.state.vertices_at_round(0).to_vec();
 
         let block_a =
-            DagBlock::new(1, [2u8; 32], genesis_hashes.clone(), vec![1], now_ms()).unwrap();
+            DagBlock::new(1, v2, genesis_hashes.clone(), vec![1], now_ms(), Some(&kp2)).unwrap();
         let data_a = crate::wire::encode_vertex(&block_a).unwrap();
         engine.handle_received_vertex(&data_a).unwrap();
 
         // Drain the BroadcastVertex if any
         while out_rx.try_recv().is_ok() {}
 
-        let block_b = DagBlock::new(1, [2u8; 32], genesis_hashes, vec![2], now_ms()).unwrap();
+        let block_b = DagBlock::new(1, v2, genesis_hashes, vec![2], now_ms(), Some(&kp2)).unwrap();
         let data_b = crate::wire::encode_vertex(&block_b).unwrap();
         engine.handle_received_vertex(&data_b).unwrap();
 
@@ -1203,7 +1277,7 @@ mod tests {
                 existing_hash,
                 duplicate_hash,
             } => {
-                assert_eq!(author, [2u8; 32]);
+                assert_eq!(author, v2);
                 assert_eq!(round, 1);
                 assert_ne!(existing_hash, duplicate_hash);
             }
@@ -1297,7 +1371,7 @@ mod tests {
         dag.insert(g1).unwrap();
         dag.insert(g2).unwrap();
 
-        let child = DagBlock::new(1, [1u8; 32], vec![g1h, g2h], vec![], 2000).unwrap();
+        let child = DagBlock::new(1, [1u8; 32], vec![g1h, g2h], vec![], 2000, None).unwrap();
         let ch = child.hash;
         dag.insert(child).unwrap();
 

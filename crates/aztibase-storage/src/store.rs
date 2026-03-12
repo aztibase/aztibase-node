@@ -93,6 +93,9 @@ pub enum StorageError {
 
     #[error("Key not found")]
     NotFound,
+
+    #[error("Serialization error: {0}")]
+    Serialization(String),
 }
 
 impl From<redb::TransactionError> for StorageError {

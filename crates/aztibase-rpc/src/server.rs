@@ -211,6 +211,8 @@ impl IpConnectionTracker {
 
 const DEFAULT_RATE_LIMIT: u32 = 100;
 const BUCKET_REFILL_INTERVAL_MS: u64 = 1000;
+const MAX_RATE_LIMIT_BUCKETS: usize = 10_000;
+const BUCKET_EVICTION_SECS: u64 = 300;
 
 struct IpBucket {
     tokens: u32,
@@ -237,6 +239,12 @@ impl RpcRateLimiter {
     pub fn check(&self, ip: IpAddr) -> bool {
         let mut buckets = self.buckets.lock().unwrap_or_else(|e| e.into_inner());
         let now = Instant::now();
+
+        if buckets.len() > MAX_RATE_LIMIT_BUCKETS {
+            let eviction_threshold = std::time::Duration::from_secs(BUCKET_EVICTION_SECS);
+            buckets.retain(|_, b| b.last_refill.elapsed() < eviction_threshold);
+        }
+
         let bucket = buckets.entry(ip).or_insert(IpBucket {
             tokens: self.limit_per_second,
             last_refill: now,
@@ -341,7 +349,7 @@ impl RpcServer {
                 faucet_nonce: Arc::new(AtomicU64::new(0)),
                 faucet_enabled: true,
                 rate_limiter: Arc::new(RpcRateLimiter::new(DEFAULT_RATE_LIMIT)),
-                permissive_cors: true,
+                permissive_cors: false,
                 cors_allowed_origins: Vec::new(),
                 max_body_bytes: MAX_WS_FRAME_SIZE,
             },
@@ -460,12 +468,16 @@ impl RpcServer {
         }
 
         let cors = if self.state.permissive_cors {
+            // testnet only — production should use explicit origins
             CorsLayer::new()
                 .allow_origin(Any)
                 .allow_methods(Any)
                 .allow_headers(Any)
         } else if self.state.cors_allowed_origins.is_empty() {
-            CorsLayer::new().allow_methods(Any).allow_headers(Any)
+            CorsLayer::new()
+                .allow_origin(AllowOrigin::list(Vec::<axum::http::HeaderValue>::new()))
+                .allow_methods(Any)
+                .allow_headers(Any)
         } else {
             let origins: Vec<axum::http::HeaderValue> = self
                 .state
@@ -1320,6 +1332,12 @@ async fn handle_faucet_drip(state: &RpcState, req: &JsonRpcRequest) -> JsonRpcRe
             .faucet_tracker
             .lock()
             .unwrap_or_else(|e| e.into_inner());
+
+        if tracker.len() > MAX_RATE_LIMIT_BUCKETS {
+            let eviction_threshold = std::time::Duration::from_secs(BUCKET_EVICTION_SECS);
+            tracker.retain(|_, t| t.elapsed() < eviction_threshold);
+        }
+
         if let Some(last) = tracker.get(&addr_bytes)
             && last.elapsed().as_secs() < FAUCET_COOLDOWN_SECS
         {
@@ -1363,11 +1381,9 @@ async fn handle_faucet_drip(state: &RpcState, req: &JsonRpcRequest) -> JsonRpcRe
             -32000,
             "mempool full, try again later".into(),
         ),
-        Err(mpsc::error::TrySendError::Closed(_)) => JsonRpcResponse::error(
-            req.id.clone(),
-            -32000,
-            "node shutting down".into(),
-        ),
+        Err(mpsc::error::TrySendError::Closed(_)) => {
+            JsonRpcResponse::error(req.id.clone(), -32000, "node shutting down".into())
+        }
     }
 }
 
@@ -3345,7 +3361,12 @@ mod tests {
             resp["result"]["amount"].as_u64().unwrap(),
             FAUCET_DRIP_AMOUNT as u64
         );
-        assert!(resp["result"]["tx_hash"].as_str().unwrap().starts_with("0x"));
+        assert!(
+            resp["result"]["tx_hash"]
+                .as_str()
+                .unwrap()
+                .starts_with("0x")
+        );
 
         let raw = rx.try_recv().expect("faucet tx should be in channel");
         let signed = aztibase_execution::SignedTx::decode(&raw).expect("valid envelope");

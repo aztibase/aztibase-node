@@ -5,6 +5,20 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ---
 
+## Sprint 058 — Pre-Mainnet Audit Fixes (2026-03-12)
+
+### Fixed
+- **CRITICAL: decode_vertex signature verification broken in production** — `decode_vertex()` assumed `block.author` was an Ed25519 public key, but in production it's a BLAKE3 address hash. All inter-node vertex exchanges were rejected ("invalid Ed25519 signature on vertex"), preventing consensus. Fixed by storing Ed25519 pubkeys in `ValidatorSet` (from genesis config) and looking them up during wire verification.
+- **Phase 1 Safety**: Ed25519 signatures on DagBlock (H-CON-1), guaranteed committed batch delivery (H-CON-3), FaucetDrip mainnet gate (H-NODE-3), `.unwrap()` elimination (~30 instances), BLAKE3 gossipsub message IDs (C-NET-2)
+- **Phase 2 Correctness**: APY formula fix (C-EXEC-1), VerkleTree leaf_count fix (C-EXEC-3), overflow protection (C-EXEC-2), phantom parent defense (C-CON-2), VecDeque replacements (C-CON-3), wave_length alignment (H-CON-5), n=4 quorum docs (C-CON-1)
+- **Phase 3 Hardening**: WASM key zeroization (C-WASM-1), WASM BLS verification (C-WASM-2), equivocation proof persistence (H-CON-2), rate limiter eviction (H-RPC-4), CORS restrictive default (H-RPC-3), inference timeout pre-check (H-RT-1), snapshot bootstrap quorum (H-NODE-2)
+
+### Added
+- `public_key` field in `ValidatorEntry` (genesis config) for Ed25519 pubkey storage
+- `ed25519_key()` / `set_ed25519_key()` methods on `ValidatorSet`
+
+---
+
 ## Pre-Mainnet Audit (2026-03-12)
 
 ### Added

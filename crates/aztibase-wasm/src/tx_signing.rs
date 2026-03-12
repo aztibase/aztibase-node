@@ -2,6 +2,7 @@ use ed25519_dalek::{Signature, Signer, SigningKey};
 use rand::rngs::OsRng;
 use serde::{Deserialize, Serialize};
 use wasm_bindgen::prelude::*;
+use zeroize::Zeroize;
 
 const TX_DOMAIN: &[u8] = b"AZTB_TX_V1";
 const ENVELOPE_MAGIC: u8 = 0xAA;
@@ -98,12 +99,15 @@ pub fn js_generate_keypair() -> String {
     let sk = SigningKey::generate(&mut OsRng);
     let pk = sk.verifying_key();
     let addr = address_from_pubkey(pk.as_bytes());
-    serde_json::json!({
-        "secret": hex_encode(&sk.to_bytes()),
+    let mut secret_bytes = sk.to_bytes();
+    let result = serde_json::json!({
+        "secret": hex_encode(&secret_bytes),
         "public": hex_encode(pk.as_bytes()),
         "address": hex_encode(&addr),
     })
-    .to_string()
+    .to_string();
+    secret_bytes.zeroize();
+    result
 }
 
 /// Derive the address from a secret key hex string.
@@ -116,6 +120,7 @@ pub fn js_address_from_secret(secret_hex: &str) -> String {
     };
     let pk = sk.verifying_key();
     let addr = address_from_pubkey(pk.as_bytes());
+    drop(sk);
     hex_encode(&addr)
 }
 
@@ -152,6 +157,7 @@ pub fn js_sign_transfer(
     let from = address_from_pubkey(pk.as_bytes());
     let payload = encode_transfer(from, to, value, nonce, gas_price);
     let envelope = sign_payload(&payload, &sk);
+    drop(sk);
     hex_encode(&envelope)
 }
 
@@ -218,7 +224,9 @@ fn parse_secret_key(hex: &str) -> Result<SigningKey, String> {
         let lo = hex_nibble(chunk[1]).ok_or("invalid hex char in secret key")?;
         bytes[i] = (hi << 4) | lo;
     }
-    Ok(SigningKey::from_bytes(&bytes))
+    let key = SigningKey::from_bytes(&bytes);
+    bytes.zeroize();
+    Ok(key)
 }
 
 #[cfg(test)]

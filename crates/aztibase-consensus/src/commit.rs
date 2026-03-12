@@ -27,7 +27,7 @@ pub struct CommitConfig {
 impl Default for CommitConfig {
     fn default() -> Self {
         Self {
-            wave_length: 3,
+            wave_length: 4,
             vrf_seed: None,
         }
     }

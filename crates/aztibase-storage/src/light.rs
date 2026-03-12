@@ -68,7 +68,8 @@ impl LightStore {
     // ── Headers ────────────────────────────────────────────────────
 
     pub fn store_header(&self, header: &LightHeader) -> StorageResult<()> {
-        let encoded = postcard::to_allocvec(header).expect("header serialization");
+        let encoded = postcard::to_allocvec(header)
+            .map_err(|e| crate::StorageError::Serialization(format!("header: {e}")))?;
         let write_txn = self.db.begin_write()?;
         {
             let mut tbl = write_txn.open_table(HEADERS_TABLE)?;
@@ -83,7 +84,8 @@ impl LightStore {
         {
             let mut tbl = write_txn.open_table(HEADERS_TABLE)?;
             for h in headers {
-                let encoded = postcard::to_allocvec(h).expect("header serialization");
+                let encoded = postcard::to_allocvec(h)
+                    .map_err(|e| crate::StorageError::Serialization(format!("header: {e}")))?;
                 tbl.insert(h.round, encoded.as_slice())?;
             }
         }
@@ -96,7 +98,8 @@ impl LightStore {
         let tbl = read_txn.open_table(HEADERS_TABLE)?;
         match tbl.get(round)? {
             Some(v) => {
-                let header: LightHeader = postcard::from_bytes(v.value()).expect("header deser");
+                let header: LightHeader = postcard::from_bytes(v.value())
+                    .map_err(|e| crate::StorageError::Serialization(format!("header: {e}")))?;
                 Ok(Some(header))
             }
             None => Ok(None),
@@ -121,7 +124,8 @@ impl LightStore {
     // ── Finality Certificates ──────────────────────────────────────
 
     pub fn store_finality_cert(&self, cert: &LightFinalityCert) -> StorageResult<()> {
-        let encoded = postcard::to_allocvec(cert).expect("cert serialization");
+        let encoded = postcard::to_allocvec(cert)
+            .map_err(|e| crate::StorageError::Serialization(format!("cert: {e}")))?;
         let write_txn = self.db.begin_write()?;
         {
             let mut tbl = write_txn.open_table(FINALITY_CERTS_TABLE)?;
@@ -136,7 +140,8 @@ impl LightStore {
         let tbl = read_txn.open_table(FINALITY_CERTS_TABLE)?;
         match tbl.get(anchor_round)? {
             Some(v) => {
-                let cert: LightFinalityCert = postcard::from_bytes(v.value()).expect("cert deser");
+                let cert: LightFinalityCert = postcard::from_bytes(v.value())
+                    .map_err(|e| crate::StorageError::Serialization(format!("cert: {e}")))?;
                 Ok(Some(cert))
             }
             None => Ok(None),
@@ -155,7 +160,8 @@ impl LightStore {
     // ── Proof Cache ────────────────────────────────────────────────
 
     pub fn cache_proof(&self, proof: &CachedProof) -> StorageResult<()> {
-        let encoded = postcard::to_allocvec(proof).expect("proof serialization");
+        let encoded = postcard::to_allocvec(proof)
+            .map_err(|e| crate::StorageError::Serialization(format!("proof: {e}")))?;
         let write_txn = self.db.begin_write()?;
         {
             let mut tbl = write_txn.open_table(PROOF_CACHE_TABLE)?;
@@ -170,7 +176,8 @@ impl LightStore {
         let tbl = read_txn.open_table(PROOF_CACHE_TABLE)?;
         match tbl.get(state_key)? {
             Some(v) => {
-                let proof: CachedProof = postcard::from_bytes(v.value()).expect("proof deser");
+                let proof: CachedProof = postcard::from_bytes(v.value())
+                    .map_err(|e| crate::StorageError::Serialization(format!("proof: {e}")))?;
                 Ok(Some(proof))
             }
             None => Ok(None),
@@ -185,7 +192,8 @@ impl LightStore {
         let mut stale_keys = Vec::new();
         for entry in tbl.iter()? {
             let (k, v) = entry?;
-            let proof: CachedProof = postcard::from_bytes(v.value()).expect("proof deser");
+            let proof: CachedProof = postcard::from_bytes(v.value())
+                .map_err(|e| crate::StorageError::Serialization(format!("proof: {e}")))?;
             if proof.at_round < cutoff {
                 stale_keys.push(k.value().to_vec());
             }
@@ -223,7 +231,8 @@ impl LightStore {
         let mut entries: Vec<(Vec<u8>, u64)> = Vec::new();
         for entry in tbl.iter()? {
             let (k, v) = entry?;
-            let proof: CachedProof = postcard::from_bytes(v.value()).expect("proof deser");
+            let proof: CachedProof = postcard::from_bytes(v.value())
+                .map_err(|e| crate::StorageError::Serialization(format!("proof: {e}")))?;
             entries.push((k.value().to_vec(), proof.at_round));
         }
         drop(tbl);
@@ -257,7 +266,8 @@ impl LightStore {
         address: &[u8; 32],
         state: &LocalWalletState,
     ) -> StorageResult<()> {
-        let encoded = postcard::to_allocvec(state).expect("wallet state serialization");
+        let encoded = postcard::to_allocvec(state)
+            .map_err(|e| crate::StorageError::Serialization(format!("wallet: {e}")))?;
         let write_txn = self.db.begin_write()?;
         {
             let mut tbl = write_txn.open_table(WALLET_STATE_TABLE)?;
@@ -272,8 +282,8 @@ impl LightStore {
         let tbl = read_txn.open_table(WALLET_STATE_TABLE)?;
         match tbl.get(address.as_slice())? {
             Some(v) => {
-                let state: LocalWalletState =
-                    postcard::from_bytes(v.value()).expect("wallet deser");
+                let state: LocalWalletState = postcard::from_bytes(v.value())
+                    .map_err(|e| crate::StorageError::Serialization(format!("wallet: {e}")))?;
                 Ok(Some(state))
             }
             None => Ok(None),

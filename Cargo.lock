@@ -995,6 +995,7 @@ dependencies = [
  "serde_json",
  "wasm-bindgen",
  "wasm-bindgen-test",
+ "zeroize",
 ]
 
 [[package]]

@@ -13,6 +13,7 @@ type RunModel = RunnableModel<TypedFact, Box<dyn TypedOp>, Graph<TypedFact, Box<
 const MAX_MODEL_SIZE: usize = 64 * 1024 * 1024; // 64 MiB
 const DEFAULT_INFERENCE_TIMEOUT: Duration = Duration::from_secs(30);
 const MAX_INPUT_SIZE: usize = 16 * 1024 * 1024; // 16 MiB
+const MAX_COMPUTE_UNITS: u64 = 1_000_000_000;
 
 struct RegisteredModel {
     plan: RunModel,
@@ -112,6 +113,14 @@ impl AIRuntime for TractRuntime {
             );
         }
 
+        if request.max_compute_units > MAX_COMPUTE_UNITS {
+            bail!(
+                "requested compute units {} exceeds maximum {}",
+                request.max_compute_units,
+                MAX_COMPUTE_UNITS
+            );
+        }
+
         let models = self
             .models
             .read()
@@ -146,6 +155,10 @@ impl AIRuntime for TractRuntime {
             tract_ndarray::Array::from_shape_vec(registered.input_shape.as_slice(), floats)?
                 .into_tensor();
 
+        // NOTE: timeout is checked post-execution because tract's synchronous plan.run()
+        // cannot be interrupted mid-computation. A pre-execution compute_units check above
+        // mitigates abuse; for true preemption, move to an async runtime with tokio::time::timeout
+        // wrapping a blocking spawn.
         let start = std::time::Instant::now();
         let outputs = registered.plan.run(tvec![input_tensor.into()])?;
         let elapsed = start.elapsed();

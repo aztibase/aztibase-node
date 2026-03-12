@@ -98,6 +98,7 @@ pub struct ExecutionPipeline {
     bridge_escrow: Arc<RwLock<BridgeEscrowStore>>,
     bridge_withdraw_proofs: Arc<RwLock<BridgeWithdrawProofs>>,
     archive: bool,
+    faucet_enabled: bool,
 }
 
 impl ExecutionPipeline {
@@ -210,12 +211,19 @@ impl ExecutionPipeline {
             bridge_escrow: Arc::new(RwLock::new(escrow)),
             bridge_withdraw_proofs: Arc::new(RwLock::new(withdraw_proofs)),
             archive: false,
+            faucet_enabled: true,
         }
     }
 
     /// Enable archive mode (disables eviction of old data).
     pub fn set_archive(&mut self, archive: bool) {
         self.archive = archive;
+    }
+
+    /// Disable faucet drip processing (must be disabled for mainnet).
+    #[allow(dead_code)]
+    pub fn set_faucet_enabled(&mut self, enabled: bool) {
+        self.faucet_enabled = enabled;
     }
 
     /// Shared compute commitment store (for RPC server).
@@ -949,7 +957,10 @@ impl ExecutionPipeline {
                     rotate_keys.push((*validator, *new_pubkey, *nonce));
                 }
                 TxKind::FaucetDrip {
-                    validator, recipient, amount, ..
+                    validator,
+                    recipient,
+                    amount,
+                    ..
                 } => {
                     faucet_drips.push((*validator, *recipient, *amount));
                 }
@@ -1268,9 +1279,15 @@ impl ExecutionPipeline {
 
             let task_key = format!("task:{}", hex::encode(task.task_id));
             let registry_acct = state.get_mut(&MODEL_REGISTRY_ADDRESS);
-            registry_acct
-                .storage
-                .insert(task_key.into_bytes(), postcard::to_allocvec(&task).unwrap());
+            match postcard::to_allocvec(&task) {
+                Ok(encoded) => {
+                    registry_acct.storage.insert(task_key.into_bytes(), encoded);
+                }
+                Err(e) => {
+                    tracing::error!(error = %e, "Failed to serialize inference task, skipping");
+                    continue;
+                }
+            }
 
             state.increment_nonce(requester);
             pending_new_tasks.push(task.clone());
@@ -2797,6 +2814,23 @@ impl ExecutionPipeline {
             buf.extend_from_slice(&amount.to_le_bytes());
             let tx_hash = hash(&buf);
 
+            if !self.faucet_enabled {
+                tracing::warn!(
+                    recipient = %short_hex(recipient),
+                    "FaucetDrip rejected — faucet disabled (mainnet)"
+                );
+                exec_receipts.push(ExecutionReceipt {
+                    tx_hash,
+                    success: false,
+                    gas_used: 0,
+                    contract_address: None,
+                    error: Some("faucet disabled on mainnet".into()),
+                    inference_hash: None,
+                    anomaly_score: 0.0,
+                });
+                continue;
+            }
+
             let prev = state.balance(recipient);
             state.set_balance(recipient, prev.saturating_add(*amount));
             state.increment_nonce(validator);
@@ -3454,6 +3488,7 @@ mod tests {
             bridge_escrow: Arc::new(RwLock::new(BridgeEscrowStore::new())),
             bridge_withdraw_proofs: Arc::new(RwLock::new(BridgeWithdrawProofs::new())),
             archive: false,
+            faucet_enabled: true,
         }
     }
 
@@ -3993,6 +4028,7 @@ mod tests {
             bridge_escrow: Arc::new(RwLock::new(BridgeEscrowStore::new())),
             bridge_withdraw_proofs: Arc::new(RwLock::new(BridgeWithdrawProofs::new())),
             archive: false,
+            faucet_enabled: true,
         }
     }
 

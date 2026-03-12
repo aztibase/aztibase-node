@@ -111,7 +111,7 @@ mod tests {
         dag.insert(g1).unwrap();
 
         let payload = encode_txs(&[b"hello", b"world"]);
-        let b1 = DagBlock::new(1, [1u8; 32], vec![g1h], payload, 2000).unwrap();
+        let b1 = DagBlock::new(1, [1u8; 32], vec![g1h], payload, 2000, None).unwrap();
         let b1h = b1.hash;
         dag.insert(b1).unwrap();
 
@@ -135,7 +135,7 @@ mod tests {
         let g1h = g1.hash;
         dag.insert(g1).unwrap();
 
-        let b1 = DagBlock::new(1, [1u8; 32], vec![g1h], encode_txs(&[b"tx1"]), 2000).unwrap();
+        let b1 = DagBlock::new(1, [1u8; 32], vec![g1h], encode_txs(&[b"tx1"]), 2000, None).unwrap();
         let b1h = b1.hash;
         dag.insert(b1).unwrap();
 

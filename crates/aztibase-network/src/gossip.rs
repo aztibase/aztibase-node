@@ -1,5 +1,3 @@
-use std::collections::hash_map::DefaultHasher;
-use std::hash::{Hash, Hasher};
 use std::time::Duration;
 
 use libp2p::gossipsub;
@@ -70,9 +68,14 @@ pub fn aztibase_topics_scoped(genesis_hex: Option<&str>) -> Vec<gossipsub::Ident
 
 pub fn gossipsub_config() -> Result<gossipsub::Config, String> {
     let message_id_fn = |message: &gossipsub::Message| {
-        let mut hasher = DefaultHasher::new();
-        message.data.hash(&mut hasher);
-        gossipsub::MessageId::from(hasher.finish().to_string())
+        let mut preimage = Vec::with_capacity(64 + message.data.len());
+        if let Some(ref peer) = message.source {
+            preimage.extend_from_slice(peer.to_bytes().as_slice());
+        }
+        preimage.extend_from_slice(message.topic.as_str().as_bytes());
+        preimage.extend_from_slice(&message.data);
+        let hash = aztibase_core::hash(&preimage);
+        gossipsub::MessageId::from(hash.to_vec())
     };
 
     gossipsub::ConfigBuilder::default()

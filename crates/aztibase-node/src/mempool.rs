@@ -1,5 +1,5 @@
 use std::cmp::Reverse;
-use std::collections::{BTreeMap, HashMap, HashSet};
+use std::collections::{BTreeMap, HashMap, HashSet, VecDeque};
 
 use aztibase_core::hash;
 use aztibase_execution::{AgentPolicyStore, SignedTx, routing::TxKind, routing::route_tx};
@@ -24,7 +24,7 @@ pub struct Mempool {
     /// Set of all ever-seen tx hashes (persists after removal to prevent replay).
     /// Bounded to `max_seen` entries; oldest entries are evicted via `seen_order`.
     seen: HashSet<TxHash>,
-    seen_order: Vec<TxHash>,
+    seen_order: VecDeque<TxHash>,
     max_size: usize,
     max_seen: usize,
 }
@@ -37,7 +37,7 @@ impl Mempool {
             ordered: BTreeMap::new(),
             index: HashMap::new(),
             seen: HashSet::new(),
-            seen_order: Vec::new(),
+            seen_order: VecDeque::new(),
             max_size,
             max_seen,
         }
@@ -74,9 +74,9 @@ impl Mempool {
         }
 
         self.seen.insert(tx_hash);
-        self.seen_order.push(tx_hash);
+        self.seen_order.push_back(tx_hash);
         if self.seen.len() > self.max_seen {
-            let oldest = self.seen_order.remove(0);
+            let oldest = self.seen_order.pop_front().unwrap();
             if !self.index.contains_key(&oldest) {
                 self.seen.remove(&oldest);
             }

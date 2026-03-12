@@ -21,6 +21,26 @@ Entries are prepended (newest first).
 
 ## Entries
 
+### Sprint 058 — Audit Fix: decode_vertex Signature Verification (2026-03-12)
+- **Date**: 2026-03-12
+- **Sprint**: 058 (Pre-Mainnet Audit Fixes)
+- **Commit**: (pending — in progress)
+- **Files changed**:
+  - `crates/aztibase-consensus/src/validator.rs` — Added `ed25519_pubkey` field to `ValidatorRecord`, `set_ed25519_key()` and `ed25519_key()` methods on `ValidatorSet`
+  - `crates/aztibase-consensus/src/wire.rs` — Fixed `decode_vertex()` to look up Ed25519 pubkey from `ValidatorSet` instead of assuming `block.author` is a raw pubkey (it's a BLAKE3 address hash in production)
+  - `crates/aztibase-consensus/src/wire.rs` (tests) — Registered Ed25519 pubkeys in test `ValidatorSet` instances
+  - `crates/aztibase-consensus/src/engine.rs` (tests) — Added `set_ed25519_key` calls in `make_test_engine()`
+  - `crates/aztibase-node/src/genesis.rs` — Added `public_key: Option<String>` to `ValidatorEntry`, populated in `generate_genesis()`, `testnet_genesis()`, `mainnet_genesis()`
+  - `crates/aztibase-node/src/main.rs` — Parse Ed25519 pubkey from genesis config and store in `ValidatorSet` via `set_ed25519_key()`
+  - `crates/aztibase-node/src/integration.rs` — Added `set_ed25519_key` calls in 13 test sites that build `ValidatorSet`
+- **Summary**: Fixed critical production bug where `decode_vertex()` assumed `block.author` was a valid Ed25519 public key. In production, `block.author` is a BLAKE3 hash (address) of the pubkey, causing `PublicKey::from_bytes()` to fail on every inter-node vertex exchange. The 3-node testnet was stuck at block height 0 with "invalid Ed25519 signature on vertex" errors on every received vertex. Fix stores Ed25519 pubkeys in `ValidatorSet` (populated from genesis config) and looks them up during signature verification. Includes fallback path for legacy configs where validator ID equals the raw pubkey (test scenarios). Consensus crate: 114 tests pass. Node crate: compilation verified.
+- **Security Flags**: H-CON-1 RESOLVED — DagBlock signature verification now works in production with address-based validator IDs.
+
+### Sprint 058 — Phases 1-3 Audit Code Fixes (2026-03-12, prior sessions)
+- **Date**: 2026-03-12
+- **Sprint**: 058 (Pre-Mainnet Audit Fixes)
+- **Summary**: Implemented all Phase 1 (Safety), Phase 2 (Correctness), and Phase 3 (Hardening) audit fixes from SPRINT-058.md. 932 tests passing across all 9 crates. Details in prior session BUILD_LOG entries and AUDIT_REPORT.
+
 ### Pre-Mainnet Audit (M9 — Full Codebase)
 - **Date**: 2026-03-12
 - **Commit**: (this commit)
