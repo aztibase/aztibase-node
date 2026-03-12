@@ -1268,6 +1268,11 @@ fn model_to_json(meta: &ModelMetadata) -> serde_json::Value {
 
 // ── Faucet + Node Info Endpoints ────────────────────────────────────
 
+/// Testnet-only faucet: credits tokens directly to local state.
+/// NOTE: This is a node-local operation (not a consensus transaction).
+/// The credited balance only exists on the node that served the request.
+/// Users must send transactions via the same node they faucet from.
+/// Future: convert to a proper consensus TxKind for cross-node consistency.
 async fn handle_faucet_drip(state: &RpcState, req: &JsonRpcRequest) -> JsonRpcResponse {
     if !state.faucet_enabled {
         return JsonRpcResponse::error(

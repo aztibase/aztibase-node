@@ -279,11 +279,149 @@ footer {
   color: var(--muted);
 }
 
+/* Wallet */
+.wallet-section { margin-bottom: 24px; }
+.wallet-section h3 {
+  font-size: 14px;
+  font-weight: 600;
+  margin-bottom: 12px;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.wallet-input {
+  width: 100%;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 10px 12px;
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 13px;
+  outline: none;
+  margin-bottom: 8px;
+}
+.wallet-input:focus { border-color: var(--accent); }
+.wallet-input::placeholder { color: #484f58; }
+.btn {
+  padding: 8px 16px;
+  border: none;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity 0.15s;
+  margin-right: 8px;
+  margin-bottom: 8px;
+}
+.btn:hover { opacity: 0.85; }
+.btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.btn-primary { background: var(--accent); color: #000; }
+.btn-green { background: var(--green); color: #000; }
+.btn-secondary { background: var(--border); color: var(--text); }
+.btn-red { background: var(--red); color: #fff; }
+.wallet-alert {
+  padding: 12px 16px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-family: var(--mono);
+  word-break: break-all;
+  margin-top: 12px;
+}
+.wallet-alert.success { background: #0d2818; border: 1px solid #1a7f37; color: var(--green); }
+.wallet-alert.error { background: #2d1117; border: 1px solid #6e3630; color: var(--red); }
+.wallet-alert.info { background: #0d1d30; border: 1px solid #1f4a7a; color: var(--accent); }
+.wallet-alert.warn { background: #2b1d11; border: 1px solid #6e5a30; color: var(--yellow); }
+.secret-toggle {
+  font-size: 12px;
+  color: var(--accent);
+  cursor: pointer;
+  margin-left: 8px;
+}
+.wallet-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+
+/* Connection gate */
+.connect-gate {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 60vh;
+  text-align: center;
+  gap: 20px;
+}
+.connect-gate .logo-big { font-size: 32px; font-weight: 700; letter-spacing: -1px; }
+.connect-gate .logo-big span { color: var(--accent); }
+.connect-gate .subtitle { color: var(--muted); font-size: 14px; margin-bottom: 8px; }
+.connect-gate .rpc-form { display: flex; gap: 8px; width: 100%; max-width: 500px; }
+.connect-gate .rpc-form input {
+  flex: 1;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 10px 14px;
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 14px;
+  outline: none;
+}
+.connect-gate .rpc-form input:focus { border-color: var(--accent); }
+.connect-gate .rpc-form button {
+  background: var(--accent);
+  color: #000;
+  border: none;
+  border-radius: 6px;
+  padding: 10px 20px;
+  font-weight: 600;
+  font-size: 14px;
+  cursor: pointer;
+}
+.connect-gate .status-msg { font-size: 13px; min-height: 20px; }
+.connect-gate .status-msg.err { color: var(--red); }
+.connect-gate .status-msg.ok { color: var(--green); }
+.connect-gate .status-msg.trying { color: var(--yellow); }
+
+/* Tx type badges */
+.tx-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  white-space: nowrap;
+}
+.tx-badge.transfer { background: #0d3868; color: #58a6ff; }
+.tx-badge.contract { background: #2d1654; color: #bc8cff; }
+.tx-badge.ai { background: #3b2300; color: #f0a830; }
+.tx-badge.governance { background: #1a3a1a; color: #3fb950; }
+.tx-badge.staking { background: #0d3030; color: #39d0d0; }
+.tx-badge.bridge { background: #3b3000; color: #d29922; }
+.tx-badge.security { background: #2d1117; color: #f85149; }
+.tx-badge.unknown { background: #21262d; color: #8b949e; }
+
+/* Copy button */
+.copy-btn {
+  display: inline-block;
+  cursor: pointer;
+  color: var(--muted);
+  font-size: 12px;
+  margin-left: 6px;
+  padding: 2px 4px;
+  border-radius: 3px;
+  vertical-align: middle;
+  transition: color 0.15s;
+}
+.copy-btn:hover { color: var(--accent); }
+.copy-btn.copied { color: var(--green); }
+
 @media (max-width: 768px) {
   header { padding: 12px 16px; }
   main { padding: 16px; }
   .block-grid { grid-template-columns: 1fr; }
   .two-col { grid-template-columns: 1fr; }
+  .wallet-grid { grid-template-columns: 1fr; }
   .card-row { flex-direction: column; gap: 4px; }
   .card-label { min-width: auto; }
   .stats-row { grid-template-columns: repeat(2, 1fr); }
@@ -298,7 +436,9 @@ footer {
   <nav class="tabs">
     <button id="tab-dashboard" class="active" onclick="navigate('dashboard')">Dashboard</button>
     <button id="tab-blocks" onclick="navigate('blocks')">Blocks</button>
+    <button id="tab-transactions" onclick="navigate('transactions')">Transactions</button>
     <button id="tab-validators" onclick="navigate('validators')">Validators</button>
+    <button id="tab-wallet" onclick="navigate('wallet')">Wallet</button>
   </nav>
   <div class="hdr-meta">
     <div>Chain: <span class="val" id="hdr-chain">--</span></div>
@@ -320,12 +460,156 @@ footer {
   Aztibase Network &mdash; Chain ID 0xA27B &mdash; <a href="https://testnet.aztibase.com">Testnet</a> &mdash; <a href="https://faucet.aztibase.com">Faucet</a> &mdash; <a href="https://github.com/user/aztibase">GitHub</a>
 </footer>
 
+<script src="https://cdn.jsdelivr.net/npm/tweetnacl@1.0.3/nacl-fast.min.js"></script>
 <script>
+// ── BLAKE3 (pure JS, single-chunk ≤1024 bytes) ────────────────────
+const BLAKE3 = (() => {
+  const IV = [0x6A09E667,0xBB67AE85,0x3C6EF372,0xA54FF53A,0x510E527F,0x9B05688C,0x1F83D9AB,0x5BE0CD19];
+  const PERM = [2,6,3,10,7,0,4,13,1,11,12,5,9,14,15,8];
+  const CHUNK_START = 1, CHUNK_END = 2, ROOT = 8;
+
+  function rotr(x, n) { return ((x >>> n) | (x << (32 - n))) >>> 0; }
+
+  function g(s, a, b, c, d, mx, my) {
+    s[a] = (s[a] + s[b] + mx) >>> 0;  s[d] = rotr(s[d] ^ s[a], 16);
+    s[c] = (s[c] + s[d]) >>> 0;        s[b] = rotr(s[b] ^ s[c], 12);
+    s[a] = (s[a] + s[b] + my) >>> 0;  s[d] = rotr(s[d] ^ s[a], 8);
+    s[c] = (s[c] + s[d]) >>> 0;        s[b] = rotr(s[b] ^ s[c], 7);
+  }
+
+  function compress(cv, block, counter, blockLen, flags) {
+    const s = [
+      cv[0],cv[1],cv[2],cv[3], cv[4],cv[5],cv[6],cv[7],
+      IV[0],IV[1],IV[2],IV[3],
+      counter & 0xFFFFFFFF, (counter / 0x100000000) >>> 0, blockLen, flags
+    ];
+    let m = block.slice();
+    for (let r = 0; r < 7; r++) {
+      g(s,0,4,8,12,m[0],m[1]);   g(s,1,5,9,13,m[2],m[3]);
+      g(s,2,6,10,14,m[4],m[5]);  g(s,3,7,11,15,m[6],m[7]);
+      g(s,0,5,10,15,m[8],m[9]);  g(s,1,6,11,12,m[10],m[11]);
+      g(s,2,7,8,13,m[12],m[13]); g(s,3,4,9,14,m[14],m[15]);
+      const p = new Array(16);
+      for (let i = 0; i < 16; i++) p[i] = m[PERM[i]];
+      m = p;
+    }
+    for (let i = 0; i < 8; i++) { s[i] ^= s[i+8]; s[i+8] ^= cv[i]; }
+    return s;
+  }
+
+  function hash(input) {
+    const data = input instanceof Uint8Array ? input : new TextEncoder().encode(input);
+    let cv = IV.slice();
+    const numBlocks = Math.max(1, Math.ceil(data.length / 64));
+    for (let i = 0; i < numBlocks; i++) {
+      const blk = new Uint8Array(64);
+      const off = i * 64, rem = Math.min(64, data.length - off);
+      if (rem > 0) blk.set(data.subarray(off, off + rem));
+      const w = new Array(16);
+      const dv = new DataView(blk.buffer);
+      for (let j = 0; j < 16; j++) w[j] = dv.getUint32(j * 4, true);
+      let flags = 0;
+      if (i === 0) flags |= CHUNK_START;
+      if (i === numBlocks - 1) flags |= CHUNK_END | ROOT;
+      const res = compress(cv, w, 0, rem, flags);
+      cv = res.slice(0, 8);
+    }
+    const out = new Uint8Array(32);
+    const odv = new DataView(out.buffer);
+    for (let i = 0; i < 8; i++) odv.setUint32(i * 4, cv[i], true);
+    return out;
+  }
+
+  return { hash };
+})();
+
+// ── Hex helpers ────────────────────────────────────────────────────
+function toHex(bytes) { return Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join(''); }
+function fromHex(hex) {
+  const clean = hex.replace(/^0x/, '');
+  const out = new Uint8Array(clean.length / 2);
+  for (let i = 0; i < out.length; i++) out[i] = parseInt(clean.substr(i*2, 2), 16);
+  return out;
+}
+
+// ── Postcard varint encoding (unsigned LEB128) ─────────────────────
+function encodeVarint(value) {
+  const bytes = [];
+  let v = BigInt(value);
+  do {
+    let byte = Number(v & 0x7Fn);
+    v >>= 7n;
+    if (v > 0n) byte |= 0x80;
+    bytes.push(byte);
+  } while (v > 0n);
+  return new Uint8Array(bytes);
+}
+
+// ── Transaction signing (matches aztibase-wasm/src/tx_signing.rs) ──
+const TX_DOMAIN = new TextEncoder().encode('AZTB_TX_V1');
+const ENVELOPE_MAGIC = 0xAA;
+const PREFIX_TRANSFER = 0x01;
+
+function encodeTransferPayload(from32, to32, value, nonce, gasPrice) {
+  const variantIdx = encodeVarint(0);
+  const valEnc = encodeVarint(value);
+  const nonceEnc = encodeVarint(nonce);
+  const gasPriceEnc = encodeVarint(gasPrice);
+  const enumPayload = new Uint8Array(variantIdx.length + 32 + 32 + valEnc.length + nonceEnc.length + gasPriceEnc.length);
+  let off = 0;
+  enumPayload.set(variantIdx, off); off += variantIdx.length;
+  enumPayload.set(from32, off); off += 32;
+  enumPayload.set(to32, off); off += 32;
+  enumPayload.set(valEnc, off); off += valEnc.length;
+  enumPayload.set(nonceEnc, off); off += nonceEnc.length;
+  enumPayload.set(gasPriceEnc, off);
+  const payload = new Uint8Array(1 + enumPayload.length);
+  payload[0] = PREFIX_TRANSFER;
+  payload.set(enumPayload, 1);
+  return payload;
+}
+
+function signPayload(payload, keypair) {
+  const msg = new Uint8Array(TX_DOMAIN.length + payload.length);
+  msg.set(TX_DOMAIN);
+  msg.set(payload, TX_DOMAIN.length);
+  const sig = nacl.sign.detached(msg, keypair.secretKey);
+  const payloadLen = payload.length;
+  const buf = new Uint8Array(1 + 4 + payloadLen + 32 + 64);
+  buf[0] = ENVELOPE_MAGIC;
+  buf[1] = payloadLen & 0xFF;
+  buf[2] = (payloadLen >> 8) & 0xFF;
+  buf[3] = (payloadLen >> 16) & 0xFF;
+  buf[4] = (payloadLen >> 24) & 0xFF;
+  buf.set(payload, 5);
+  buf.set(keypair.publicKey, 5 + payloadLen);
+  buf.set(sig, 5 + payloadLen + 32);
+  return buf;
+}
+
+function deriveAddress(publicKey) {
+  return BLAKE3.hash(publicKey);
+}
+
+// ── Wallet state ───────────────────────────────────────────────────
+let walletKeypair = null;
+let walletAddress = null;
+let walletSecretHex = null;
+
+function walletFromSeed(seedBytes) {
+  walletKeypair = nacl.sign.keyPair.fromSeed(seedBytes);
+  walletAddress = toHex(deriveAddress(walletKeypair.publicKey));
+  walletSecretHex = toHex(seedBytes);
+}
+
 const params = new URLSearchParams(window.location.search);
-const RPC_URL = params.get('rpc') || 'http://127.0.0.1:9944';
+let RPC_URL = params.get('rpc') || 'http://127.0.0.1:9944';
 let pollTimer = null;
 let currentTab = 'dashboard';
 let cachedMetrics = null;
+let lastTxCount = null;
+let lastTxTime = null;
+let currentTps = 0;
 
 async function rpc(method, rpcParams = []) {
   const controller = new AbortController();
@@ -385,6 +669,69 @@ function isAddr(v) {
   return typeof v === 'string' && /^(0x)?[0-9a-fA-F]{64}$/.test(v);
 }
 
+function copyToClipboard(text, btnEl) {
+  navigator.clipboard.writeText(text).then(() => {
+    if (btnEl) {
+      btnEl.textContent = '\u2713';
+      btnEl.classList.add('copied');
+      setTimeout(() => { btnEl.textContent = '\u2398'; btnEl.classList.remove('copied'); }, 1500);
+    }
+  }).catch(() => {});
+}
+
+function copyable(text) {
+  const short = shortHash(text);
+  const id = 'cp-' + Math.random().toString(36).slice(2, 8);
+  return `${escapeHtml(short)}<span class="copy-btn" id="${id}" onclick="event.stopPropagation();copyToClipboard('${escapeHtml(text)}',document.getElementById('${id}'))">\u2398</span>`;
+}
+
+function copyableFull(text) {
+  const id = 'cp-' + Math.random().toString(36).slice(2, 8);
+  return `${escapeHtml(text)}<span class="copy-btn" id="${id}" onclick="event.stopPropagation();copyToClipboard('${escapeHtml(text)}',document.getElementById('${id}'))">\u2398</span>`;
+}
+
+const TX_TYPE_MAP = {
+  0x01: ['Transfer', 'transfer'],
+  0x02: ['Contract Deploy', 'contract'],
+  0x03: ['Contract Call', 'contract'],
+  0x04: ['EVM Deploy', 'contract'],
+  0x05: ['EVM Call', 'contract'],
+  0x06: ['AI Infer', 'ai'],
+  0x07: ['Create Agent', 'ai'],
+  0x08: ['Register Model', 'ai'],
+  0x09: ['Post Task', 'ai'],
+  0x0A: ['Attestation', 'ai'],
+  0x0B: ['Commit Compute', 'ai'],
+  0x0C: ['Dereg Compute', 'ai'],
+  0x0D: ['Dereg Model', 'ai'],
+  0x0E: ['Proposal', 'governance'],
+  0x0F: ['Vote', 'governance'],
+  0x10: ['Stake', 'staking'],
+  0x11: ['Unstake', 'staking'],
+  0x12: ['Delegate', 'staking'],
+  0x13: ['Undelegate', 'staking'],
+  0x14: ['Agent Policy', 'ai'],
+  0x15: ['Agent Execute', 'ai'],
+  0x16: ['Anchor L2', 'bridge'],
+  0x17: ['Bridge Deposit', 'bridge'],
+  0x18: ['Bridge Withdraw', 'bridge'],
+  0x19: ['Register L2', 'bridge'],
+  0x1A: ['Rotate Key', 'security'],
+};
+
+function txBadge(typeCode) {
+  const code = typeof typeCode === 'string' ? parseInt(typeCode, 16) : (typeCode || 0);
+  const entry = TX_TYPE_MAP[code];
+  if (!entry) return '<span class="tx-badge unknown">Unknown</span>';
+  return `<span class="tx-badge ${entry[1]}">${entry[0]}</span>`;
+}
+
+function txTypeName(typeCode) {
+  const code = typeof typeCode === 'string' ? parseInt(typeCode, 16) : (typeCode || 0);
+  const entry = TX_TYPE_MAP[code];
+  return entry ? entry[0] : 'Unknown';
+}
+
 // --- Navigation ---
 
 function navigate(tab) {
@@ -396,7 +743,9 @@ function navigate(tab) {
 
   if (tab === 'dashboard') showDashboard();
   else if (tab === 'blocks') { showBlocks(); pollTimer = setInterval(showBlocks, 3000); }
+  else if (tab === 'transactions') { showTransactions(); pollTimer = setInterval(showTransactions, 4000); }
   else if (tab === 'validators') showValidators();
+  else if (tab === 'wallet') showWallet();
 }
 
 // --- Dashboard ---
@@ -412,6 +761,7 @@ function buildDashboardShell() {
       <div class="stat"><div class="val" id="d-validators">--</div><div class="label">Validators</div></div>
       <div class="stat"><div class="val" id="d-staked">--</div><div class="label">Total Staked</div></div>
       <div class="stat"><div class="val" id="d-mempool">--</div><div class="label">Mempool</div></div>
+      <div class="stat"><div class="val" id="d-tps">--</div><div class="label">TPS</div></div>
       <div class="stat"><div class="val" id="d-latency">--</div><div class="label">Commit Latency</div></div>
       <div class="stat"><div class="val" id="d-basefee">--</div><div class="label">Base Fee</div></div>
     </div>
@@ -481,6 +831,16 @@ async function showDashboard() {
     setVal('d-mempool', formatNumber(execution.mempool_size));
     setVal('d-latency', consensus.last_commit_latency_us ? (consensus.last_commit_latency_us / 1000).toFixed(0) + 'ms' : '--');
     setVal('d-basefee', gasPrice != null ? gasPrice : (execution.base_fee || '--'));
+
+    const txNow = execution.txs_processed || 0;
+    const now = Date.now();
+    if (lastTxCount !== null && lastTxTime !== null) {
+      const dt = (now - lastTxTime) / 1000;
+      if (dt > 0) currentTps = ((txNow - lastTxCount) / dt).toFixed(1);
+    }
+    lastTxCount = txNow;
+    lastTxTime = now;
+    setVal('d-tps', currentTps);
 
     setVal('d-vp', formatNumber(consensus.vertices_proposed));
     setVal('d-vr', formatNumber(consensus.vertices_received));
@@ -586,8 +946,8 @@ async function showValidators() {
     let tableRows = '';
     if (Array.isArray(validators) && validators.length > 0) {
       tableRows = validators.map((v, i) => {
-        const addr = v.address || v;
-        const stake = v.stake != null ? formatAZTB(v.stake) : '--';
+        const addr = v.validator_id || v.address || (typeof v === 'string' ? v : JSON.stringify(v));
+        const stake = v.effective_stake != null ? formatAZTB(v.effective_stake) : (v.stake != null ? formatAZTB(v.stake) : '--');
         const status = v.active !== false ? '<span style="color:var(--green)">Active</span>' : '<span style="color:var(--red)">Inactive</span>';
         return `<tr>
           <td>${i + 1}</td>
@@ -614,6 +974,85 @@ async function showValidators() {
     `;
   } catch (e) {
     el.innerHTML = `<div class="empty-state">Error: ${escapeHtml(e.message)}</div>`;
+  }
+}
+
+// --- Transactions ---
+
+async function showTransactions() {
+  const el = document.getElementById('content');
+  if (!document.getElementById('tx-table')) {
+    el.innerHTML = '<div class="view-title">Recent Transactions <span class="badge green">live</span></div><div id="tx-table"><div class="empty-state">Loading...</div></div>';
+  }
+
+  try {
+    const height = await rpc('aztb_blockNumber');
+    const h = typeof height === 'string' ? parseInt(height, 16) : (height || 0);
+    updateHeader(h, true);
+
+    if (h === 0) {
+      document.getElementById('tx-table').innerHTML = '<div class="empty-state">No blocks yet</div>';
+      return;
+    }
+
+    const from = Math.max(0, h - 15);
+    const blocks = await rpc('aztb_getBlockRange', [from, h]);
+    if (!blocks || blocks.length === 0) {
+      document.getElementById('tx-table').innerHTML = '<div class="empty-state">No blocks in range</div>';
+      return;
+    }
+
+    const txRows = [];
+    for (const b of blocks.reverse()) {
+      const num = typeof b.number === 'string' ? parseInt(b.number, 16) : b.number;
+      const txs = b.transactions || [];
+      for (const txHash of txs) {
+        try {
+          const tx = await rpc('aztb_getTransactionByHash', [txHash]);
+          if (tx) {
+            txRows.push({
+              hash: txHash,
+              block: num,
+              type: tx.type || tx.tx_type || tx.kind || 0,
+              from: tx.from || tx.sender || '--',
+              to: tx.to || tx.recipient || '--',
+              value: tx.value || 0,
+              gas: tx.gas_used || tx.gas_limit || '--',
+              status: tx.status != null ? tx.status : (tx.success != null ? (tx.success ? 1 : 0) : null),
+            });
+          }
+        } catch (_) {}
+        if (txRows.length >= 50) break;
+      }
+      if (txRows.length >= 50) break;
+    }
+
+    const container = document.getElementById('tx-table');
+    if (txRows.length === 0) {
+      container.innerHTML = '<div class="empty-state">No transactions in recent blocks</div>';
+      return;
+    }
+
+    container.innerHTML = `<table class="data-table">
+      <thead><tr><th>Hash</th><th>Type</th><th>Block</th><th>From</th><th>To</th><th>Value</th><th>Status</th></tr></thead>
+      <tbody>${txRows.map(tx => {
+        const statusHtml = tx.status === 1 || tx.status === '1' ? '<span style="color:var(--green)">OK</span>'
+          : tx.status === 0 || tx.status === '0' ? '<span style="color:var(--red)">Fail</span>'
+          : '<span style="color:var(--muted)">--</span>';
+        return `<tr>
+          <td><a onclick="showTx('${escapeHtml(tx.hash)}')">${copyable(tx.hash)}</a></td>
+          <td>${txBadge(tx.type)}</td>
+          <td><a onclick="showBlock(${tx.block})">#${tx.block}</a></td>
+          <td>${isAddr(tx.from) ? `<a onclick="showAccount('${escapeHtml(tx.from)}')">${shortHash(tx.from)}</a>` : escapeHtml(String(tx.from))}</td>
+          <td>${isAddr(tx.to) ? `<a onclick="showAccount('${escapeHtml(tx.to)}')">${shortHash(tx.to)}</a>` : escapeHtml(String(tx.to))}</td>
+          <td>${formatNumber(tx.value)} AZTB</td>
+          <td>${statusHtml}</td>
+        </tr>`;
+      }).join('')}</tbody>
+    </table>`;
+  } catch (e) {
+    document.getElementById('content').innerHTML = `<div class="empty-state">Failed to connect: ${escapeHtml(e.message)}</div>`;
+    updateHeader(null, false);
   }
 }
 
@@ -645,10 +1084,10 @@ async function showBlock(num) {
       <a class="nav-link" onclick="navigate('blocks')">Back to blocks</a>
       <div class="view-title">Block #${num}</div>
       <div class="card">
-        <div class="card-row"><div class="card-label">Hash</div><div class="card-value">${escapeHtml(hash)}</div></div>
+        <div class="card-row"><div class="card-label">Hash</div><div class="card-value">${copyableFull(hash)}</div></div>
         <div class="card-row"><div class="card-label">Height</div><div class="card-value">${num}</div></div>
-        <div class="card-row"><div class="card-label">Parent Hash</div><div class="card-value">${escapeHtml(parentHash)}</div></div>
-        <div class="card-row"><div class="card-label">State Root</div><div class="card-value">${escapeHtml(stateRoot)}</div></div>
+        <div class="card-row"><div class="card-label">Parent Hash</div><div class="card-value">${copyableFull(parentHash)}</div></div>
+        <div class="card-row"><div class="card-label">State Root</div><div class="card-value">${copyableFull(stateRoot)}</div></div>
         <div class="card-row"><div class="card-label">Timestamp</div><div class="card-value">${escapeHtml(timestamp)}</div></div>
         <div class="card-row"><div class="card-label">Transactions</div><div class="card-value">${txs.length}</div></div>
         <div class="card-row"><div class="card-label">Navigate</div><div class="card-value">${prevBtn}${nextBtn}</div></div>
@@ -658,7 +1097,7 @@ async function showBlock(num) {
         <div class="card">
           ${txs.map((tx, i) => `<div class="tx-row">
             <span style="color:var(--muted);width:24px">${i}</span>
-            <a class="tx-hash" onclick="showTx('${escapeHtml(tx)}')">${escapeHtml(tx)}</a>
+            <a class="tx-hash" onclick="showTx('${escapeHtml(tx)}')">${copyable(tx)}</a>
           </div>`).join('')}
         </div>` : ''}
     `;
@@ -680,15 +1119,17 @@ async function showTx(hash) {
       return;
     }
 
-    const fields = Object.entries(tx).filter(([k]) => k !== 'hash');
+    const txType = tx.type || tx.tx_type || tx.kind || 0;
+    const fields = Object.entries(tx).filter(([k]) => !['hash', 'type', 'tx_type', 'kind'].includes(k));
     el.innerHTML = `
       <a class="nav-link" onclick="navigate('dashboard')">Back to dashboard</a>
-      <div class="view-title">Transaction</div>
+      <div class="view-title">Transaction ${txBadge(txType)}</div>
       <div class="card">
-        <div class="card-row"><div class="card-label">Hash</div><div class="card-value">${escapeHtml(hash)}</div></div>
+        <div class="card-row"><div class="card-label">Hash</div><div class="card-value">${copyableFull(hash)}</div></div>
+        <div class="card-row"><div class="card-label">Type</div><div class="card-value">${txBadge(txType)} ${escapeHtml(txTypeName(txType))}</div></div>
         ${fields.map(([k, v]) => `<div class="card-row">
           <div class="card-label">${escapeHtml(k)}</div>
-          <div class="card-value">${typeof v === 'object' ? escapeHtml(JSON.stringify(v)) : isAddr(v) ? `<a onclick="showAccount('${escapeHtml(String(v))}')">${escapeHtml(String(v))}</a>` : escapeHtml(String(v))}</div>
+          <div class="card-value">${typeof v === 'object' ? escapeHtml(JSON.stringify(v)) : isAddr(v) ? `<a onclick="showAccount('${escapeHtml(String(v))}')">${copyableFull(String(v))}</a>` : escapeHtml(String(v))}</div>
         </div>`).join('')}
       </div>
     `;
@@ -726,16 +1167,307 @@ async function showAccount(addr) {
       <a class="nav-link" onclick="navigate('dashboard')">Back to dashboard</a>
       <div class="view-title">Account</div>
       <div class="card">
-        <div class="card-row"><div class="card-label">Address</div><div class="card-value">${escapeHtml(addr)}</div></div>
+        <div class="card-row"><div class="card-label">Address</div><div class="card-value">${copyableFull(addr)}</div></div>
         <div class="card-row"><div class="card-label">Balance</div><div class="card-value">${formatNumber(bal)} AZTB</div></div>
         <div class="card-row"><div class="card-label">Nonce</div><div class="card-value">${escapeHtml(String(nonce))}</div></div>
         <div class="card-row"><div class="card-label">Type</div><div class="card-value">${escapeHtml(String(accType))}</div></div>
         ${stakingHtml}
       </div>
+      <div class="view-title" style="margin-top:24px">Recent Transactions</div>
+      <div id="account-txs"><div class="empty-state">Scanning recent blocks...</div></div>
     `;
+    loadAccountTxs(addr);
   } catch (e) {
     el.innerHTML = `<a class="nav-link" onclick="navigate('dashboard')">Back to dashboard</a><div class="empty-state">Error: ${escapeHtml(e.message)}</div>`;
   }
+}
+
+async function loadAccountTxs(addr) {
+  const container = document.getElementById('account-txs');
+  if (!container) return;
+  try {
+    const height = await rpc('aztb_blockNumber');
+    const h = typeof height === 'string' ? parseInt(height, 16) : (height || 0);
+    if (h === 0) { container.innerHTML = '<div class="empty-state">No blocks yet</div>'; return; }
+
+    const from = Math.max(0, h - 50);
+    const blocks = await rpc('aztb_getBlockRange', [from, h]);
+    const found = [];
+
+    for (const b of (blocks || []).reverse()) {
+      const num = typeof b.number === 'string' ? parseInt(b.number, 16) : b.number;
+      for (const txHash of (b.transactions || [])) {
+        try {
+          const tx = await rpc('aztb_getTransactionByHash', [txHash]);
+          if (!tx) continue;
+          const sender = tx.from || tx.sender || '';
+          const recip = tx.to || tx.recipient || '';
+          if (sender === addr || recip === addr) {
+            found.push({ hash: txHash, block: num, type: tx.type || tx.tx_type || tx.kind || 0,
+              from: sender, to: recip, value: tx.value || 0 });
+          }
+        } catch (_) {}
+        if (found.length >= 25) break;
+      }
+      if (found.length >= 25) break;
+    }
+
+    if (found.length === 0) {
+      container.innerHTML = '<div class="empty-state">No transactions found in recent blocks</div>';
+      return;
+    }
+
+    container.innerHTML = `<table class="data-table">
+      <thead><tr><th>Hash</th><th>Type</th><th>Block</th><th>Direction</th><th>Value</th></tr></thead>
+      <tbody>${found.map(tx => {
+        const dir = tx.from === addr ? '<span style="color:var(--red)">OUT</span>' : '<span style="color:var(--green)">IN</span>';
+        return `<tr>
+          <td><a onclick="showTx('${escapeHtml(tx.hash)}')">${copyable(tx.hash)}</a></td>
+          <td>${txBadge(tx.type)}</td>
+          <td><a onclick="showBlock(${tx.block})">#${tx.block}</a></td>
+          <td>${dir}</td>
+          <td>${formatNumber(tx.value)} AZTB</td>
+        </tr>`;
+      }).join('')}</tbody>
+    </table>`;
+  } catch (e) {
+    container.innerHTML = `<div class="empty-state">Error loading transactions: ${escapeHtml(e.message)}</div>`;
+  }
+}
+
+// --- Wallet ---
+
+function showWallet() {
+  const el = document.getElementById('content');
+  const connected = walletKeypair !== null;
+
+  el.innerHTML = `
+    <div class="view-title">Wallet ${connected ? '<span class="badge green">connected</span>' : '<span class="badge">not connected</span>'}</div>
+    <div class="wallet-grid">
+      <div>
+        <div class="wallet-section">
+          <h3>Connect Wallet</h3>
+          ${connected ? `
+            <div class="card">
+              <div class="card-row">
+                <div class="card-label">Address</div>
+                <div class="card-value" style="color:var(--accent)">${walletAddress}</div>
+              </div>
+              <div class="card-row">
+                <div class="card-label">Secret Key</div>
+                <div class="card-value">
+                  <span id="secret-display">${'*'.repeat(64)}</span>
+                  <span class="secret-toggle" onclick="toggleSecret()">show</span>
+                </div>
+              </div>
+              <div class="card-row">
+                <div class="card-label">Public Key</div>
+                <div class="card-value">${toHex(walletKeypair.publicKey)}</div>
+              </div>
+              <div class="card-row">
+                <div class="card-label">Balance</div>
+                <div class="card-value" id="wallet-balance">loading...</div>
+              </div>
+              <div class="card-row">
+                <div class="card-label">Nonce</div>
+                <div class="card-value" id="wallet-nonce">--</div>
+              </div>
+            </div>
+            <button class="btn btn-secondary" onclick="refreshWalletBalance()">Refresh Balance</button>
+            <button class="btn btn-green" onclick="walletFaucetDrip()">Faucet Drip (1M AZTB)</button>
+            <button class="btn btn-red" onclick="disconnectWallet()">Disconnect</button>
+          ` : `
+            <button class="btn btn-primary" onclick="generateNewWallet()">Generate New Keypair</button>
+            <div style="margin-top:16px">
+              <div class="field-label" style="color:var(--muted);font-size:12px;margin-bottom:6px">Or import secret key (64 hex chars):</div>
+              <input class="wallet-input" id="import-secret" placeholder="Enter 64-character hex secret key..." maxlength="66" spellcheck="false" autocomplete="off">
+              <button class="btn btn-secondary" onclick="importWallet()">Import</button>
+            </div>
+          `}
+          <div id="wallet-status"></div>
+        </div>
+      </div>
+      <div>
+        ${connected ? `
+        <div class="wallet-section">
+          <h3>Send Transfer</h3>
+          <input class="wallet-input" id="send-to" placeholder="Recipient address (64 hex chars)" maxlength="66" spellcheck="false">
+          <input class="wallet-input" id="send-amount" placeholder="Amount (AZTB)" type="number" min="1">
+          <input class="wallet-input" id="send-gas" placeholder="Gas price (default: 1)" type="number" min="1" value="1">
+          <button class="btn btn-primary" onclick="sendTransfer()">Sign & Send</button>
+          <div id="send-status"></div>
+        </div>
+        <div class="wallet-section">
+          <h3>Transaction Log</h3>
+          <div id="tx-log" class="card">
+            <div class="empty-state" style="padding:24px;font-size:13px">No transactions yet</div>
+          </div>
+        </div>
+        ` : `
+        <div class="wallet-section">
+          <h3>Getting Started</h3>
+          <div class="card">
+            <div class="card-row" style="flex-direction:column;gap:8px">
+              <div style="font-size:14px;font-weight:600">1. Generate or import a keypair</div>
+              <div style="color:var(--muted);font-size:13px">Click "Generate New Keypair" to create a fresh Ed25519 key, or paste an existing secret key.</div>
+            </div>
+            <div class="card-row" style="flex-direction:column;gap:8px">
+              <div style="font-size:14px;font-weight:600">2. Get testnet tokens</div>
+              <div style="color:var(--muted);font-size:13px">Use the Faucet button to receive 1,000,000 AZTB for testing.</div>
+            </div>
+            <div class="card-row" style="flex-direction:column;gap:8px">
+              <div style="font-size:14px;font-weight:600">3. Send a transfer</div>
+              <div style="color:var(--muted);font-size:13px">Enter a recipient address and amount, then sign and broadcast the transaction.</div>
+            </div>
+          </div>
+        </div>
+        `}
+      </div>
+    </div>
+  `;
+
+  if (connected) refreshWalletBalance();
+}
+
+let txLog = [];
+
+function walletStatus(msg, cls) {
+  const el = document.getElementById('wallet-status');
+  if (el) el.innerHTML = `<div class="wallet-alert ${cls}">${escapeHtml(msg)}</div>`;
+}
+
+function sendStatus(msg, cls) {
+  const el = document.getElementById('send-status');
+  if (el) el.innerHTML = `<div class="wallet-alert ${cls}">${escapeHtml(msg)}</div>`;
+}
+
+function generateNewWallet() {
+  const seed = nacl.randomBytes(32);
+  walletFromSeed(seed);
+  showWallet();
+  walletStatus('New keypair generated. Save your secret key!', 'success');
+}
+
+function importWallet() {
+  const input = document.getElementById('import-secret');
+  const hex = (input.value || '').trim().replace(/^0x/, '');
+  if (!/^[0-9a-fA-F]{64}$/.test(hex)) {
+    walletStatus('Invalid secret key. Must be 64 hex characters.', 'error');
+    return;
+  }
+  walletFromSeed(fromHex(hex));
+  showWallet();
+  walletStatus('Wallet imported successfully.', 'success');
+}
+
+function disconnectWallet() {
+  walletKeypair = null;
+  walletAddress = null;
+  walletSecretHex = null;
+  txLog = [];
+  showWallet();
+}
+
+let secretVisible = false;
+function toggleSecret() {
+  secretVisible = !secretVisible;
+  const el = document.getElementById('secret-display');
+  const toggle = el?.nextElementSibling;
+  if (el) el.textContent = secretVisible ? walletSecretHex : '*'.repeat(64);
+  if (toggle) toggle.textContent = secretVisible ? 'hide' : 'show';
+}
+
+async function refreshWalletBalance() {
+  if (!walletAddress) return;
+  try {
+    const [balance, nonce] = await Promise.all([
+      rpc('aztb_getBalance', [walletAddress]),
+      rpc('aztb_getNonce', [walletAddress]),
+    ]);
+    const balEl = document.getElementById('wallet-balance');
+    const nonceEl = document.getElementById('wallet-nonce');
+    if (balEl) balEl.textContent = formatNumber(balance) + ' AZTB';
+    if (nonceEl) nonceEl.textContent = String(nonce);
+  } catch (e) {
+    const balEl = document.getElementById('wallet-balance');
+    if (balEl) balEl.textContent = 'error: ' + e.message;
+  }
+}
+
+async function walletFaucetDrip() {
+  if (!walletAddress) return;
+  walletStatus('Requesting faucet drip...', 'info');
+  try {
+    const result = await rpc('aztb_faucetDrip', [walletAddress]);
+    const txHash = typeof result === 'object' ? JSON.stringify(result) : (result || 'sent');
+    walletStatus('Faucet drip sent! Balance: ' + (result?.balance ?? txHash), 'success');
+    addTxLog('Faucet Drip', '1,000,000 AZTB', result?.address || txHash);
+    setTimeout(refreshWalletBalance, 2000);
+  } catch (e) {
+    walletStatus('Faucet error: ' + e.message, 'error');
+  }
+}
+
+async function sendTransfer() {
+  if (!walletKeypair) return;
+  const toHexVal = (document.getElementById('send-to').value || '').trim().replace(/^0x/, '');
+  const amountStr = (document.getElementById('send-amount').value || '').trim();
+  const gasPriceStr = (document.getElementById('send-gas').value || '1').trim();
+
+  if (!/^[0-9a-fA-F]{64}$/.test(toHexVal)) {
+    sendStatus('Invalid recipient address.', 'error');
+    return;
+  }
+  const amount = parseInt(amountStr, 10);
+  if (!amount || amount <= 0) {
+    sendStatus('Invalid amount.', 'error');
+    return;
+  }
+  const gasPrice = parseInt(gasPriceStr, 10) || 1;
+
+  sendStatus('Fetching nonce...', 'info');
+  try {
+    const nonce = await rpc('aztb_getNonce', [walletAddress]);
+    const from32 = deriveAddress(walletKeypair.publicKey);
+    const to32 = fromHex(toHexVal);
+
+    sendStatus('Signing transaction...', 'info');
+    const payload = encodeTransferPayload(from32, to32, amount, nonce, gasPrice);
+    const envelope = signPayload(payload, walletKeypair);
+    const txHex = toHex(envelope);
+
+    sendStatus('Broadcasting...', 'info');
+    const result = await rpc('aztb_sendRawTransaction', [txHex]);
+    const txHash = result?.tx_hash || result || 'submitted';
+    sendStatus('Transaction sent! Hash: ' + txHash, 'success');
+    addTxLog('Transfer ' + amount + ' AZTB', 'to ' + toHexVal.slice(0, 12) + '...', txHash);
+    setTimeout(refreshWalletBalance, 3000);
+  } catch (e) {
+    sendStatus('Send error: ' + e.message, 'error');
+  }
+}
+
+function addTxLog(title, detail, hash) {
+  txLog.unshift({ title, detail, hash, time: new Date().toLocaleTimeString() });
+  if (txLog.length > 20) txLog.pop();
+  renderTxLog();
+}
+
+function renderTxLog() {
+  const el = document.getElementById('tx-log');
+  if (!el || txLog.length === 0) return;
+  el.innerHTML = txLog.map(tx => `
+    <div class="card-row">
+      <div style="flex:1">
+        <div style="font-size:13px;font-weight:500">${escapeHtml(tx.title)}</div>
+        <div style="font-size:11px;color:var(--muted)">${escapeHtml(tx.detail)}</div>
+      </div>
+      <div style="font-size:11px;color:var(--muted);text-align:right">
+        <div>${escapeHtml(tx.time)}</div>
+        <div style="font-family:var(--mono)">${typeof tx.hash === 'string' ? escapeHtml(tx.hash.slice(0, 16)) + '...' : '--'}</div>
+      </div>
+    </div>
+  `).join('');
 }
 
 // --- Helpers ---
@@ -758,7 +1490,9 @@ function doSearch() {
     showBlock(parseInt(q, 10));
   } else if (/^0x[0-9a-fA-F]+$/.test(q) || /^[0-9a-fA-F]{64}$/.test(q)) {
     if (q.replace('0x', '').length === 64) {
-      showTx(q).catch(() => showAccount(q));
+      rpc('aztb_getTransactionByHash', [q]).then(tx => {
+        if (tx) showTx(q); else showAccount(q.replace(/^0x/, ''));
+      }).catch(() => showAccount(q.replace(/^0x/, '')));
     } else {
       showBlock(parseInt(q, 16));
     }
@@ -775,14 +1509,71 @@ function stopPolling() {
   if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
 }
 
+// --- Connection Gate ---
+
+let connected = false;
+
+function showConnectGate(errorMsg) {
+  document.querySelector('header').style.display = 'none';
+  document.querySelector('.search-bar').style.display = 'none';
+  const el = document.getElementById('content');
+  el.innerHTML = `
+    <div class="connect-gate">
+      <div class="logo-big">Aztibase <span>Explorer</span></div>
+      <div class="subtitle">Connect to an Aztibase node to explore the chain</div>
+      <div class="rpc-form">
+        <input id="gate-rpc" value="${escapeHtml(RPC_URL)}" placeholder="http://host:port" spellcheck="false">
+        <button onclick="tryConnect()">Connect</button>
+      </div>
+      <div class="status-msg ${errorMsg ? 'err' : ''}" id="gate-status">${errorMsg ? escapeHtml(errorMsg) : ''}</div>
+      <div style="color:var(--muted);font-size:12px;max-width:400px">
+        Enter the RPC endpoint of any Aztibase node. Default is localhost:9944 for local testnet.
+        You can also pass <code style="color:var(--accent)">?rpc=http://host:port</code> in the URL.
+      </div>
+    </div>
+  `;
+  document.getElementById('gate-rpc').addEventListener('keydown', e => { if (e.key === 'Enter') tryConnect(); });
+}
+
+async function tryConnect() {
+  const input = document.getElementById('gate-rpc');
+  const status = document.getElementById('gate-status');
+  const url = (input.value || '').trim();
+  if (!url) { status.textContent = 'Enter an RPC URL'; status.className = 'status-msg err'; return; }
+
+  RPC_URL = url;
+  status.textContent = 'Connecting...';
+  status.className = 'status-msg trying';
+
+  try {
+    const chainId = await rpc('aztb_chainId');
+    status.textContent = 'Connected! Chain ID: ' + (chainId || 'unknown');
+    status.className = 'status-msg ok';
+    connected = true;
+    document.getElementById('hdr-chain').textContent = chainId || '--';
+
+    setTimeout(() => {
+      document.querySelector('header').style.display = '';
+      document.querySelector('.search-bar').style.display = '';
+      navigate('dashboard');
+    }, 500);
+  } catch (e) {
+    status.textContent = 'Failed: ' + e.message;
+    status.className = 'status-msg err';
+  }
+}
+
 // --- Init ---
 
 (async () => {
   try {
     const chainId = await rpc('aztb_chainId');
     document.getElementById('hdr-chain').textContent = chainId || '--';
-  } catch (_) {}
-  navigate('dashboard');
+    connected = true;
+    navigate('dashboard');
+  } catch (_) {
+    showConnectGate('Could not connect to ' + RPC_URL);
+  }
 })();
 </script>
 </body>

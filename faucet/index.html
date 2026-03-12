@@ -152,7 +152,7 @@ footer {
 <main>
   <div class="faucet-card">
     <h1>Testnet Faucet</h1>
-    <p class="subtitle">Get 10 AZTB testnet tokens. Rate limited to 1 request per 60 seconds per address.</p>
+    <p class="subtitle">Get 1,000,000 AZTB testnet tokens. Rate limited to 1 request per 60 seconds per address. Drip: 1,000,000 AZTB.</p>
 
     <div class="field-label">Your wallet address</div>
     <input
@@ -166,7 +166,7 @@ footer {
     >
 
     <button class="drip-btn" id="dripBtn" onclick="requestDrip()">
-      Request 10 AZTB
+      Request 1,000,000 AZTB
     </button>
 
     <div class="result" id="result"></div>
@@ -182,7 +182,7 @@ footer {
       </div>
       <div class="info-item">
         <span class="label">Amount:</span>
-        <span class="val">10 AZTB</span>
+        <span class="val">1,000,000 AZTB</span>
       </div>
       <div class="info-item">
         <span class="label">Cooldown:</span>
@@ -235,14 +235,14 @@ async function requestDrip() {
       setResult('Error: ' + data.error.message, 'error');
     } else if (data.result) {
       const txHash = data.result.tx_hash || data.result;
-      setResult('Success! Sent 10 AZTB. Tx: ' + txHash, 'success');
+      setResult('Success! Sent 1,000,000 AZTB. Tx: ' + txHash, 'success');
     } else {
       setResult('Sent! Check your balance in a few seconds.', 'success');
     }
   } catch (err) {
     setResult('Network error: ' + err.message + '. Is the RPC node running?', 'error');
   } finally {
-    btn.textContent = 'Request 10 AZTB';
+    btn.textContent = 'Request 1,000,000 AZTB';
     setTimeout(() => { btn.disabled = false; }, 60000);
     startCooldown(60);
   }
@@ -255,7 +255,7 @@ function startCooldown(seconds) {
     remaining--;
     if (remaining <= 0) {
       clearInterval(interval);
-      btn.textContent = 'Request 10 AZTB';
+      btn.textContent = 'Request 1,000,000 AZTB';
       btn.disabled = false;
     } else {
       btn.textContent = 'Wait ' + remaining + 's';

@@ -472,6 +472,19 @@ impl ExecutionPipeline {
             }
         }
         let original_routed = std::mem::take(&mut routed);
+
+        // Serialize ALL transactions for persistent storage before nonce filtering.
+        // Without this, nonce-rejected txs would be missing from TX_TABLE
+        // even though their receipts and batch index entries exist.
+        let all_tx_store_data: Vec<([u8; 32], Vec<u8>)> = original_routed
+            .iter()
+            .filter_map(|tx| {
+                postcard::to_allocvec(tx)
+                    .ok()
+                    .map(|data| (compute_tx_hash(tx), data))
+            })
+            .collect();
+
         routed = original_routed
             .into_iter()
             .zip(nonce_valid.iter())
@@ -492,7 +505,6 @@ impl ExecutionPipeline {
             let gas_limit = tx.gas_limit();
             if gas_price < current_base_fee {
                 let tx_hash = compute_tx_hash(tx);
-                state.increment_nonce(tx.sender());
                 receipts.push(ExecutionReceipt {
                     tx_hash,
                     success: false,
@@ -520,7 +532,6 @@ impl ExecutionPipeline {
                 }
                 None => {
                     let tx_hash = compute_tx_hash(tx);
-                    state.increment_nonce(tx.sender());
                     receipts.push(ExecutionReceipt {
                         tx_hash,
                         success: false,
@@ -2865,11 +2876,8 @@ impl ExecutionPipeline {
                 }
             }
 
-            for tx in &routed {
-                let h = compute_tx_hash(tx);
-                if let Ok(data) = postcard::to_allocvec(tx) {
-                    let _ = aztibase_execution::store_transaction(store, &h, &data);
-                }
+            for (h, data) in &all_tx_store_data {
+                let _ = aztibase_execution::store_transaction(store, h, data);
             }
 
             if !self.archive {
