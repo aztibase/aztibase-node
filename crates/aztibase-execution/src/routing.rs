@@ -28,6 +28,7 @@ const PREFIX_BRIDGE_DEPOSIT: u8 = 0x17;
 const PREFIX_BRIDGE_WITHDRAW: u8 = 0x18;
 const PREFIX_REGISTER_L2: u8 = 0x19;
 const PREFIX_ROTATE_VALIDATOR_KEY: u8 = 0x1A;
+const PREFIX_FAUCET_DRIP: u8 = 0x1B;
 
 /// Maximum encoded transaction size (1 MB). Rejects oversized payloads before
 /// deserialization to prevent memory-bomb attacks via oversized payloads.
@@ -236,6 +237,13 @@ pub enum TxKind {
         nonce: u64,
         gas_price: u64,
     },
+    FaucetDrip {
+        validator: Address,
+        recipient: Address,
+        amount: u128,
+        nonce: u64,
+        gas_price: u64,
+    },
 }
 
 impl TxKind {
@@ -268,6 +276,7 @@ impl TxKind {
             TxKind::BridgeWithdraw { .. } => PREFIX_BRIDGE_WITHDRAW,
             TxKind::RegisterL2 { .. } => PREFIX_REGISTER_L2,
             TxKind::RotateValidatorKey { .. } => PREFIX_ROTATE_VALIDATOR_KEY,
+            TxKind::FaucetDrip { .. } => PREFIX_FAUCET_DRIP,
         };
         let payload = postcard::to_allocvec(self).expect("TxKind serialization cannot fail");
         let mut buf = Vec::with_capacity(1 + payload.len());
@@ -303,7 +312,8 @@ impl TxKind {
             | TxKind::BridgeDeposit { nonce, .. }
             | TxKind::BridgeWithdraw { nonce, .. }
             | TxKind::RegisterL2 { nonce, .. }
-            | TxKind::RotateValidatorKey { nonce, .. } => *nonce,
+            | TxKind::RotateValidatorKey { nonce, .. }
+            | TxKind::FaucetDrip { nonce, .. } => *nonce,
         }
     }
 
@@ -334,7 +344,8 @@ impl TxKind {
             | TxKind::BridgeDeposit { gas_price, .. }
             | TxKind::BridgeWithdraw { gas_price, .. }
             | TxKind::RegisterL2 { gas_price, .. }
-            | TxKind::RotateValidatorKey { gas_price, .. } => *gas_price,
+            | TxKind::RotateValidatorKey { gas_price, .. }
+            | TxKind::FaucetDrip { gas_price, .. } => *gas_price,
         }
     }
 
@@ -368,6 +379,7 @@ impl TxKind {
             TxKind::BridgeWithdraw { .. } => 70_000,
             TxKind::RegisterL2 { .. } => 100_000,
             TxKind::RotateValidatorKey { .. } => 60_000,
+            TxKind::FaucetDrip { .. } => 0,
         }
     }
 
@@ -399,6 +411,7 @@ impl TxKind {
             TxKind::BridgeWithdraw { withdrawer, .. } => withdrawer,
             TxKind::RegisterL2 { owner, .. } => owner,
             TxKind::RotateValidatorKey { validator, .. } => validator,
+            TxKind::FaucetDrip { validator, .. } => validator,
         }
     }
 
@@ -430,6 +443,7 @@ impl TxKind {
             TxKind::BridgeWithdraw { .. } => PREFIX_BRIDGE_WITHDRAW,
             TxKind::RegisterL2 { .. } => PREFIX_REGISTER_L2,
             TxKind::RotateValidatorKey { .. } => PREFIX_ROTATE_VALIDATOR_KEY,
+            TxKind::FaucetDrip { .. } => PREFIX_FAUCET_DRIP,
         }
     }
 }
@@ -513,7 +527,8 @@ pub fn route_tx(raw: &[u8]) -> Result<TxKind, RoutingError> {
         | PREFIX_BRIDGE_DEPOSIT
         | PREFIX_BRIDGE_WITHDRAW
         | PREFIX_REGISTER_L2
-        | PREFIX_ROTATE_VALIDATOR_KEY => {}
+        | PREFIX_ROTATE_VALIDATOR_KEY
+        | PREFIX_FAUCET_DRIP => {}
         other => return Err(RoutingError::UnknownPrefix(other)),
     }
     let (decoded, remaining): (TxKind, &[u8]) =
@@ -1259,5 +1274,22 @@ mod tests {
             route_tx(&encoded),
             Err(RoutingError::DecodeFailed(_))
         ));
+    }
+
+    #[test]
+    fn faucet_drip_roundtrip() {
+        let tx = TxKind::FaucetDrip {
+            validator: [0xF1; 32],
+            recipient: [0xF2; 32],
+            amount: 1_000_000,
+            nonce: 0,
+            gas_price: 0,
+        };
+        let encoded = tx.encode();
+        assert_eq!(encoded[0], PREFIX_FAUCET_DRIP);
+        let decoded = route_tx(&encoded).unwrap();
+        assert_eq!(decoded, tx);
+        assert_eq!(decoded.gas_limit(), 0);
+        assert_eq!(*decoded.sender(), [0xF1; 32]);
     }
 }

@@ -132,6 +132,7 @@ impl BaseFeeCalculator {
             0x18 => 70_000,  // BridgeWithdraw
             0x19 => 100_000, // RegisterL2
             0x1A => 60_000,  // RotateValidatorKey
+            0x1B => 0,       // FaucetDrip (free mint, testnet only)
             _ => 21_000,
         }
     }

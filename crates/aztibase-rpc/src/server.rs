@@ -19,11 +19,12 @@ use tower_http::cors::{AllowOrigin, Any, CorsLayer};
 use tracing::{debug, info};
 
 use aztibase_consensus::ComputeCommitmentStore;
+use aztibase_core::{Keypair, address_from_pubkey};
 use aztibase_execution::AccountState;
 use aztibase_execution::model_registry::{MODEL_REGISTRY_ADDRESS, ModelMetadata, ModelRegistry};
 use aztibase_execution::{
     AgentPolicyStore, BridgeEscrow, BridgeWithdrawProofs, ChainParams, EmissionTracker,
-    GovernanceStore, L2AnchorStore, L2Registry, StakingStore,
+    GovernanceStore, L2AnchorStore, L2Registry, SignedTx, StakingStore, TxKind,
 };
 use aztibase_storage::StateStore;
 
@@ -96,6 +97,11 @@ const FAUCET_DRIP_AMOUNT: u128 = 1_000_000;
 const FAUCET_COOLDOWN_SECS: u64 = 60;
 const NODE_VERSION: &str = env!("CARGO_PKG_VERSION");
 
+fn faucet_keypair() -> Keypair {
+    let seed = aztibase_core::hash(b"AZTIBASE_TESTNET_FAUCET");
+    Keypair::from_secret_bytes(&seed)
+}
+
 pub struct RpcState {
     pub accounts: Arc<RwLock<AccountState>>,
     pub tx_sender: mpsc::Sender<Vec<u8>>,
@@ -120,6 +126,7 @@ pub struct RpcState {
     pub chain_id: u64,
     pub genesis_hash: Option<[u8; 32]>,
     faucet_tracker: Arc<std::sync::Mutex<HashMap<[u8; 32], std::time::Instant>>>,
+    faucet_nonce: Arc<AtomicU64>,
     pub faucet_enabled: bool,
     pub rate_limiter: Arc<RpcRateLimiter>,
     pub permissive_cors: bool,
@@ -153,6 +160,7 @@ impl Clone for RpcState {
             chain_id: self.chain_id,
             genesis_hash: self.genesis_hash,
             faucet_tracker: Arc::clone(&self.faucet_tracker),
+            faucet_nonce: Arc::clone(&self.faucet_nonce),
             faucet_enabled: self.faucet_enabled,
             rate_limiter: Arc::clone(&self.rate_limiter),
             permissive_cors: self.permissive_cors,
@@ -330,6 +338,7 @@ impl RpcServer {
                 chain_id: TESTNET_CHAIN_ID,
                 genesis_hash: None,
                 faucet_tracker: Arc::new(std::sync::Mutex::new(HashMap::new())),
+                faucet_nonce: Arc::new(AtomicU64::new(0)),
                 faucet_enabled: true,
                 rate_limiter: Arc::new(RpcRateLimiter::new(DEFAULT_RATE_LIMIT)),
                 permissive_cors: true,
@@ -1268,11 +1277,9 @@ fn model_to_json(meta: &ModelMetadata) -> serde_json::Value {
 
 // ── Faucet + Node Info Endpoints ────────────────────────────────────
 
-/// Testnet-only faucet: credits tokens directly to local state.
-/// NOTE: This is a node-local operation (not a consensus transaction).
-/// The credited balance only exists on the node that served the request.
-/// Users must send transactions via the same node they faucet from.
-/// Future: convert to a proper consensus TxKind for cross-node consistency.
+/// Testnet-only faucet: submits a FaucetDrip consensus transaction.
+/// The drip goes through mempool → gossip → consensus → execution,
+/// ensuring all nodes credit the same balance (cross-node consistent).
 async fn handle_faucet_drip(state: &RpcState, req: &JsonRpcRequest) -> JsonRpcResponse {
     if !state.faucet_enabled {
         return JsonRpcResponse::error(
@@ -1326,18 +1333,42 @@ async fn handle_faucet_drip(state: &RpcState, req: &JsonRpcRequest) -> JsonRpcRe
         tracker.insert(addr_bytes, std::time::Instant::now());
     }
 
-    let mut accounts = state.accounts.write().await;
-    let current = accounts.balance(&addr_bytes);
-    accounts.set_balance(&addr_bytes, current + FAUCET_DRIP_AMOUNT);
+    let kp = faucet_keypair();
+    let faucet_addr = address_from_pubkey(kp.public_key().as_bytes());
+    let nonce = state.faucet_nonce.fetch_add(1, Ordering::Relaxed);
 
-    JsonRpcResponse::success(
-        req.id.clone(),
-        serde_json::json!({
-            "address": format!("0x{}", hex::encode(addr_bytes)),
-            "amount": FAUCET_DRIP_AMOUNT,
-            "balance": current + FAUCET_DRIP_AMOUNT,
-        }),
-    )
+    let tx = TxKind::FaucetDrip {
+        validator: faucet_addr,
+        recipient: addr_bytes,
+        amount: FAUCET_DRIP_AMOUNT,
+        nonce,
+        gas_price: 0,
+    };
+    let payload = tx.encode();
+    let signed = SignedTx::new(payload, &kp);
+    let envelope = signed.encode();
+    let tx_hash = aztibase_core::hash(&envelope);
+
+    match state.tx_sender.try_send(envelope) {
+        Ok(()) => JsonRpcResponse::success(
+            req.id.clone(),
+            serde_json::json!({
+                "address": format!("0x{}", hex::encode(addr_bytes)),
+                "amount": FAUCET_DRIP_AMOUNT,
+                "tx_hash": format!("0x{}", hex::encode(tx_hash)),
+            }),
+        ),
+        Err(mpsc::error::TrySendError::Full(_)) => JsonRpcResponse::error(
+            req.id.clone(),
+            -32000,
+            "mempool full, try again later".into(),
+        ),
+        Err(mpsc::error::TrySendError::Closed(_)) => JsonRpcResponse::error(
+            req.id.clone(),
+            -32000,
+            "node shutting down".into(),
+        ),
+    }
 }
 
 async fn handle_node_info(state: &RpcState, req: &JsonRpcRequest) -> JsonRpcResponse {
@@ -2360,6 +2391,7 @@ mod tests {
             chain_id: TESTNET_CHAIN_ID,
             genesis_hash: None,
             faucet_tracker: Arc::new(std::sync::Mutex::new(HashMap::new())),
+            faucet_nonce: Arc::new(AtomicU64::new(0)),
             faucet_enabled: true,
             rate_limiter: Arc::new(RpcRateLimiter::new(DEFAULT_RATE_LIMIT)),
             permissive_cors: true,
@@ -2401,6 +2433,7 @@ mod tests {
             chain_id: TESTNET_CHAIN_ID,
             genesis_hash: None,
             faucet_tracker: Arc::new(std::sync::Mutex::new(HashMap::new())),
+            faucet_nonce: Arc::new(AtomicU64::new(0)),
             faucet_enabled: true,
             rate_limiter: Arc::new(RpcRateLimiter::new(DEFAULT_RATE_LIMIT)),
             permissive_cors: true,
@@ -2654,6 +2687,7 @@ mod tests {
             chain_id: TESTNET_CHAIN_ID,
             genesis_hash: None,
             faucet_tracker: Arc::new(std::sync::Mutex::new(HashMap::new())),
+            faucet_nonce: Arc::new(AtomicU64::new(0)),
             faucet_enabled: true,
             rate_limiter: Arc::new(RpcRateLimiter::new(DEFAULT_RATE_LIMIT)),
             permissive_cors: true,
@@ -3046,6 +3080,7 @@ mod tests {
             chain_id: TESTNET_CHAIN_ID,
             genesis_hash: None,
             faucet_tracker: Arc::new(std::sync::Mutex::new(HashMap::new())),
+            faucet_nonce: Arc::new(AtomicU64::new(0)),
             faucet_enabled: true,
             rate_limiter: Arc::new(RpcRateLimiter::new(DEFAULT_RATE_LIMIT)),
             permissive_cors: true,
@@ -3147,6 +3182,7 @@ mod tests {
             chain_id: TESTNET_CHAIN_ID,
             genesis_hash: None,
             faucet_tracker: Arc::new(std::sync::Mutex::new(HashMap::new())),
+            faucet_nonce: Arc::new(AtomicU64::new(0)),
             faucet_enabled: true,
             rate_limiter: Arc::new(RpcRateLimiter::new(100)),
             permissive_cors: true,
@@ -3297,7 +3333,7 @@ mod tests {
 
     #[tokio::test]
     async fn faucet_drip_credits_account() {
-        let (state, _rx) = test_state();
+        let (state, mut rx) = test_state();
         let addr = [0xAA; 32];
         let addr_hex = hex::encode(addr);
         let body = format!(
@@ -3309,13 +3345,13 @@ mod tests {
             resp["result"]["amount"].as_u64().unwrap(),
             FAUCET_DRIP_AMOUNT as u64
         );
-        assert_eq!(
-            resp["result"]["balance"].as_u64().unwrap(),
-            FAUCET_DRIP_AMOUNT as u64
-        );
+        assert!(resp["result"]["tx_hash"].as_str().unwrap().starts_with("0x"));
 
-        let balance = state.accounts.read().await.balance(&addr);
-        assert_eq!(balance, FAUCET_DRIP_AMOUNT);
+        let raw = rx.try_recv().expect("faucet tx should be in channel");
+        let signed = aztibase_execution::SignedTx::decode(&raw).expect("valid envelope");
+        assert!(signed.verify(), "faucet signature must be valid");
+        let tx = aztibase_execution::routing::route_tx(&signed.payload).expect("valid routing");
+        assert!(matches!(tx, aztibase_execution::TxKind::FaucetDrip { .. }));
     }
 
     #[tokio::test]

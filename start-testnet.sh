@@ -23,9 +23,11 @@ for node in data/node1 data/node2 data/node3; do
 done
 echo "[OK] Old data cleared"
 
-# Start 3 validators
+# Start 3 validators (staggered to avoid boot_node race conditions)
 ./target/release/aztibase.exe --config data/node1/node1-local.toml --testnet > data/node1/node1.log 2>&1 &
+sleep 2
 ./target/release/aztibase.exe --config data/node2/node2-local.toml --testnet > data/node2/node2.log 2>&1 &
+sleep 2
 ./target/release/aztibase.exe --config data/node3/node3-local.toml --testnet > data/node3/node3.log 2>&1 &
 echo "[OK] 3 validator nodes started"
 

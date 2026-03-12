@@ -121,7 +121,8 @@ impl Mempool {
             Some(t) => t,
             None => return false,
         };
-        if gas_price < min_gas_price {
+        let is_faucet = matches!(decode_tx_kind(&tx), Some(TxKind::FaucetDrip { .. }));
+        if !is_faucet && gas_price < min_gas_price {
             return false;
         }
         let current = nonce_lookup(&sender);

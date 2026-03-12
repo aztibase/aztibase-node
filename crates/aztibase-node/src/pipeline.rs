@@ -501,6 +501,11 @@ impl ExecutionPipeline {
         let mut total_fees_burned: u128 = 0;
 
         for (i, tx) in routed.iter().enumerate() {
+            if matches!(tx, TxKind::FaucetDrip { .. }) {
+                escrows.push(None);
+                escrowed_indices.push(i);
+                continue;
+            }
             let gas_price = tx.gas_price();
             let gas_limit = tx.gas_limit();
             if gas_price < current_base_fee {
@@ -574,6 +579,7 @@ impl ExecutionPipeline {
         let mut bridge_withdraws: Vec<BridgeWithdrawEntry> = Vec::new();
         let mut register_l2s: Vec<RegisterL2Entry> = Vec::new();
         let mut rotate_keys: Vec<([u8; 32], [u8; 32], u64)> = Vec::new();
+        let mut faucet_drips: Vec<([u8; 32], [u8; 32], u128)> = Vec::new();
 
         for tx in &executable {
             match tx {
@@ -941,6 +947,11 @@ impl ExecutionPipeline {
                     ..
                 } => {
                     rotate_keys.push((*validator, *new_pubkey, *nonce));
+                }
+                TxKind::FaucetDrip {
+                    validator, recipient, amount, ..
+                } => {
+                    faucet_drips.push((*validator, *recipient, *amount));
                 }
             }
         }
@@ -2780,6 +2791,26 @@ impl ExecutionPipeline {
             });
         }
 
+        for (validator, recipient, amount) in &faucet_drips {
+            let mut buf = Vec::new();
+            buf.extend_from_slice(recipient);
+            buf.extend_from_slice(&amount.to_le_bytes());
+            let tx_hash = hash(&buf);
+
+            let prev = state.balance(recipient);
+            state.set_balance(recipient, prev.saturating_add(*amount));
+            state.increment_nonce(validator);
+            exec_receipts.push(ExecutionReceipt {
+                tx_hash,
+                success: true,
+                gas_used: 0,
+                contract_address: None,
+                error: None,
+                inference_hash: None,
+                anomaly_score: 0.0,
+            });
+        }
+
         // Phase 2.5: Score each executed tx for anomalous behavior.
         for (i, tx) in executable.iter().enumerate() {
             if i >= exec_receipts.len() {
@@ -3302,6 +3333,14 @@ fn compute_tx_hash(tx: &TxKind) -> [u8; 32] {
             buf.extend_from_slice(validator);
             buf.extend_from_slice(new_pubkey);
             buf.extend_from_slice(&nonce.to_le_bytes());
+            hash(&buf)
+        }
+        TxKind::FaucetDrip {
+            recipient, amount, ..
+        } => {
+            let mut buf = Vec::new();
+            buf.extend_from_slice(recipient);
+            buf.extend_from_slice(&amount.to_le_bytes());
             hash(&buf)
         }
     }
