@@ -21,6 +21,20 @@ Entries are prepended (newest first).
 
 ## Entries
 
+### Sprint 059 — Friends Testnet: Genesis Ceremony & Multi-Party Setup (2026-03-12)
+- **Date**: 2026-03-12
+- **Sprint**: 059 (Friends Testnet)
+- **Commit**: (pending)
+- **Files changed**:
+  - `crates/aztibase-node/src/wallet.rs` — Added `generate_validator_key()` producing Ed25519 + BLS keypair, `--validator` flag test
+  - `crates/aztibase-node/src/main.rs` — Added `--validator` flag to `WalletAction::Generate`, added `--boot-node` CLI flag with `apply_overrides` wiring, refactored `Command::Genesis` to `GenesisAction` subcommand enum (generate, init, add-validator, add-account, validate, show), fixed 3 test sites for new `boot_node` field
+  - `crates/aztibase-node/src/genesis.rs` — Added `init_genesis()`, `add_validator_to_genesis()`, `add_account_to_genesis()`, `show_genesis()`, `save_genesis()`, 8 ceremony tests (scaffold, keyfile add, public-info add, duplicate rejection, account add, account-validator overlap, show, full ceremony flow)
+  - `deploy/setup-validator.sh` — Added `--boot-nodes`, `--genesis` flags and `custom` network option for private testnets
+  - `docs/FRIENDS_TESTNET_GUIDE.md` — NEW: Step-by-step guide for multi-party private testnet setup
+  - `scripts/setup-friends-testnet.sh` — NEW: Interactive coordinator genesis ceremony script
+- **Summary**: Enables friends to each generate validator keys locally, share only public info, and join a coordinated private testnet. Genesis ceremony CLI allows incremental validator/account addition without code changes. Setup script supports custom boot nodes and genesis for non-official testnets. Breaking change: `aztibase genesis` now requires subcommand (`aztibase genesis generate` for old behavior).
+- **Security Flags**: None
+
 ### Sprint 058 — Audit Fix: decode_vertex Signature Verification (2026-03-12)
 - **Date**: 2026-03-12
 - **Sprint**: 058 (Pre-Mainnet Audit Fixes)

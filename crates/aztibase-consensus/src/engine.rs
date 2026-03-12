@@ -561,6 +561,8 @@ impl ConsensusEngine {
             .insert(block)
             .context("Failed to insert own vertex")?;
         self.state.record_vertex(round, hash);
+        self.threshold_clock
+            .add_block(self.identity, round, &self.validators);
 
         if pending_count > 0 {
             info!(round, hash = %short_hex(&hash), txs = pending_count, payload_bytes = payload.len(), "Proposed vertex WITH transactions");

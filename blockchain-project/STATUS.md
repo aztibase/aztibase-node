@@ -3,8 +3,8 @@
 **Last Updated:** 2026-03-12
 **Updated By:** consensus-engineer + security-engineer + documentation-engineer
 **Current Phase:** M9 -- Mainnet Prep
-**Current Sprint:** Sprint 058 -- IN PROGRESS (Pre-Mainnet Audit Fixes)
-**Sprint Status:** Phases 1-3 code DONE, Phase 4 testnet validation IN PROGRESS
+**Current Sprint:** Sprint 059 -- DONE (Friends Testnet: Genesis Ceremony & Multi-Party Setup)
+**Sprint Status:** All 6 phases complete. Tests pass, clippy clean, fmt clean.
 
 ---
 
@@ -86,6 +86,7 @@
 - Mainnet launch blocked on: DagBlock signature verification (H-CON-1), committed batch delivery guarantee (H-CON-3), faucet mainnet gate (H-NODE-3)
 
 ### Recently Completed
+- **Sprint 059 (2026-03-12)**: Friends testnet — genesis ceremony CLI (init, add-validator, add-account, validate, show), wallet --validator flag (Ed25519+BLS), --boot-node CLI flag, setup-validator.sh custom network support, friends testnet guide + coordinator script
 - **Pre-mainnet audit (2026-03-12)**: 7-agent parallel audit of all 9 crates. 15C/25H/31M findings. Code quality clean. 8 architecture gaps. Prioritized 4-phase fix plan.
 - Consensus-based FaucetDrip: TxKind 0x1B, signed envelope through mempool→consensus→pipeline. Fixes node-local state divergence. Nonce increment fix for repeat drips.
 - P2P mesh fix: 0.0.0.0 bind + staggered starts → full 3-node mesh, continuous block production

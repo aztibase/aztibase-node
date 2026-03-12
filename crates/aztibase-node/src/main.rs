@@ -109,6 +109,10 @@ struct Cli {
     #[arg(long, conflicts_with = "testnet")]
     mainnet: bool,
 
+    /// Bootstrap peer address in multiaddr format (may be repeated)
+    #[arg(long)]
+    boot_node: Vec<String>,
+
     /// Bootstrap from a snapshot file instead of replaying from genesis
     #[arg(long)]
     snapshot: Option<PathBuf>,
@@ -116,8 +120,27 @@ struct Cli {
 
 #[derive(clap::Subcommand, Debug)]
 enum Command {
-    /// Generate a new genesis configuration
+    /// Genesis configuration management
     Genesis {
+        #[command(subcommand)]
+        action: GenesisAction,
+    },
+    /// Export a full state snapshot from the node database
+    Snapshot {
+        #[command(subcommand)]
+        action: SnapshotAction,
+    },
+    /// Wallet key management and transaction signing
+    Wallet {
+        #[command(subcommand)]
+        action: WalletAction,
+    },
+}
+
+#[derive(clap::Subcommand, Debug)]
+enum GenesisAction {
+    /// Generate a complete genesis with random keys (existing behavior)
+    Generate {
         /// Number of validators
         #[arg(long, default_value = "4")]
         validators: usize,
@@ -131,15 +154,59 @@ enum Command {
         #[arg(long)]
         docker: bool,
     },
-    /// Export a full state snapshot from the node database
-    Snapshot {
-        #[command(subcommand)]
-        action: SnapshotAction,
+    /// Initialize an empty genesis scaffold for a ceremony
+    Init {
+        /// Output directory (genesis.toml will be created here)
+        #[arg(long, default_value = "genesis")]
+        output: PathBuf,
     },
-    /// Wallet key management and transaction signing
-    Wallet {
-        #[command(subcommand)]
-        action: WalletAction,
+    /// Add a validator to an existing genesis config
+    AddValidator {
+        /// Path to genesis.toml
+        #[arg(long)]
+        genesis: PathBuf,
+        /// Validator name
+        #[arg(long)]
+        name: String,
+        /// Path to validator keyfile (extracts public info)
+        #[arg(long, conflicts_with_all = ["address", "public_key", "bls_public_key"])]
+        key: Option<PathBuf>,
+        /// Validator address hex (when sharing public info only)
+        #[arg(long, requires = "bls_public_key")]
+        address: Option<String>,
+        /// Ed25519 public key hex
+        #[arg(long)]
+        public_key: Option<String>,
+        /// BLS12-381 public key hex
+        #[arg(long)]
+        bls_public_key: Option<String>,
+        /// Validator stake amount
+        #[arg(long, default_value = "1000000")]
+        stake: u128,
+    },
+    /// Add a pre-funded account to an existing genesis config
+    AddAccount {
+        /// Path to genesis.toml
+        #[arg(long)]
+        genesis: PathBuf,
+        /// Account address hex
+        #[arg(long)]
+        address: String,
+        /// Account balance
+        #[arg(long)]
+        balance: u128,
+    },
+    /// Validate a genesis config
+    Validate {
+        /// Path to genesis.toml
+        #[arg(long)]
+        genesis: PathBuf,
+    },
+    /// Show genesis config summary and hash
+    Show {
+        /// Path to genesis.toml
+        #[arg(long)]
+        genesis: PathBuf,
     },
 }
 
@@ -174,6 +241,9 @@ enum WalletAction {
         /// Passphrase for keyfile encryption (required with --mnemonic)
         #[arg(long)]
         passphrase: Option<String>,
+        /// Generate a validator keypair (Ed25519 + BLS12-381)
+        #[arg(long)]
+        validator: bool,
     },
     /// Recover keypair from BIP-39 mnemonic phrase
     Recover {
@@ -289,6 +359,9 @@ impl Cli {
         if self.archive {
             cfg.archive = true;
         }
+        if !self.boot_node.is_empty() {
+            cfg.network.boot_nodes = self.boot_node.clone();
+        }
         cfg
     }
 }
@@ -298,43 +371,100 @@ async fn main() -> Result<()> {
     let cli = Cli::parse();
 
     match cli.command {
-        Some(Command::Genesis {
-            validators,
-            funded,
-            output,
-            docker,
-        }) => {
-            let timestamp = std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_millis() as u64;
-            let generated = genesis::generate_genesis(validators, funded, timestamp);
-            if docker {
-                genesis::write_docker_configs(&generated, &output)?;
-                let hash = genesis::genesis_hash(&generated.config)?;
-                println!(
-                    "Docker testnet written to {} ({} validators, {} funded accounts)",
-                    output.display(),
+        Some(Command::Genesis { action }) => {
+            match action {
+                GenesisAction::Generate {
                     validators,
                     funded,
-                );
-                println!("Genesis hash: {}", genesis::hex_encode(&hash));
-                println!("\nLayout:");
-                println!("  {}/genesis/genesis.toml", output.display());
-                for i in 1..=validators {
-                    println!("  {}/node{i}/node{i}.toml", output.display());
-                    println!("  {}/node{i}/keys/validator{i}.json", output.display());
+                    output,
+                    docker,
+                } => {
+                    let timestamp = std::time::SystemTime::now()
+                        .duration_since(std::time::UNIX_EPOCH)
+                        .unwrap()
+                        .as_millis() as u64;
+                    let generated = genesis::generate_genesis(validators, funded, timestamp);
+                    if docker {
+                        genesis::write_docker_configs(&generated, &output)?;
+                        let hash = genesis::genesis_hash(&generated.config)?;
+                        println!(
+                            "Docker testnet written to {} ({} validators, {} funded accounts)",
+                            output.display(),
+                            validators,
+                            funded,
+                        );
+                        println!("Genesis hash: {}", genesis::hex_encode(&hash));
+                        println!("\nLayout:");
+                        println!("  {}/genesis/genesis.toml", output.display());
+                        for i in 1..=validators {
+                            println!("  {}/node{i}/node{i}.toml", output.display());
+                            println!("  {}/node{i}/keys/validator{i}.json", output.display());
+                        }
+                    } else {
+                        genesis::write_genesis(&generated, &output)?;
+                        genesis::write_node_configs(&generated, &output)?;
+                        println!(
+                            "Genesis written to {} ({} validators, {} funded accounts, {} node configs)",
+                            output.display(),
+                            validators,
+                            funded,
+                            validators,
+                        );
+                    }
                 }
-            } else {
-                genesis::write_genesis(&generated, &output)?;
-                genesis::write_node_configs(&generated, &output)?;
-                println!(
-                    "Genesis written to {} ({} validators, {} funded accounts, {} node configs)",
-                    output.display(),
-                    validators,
-                    funded,
-                    validators,
-                );
+                GenesisAction::Init { output } => {
+                    genesis::init_genesis(&output)?;
+                }
+                GenesisAction::AddValidator {
+                    genesis: genesis_path,
+                    name,
+                    key,
+                    address,
+                    public_key,
+                    bls_public_key,
+                    stake,
+                } => {
+                    genesis::add_validator_to_genesis(
+                        &genesis_path,
+                        &name,
+                        key.as_deref(),
+                        address.as_deref(),
+                        public_key.as_deref(),
+                        bls_public_key.as_deref(),
+                        stake,
+                    )?;
+                }
+                GenesisAction::AddAccount {
+                    genesis: genesis_path,
+                    address,
+                    balance,
+                } => {
+                    genesis::add_account_to_genesis(&genesis_path, &address, balance)?;
+                }
+                GenesisAction::Validate {
+                    genesis: genesis_path,
+                } => {
+                    let config = genesis::load_genesis(&genesis_path)?;
+                    match genesis::validate_genesis(&config) {
+                        Ok(()) => {
+                            println!("Genesis config is valid.");
+                            let hash = genesis::genesis_hash(&config)?;
+                            println!("Genesis hash: {}", genesis::hex_encode(&hash));
+                        }
+                        Err(errors) => {
+                            eprintln!("Genesis validation failed ({} errors):", errors.len());
+                            for err in &errors {
+                                eprintln!("  - {err}");
+                            }
+                            std::process::exit(1);
+                        }
+                    }
+                }
+                GenesisAction::Show {
+                    genesis: genesis_path,
+                } => {
+                    genesis::show_genesis(&genesis_path)?;
+                }
             }
             return Ok(());
         }
@@ -435,6 +565,7 @@ async fn main() -> Result<()> {
                     output,
                     mnemonic,
                     passphrase,
+                    validator,
                 } => {
                     if mnemonic {
                         let pass = passphrase.unwrap_or_else(|| {
@@ -450,6 +581,8 @@ async fn main() -> Result<()> {
                         println!("\nBACKUP YOUR MNEMONIC (24 words):");
                         println!("{phrase}");
                         println!("\nStore this safely. It is the ONLY way to recover your key.");
+                    } else if validator {
+                        wallet::generate_validator_key(&output)?;
                     } else {
                         wallet::generate_key(&output)?;
                     }
@@ -1762,6 +1895,7 @@ mod tests {
             epoch_length: None,
             testnet: false,
             mainnet: false,
+            boot_node: vec![],
             snapshot: None,
         };
         let config = cli.apply_overrides(NodeConfig::default());
@@ -1789,6 +1923,7 @@ mod tests {
             epoch_length: None,
             testnet: false,
             mainnet: false,
+            boot_node: vec![],
             snapshot: None,
         };
         let config = cli.apply_overrides(NodeConfig::default());
@@ -1881,6 +2016,7 @@ mod tests {
             epoch_length: None,
             testnet: false,
             mainnet: false,
+            boot_node: vec![],
             snapshot: None,
         };
         let result = cli.apply_overrides(config);

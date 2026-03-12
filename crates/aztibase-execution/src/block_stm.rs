@@ -426,7 +426,7 @@ impl BlockSTMExecutor {
                             }
                             SchedulerTask::Done => break,
                             SchedulerTask::Wait => {
-                                std::thread::yield_now();
+                                std::thread::sleep(std::time::Duration::from_micros(50));
                             }
                         }
                     }

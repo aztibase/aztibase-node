@@ -5,6 +5,21 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ---
 
+## Sprint 059 — Friends Testnet: Genesis Ceremony & Multi-Party Setup (2026-03-12)
+
+### Added
+- **Genesis ceremony CLI**: `aztibase genesis init`, `add-validator`, `add-account`, `validate`, `show` subcommands for incremental multi-party genesis building
+- **Validator key generation**: `aztibase wallet generate --validator` produces Ed25519 + BLS12-381 keypair in one step
+- **`--boot-node` CLI flag**: Override bootstrap peers from command line (repeatable)
+- **Custom network support**: `setup-validator.sh` now accepts `--network custom --boot-nodes <addrs> --genesis <path>` for private testnets
+- **Friends testnet guide**: `docs/FRIENDS_TESTNET_GUIDE.md` — step-by-step for multi-party private testnet
+- **Coordinator script**: `scripts/setup-friends-testnet.sh` — interactive genesis ceremony wrapper
+
+### Changed
+- **Breaking**: `aztibase genesis` refactored to subcommands. Old `aztibase genesis --validators 4` is now `aztibase genesis generate --validators 4`
+
+---
+
 ## Sprint 058 — Pre-Mainnet Audit Fixes (2026-03-12)
 
 ### Fixed

@@ -28,6 +28,8 @@ LOG_FILE="/tmp/aztibase-setup-$(date +%Y%m%d-%H%M%S).log"
 # Defaults (overridden by prompts or flags)
 NODE_NAME=""
 NETWORK="testnet"
+CUSTOM_BOOT_NODES=""
+CUSTOM_GENESIS=""
 ENABLE_MONITORING="no"
 GRAFANA_CLOUD_URL=""
 GRAFANA_CLOUD_USER=""
@@ -112,6 +114,10 @@ while [ $# -gt 0 ]; do
         --grafana-user=*) GRAFANA_CLOUD_USER="${1#*=}" ;;
         --grafana-token) GRAFANA_CLOUD_TOKEN="$2"; shift ;;
         --grafana-token=*) GRAFANA_CLOUD_TOKEN="${1#*=}" ;;
+        --boot-nodes) CUSTOM_BOOT_NODES="$2"; shift ;;
+        --boot-nodes=*) CUSTOM_BOOT_NODES="${1#*=}" ;;
+        --genesis) CUSTOM_GENESIS="$2"; shift ;;
+        --genesis=*) CUSTOM_GENESIS="${1#*=}" ;;
         --help|-h)
             banner
             echo "Usage: bash setup-validator.sh [OPTIONS]"
@@ -120,8 +126,10 @@ while [ $# -gt 0 ]; do
             echo "  --yes, -y             Skip all prompts (use defaults)"
             echo "  --dry-run             Show what would be done without making changes"
             echo "  --uninstall           Remove Aztibase validator and all data"
-            echo "  --network <name>      Network: testnet or mainnet (default: testnet)"
+            echo "  --network <name>      Network: testnet, mainnet, or custom (default: testnet)"
             echo "  --name <name>         Node name (default: auto-generated)"
+            echo "  --boot-nodes <addrs>  Comma-separated multiaddrs for custom bootstrap peers"
+            echo "  --genesis <path>      Path to custom genesis.toml (required for --network custom)"
             echo "  --grafana-url <url>   Grafana Cloud Prometheus push URL"
             echo "  --grafana-user <id>   Grafana Cloud instance ID"
             echo "  --grafana-token <tok> Grafana Cloud API token"
@@ -371,7 +379,18 @@ fi
 run_cmd mkdir -p "$AZTIBASE_HOME" "$AZTIBASE_CONFIG/keys"
 
 NETWORK_FLAG="--testnet"
-[ "$NETWORK" = "mainnet" ] && NETWORK_FLAG="--mainnet"
+if [ "$NETWORK" = "mainnet" ]; then
+    NETWORK_FLAG="--mainnet"
+elif [ "$NETWORK" = "custom" ]; then
+    NETWORK_FLAG=""
+    if [ -z "$CUSTOM_GENESIS" ]; then
+        err "Custom network requires --genesis <path>. Aborting."
+        exit 1
+    fi
+    if [ -z "$CUSTOM_BOOT_NODES" ]; then
+        warn "No --boot-nodes provided. Node will not discover peers automatically."
+    fi
+fi
 
 if [ ! -f "$AZTIBASE_CONFIG/keys/validator.json" ] || [ "$DRY_RUN" = "yes" ]; then
     log "Generating validator keypair..."
@@ -399,8 +418,21 @@ if [ "$DRY_RUN" = "no" ]; then
 fi
 
 BOOT_NODES=""
-if [ "$NETWORK" = "testnet" ]; then
+GENESIS_FLAG=""
+if [ -n "$CUSTOM_BOOT_NODES" ]; then
+    IFS=',' read -ra BN_ARRAY <<< "$CUSTOM_BOOT_NODES"
+    for bn in "${BN_ARRAY[@]}"; do
+        bn=$(echo "$bn" | xargs)
+        BOOT_NODES="$BOOT_NODES --boot-node $bn"
+    done
+elif [ "$NETWORK" = "testnet" ]; then
     BOOT_NODES="--boot-node /dns4/testnet1.aztibase.com/tcp/30333 --boot-node /dns4/testnet2.aztibase.com/tcp/30333 --boot-node /dns4/testnet3.aztibase.com/tcp/30333"
+fi
+if [ -n "$CUSTOM_GENESIS" ]; then
+    cp "$CUSTOM_GENESIS" "$AZTIBASE_CONFIG/genesis.toml"
+    chown "$AZTIBASE_USER:$AZTIBASE_USER" "$AZTIBASE_CONFIG/genesis.toml"
+    GENESIS_FLAG="--genesis $AZTIBASE_CONFIG/genesis.toml"
+    log "Custom genesis installed: $AZTIBASE_CONFIG/genesis.toml"
 fi
 
 cat > "/etc/systemd/system/${SERVICE_NAME}.service" << UNIT
@@ -420,7 +452,7 @@ ExecStart=$AZTIBASE_BIN \\
     --listen /ip4/0.0.0.0/tcp/30333 \\
     --listen /ip4/0.0.0.0/udp/30333/quic-v1 \\
     --metrics \\
-    $NETWORK_FLAG $BOOT_NODES
+    $NETWORK_FLAG $BOOT_NODES $GENESIS_FLAG
 Restart=on-failure
 RestartSec=10
 LimitNOFILE=65535

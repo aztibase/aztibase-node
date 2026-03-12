@@ -3,7 +3,7 @@ use std::path::Path;
 use anyhow::{Context, Result};
 use zeroize::Zeroize;
 
-use aztibase_core::{Keypair, address_from_pubkey};
+use aztibase_core::{BlsKeypair, Keypair, address_from_pubkey};
 use aztibase_execution::{SignedTx, TxKind};
 
 use crate::genesis::{KeyFile, hex_decode, hex_encode, load_keyfile};
@@ -36,6 +36,36 @@ pub fn generate_key(output_path: &Path) -> Result<()> {
 
     println!("Address: {}", keyfile.address);
     println!("Public key: {}", keyfile.public_key);
+    println!("Key file: {}", output_path.display());
+    Ok(())
+}
+
+pub fn generate_validator_key(output_path: &Path) -> Result<()> {
+    let kp = Keypair::generate();
+    let bls_kp = BlsKeypair::generate();
+    let addr = address_from_pubkey(kp.public_key().as_bytes());
+
+    let keyfile = KeyFile {
+        public_key: hex_encode(kp.public_key().as_bytes()),
+        secret_key: hex_encode(&kp.secret_bytes()),
+        address: hex_encode(&addr),
+        bls_public_key: Some(hex_encode(bls_kp.public_key().as_bytes())),
+        bls_secret_key: Some(hex_encode(&bls_kp.secret_bytes())),
+    };
+
+    if let Some(parent) = output_path.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+
+    let json = serde_json::to_string_pretty(&keyfile).context("Failed to serialize key file")?;
+    std::fs::write(output_path, json)
+        .with_context(|| format!("Failed to write {}", output_path.display()))?;
+
+    println!("Address: {}", keyfile.address);
+    println!("Public key: {}", keyfile.public_key);
+    if let Some(ref bls) = keyfile.bls_public_key {
+        println!("BLS public key: {bls}");
+    }
     println!("Key file: {}", output_path.display());
     Ok(())
 }
@@ -454,6 +484,25 @@ mod tests {
 
         let (kp, addr) = load_keyfile(&keyfile_path).unwrap();
         assert_eq!(address_from_pubkey(kp.public_key().as_bytes()), addr);
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn generate_validator_key_includes_bls() {
+        let dir =
+            std::env::temp_dir().join(format!("aztibase_val_key_test_{}", std::process::id()));
+        let keyfile_path = dir.join("validator.json");
+
+        generate_validator_key(&keyfile_path).unwrap();
+        assert!(keyfile_path.exists());
+
+        let (kp, addr, bls_kp) = crate::genesis::load_keyfile_full(&keyfile_path).unwrap();
+        assert_eq!(address_from_pubkey(kp.public_key().as_bytes()), addr);
+        assert!(
+            bls_kp.is_some(),
+            "BLS keypair must be present for validator keys"
+        );
 
         let _ = std::fs::remove_dir_all(&dir);
     }

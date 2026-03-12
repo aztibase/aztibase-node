@@ -597,6 +597,134 @@ pub fn load_genesis(path: &Path) -> Result<GenesisConfig> {
     Ok(config)
 }
 
+fn save_genesis(path: &Path, config: &GenesisConfig) -> Result<()> {
+    let toml_str = toml::to_string_pretty(config).context("Failed to serialize genesis config")?;
+    std::fs::write(path, toml_str)
+        .with_context(|| format!("Failed to write {}", path.display()))?;
+    Ok(())
+}
+
+pub fn init_genesis(output_dir: &Path) -> Result<()> {
+    std::fs::create_dir_all(output_dir)
+        .with_context(|| format!("Failed to create {}", output_dir.display()))?;
+
+    let timestamp = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_millis() as u64;
+
+    let config = GenesisConfig {
+        chain_id: CHAIN_ID,
+        timestamp,
+        validators: Vec::new(),
+        accounts: BTreeMap::new(),
+    };
+
+    let genesis_path = output_dir.join("genesis.toml");
+    save_genesis(&genesis_path, &config)?;
+    let hash = genesis_hash(&config)?;
+    println!("Genesis scaffold created: {}", genesis_path.display());
+    println!("Chain ID: 0x{:X} ({})", config.chain_id, config.chain_id);
+    println!("Genesis hash: {}", hex_encode(&hash));
+    println!("\nNext: add validators with `aztibase genesis add-validator`");
+    Ok(())
+}
+
+pub fn add_validator_to_genesis(
+    genesis_path: &Path,
+    name: &str,
+    key_path: Option<&Path>,
+    address: Option<&str>,
+    public_key: Option<&str>,
+    bls_public_key: Option<&str>,
+    stake: u128,
+) -> Result<()> {
+    let mut config = load_genesis(genesis_path)?;
+
+    let (addr_hex, pk_hex, bls_hex) = if let Some(kf_path) = key_path {
+        let contents = std::fs::read_to_string(kf_path)
+            .with_context(|| format!("Failed to read {}", kf_path.display()))?;
+        let kf: KeyFile = serde_json::from_str(&contents).context("Failed to parse keyfile")?;
+        let bls = kf.bls_public_key.ok_or_else(|| {
+            anyhow::anyhow!(
+                "Keyfile has no BLS public key. Generate with: aztibase wallet generate --validator"
+            )
+        })?;
+        (kf.address, Some(kf.public_key), bls)
+    } else {
+        let addr =
+            address.ok_or_else(|| anyhow::anyhow!("Either --key or --address is required"))?;
+        let bls = bls_public_key
+            .ok_or_else(|| anyhow::anyhow!("--bls-public-key is required when using --address"))?;
+        (
+            addr.strip_prefix("0x").unwrap_or(addr).to_string(),
+            public_key.map(|s| s.strip_prefix("0x").unwrap_or(s).to_string()),
+            bls.strip_prefix("0x").unwrap_or(bls).to_string(),
+        )
+    };
+
+    if config.validators.iter().any(|v| v.address == addr_hex) {
+        anyhow::bail!("Validator with address {addr_hex} already exists in genesis");
+    }
+    if config.accounts.contains_key(&addr_hex) {
+        anyhow::bail!("Address {addr_hex} already exists as an account in genesis");
+    }
+
+    config.validators.push(ValidatorEntry {
+        name: name.to_string(),
+        address: addr_hex.clone(),
+        stake,
+        public_key: pk_hex,
+        bls_public_key: Some(bls_hex),
+    });
+
+    save_genesis(genesis_path, &config)?;
+    println!("Added validator '{name}' (address: 0x{addr_hex}, stake: {stake})");
+    println!("Total validators: {}", config.validators.len());
+    Ok(())
+}
+
+pub fn add_account_to_genesis(genesis_path: &Path, address: &str, balance: u128) -> Result<()> {
+    let mut config = load_genesis(genesis_path)?;
+    let addr_hex = address.strip_prefix("0x").unwrap_or(address).to_string();
+
+    if config.validators.iter().any(|v| v.address == addr_hex) {
+        anyhow::bail!("Address {addr_hex} already exists as a validator in genesis");
+    }
+
+    config
+        .accounts
+        .insert(addr_hex.clone(), AccountEntry { balance });
+
+    save_genesis(genesis_path, &config)?;
+    println!("Added account 0x{addr_hex} with balance {balance}");
+    println!("Total accounts: {}", config.accounts.len());
+    Ok(())
+}
+
+pub fn show_genesis(genesis_path: &Path) -> Result<()> {
+    let config = load_genesis(genesis_path)?;
+    let hash = genesis_hash(&config)?;
+
+    let validator_total: u128 = config.validators.iter().map(|v| v.stake).sum();
+    let account_total: u128 = config.accounts.values().map(|a| a.balance).sum();
+    let total_supply = validator_total + account_total;
+
+    println!("Genesis: {}", genesis_path.display());
+    println!("Chain ID: 0x{:X} ({})", config.chain_id, config.chain_id);
+    println!("Timestamp: {}", config.timestamp);
+    println!("Genesis hash: {}", hex_encode(&hash));
+    println!();
+    println!("Validators ({}):", config.validators.len());
+    for v in &config.validators {
+        println!("  {} — 0x{}… stake: {}", v.name, &v.address[..16], v.stake);
+    }
+    println!();
+    println!("Accounts: {}", config.accounts.len());
+    println!("Total supply: {total_supply} AZTB (cap: {GENESIS_SUPPLY})");
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -942,6 +1070,216 @@ mod tests {
             .filter_map(|e| e.ok())
             .collect();
         assert_eq!(key_files.len(), 3);
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn init_genesis_creates_scaffold() {
+        let dir =
+            std::env::temp_dir().join(format!("aztibase_init_genesis_{}", std::process::id()));
+        init_genesis(&dir).unwrap();
+
+        let genesis_path = dir.join("genesis.toml");
+        assert!(genesis_path.exists());
+
+        let config = load_genesis(&genesis_path).unwrap();
+        assert_eq!(config.chain_id, CHAIN_ID);
+        assert!(config.validators.is_empty());
+        assert!(config.accounts.is_empty());
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn add_validator_from_keyfile() {
+        let dir = std::env::temp_dir().join(format!("aztibase_addval_kf_{}", std::process::id()));
+        init_genesis(&dir).unwrap();
+        let genesis_path = dir.join("genesis.toml");
+
+        let keys_dir = dir.join("keys");
+        std::fs::create_dir_all(&keys_dir).unwrap();
+        let kp = Keypair::generate();
+        let bls_kp = BlsKeypair::generate();
+        let addr = address_from_pubkey(kp.public_key().as_bytes());
+        let keyfile = KeyFile {
+            public_key: hex_encode(kp.public_key().as_bytes()),
+            secret_key: hex_encode(&kp.secret_bytes()),
+            address: hex_encode(&addr),
+            bls_public_key: Some(hex_encode(bls_kp.public_key().as_bytes())),
+            bls_secret_key: Some(hex_encode(&bls_kp.secret_bytes())),
+        };
+        let kf_path = keys_dir.join("val.json");
+        std::fs::write(&kf_path, serde_json::to_string_pretty(&keyfile).unwrap()).unwrap();
+
+        add_validator_to_genesis(
+            &genesis_path,
+            "alice",
+            Some(&kf_path),
+            None,
+            None,
+            None,
+            500_000,
+        )
+        .unwrap();
+
+        let config = load_genesis(&genesis_path).unwrap();
+        assert_eq!(config.validators.len(), 1);
+        assert_eq!(config.validators[0].name, "alice");
+        assert_eq!(config.validators[0].stake, 500_000);
+        assert!(config.validators[0].bls_public_key.is_some());
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn add_validator_from_public_info() {
+        let dir = std::env::temp_dir().join(format!("aztibase_addval_pub_{}", std::process::id()));
+        init_genesis(&dir).unwrap();
+        let genesis_path = dir.join("genesis.toml");
+
+        let addr = hex_encode(&[0x42; 32]);
+        let pk = hex_encode(&[0x11; 32]);
+        let bls = hex_encode(&[0xAA; 48]);
+
+        add_validator_to_genesis(
+            &genesis_path,
+            "bob",
+            None,
+            Some(&addr),
+            Some(&pk),
+            Some(&bls),
+            1_000_000,
+        )
+        .unwrap();
+
+        let config = load_genesis(&genesis_path).unwrap();
+        assert_eq!(config.validators.len(), 1);
+        assert_eq!(config.validators[0].name, "bob");
+        assert_eq!(config.validators[0].address, addr);
+        assert_eq!(
+            config.validators[0].public_key.as_deref(),
+            Some(pk.as_str())
+        );
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn add_validator_rejects_duplicate() {
+        let dir = std::env::temp_dir().join(format!("aztibase_addval_dup_{}", std::process::id()));
+        init_genesis(&dir).unwrap();
+        let genesis_path = dir.join("genesis.toml");
+
+        let addr = hex_encode(&[0x42; 32]);
+        let bls = hex_encode(&[0xAA; 48]);
+
+        add_validator_to_genesis(
+            &genesis_path,
+            "v1",
+            None,
+            Some(&addr),
+            None,
+            Some(&bls),
+            100_000,
+        )
+        .unwrap();
+        let result = add_validator_to_genesis(
+            &genesis_path,
+            "v2",
+            None,
+            Some(&addr),
+            None,
+            Some(&bls),
+            100_000,
+        );
+        assert!(result.is_err());
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn add_account_works() {
+        let dir = std::env::temp_dir().join(format!("aztibase_addacct_{}", std::process::id()));
+        init_genesis(&dir).unwrap();
+        let genesis_path = dir.join("genesis.toml");
+
+        let addr = hex_encode(&[0x55; 32]);
+        add_account_to_genesis(&genesis_path, &addr, 5_000_000).unwrap();
+
+        let config = load_genesis(&genesis_path).unwrap();
+        assert_eq!(config.accounts.len(), 1);
+        assert_eq!(config.accounts[&addr].balance, 5_000_000);
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn add_account_rejects_validator_overlap() {
+        let dir =
+            std::env::temp_dir().join(format!("aztibase_addacct_overlap_{}", std::process::id()));
+        init_genesis(&dir).unwrap();
+        let genesis_path = dir.join("genesis.toml");
+
+        let addr = hex_encode(&[0x42; 32]);
+        let bls = hex_encode(&[0xAA; 48]);
+        add_validator_to_genesis(
+            &genesis_path,
+            "v1",
+            None,
+            Some(&addr),
+            None,
+            Some(&bls),
+            100_000,
+        )
+        .unwrap();
+
+        let result = add_account_to_genesis(&genesis_path, &addr, 1_000);
+        assert!(result.is_err());
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn show_genesis_runs_without_error() {
+        let dir = std::env::temp_dir().join(format!("aztibase_showgen_{}", std::process::id()));
+        let generated = generate_genesis(2, 1, 1000);
+        write_genesis(&generated, &dir).unwrap();
+        show_genesis(&dir.join("genesis.toml")).unwrap();
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn full_ceremony_flow() {
+        let dir = std::env::temp_dir().join(format!("aztibase_ceremony_{}", std::process::id()));
+        init_genesis(&dir).unwrap();
+        let genesis_path = dir.join("genesis.toml");
+
+        for i in 0..3 {
+            let addr = hex_encode(&[i + 1; 32]);
+            let pk = hex_encode(&[i + 0x10; 32]);
+            let bls = hex_encode(&[i + 0xA0; 48]);
+            add_validator_to_genesis(
+                &genesis_path,
+                &format!("validator-{}", i + 1),
+                None,
+                Some(&addr),
+                Some(&pk),
+                Some(&bls),
+                1_000_000,
+            )
+            .unwrap();
+        }
+
+        let faucet = hex_encode(&[0xFF; 32]);
+        add_account_to_genesis(&genesis_path, &faucet, 10_000_000).unwrap();
+
+        let config = load_genesis(&genesis_path).unwrap();
+        assert_eq!(config.validators.len(), 3);
+        assert_eq!(config.accounts.len(), 1);
+
+        assert!(validate_genesis(&config).is_ok());
+        show_genesis(&genesis_path).unwrap();
 
         let _ = std::fs::remove_dir_all(&dir);
     }
