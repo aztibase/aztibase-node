@@ -85,6 +85,9 @@
 - Nothing currently blocked
 
 ### Recently Completed
+- Consensus-based FaucetDrip: TxKind 0x1B, signed envelope through mempool→consensus→pipeline. Fixes node-local state divergence. Nonce increment fix for repeat drips.
+- P2P mesh fix: 0.0.0.0 bind + staggered starts → full 3-node mesh, continuous block production
+- Live testnet re-validated: faucet drips (2x), transfers (2x), cross-node balance consistency confirmed
 - Open risk resolution: nChain FTO (LOW-MEDIUM, ADR-028), quinn-proto DoS fix (ADR-029), wasmtime v42 Windows clean, domain acquisition confirmed
 - Live testnet validation: 2226+ batches, 0 equivocations, 49 RPC methods, 3 validators, staking metrics fix
 - Sprint 057: Validator business-in-a-box — one-click setup script, Grafana Cloud free tier monitoring, VPS guide (6 providers, from €3.99/mo)

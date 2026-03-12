@@ -5,6 +5,24 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ---
 
+## Consensus-Based FaucetDrip & Testnet Liveness Fixes (2026-03-12)
+
+### Changed
+- **Faucet is now consensus-based**: FaucetDrip (0x1B) is a signed transaction that goes through mempool→gossipsub→consensus→pipeline execution. All nodes reach consistent state. Replaces the prior node-local faucet.
+
+### Fixed
+- **FaucetDrip nonce not incremented**: Pipeline execution set recipient balance but never called `increment_nonce(validator)`. Second+ faucet drips failed nonce validation (expected=0, got=1).
+- **P2P mesh incomplete on local testnet**: Nodes bound to `127.0.0.1` couldn't be reached when peers discovered them via LAN IPs (172.x, 192.x) through libp2p address observation. Changed to `0.0.0.0`.
+- **Testnet startup race condition**: All 3 nodes started simultaneously, causing boot_node connections to fail before listeners were ready. Added 2s staggered starts.
+
+### Validated (Live 3-Node Testnet)
+- FaucetDrip: 2x drips credited correctly (nonce 0 and 1), balance 2,000,000 on all 3 nodes
+- Transfers: 500 + 1,000 AZTB with correct gas accounting (21,000 gas each)
+- Cross-node consistency: all 3 nodes show identical sender/recipient balances
+- Block production: ~15 batches/sec continuous, full P2P mesh (2 peers per node)
+
+---
+
 ## Open Risk Resolution & Testnet Validation (2026-03-12)
 
 ### Security
@@ -36,7 +54,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 ### Fixed
 - **TX lookup returning null**: `getTransactionByHash` now returns data for all transactions (including nonce-rejected ones), not just successfully executed txs.
 - **Nonce increment on failed escrow**: Transactions that fail gas-price or escrow checks no longer consume a nonce slot. Matches standard behavior: if you can't pay, no nonce consumed.
-- **Faucet documented as node-local**: Added rustdoc comment clarifying faucet drips are node-local (not consensus txs) and recipients must transact on the same node.
+- **Faucet documented as node-local**: Added rustdoc comment (now superseded — faucet is consensus-based as of fc4de4e).
 
 ---
 

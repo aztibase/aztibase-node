@@ -21,6 +21,20 @@ Entries are prepended (newest first).
 
 ## Entries
 
+### Consensus-Based FaucetDrip & Testnet Liveness Fixes (M9-S18.4)
+- **Date**: 2026-03-12
+- **Commit**: fc4de4e
+- **Files changed**:
+  - `crates/aztibase-execution/src/routing.rs` — New TxKind::FaucetDrip variant (prefix 0x1B): validator, recipient, amount, nonce, gas_price. All match arms updated (encode, nonce, gas_price, gas_limit=0, sender→validator, expected_prefix). Roundtrip test.
+  - `crates/aztibase-execution/src/fee.rs` — Added `0x1B => 0` to estimate_gas (FaucetDrip is free)
+  - `crates/aztibase-node/src/pipeline.rs` — FaucetDrip pipeline execution: gas escrow bypass (pushes None), dispatch to faucet_drips vec (validator, recipient, amount), execution sets balance + increments sender nonce. compute_tx_hash updated.
+  - `crates/aztibase-node/src/mempool.rs` — Gas price bypass for FaucetDrip txs (skip min_gas_price check)
+  - `crates/aztibase-rpc/src/server.rs` — Rewrote handle_faucet_drip: deterministic keypair from BLAKE3("AZTIBASE_TESTNET_FAUCET"), constructs SignedTx envelope, submits via consensus channel. Added faucet_nonce AtomicU64 to RpcState.
+  - `data/node{1,2,3}/node{1,2,3}-local.toml` — Changed listen_addresses from 127.0.0.1 to 0.0.0.0 (fixes peer discovery via LAN IPs)
+  - `start-testnet.sh` — Staggered node starts (2s delay) to prevent boot_node race conditions
+- **Review Notes**: Converts faucet from node-local state mutation to a consensus transaction. Fixes 3 bugs: (1) FaucetDrip nonce never incremented in state → 2nd+ drips failed nonce validation; (2) P2P mesh incomplete because nodes bound to 127.0.0.1 but discovered via LAN IPs; (3) startup race condition. Live testnet validated: 2x faucet drips, 2x transfers (500 + 1000 AZTB), cross-node balance consistency on all 3 nodes.
+- **Security Flags**: None
+
 ### Open Risk Resolution & Testnet Validation (M9-S18.3)
 - **Date**: 2026-03-12
 - **Commit**: (this commit)
