@@ -21,6 +21,18 @@ Entries are prepended (newest first).
 
 ## Entries
 
+### Open Risk Resolution & Testnet Validation (M9-S18.3)
+- **Date**: 2026-03-12
+- **Commit**: (this commit)
+- **Files changed**:
+  - `Cargo.lock` — quinn-proto 0.11.13 → 0.11.14 (RUSTSEC-2026-0037 HIGH DoS fix)
+  - `crates/aztibase-node/src/main.rs` — Staking metrics wiring: `update_staking()` called after each batch with validator count and total stake from shared staking store
+  - `blockchain-project/STATUS.md` — Updated open risks (domain resolved, FTO in progress, wasmtime v42 clean, quinn-proto fixed)
+  - `blockchain-project/DECISIONS.md` — ADR-028 (nChain FTO analysis), ADR-029 (quinn-proto patch)
+  - `test-testnet.sh` — NEW: Comprehensive testnet validation script (12 phases)
+- **Review Notes**: Live 3-node testnet validated: 2226+ batches, 0 equivocations, 3.2ms commit latency, 2 peers per node, all 49 RPC methods responsive. nChain FTO: overall LOW-MEDIUM risk, PoUW attestation approach is architecturally distinct. wasmtime v42 Windows trap handling confirmed resolved (setjmp/longjmp rewrite shipped). 223 node tests pass, 0 clippy warnings.
+- **Security Flags**: None
+
 ### Admin Dashboard & Testnet Hardening (M9-S18.2)
 - **Date**: 2026-03-12
 - **Commit**: (this commit)

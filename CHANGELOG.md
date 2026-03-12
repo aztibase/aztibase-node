@@ -5,6 +5,28 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ---
 
+## Open Risk Resolution & Testnet Validation (2026-03-12)
+
+### Security
+- **quinn-proto DoS fix**: Bumped 0.11.13 → 0.11.14 (RUSTSEC-2026-0037, severity 8.7 HIGH). Eliminates DoS on QUIC P2P transport.
+- **nChain FTO analysis (ADR-028)**: Overall LOW-MEDIUM risk. 3,900 patents reviewed. PoUW attestation mechanism confirmed architecturally distinct from nChain's ZK-based verifiable AI. No DAG consensus or Verkle tree overlap.
+- **wasmtime v42 Windows**: Trap handling confirmed clean — setjmp/longjmp rewrite shipped in v38-v40, fully baked by v42.
+
+### Fixed
+- **Staking metrics in /metrics/json**: `active_validators` and `total_staked` counters were always 0. Now updated from shared staking store after each batch commit.
+
+### Added
+- **Testnet validation script**: `test-testnet.sh` — 12-phase automated validation (health, chain ID, block production, faucet, balances, metrics, cross-node consistency, stress test).
+
+### Validated (Live 3-Node Testnet)
+- 2226+ batches committed, 0 equivocations, 3.2ms avg commit latency
+- All 49 RPC methods responsive, 3 validators active (1M stake each)
+- Prometheus + JSON metrics endpoints confirmed
+- Rate limiter, faucet, cross-node genesis hash consistency confirmed
+- 20/20 rapid faucet drips succeeded under stress
+
+---
+
 ## Admin Dashboard & Testnet Hardening (2026-03-12)
 
 ### Added

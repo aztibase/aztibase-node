@@ -1,7 +1,7 @@
 # PROJECT STATUS: Aztibase Network
 
-**Last Updated:** 2026-03-11
-**Updated By:** node-engineer + documentation-engineer
+**Last Updated:** 2026-03-12
+**Updated By:** security-engineer + node-engineer + documentation-engineer
 **Current Phase:** M9 -- Mainnet Prep (Sprint 18 COMPLETE)
 **Current Sprint:** Sprint 057 -- COMPLETE (Validator Business-in-a-Box & Cloud Monitoring)
 
@@ -85,6 +85,8 @@
 - Nothing currently blocked
 
 ### Recently Completed
+- Open risk resolution: nChain FTO (LOW-MEDIUM, ADR-028), quinn-proto DoS fix (ADR-029), wasmtime v42 Windows clean, domain acquisition confirmed
+- Live testnet validation: 2226+ batches, 0 equivocations, 49 RPC methods, 3 validators, staking metrics fix
 - Sprint 057: Validator business-in-a-box — one-click setup script, Grafana Cloud free tier monitoring, VPS guide (6 providers, from €3.99/mo)
 - Sprint 056: Full state snapshots & mainnet genesis — ProtocolStoreBundle, snapshot CLI, mainnet_genesis() 400M AZTB, ADR-027
 - Sprint 055: Public testnet launch infrastructure — faucet UI, testnet landing page, seed node configs, systemd service, bootstrap script, ADR-026
@@ -255,9 +257,9 @@
 - Sprint 005 Phase 1: Consensus-to-execution wiring, TxKind routing, ExecutionPipeline
 
 ### Next Up
-1. Sprint 051 Phase 1: WASM tx signing exports
-2. Sprint 051 Phase 2: Block explorer (static HTML + RPC)
-3. Sprint 051 Phase 3: RPC hardening (new endpoints, CORS)
+1. Open risk resolution: nChain FTO analysis, dependency audit, coexistence agreement
+2. Live testnet validation: full RPC suite, multi-transfer stress test, monitoring verification
+3. Sprint 058 planning: mainnet launch checklist
 
 ### Deferred to M9+ (Locked in FUTURE_PLANNING.md)
 
@@ -291,10 +293,11 @@
 | Risk | Severity | Owner | Status |
 |------|----------|-------|--------|
 | Aztibase Systems coexistence agreement not initiated | MEDIUM | legal-ip-counsel | OPEN |
-| Domain acquisition pending | MEDIUM | legal-ip-counsel | OPEN |
-| nChain patent FTO analysis not started | HIGH | legal-ip-counsel | OPEN |
-| wasmtime trap handling on Windows | LOW | smart-contract-engineer | KNOWN |
-| Transitive dep advisories (ring, wasmtime ×4, tracing-subscriber, lru, bincode) | LOW | security-engineer | DOCUMENTED |
+| Domain acquisition (aztibase.com) | MEDIUM | legal-ip-counsel | RESOLVED (acquired) |
+| nChain patent FTO analysis | LOW-MEDIUM | legal-ip-counsel | ASSESSED (ADR-028: overall LOW-MEDIUM, PoUW attestation distinct from nChain ZK approach) |
+| wasmtime trap handling on Windows | LOW | smart-contract-engineer | RESOLVED (v42 setjmp/longjmp rewrite confirmed clean) |
+| Transitive dep advisories (ring 0.16, tracing-subscriber 0.2, lru 0.12) | LOW | security-engineer | DOCUMENTED (locked by libp2p 0.54 / revm 36) |
+| quinn-proto QUIC DoS (RUSTSEC-2026-0037) | HIGH | security-engineer | FIXED (0.11.13→0.11.14) |
 | Mempool seen set memory growth (SEC-MEM-001) | MEDIUM | node-engineer | FIXED (bounded to max_size×10) |
 | AI model paths from config (SEC-AI-001) | MEDIUM | ai-integration-engineer | FIXED (path traversal blocked) |
 | Block-STM parallel validation race | MEDIUM | smart-contract-engineer | FIXED (prior-tx check in finish_validation) |
@@ -311,5 +314,5 @@
 | 1 | Use AZTB ticker (not DND) | SATISFIED |
 | 2 | Coexistence agreement with Aztibase Systems Inc. | PENDING |
 | 3 | Trademark filing strategy (Classes 36/42 first, then 9) | PENDING |
-| 4 | Domain acquisition before public announcement | PENDING |
+| 4 | Domain acquisition before public announcement | SATISFIED (aztibase.com acquired) |
 | 5 | Matrix Aztibase FAQ entry | PENDING |

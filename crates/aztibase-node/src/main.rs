@@ -1075,6 +1075,7 @@ async fn main() -> Result<()> {
     // Shared state for sync protocol + mempool gas price validation
     let shared_state = exec_pipeline.shared_state();
     let shared_base_fee = exec_pipeline.shared_base_fee();
+    let shared_staking = exec_pipeline.shared_staking_store();
 
     // Spawn execution pipeline
     let pipeline_handle = tokio::spawn(async move {
@@ -1413,6 +1414,13 @@ async fn main() -> Result<()> {
                 );
                 node_metrics.update_execution(batch_index, base_fee_val);
                 node_metrics.inc_txs_processed(result.receipts.len() as u64);
+
+                {
+                    let staking = shared_staking.read().await;
+                    let validators = staking.active_validators();
+                    let total: u128 = validators.iter().map(|v| v.effective_stake()).sum();
+                    node_metrics.update_staking(validators.len() as u64, total);
+                }
             }
             _ = shutdown.notified() => {
                 break;

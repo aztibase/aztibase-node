@@ -35,6 +35,8 @@ Every non-obvious technical decision is recorded here. Each ADR is immutable onc
 | ADR-025 | Network profiles & mainnet operational hardening | 2026-03-11 | ACCEPTED | blockchain-architect + security-engineer |
 | ADR-026 | Public testnet launch infrastructure | 2026-03-11 | ACCEPTED | node-engineer + documentation-engineer |
 | ADR-027 | Full state snapshots & mainnet genesis ceremony | 2026-03-11 | ACCEPTED | node-engineer + blockchain-architect |
+| ADR-028 | nChain patent FTO preliminary analysis | 2026-03-12 | ACCEPTED | legal-ip-counsel + blockchain-architect |
+| ADR-029 | quinn-proto security patch (RUSTSEC-2026-0037) | 2026-03-12 | ACCEPTED | security-engineer |
 
 ---
 
@@ -851,3 +853,57 @@ The snapshot module (Sprint 046+) captured AccountState but not protocol stores 
 ### Consequences
 [What follows from this decision -- both positive and negative]
 ```
+
+---
+
+## ADR-028: nChain Patent FTO Preliminary Analysis
+
+**Date:** 2026-03-12
+**Status:** ACCEPTED
+**Decided By:** legal-ip-counsel + blockchain-architect
+**Git Ref:** (this commit)
+
+### Context
+nChain holds ~3,900 patent applications (~1,090 granted), making them the largest blockchain patent holder. Their Patent Pledge only covers BSV implementations. As an independent L1, Aztibase has no protection under this pledge. An FTO analysis was required before mainnet launch.
+
+### Decision
+Overall risk assessed as LOW-MEDIUM. Aztibase's architecture is fundamentally different from nChain's BSV-centric portfolio.
+
+Risk by feature:
+- **PoUW / AI verification (MEDIUM-HIGH)**: nChain demonstrated verifiable AI inference on BSV (Sept 2024) using ZK proofs. Aztibase uses committee attestation, not ZK proofs — architecturally distinct but closest overlap area.
+- **Smart contracts (MEDIUM)**: nChain holds patents on state machines on blockchain (EP 3257191, US 11,194,898). Aztibase uses standard WASM/EVM open standards, not BSV Script.
+- **Consensus (MEDIUM → possibly LOW)**: US 12,032,677 covers consensus-based ledgers but is under reexamination by Unified Patents. nChain has zero DAG consensus patents. SynBFT derives from MystiCeti (academic prior art).
+- **All other features (LOW)**: DAG structure, Verkle trees, libp2p, BLAKE3/Ed25519/BLS, hybrid account+object model — no nChain overlap.
+
+### Rationale
+Aztibase's design choices (DAG-BFT, Verkle trees, dual WASM+EVM, PoUW with attestation) are architecturally distinct from nChain's BSV-focused innovations. The only meaningful overlap is in verifiable AI computation, which uses a different verification mechanism.
+
+### Consequences
+- Must ensure PoUW verification remains attestation-based (not ZK-proof-based)
+- Consider joining COPA (Cryptocurrency Open Patent Alliance) for defensive coverage
+- File defensive publications for novel techniques (SynBFT, PoUW, hybrid model)
+- Monitor nChain patent grants quarterly, especially AI/computation filings
+- Track US 12,032,677 reexamination outcome
+
+---
+
+## ADR-029: quinn-proto Security Patch (RUSTSEC-2026-0037)
+
+**Date:** 2026-03-12
+**Status:** ACCEPTED
+**Decided By:** security-engineer
+**Git Ref:** (this commit)
+
+### Context
+`cargo audit` identified RUSTSEC-2026-0037: DoS vulnerability in quinn-proto 0.11.13 (severity 8.7 HIGH). quinn-proto is a transitive dependency of libp2p-quic and reqwest, used for all P2P transport.
+
+### Decision
+Bumped quinn-proto 0.11.13 → 0.11.14 via `cargo update quinn-proto`. Remaining advisories (ring 0.16, tracing-subscriber 0.2, lru 0.12, atomic-polyfill, bincode, derivative) are transitive dependencies locked by libp2p 0.54 and revm 36 — cannot be patched without major version bumps.
+
+### Rationale
+Patch-level bump with no breaking changes. Eliminates a high-severity DoS attack surface on all QUIC-based P2P connections.
+
+### Consequences
+- QUIC DoS vulnerability eliminated
+- 2 remaining vulnerabilities (ring AES panic, tracing-subscriber ANSI injection) are transitive and low-impact for Aztibase's use case
+- Will be fully resolved when libp2p releases a version using ring 0.17+
