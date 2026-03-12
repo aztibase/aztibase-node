@@ -5,6 +5,20 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ---
 
+## Pre-Mainnet Audit (2026-03-12)
+
+### Added
+- Full pre-mainnet audit report (`blockchain-project/AUDIT_REPORT_2026-03-12.md`) covering all 9 crates + architecture alignment
+
+### Audit Results
+- **15 CRITICAL**: `.unwrap()` panics on untrusted data, phantom parent attacks, gossipsub message suppression, WASM key exposure, APY formula mismatch, VerkleTree leaf count bug
+- **25 HIGH**: No DagBlock signatures (top blocker), silent committed batch drops, faucet abuse vectors, empty runtime stubs, CORS defaults
+- **3 constraint violations**: `blst` C dep (ADR-001), Merkle-not-Verkle state root, zero privacy primitives
+- **8 architecture gaps**: Object model, Block-STM integration, WASM execution, privacy, DAS, relay incentives, runtime upgrades
+- **Code quality**: PASS — zero AI fingerprints, zero `unsafe`, zero `todo!()`, 931 tests
+
+---
+
 ## Consensus-Based FaucetDrip & Testnet Liveness Fixes (2026-03-12)
 
 ### Changed

@@ -79,12 +79,13 @@
 | aztibase-wasm | PARTIAL | p2p-network-engineer | NO | YES |
 
 ### In Progress
-- Nothing currently in progress
+- Pre-mainnet audit fixes (15 CRITICAL, 25 HIGH findings — see AUDIT_REPORT_2026-03-12.md)
 
 ### Blocked
-- Nothing currently blocked
+- Mainnet launch blocked on: DagBlock signature verification (H-CON-1), committed batch delivery guarantee (H-CON-3), faucet mainnet gate (H-NODE-3)
 
 ### Recently Completed
+- **Pre-mainnet audit (2026-03-12)**: 7-agent parallel audit of all 9 crates. 15C/25H/31M findings. Code quality clean. 8 architecture gaps. Prioritized 4-phase fix plan.
 - Consensus-based FaucetDrip: TxKind 0x1B, signed envelope through mempool→consensus→pipeline. Fixes node-local state divergence. Nonce increment fix for repeat drips.
 - P2P mesh fix: 0.0.0.0 bind + staggered starts → full 3-node mesh, continuous block production
 - Live testnet re-validated: faucet drips (2x), transfers (2x), cross-node balance consistency confirmed

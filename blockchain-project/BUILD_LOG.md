@@ -21,6 +21,14 @@ Entries are prepended (newest first).
 
 ## Entries
 
+### Pre-Mainnet Audit (M9 — Full Codebase)
+- **Date**: 2026-03-12
+- **Commit**: (this commit)
+- **Files changed**:
+  - `blockchain-project/AUDIT_REPORT_2026-03-12.md` — NEW: Full pre-mainnet audit report across all 9 crates + architecture alignment
+- **Summary**: 7-agent parallel code audit covering security, code quality, architecture alignment, and completeness. 15 CRITICAL, 25 HIGH, 31 MEDIUM findings. Top blockers: no DagBlock signatures, silent committed batch drops, WASM light client accepts forged data, `blst` C dep, faucet has no mainnet gate. Code quality clean (zero AI fingerprints, zero unsafe, 931 tests). 8 architecture gaps identified (object model, Block-STM integration, WASM execution, privacy, DAS).
+- **Security Flags**: H-CON-1 (no block signatures) ELEVATED — blocks BFT safety assumptions. H-CON-3 (dropped committed batches) ELEVATED — consensus-execution divergence risk.
+
 ### Consensus-Based FaucetDrip & Testnet Liveness Fixes (M9-S18.4)
 - **Date**: 2026-03-12
 - **Commit**: fc4de4e
