@@ -21,6 +21,22 @@ Entries are prepended (newest first).
 
 ## Entries
 
+### Public Testnet Infrastructure & Docs (2026-03-13)
+- **Date**: 2026-03-13
+- **Sprint**: Post-059 (Testnet Deployment)
+- **Commit**: TBD
+- **Files changed**:
+  - `start-testnet-public.sh` — Combined launcher for testnet + Cloudflare Tunnel
+  - `docs/VALIDATOR_ONBOARDING.md` — Validator onboarding guide (Tailscale + public RPC)
+  - `docs/brand/logo.svg`, `docs/brand/symbol.svg` — Brand vector assets
+  - `docs/generate_biab_pdf.py` — Business-in-a-Box PDF generator
+  - `docs/AZTIBASE_BUSINESS_IN_A_BOX.pdf` — Business-in-a-Box document
+  - `workspace/` — Investor deck build scripts and HTML slides
+  - `website/` — Astro docs site source
+  - `.gitignore` — Added website/dist/ exclusion
+- **Review Notes**: Set up Cloudflare Tunnel (aztibase-testnet) with DNS routes: rpc.aztibase.com, rpc2.aztibase.com, rpc3.aztibase.com. Tailscale mesh for validator P2P. Oracle Cloud explored but ARM capacity unavailable in Ashburn.
+- **Security Flags**: None
+
 ### Sprint 059 — Friends Testnet: Genesis Ceremony & Multi-Party Setup (2026-03-12)
 - **Date**: 2026-03-12
 - **Sprint**: 059 (Friends Testnet)

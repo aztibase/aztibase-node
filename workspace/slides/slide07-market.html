@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html>
+<head>
+<style>
+html { background: #FDFCFD; }
+body {
+  width: 720pt; height: 405pt; margin: 0; padding: 0;
+  font-family: Arial, sans-serif; display: flex; flex-direction: column;
+  background: #FDFCFD;
+}
+.top-bar img { width: 100%; height: 4pt; display: block; }
+.accent { position: absolute; left: 0; top: 4pt; }
+.accent img { width: 5pt; height: 401pt; display: block; }
+.header { margin: 28pt 0 0 42pt; }
+.header h2 { color: #3A2D7A; font-size: 24pt; font-weight: 300; letter-spacing: 2pt; margin: 0; }
+.header p { color: #8B7FB0; font-size: 10pt; letter-spacing: 1pt; margin: 4pt 0 0 0; }
+.main { display: flex; margin: 18pt 30pt 0 36pt; gap: 18pt; }
+.left { width: 330pt; }
+.left h3 { color: #3A2D7A; font-size: 13pt; font-weight: 700; margin: 0 0 12pt 0; }
+.market-item { display: flex; align-items: center; margin-bottom: 10pt; }
+.market-num { width: 70pt; }
+.market-num h4 { color: #4A3B8F; font-size: 18pt; font-weight: 700; margin: 0; }
+.market-desc p { color: #5A5070; font-size: 9pt; margin: 0; line-height: 1.4; }
+.right { width: 310pt; }
+.right h3 { color: #3A2D7A; font-size: 11pt; font-weight: 700; margin: 0 0 10pt 0; }
+.comp { padding: 8pt 12pt; border-radius: 4pt; margin-bottom: 6pt; }
+.comp div { background: #F5F2FA; border-radius: 4pt; padding: 8pt 12pt; display: flex; justify-content: space-between; align-items: center; }
+.comp-name p { color: #3A2D7A; font-size: 9pt; font-weight: 700; margin: 0; }
+.comp-val p { color: #4A3B8F; font-size: 9pt; margin: 0; }
+.comp-note p { color: #8B7FB0; font-size: 8pt; margin: 0; font-style: italic; }
+.diff { margin-top: 12pt; padding: 10pt 14pt; border-left: 3pt solid #D4A574; }
+.diff h4 { color: #D4A574; font-size: 9pt; font-weight: 700; margin: 0 0 4pt 0; letter-spacing: 1pt; }
+.diff p { color: #5A5070; font-size: 8.5pt; margin: 0; line-height: 1.5; }
+</style>
+</head>
+<body>
+<div class="top-bar"><div style="background:#4A3B8F;width:50%;height:4pt;display:inline-block;"></div><div style="background:#D4A574;width:50%;height:4pt;display:inline-block;"></div></div>
+<div class="accent"><div style="background:#4A3B8F;width:5pt;height:401pt;"></div></div>
+<div class="header">
+  <h2>MARKET OPPORTUNITY</h2>
+  <p>AI infrastructure meets decentralized compute</p>
+</div>
+<div class="main">
+  <div class="left">
+    <h3>Total Addressable Market</h3>
+    <div class="market-item">
+      <div class="market-num"><h4>$150B+</h4></div>
+      <div class="market-desc"><p>AI infrastructure market by 2027, growing 40%+ annually</p></div>
+    </div>
+    <div class="market-item">
+      <div class="market-num"><h4>$7B+</h4></div>
+      <div class="market-desc"><p>Combined market cap of decentralized compute projects</p></div>
+    </div>
+    <div class="market-item">
+      <div class="market-num"><h4>$1B+</h4></div>
+      <div class="market-desc"><p>DePIN hardware ecosystem (Helium, DIMO, Deeper)</p></div>
+    </div>
+    <div class="diff">
+      <h4>AZTIBASE DIFFERENTIATOR</h4>
+      <p>None of these projects have AI integrated INTO consensus. They all bolt compute onto existing chains. PoUW makes mining productive.</p>
+    </div>
+  </div>
+  <div class="right">
+    <h3>Decentralized AI Compute Landscape</h3>
+    <div class="comp"><div>
+      <div class="comp-name"><p>Bittensor (TAO)</p></div>
+      <div class="comp-val"><p>$3B+ FDV</p></div>
+    </div></div>
+    <div class="comp"><div>
+      <div class="comp-name"><p>Render (RNDR)</p></div>
+      <div class="comp-val"><p>$3B+ FDV</p></div>
+    </div></div>
+    <div class="comp"><div>
+      <div class="comp-name"><p>Akash (AKT)</p></div>
+      <div class="comp-val"><p>$1B+ FDV</p></div>
+    </div></div>
+    <div class="comp"><div>
+      <div class="comp-name"><p>io.net</p></div>
+      <div class="comp-val"><p>$500M+ FDV</p></div>
+    </div></div>
+    <div class="comp-note"><p>All are compute marketplaces on existing chains — none have consensus-level AI integration</p></div>
+  </div>
+</div>
+</body>
+</html>

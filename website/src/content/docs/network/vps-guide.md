@@ -1,0 +1,91 @@
+---
+title: VPS & Hardware Guide
+description: Hardware requirements and VPS provider comparison for validators
+---
+
+Everything you need to choose the right server for running an Aztibase validator.
+
+## Hardware Requirements
+
+| Component | Minimum (Testnet) | Recommended (Mainnet) |
+|-----------|-------------------|----------------------|
+| CPU | 2 vCPU | 4+ vCPU (dedicated preferred) |
+| RAM | 4 GB | 8-16 GB |
+| Disk | 50 GB SSD | 200 GB NVMe |
+| Network | 100 Mbps | 1 Gbps unmetered |
+| OS | Ubuntu 22.04 / Debian 12 | Ubuntu 24.04 LTS |
+
+**Storage note:** Aztibase uses redb (embedded database). Disk usage grows ~1 GB/month on testnet. For archive nodes, plan for 500 GB+.
+
+## VPS Provider Comparison
+
+### Budget Tier
+
+| Provider | Plan | CPU | RAM | Disk | Bandwidth | Price/mo |
+|----------|------|-----|-----|------|-----------|----------|
+| **Hetzner** | CX22 | 2 vCPU | 4 GB | 40 GB | 20 TB | **€3.99** |
+| **Contabo** | VPS S | 4 vCPU | 8 GB | 50 GB | 32 TB | **€6.99** |
+| **OVH** | Starter | 2 vCPU | 4 GB | 40 GB | Unmetered | **€5.50** |
+| **Vultr** | Cloud Compute | 2 vCPU | 4 GB | 80 GB | 3 TB | **$12** |
+| **DigitalOcean** | Basic | 2 vCPU | 4 GB | 80 GB | 4 TB | **$24** |
+
+### Production Tier
+
+| Provider | Plan | CPU | RAM | Disk | Bandwidth | Price/mo |
+|----------|------|-----|-----|------|-----------|----------|
+| **Hetzner** | CX32 | 4 vCPU | 8 GB | 80 GB | 20 TB | **€7.59** |
+| **Contabo** | VPS M | 6 vCPU | 16 GB | 100 GB | 32 TB | **€10.49** |
+| **Hetzner** | CCX23 (ARM) | 4 vCPU | 8 GB | 80 GB | 20 TB | **€7.19** |
+
+### Dedicated Servers
+
+| Provider | Plan | CPU | RAM | Disk | Price/mo |
+|----------|------|-----|-----|------|----------|
+| **Hetzner** | AX42 | Ryzen 5 3600 | 64 GB | 2× 512 GB NVMe | **€44** |
+| **OVH** | Rise-1 | Intel E-2386G | 32 GB | 2× 480 GB SSD | **€54** |
+
+## Our Recommendation
+
+**Hetzner CX22** at **€3.99/month** for testnet and early mainnet:
+- 2 vCPU, 4 GB RAM, 40 GB SSD, 20 TB bandwidth
+- EU (Falkenstein, Nuremberg, Helsinki) or US (Ashburn)
+- Upgrade to CX32 (€7.59) when mainnet traffic increases
+
+## Geographic Distribution
+
+For network health, validators should be geographically diverse:
+
+| Region | Providers |
+|--------|-----------|
+| Europe | Hetzner, OVH, Contabo |
+| North America | Hetzner US, Vultr, DigitalOcean |
+| Asia | Vultr (Tokyo, Singapore) |
+| South America | Vultr (São Paulo) |
+| Oceania | Vultr (Sydney), Linode |
+| Africa | Self-host or AWS Cape Town |
+
+## Monthly Costs
+
+| Item | Cost |
+|------|------|
+| VPS (Hetzner CX22) | €3.99/mo |
+| Grafana Cloud monitoring | Free |
+| Domain (optional) | €10/year |
+| **Total minimum** | **~€4/month** |
+
+## FAQ
+
+**Can I run on my home machine?**
+For testnet development, yes. Not recommended for production — validators that go offline get slashed (0.5% of stake).
+
+**Multiple validators on one VPS?**
+Not recommended. If the VPS goes down, all get slashed.
+
+**Static IP required?**
+No. Aztibase uses libp2p peer discovery automatically.
+
+**ARM support?**
+Yes. Aztibase compiles on ARM64. Hetzner's Ampere ARM servers offer great value.
+
+**Bandwidth usage?**
+~5-20 GB/day. The 20 TB/month included with most VPS plans is more than enough.

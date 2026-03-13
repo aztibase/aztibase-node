@@ -1,10 +1,10 @@
 # PROJECT STATUS: Aztibase Network
 
-**Last Updated:** 2026-03-12
-**Updated By:** consensus-engineer + security-engineer + documentation-engineer
+**Last Updated:** 2026-03-13
+**Updated By:** documentation-engineer + p2p-network-engineer
 **Current Phase:** M9 -- Mainnet Prep
-**Current Sprint:** Sprint 059 -- DONE (Friends Testnet: Genesis Ceremony & Multi-Party Setup)
-**Sprint Status:** All 6 phases complete. Tests pass, clippy clean, fmt clean.
+**Current Sprint:** Post-059 -- Public Testnet Infrastructure
+**Sprint Status:** Cloudflare Tunnel live (rpc.aztibase.com), Tailscale mesh configured, validator onboarding guide written. DNS propagation pending.
 
 ---
 

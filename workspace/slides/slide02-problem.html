@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html>
+<head>
+<style>
+html { background: #FDFCFD; }
+body {
+  width: 720pt; height: 405pt; margin: 0; padding: 0;
+  font-family: Arial, sans-serif; display: flex; flex-direction: column;
+  background: #FDFCFD;
+}
+.top-bar { width: 100%; height: 4pt; }
+.top-bar img { width: 100%; height: 4pt; display: block; }
+.accent { position: absolute; left: 0; top: 4pt; }
+.accent img { width: 5pt; height: 401pt; display: block; }
+.header { margin: 20pt 0 0 42pt; }
+.header h2 { color: #3A2D7A; font-size: 22pt; font-weight: 300; letter-spacing: 2pt; margin: 0; }
+.header p { color: #8B7FB0; font-size: 9pt; font-weight: 300; letter-spacing: 1pt; margin: 3pt 0 0 0; }
+.cards { display: flex; flex-wrap: wrap; margin: 12pt 30pt 0 30pt; gap: 10pt; }
+.card { width: 310pt; padding: 10pt 14pt; border-left: 3pt solid #4A3B8F; }
+.card div { background: #F8F6FA; border-radius: 4pt; }
+.card h3 { color: #3A2D7A; font-size: 10pt; font-weight: 700; margin: 0 0 4pt 0; }
+.card p { color: #5A5070; font-size: 8.5pt; font-weight: 300; line-height: 1.4; margin: 0; }
+</style>
+</head>
+<body>
+<div class="top-bar"><div style="background:#4A3B8F;width:50%;height:4pt;display:inline-block;"></div><div style="background:#D4A574;width:50%;height:4pt;display:inline-block;"></div></div>
+<div class="accent"><div style="background:#4A3B8F;width:5pt;height:401pt;"></div></div>
+<div class="header">
+  <h2>THE PROBLEM</h2>
+  <p>Four barriers holding back decentralized AI</p>
+</div>
+<div class="cards">
+  <div class="card">
+    <h3>Centralized AI Compute</h3>
+    <p>AWS, Google, and Microsoft control 80%+ of AI infrastructure. A single point of failure for the entire AI economy.</p>
+  </div>
+  <div class="card">
+    <h3>Wasted Mining Energy</h3>
+    <p>Proof of Work blockchains burn electricity solving meaningless puzzles. Proof of Stake requires nothing. Neither creates real-world value.</p>
+  </div>
+  <div class="card">
+    <h3>No Decentralized Inference</h3>
+    <p>AI developers cannot access affordable, censorship-resistant inference at scale. Every model call routes through centralized APIs.</p>
+  </div>
+  <div class="card">
+    <h3>AI as Afterthought</h3>
+    <p>No existing blockchain treats AI inference as a first-class protocol operation. It is always a bolt-on, never native.</p>
+  </div>
+</div>
+</body>
+</html>

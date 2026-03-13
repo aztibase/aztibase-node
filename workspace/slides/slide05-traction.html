@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html>
+<head>
+<style>
+html { background: #FDFCFD; }
+body {
+  width: 720pt; height: 405pt; margin: 0; padding: 0;
+  font-family: Arial, sans-serif; display: flex; flex-direction: column;
+  background: #FDFCFD;
+}
+.top-bar img { width: 100%; height: 4pt; display: block; }
+.accent { position: absolute; left: 0; top: 4pt; }
+.accent img { width: 5pt; height: 401pt; display: block; }
+.header { margin: 28pt 0 0 42pt; }
+.header h2 { color: #3A2D7A; font-size: 24pt; font-weight: 300; letter-spacing: 2pt; margin: 0; }
+.header p { color: #8B7FB0; font-size: 10pt; letter-spacing: 1pt; margin: 4pt 0 0 0; }
+.metrics { display: flex; flex-wrap: wrap; margin: 16pt 30pt 0 36pt; gap: 10pt; }
+.metric { width: 145pt; padding: 12pt 14pt; border-radius: 6pt; text-align: center; }
+.metric div { background: #F5F2FA; border-radius: 6pt; padding: 12pt 14pt; }
+.metric h3 { color: #4A3B8F; font-size: 22pt; font-weight: 700; margin: 0 0 2pt 0; }
+.metric p { color: #5A5070; font-size: 8pt; margin: 0; letter-spacing: 0.5pt; }
+.details { display: flex; margin: 14pt 30pt 0 36pt; gap: 14pt; }
+.detail-col { width: 310pt; }
+.detail-col h4 { color: #3A2D7A; font-size: 10pt; font-weight: 700; margin: 0 0 6pt 0; }
+.detail-col ul { margin: 0; padding: 0 0 0 14pt; }
+.detail-col li { color: #5A5070; font-size: 8.5pt; line-height: 1.6; margin: 0; }
+</style>
+</head>
+<body>
+<div class="top-bar"><div style="background:#4A3B8F;width:50%;height:4pt;display:inline-block;"></div><div style="background:#D4A574;width:50%;height:4pt;display:inline-block;"></div></div>
+<div class="accent"><div style="background:#4A3B8F;width:5pt;height:401pt;"></div></div>
+<div class="header">
+  <h2>TRACTION &amp; PROOF</h2>
+  <p>Code-backed evidence, not promises</p>
+</div>
+<div class="metrics">
+  <div class="metric"><div>
+    <h3>44,900</h3>
+    <p>LINES OF RUST CODE</p>
+  </div></div>
+  <div class="metric"><div>
+    <h3>940+</h3>
+    <p>PASSING TESTS</p>
+  </div></div>
+  <div class="metric"><div>
+    <h3>18.3K</h3>
+    <p>TPS PER CORE</p>
+  </div></div>
+  <div class="metric"><div>
+    <h3>59</h3>
+    <p>COMPLETED SPRINTS</p>
+  </div></div>
+</div>
+<div class="details">
+  <div class="detail-col">
+    <h4>Live Infrastructure</h4>
+    <ul>
+      <li>3-node testnet running continuously</li>
+      <li>400ms block time, sub-second finality</li>
+      <li>48 JSON-RPC methods, all functional</li>
+      <li>One-click validator deployment script</li>
+      <li>Prometheus + Grafana monitoring</li>
+    </ul>
+  </div>
+  <div class="detail-col">
+    <h4>Quality &amp; Security</h4>
+    <ul>
+      <li>Pre-mainnet audit: 71 findings, 70%+ resolved</li>
+      <li>0 Clippy warnings, cargo fmt clean</li>
+      <li>29 Architecture Decision Records</li>
+      <li>103 git commits, full build traceability</li>
+      <li>Pure Rust — zero C/C++ dependencies</li>
+    </ul>
+  </div>
+</div>
+</body>
+</html>

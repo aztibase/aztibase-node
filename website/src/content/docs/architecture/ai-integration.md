@@ -1,0 +1,95 @@
+---
+title: AI Integration
+description: How AI capabilities are built into the Aztibase protocol layer
+---
+
+Aztibase is designed as an **AI-native** blockchain — AI capabilities are part of the protocol layer, not third-party add-ons.
+
+## Design Principle
+
+**AI inference is off-chain. AI verification is on-chain.**
+
+Running neural networks on-chain would be prohibitively expensive and slow. Instead, Aztibase separates computation from verification:
+
+1. Users submit AI tasks on-chain
+2. Compute providers execute inference off-chain
+3. Results are verified on-chain through attestation consensus
+4. Rewards are distributed based on correct, timely computation
+
+## Three-Layer Architecture
+
+### Layer 1: Model Registry
+
+On-chain registry for AI models with:
+- Model hash (content-addressed via BLAKE3)
+- Version tracking
+- Owner and permissions
+- Compute requirements (min memory, supported hardware)
+
+**Transaction types:**
+- `RegisterModel` (0x08) — Register a new model
+- `DeregisterModel` (0x0D) — Remove a model from the registry
+
+### Layer 2: Compute Market
+
+Decentralized marketplace connecting task posters with compute providers:
+- **Task posting**: Users specify model, input data, max price, and deadline
+- **Compute commitment**: Providers stake and commit to execute tasks
+- **Price discovery**: Market-driven pricing based on model complexity and demand
+
+**Transaction types:**
+- `PostTask` (0x09) — Submit an AI inference task
+- `CommitCompute` (0x0B) — Provider commits to process a task
+- `DeregisterCompute` (0x0C) — Provider exits the compute market
+
+### Layer 3: Attestation Protocol
+
+Verification that off-chain computations were performed correctly:
+- Multiple providers execute the same task independently
+- Results are compared through on-chain attestations
+- Consensus on the correct result triggers reward distribution
+- Incorrect results trigger slashing of the provider's stake
+
+**Transaction types:**
+- `AiInfer` (0x06) — Submit inference result
+- `SubmitAttestation` (0x0A) — Attest to a computation result
+
+## Proof of Useful Work (PoUW)
+
+Validators with spare compute capacity can earn additional rewards by processing AI tasks. This converts idle validator resources into useful AI computation.
+
+**Emission share:** 15% of all block emissions go to PoUW participants.
+
+Unlike traditional Proof of Work, PoUW produces useful output (AI inference results) rather than burning energy on hash puzzles.
+
+## AI Agent Framework
+
+Aztibase supports autonomous AI agents that can:
+- Hold balances and execute transactions
+- Interact with smart contracts
+- Operate within policy-defined boundaries
+- Be created, configured, and governed on-chain
+
+**Transaction types:**
+- `CreateAgent` (0x07) — Deploy a new AI agent
+- `SetAgentPolicy` (0x14) — Configure agent permissions and limits
+- `AgentExecute` (0x15) — Agent-initiated transaction execution
+
+## Runtime Libraries
+
+| Library | Role |
+|---------|------|
+| **tract** | Primary inference runtime (ONNX models) |
+| **candle** | Secondary runtime (Hugging Face models, GPU support) |
+
+Both are pure Rust — no Python dependencies, no C++ bindings.
+
+## Browser Wallet Limits
+
+For browser-based AI interactions:
+
+| Parameter | Value |
+|-----------|-------|
+| Per-tx limit | 100 AZTB |
+| Session spending limit | 10,000 AZTB |
+| High-value warning | 1,000 AZTB |

@@ -5,6 +5,19 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ---
 
+## Public Testnet Infrastructure (2026-03-13)
+
+### Added
+- **Public RPC endpoints**: `rpc.aztibase.com`, `rpc2.aztibase.com`, `rpc3.aztibase.com` via Cloudflare Tunnel
+- **Combined launcher**: `start-testnet-public.sh` starts testnet + tunnel in one command
+- **Validator onboarding guide**: `docs/VALIDATOR_ONBOARDING.md` with Tailscale + public RPC instructions
+- **Brand assets**: Vector logo and symbol SVGs in `docs/brand/`
+- **Business-in-a-Box**: PDF document and generator script
+- **Investor deck**: HTML slide deck with build tooling in `workspace/`
+- **Documentation site**: Astro-based docs site in `website/`
+
+---
+
 ## Sprint 059 — Friends Testnet: Genesis Ceremony & Multi-Party Setup (2026-03-12)
 
 ### Added

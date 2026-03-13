@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html>
+<head>
+<style>
+html { background: #FDFCFD; }
+body {
+  width: 720pt; height: 405pt; margin: 0; padding: 0;
+  font-family: Arial, sans-serif; display: flex; flex-direction: column;
+  background: #FDFCFD;
+}
+.top-bar img { width: 100%; height: 4pt; display: block; }
+.accent { position: absolute; left: 0; top: 4pt; }
+.accent img { width: 5pt; height: 401pt; display: block; }
+.header { margin: 28pt 0 0 42pt; }
+.header h2 { color: #3A2D7A; font-size: 24pt; font-weight: 300; letter-spacing: 2pt; margin: 0; }
+.header p { color: #8B7FB0; font-size: 10pt; letter-spacing: 1pt; margin: 4pt 0 0 0; }
+.main { display: flex; margin: 16pt 30pt 0 36pt; gap: 20pt; }
+.left { width: 300pt; }
+.token-info { margin-bottom: 14pt; }
+.token-info h3 { color: #3A2D7A; font-size: 13pt; font-weight: 700; margin: 0 0 8pt 0; }
+.token-row { display: flex; margin-bottom: 4pt; }
+.token-label { width: 120pt; }
+.token-label p { color: #8B7FB0; font-size: 9pt; margin: 0; }
+.token-val p { color: #3A2D7A; font-size: 9pt; font-weight: 700; margin: 0; }
+.right { width: 340pt; }
+.right h3 { color: #3A2D7A; font-size: 11pt; font-weight: 700; margin: 0 0 10pt 0; }
+.dist-row { display: flex; align-items: center; margin-bottom: 8pt; }
+.dist-bar { height: 18pt; border-radius: 3pt; margin-right: 8pt; }
+.dist-label p { color: #5A5070; font-size: 8.5pt; margin: 0; }
+.value-box { margin-top: 12pt; padding: 10pt 14pt; border-radius: 6pt; }
+.value-box div { background: #F5F2FA; border-radius: 6pt; padding: 10pt 14pt; }
+.value-box h4 { color: #4A3B8F; font-size: 9pt; font-weight: 700; margin: 0 0 4pt 0; }
+.value-box ul { margin: 0; padding: 0 0 0 12pt; }
+.value-box li { color: #5A5070; font-size: 8pt; line-height: 1.5; }
+</style>
+</head>
+<body>
+<div class="top-bar"><div style="background:#4A3B8F;width:50%;height:4pt;display:inline-block;"></div><div style="background:#D4A574;width:50%;height:4pt;display:inline-block;"></div></div>
+<div class="accent"><div style="background:#4A3B8F;width:5pt;height:401pt;"></div></div>
+<div class="header">
+  <h2>TOKENOMICS</h2>
+  <p>Implemented in code, not just a whitepaper</p>
+</div>
+<div class="main">
+  <div class="left">
+    <div class="token-info">
+      <h3>AZTB Token</h3>
+      <div class="token-row">
+        <div class="token-label"><p>Hard Cap</p></div>
+        <div class="token-val"><p>1,000,000,000 AZTB</p></div>
+      </div>
+      <div class="token-row">
+        <div class="token-label"><p>Year 1-2 Emission</p></div>
+        <div class="token-val"><p>120M AZTB / year</p></div>
+      </div>
+      <div class="token-row">
+        <div class="token-label"><p>Halving Schedule</p></div>
+        <div class="token-val"><p>Every 2 years</p></div>
+      </div>
+      <div class="token-row">
+        <div class="token-label"><p>Fee Model</p></div>
+        <div class="token-val"><p>EIP-1559 base fee burn</p></div>
+      </div>
+      <div class="token-row">
+        <div class="token-label"><p>Chain ID</p></div>
+        <div class="token-val"><p>0xA27B</p></div>
+      </div>
+    </div>
+    <div class="value-box"><div>
+      <h4>Value Accrual</h4>
+      <ul>
+        <li>Gas fees for all transactions</li>
+        <li>Staking lockup reduces supply</li>
+        <li>AI compute market (PoUW) drives demand</li>
+        <li>dApps and L2 settlements</li>
+        <li>Hard cap + halving = scarcity</li>
+      </ul>
+    </div></div>
+  </div>
+  <div class="right">
+    <h3>Emission Distribution</h3>
+    <div class="dist-row">
+      <div class="dist-bar" style="width: 210pt;"><div style="background:#4A3B8F;width:210pt;height:18pt;border-radius:3pt;"></div></div>
+      <div class="dist-label"><p><span style="font-weight:700;">70%</span> Validators</p></div>
+    </div>
+    <div class="dist-row">
+      <div class="dist-bar" style="width: 45pt;"><div style="background:#6B5CA5;width:45pt;height:18pt;border-radius:3pt;"></div></div>
+      <div class="dist-label"><p><span style="font-weight:700;">15%</span> PoUW Compute</p></div>
+    </div>
+    <div class="dist-row">
+      <div class="dist-bar" style="width: 30pt;"><div style="background:#D4A574;width:30pt;height:18pt;border-radius:3pt;"></div></div>
+      <div class="dist-label"><p><span style="font-weight:700;">10%</span> Treasury</p></div>
+    </div>
+    <div class="dist-row">
+      <div class="dist-bar" style="width: 15pt;"><div style="background:#C4B8E0;width:15pt;height:18pt;border-radius:3pt;"></div></div>
+      <div class="dist-label"><p><span style="font-weight:700;">5%</span> Insurance Fund</p></div>
+    </div>
+    <div id="chart" class="placeholder" style="width: 300pt; height: 160pt; margin-top: 10pt;"></div>
+  </div>
+</div>
+</body>
+</html>

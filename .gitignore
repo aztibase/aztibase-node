@@ -27,5 +27,8 @@ data/*/db
 data/*/execution_db
 data/*/*.redb
 
+# Website build output
+website/dist/
+
 # Reference repos (not part of our codebase)
 /references/

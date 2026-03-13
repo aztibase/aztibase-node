@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html>
+<head>
+<style>
+html { background: #FDFCFD; }
+body {
+  width: 720pt; height: 405pt; margin: 0; padding: 0;
+  font-family: Arial, sans-serif; display: flex; flex-direction: column;
+  background: #FDFCFD;
+}
+.top-bar img { width: 100%; height: 4pt; display: block; }
+.accent { position: absolute; left: 0; top: 4pt; }
+.accent img { width: 5pt; height: 401pt; display: block; }
+.header { margin: 28pt 0 0 42pt; }
+.header h2 { color: #3A2D7A; font-size: 24pt; font-weight: 300; letter-spacing: 2pt; margin: 0; }
+.header p { color: #8B7FB0; font-size: 10pt; letter-spacing: 1pt; margin: 4pt 0 0 0; }
+.main { display: flex; margin: 16pt 30pt 0 36pt; gap: 20pt; }
+.left { width: 320pt; }
+.left h3 { color: #3A2D7A; font-size: 14pt; font-weight: 700; margin: 0 0 10pt 0; }
+.left p { color: #5A5070; font-size: 10pt; line-height: 1.6; margin: 0 0 12pt 0; }
+.right { width: 320pt; display: flex; flex-direction: column; gap: 10pt; }
+.feature { padding: 10pt 14pt; border-radius: 6pt; }
+.feature div { background: #F5F2FA; }
+.feature h4 { color: #4A3B8F; font-size: 10.5pt; font-weight: 700; margin: 0 0 3pt 0; }
+.feature p { color: #5A5070; font-size: 9pt; margin: 0; line-height: 1.4; }
+.tag { display: inline-block; padding: 2pt 8pt; border-radius: 3pt; margin-top: 6pt; }
+.tag div { background: #EDE8F5; }
+.tag p { color: #4A3B8F; font-size: 8pt; font-weight: 700; margin: 0; }
+</style>
+</head>
+<body>
+<div class="top-bar"><div style="background:#4A3B8F;width:50%;height:4pt;display:inline-block;"></div><div style="background:#D4A574;width:50%;height:4pt;display:inline-block;"></div></div>
+<div class="accent"><div style="background:#4A3B8F;width:5pt;height:401pt;"></div></div>
+<div class="header">
+  <h2>THE SOLUTION</h2>
+  <p>A blockchain where mining produces real value</p>
+</div>
+<div class="main">
+  <div class="left">
+    <h3>Aztibase Network</h3>
+    <p>A Layer-1 blockchain where validators earn rewards by running AI inference instead of solving meaningless puzzles. Proof of Useful Work turns every block into productive computation.</p>
+    <p>AI inference is a native transaction type, verified on-chain through deterministic re-execution and quorum attestation.</p>
+    <div class="tag"><div><p>PURE RUST  ·  9 CRATES  ·  44,900 LOC</p></div></div>
+  </div>
+  <div class="right">
+    <div class="feature"><div>
+      <h4>Proof of Useful Work (PoUW)</h4>
+      <p>Validators earn by running real AI inference tasks, scored on accuracy, latency, and availability.</p>
+    </div></div>
+    <div class="feature"><div>
+      <h4>Dual VM: WASM + EVM</h4>
+      <p>Write contracts in Rust, C, or Solidity. No ecosystem lock-in. Full EVM compatibility.</p>
+    </div></div>
+    <div class="feature"><div>
+      <h4>Server-Independent</h4>
+      <p>Browser nodes via WebRTC. Works even if all centralized infrastructure goes offline.</p>
+    </div></div>
+    <div class="feature"><div>
+      <h4>DAG Consensus</h4>
+      <p>10,000+ TPS, sub-second finality. Not limited by linear chain bottlenecks.</p>
+    </div></div>
+  </div>
+</div>
+</body>
+</html>

@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html>
+<head>
+<style>
+html { background: #FDFCFD; }
+body {
+  width: 720pt; height: 405pt; margin: 0; padding: 0;
+  font-family: Arial, sans-serif; display: flex; flex-direction: column;
+  background: #FDFCFD;
+}
+.top-bar img { width: 100%; height: 4pt; display: block; }
+.accent { position: absolute; left: 0; top: 4pt; }
+.accent img { width: 5pt; height: 401pt; display: block; }
+.header { margin: 28pt 0 0 42pt; }
+.header h2 { color: #3A2D7A; font-size: 24pt; font-weight: 300; letter-spacing: 2pt; margin: 0; }
+.header p { color: #8B7FB0; font-size: 10pt; letter-spacing: 1pt; margin: 4pt 0 0 0; }
+.pipeline { display: flex; align-items: flex-start; margin: 20pt 30pt 0 36pt; gap: 6pt; }
+.step { width: 120pt; text-align: center; }
+.step-num { width: 28pt; height: 28pt; border-radius: 50%; margin: 0 auto 6pt auto; display: flex; align-items: center; justify-content: center; }
+.step-num div { background: #4A3B8F; width: 28pt; height: 28pt; border-radius: 50%; display: flex; align-items: center; justify-content: center; }
+.step-num p { color: #FFFFFF; font-size: 12pt; font-weight: 700; margin: 0; }
+.step h4 { color: #3A2D7A; font-size: 9pt; font-weight: 700; margin: 0 0 4pt 0; letter-spacing: 0.5pt; }
+.step p.desc { color: #5A5070; font-size: 8pt; line-height: 1.4; margin: 0; }
+.arrow { margin-top: 12pt; }
+.arrow p { color: #C4B8E0; font-size: 16pt; margin: 0; }
+.bottom { margin: 16pt 36pt 0 36pt; padding: 14pt 18pt; border-radius: 6pt; }
+.bottom div { background: #F5F2FA; border-radius: 6pt; padding: 14pt 18pt; }
+.bottom h4 { color: #4A3B8F; font-size: 10pt; font-weight: 700; margin: 0 0 6pt 0; }
+.bottom p { color: #5A5070; font-size: 9pt; line-height: 1.5; margin: 0; }
+</style>
+</head>
+<body>
+<div class="top-bar"><div style="background:#4A3B8F;width:50%;height:4pt;display:inline-block;"></div><div style="background:#D4A574;width:50%;height:4pt;display:inline-block;"></div></div>
+<div class="accent"><div style="background:#4A3B8F;width:5pt;height:401pt;"></div></div>
+<div class="header">
+  <h2>HOW IT WORKS</h2>
+  <p>The PoUW inference pipeline</p>
+</div>
+<div class="pipeline">
+  <div class="step">
+    <div class="step-num"><div><p>1</p></div></div>
+    <h4>REGISTER MODEL</h4>
+    <p class="desc">Provider uploads ONNX model to on-chain registry with 5% royalty</p>
+  </div>
+  <div class="arrow"><p>&#8594;</p></div>
+  <div class="step">
+    <div class="step-num"><div><p>2</p></div></div>
+    <h4>POST TASK</h4>
+    <p class="desc">Requester posts inference job, pays AZTB reward</p>
+  </div>
+  <div class="arrow"><p>&#8594;</p></div>
+  <div class="step">
+    <div class="step-num"><div><p>3</p></div></div>
+    <h4>INFERENCE</h4>
+    <p class="desc">Assigned validator runs inference via tract runtime</p>
+  </div>
+  <div class="arrow"><p>&#8594;</p></div>
+  <div class="step">
+    <div class="step-num"><div><p>4</p></div></div>
+    <h4>ATTESTATION</h4>
+    <p class="desc">Quorum of 2+ validators verify matching results</p>
+  </div>
+  <div class="arrow"><p>&#8594;</p></div>
+  <div class="step">
+    <div class="step-num"><div><p>5</p></div></div>
+    <h4>SETTLEMENT</h4>
+    <p class="desc">Rewards split among validators, 5% royalty to model provider</p>
+  </div>
+</div>
+<div class="bottom"><div>
+  <h4>Validator Scoring: PoUW Formula</h4>
+  <p>Validators are ranked by a multi-metric score: Accuracy (40%) + Latency (30%) + Availability (30%). Higher-scoring validators receive more task assignments and earn proportionally more rewards. This creates a competitive market for inference quality.</p>
+</div></div>
+</body>
+</html>

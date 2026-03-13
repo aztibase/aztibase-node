@@ -1,0 +1,23 @@
+---
+import type { Props } from '@astrojs/starlight/props';
+import Default from '@astrojs/starlight/components/Header.astro';
+---
+
+<Default {...Astro.props}><slot /></Default>
+
+<nav class="top-nav-links" id="top-nav">
+	<a href="/guides/introduction/">Docs</a>
+	<a href="/network/testnet/">Network</a>
+	<a href="/guides/run-validator/">Validators</a>
+	<a href="/api/rpc/">API</a>
+	<a href="/guides/run-validator/" class="nav-cta">Launch Node</a>
+</nav>
+
+<script>
+	// Move nav links into the header's right group
+	const nav = document.getElementById('top-nav');
+	const rightGroup = document.querySelector('.header .right-group');
+	if (nav && rightGroup) {
+		rightGroup.insertBefore(nav, rightGroup.firstChild);
+	}
+</script>
