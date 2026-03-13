@@ -45,7 +45,7 @@ For each GREEN-cleared name, evaluate:
 
 ## Output Format
 ```
-# NAMING REPORT - Genesis Chain
+# NAMING REPORT - Aztibase Network
 
 ## Legal Gate Status
 - Legal clearance received: [YES/NO]

@@ -22,7 +22,7 @@ Security specialist with veto authority over any design that introduces unaccept
   - Ed25519 vs BLS vs Schnorr for the signature scheme
   - Noise protocol adequacy for P2P encryption
   - WASM sandbox security for smart contracts
-  - RocksDB security (access control, encryption at rest)
+  - redb security (access control, encryption at rest)
 
 ## Inputs Required
 - `/blockchain-project/RESEARCH_BRIEF.md`

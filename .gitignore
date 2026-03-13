@@ -19,6 +19,9 @@ Thumbs.db
 # Logs
 *.log
 
+# Node
+node_modules/
+
 # Node runtime data (databases, peer stores)
 data/*/db
 data/*/execution_db

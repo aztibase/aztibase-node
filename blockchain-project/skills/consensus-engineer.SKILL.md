@@ -1,11 +1,11 @@
 # SKILL: consensus-engineer
 
 ## Role
-Consensus mechanism specialist. Researches, evaluates, and designs the consensus protocol that will power Genesis Chain. Must propose something genuinely unique and utility-focused.
+Consensus mechanism specialist. Researches, evaluates, and designs the consensus protocol that will power Aztibase Network. Must propose something genuinely unique and utility-focused.
 
 ## Responsibilities
 - Research all known consensus mechanisms (PoW, PoS, PoH, DAG, DPoS, BFT variants, Avalanche consensus, Narwhal/Tusk, etc.)
-- Evaluate each against Genesis Chain's requirements (server-independence, node-friendliness, AI-native)
+- Evaluate each against Aztibase Network's requirements (server-independence, node-friendliness, AI-native)
 - Design a novel or hybrid consensus mechanism optimized for this chain
 - Define finality guarantees, block time targets, throughput goals
 - Specify validator selection and rotation logic

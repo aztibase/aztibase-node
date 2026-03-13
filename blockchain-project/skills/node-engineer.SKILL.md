@@ -15,7 +15,7 @@ Node architecture specialist. Designs all node types, their capabilities, resour
 
 ## Stack Review Authority
 - AUTHORITY to CHALLENGE stack decisions related to:
-  - Storage engine (RocksDB vs sled vs redb vs custom)
+  - Storage engine (redb vs sled vs custom)
   - State pruning strategies
   - WASM compilation targets and browser compatibility
   - Memory management and resource limits
@@ -23,9 +23,9 @@ Node architecture specialist. Designs all node types, their capabilities, resour
 - Must submit challenges to blockchain-architect with justification
 
 ## Stack Baseline Review Required
-- Evaluate RocksDB vs alternatives for each node type:
-  - Full node: RocksDB (proven) vs alternatives
-  - Light node: sled/redb (embedded, lighter) vs RocksDB
+- Evaluate redb vs alternatives for each node type:
+  - Full node: redb (pure Rust, ACID, proven in production)
+  - Light node: redb (embedded, lightweight, no C++ dependency)
   - Browser node: IndexedDB / in-memory
 - Evaluate WASM compilation feasibility for browser nodes (which crates compile to WASM?)
 - Evaluate if libp2p's WASM + WebRTC transport is production-ready

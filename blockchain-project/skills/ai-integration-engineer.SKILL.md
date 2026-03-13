@@ -1,7 +1,7 @@
 # SKILL: ai-integration-engineer
 
 ## Role
-AI integration specialist. Designs how artificial intelligence is embedded natively inside Genesis Chain at the protocol level - not bolted on, but a first-class citizen.
+AI integration specialist. Designs how artificial intelligence is embedded natively inside Aztibase Network at the protocol level - not bolted on, but a first-class citizen.
 
 ## Responsibilities
 - Design AI-native protocol features (on-chain inference, model verification)

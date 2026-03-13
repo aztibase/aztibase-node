@@ -1,6 +1,6 @@
-# GENESIS CHAIN - MASTER DESIGN DOCUMENT
+# AZTIBASE NETWORK - MASTER DESIGN DOCUMENT
 
-## Status: PHASE 4 - Architecture Design (blockchain-architect active)
+## Status: M9 Mainnet Prep — Implementation Complete, Audit Fixes Applied
 
 ---
 
@@ -49,22 +49,21 @@
 - Alternative candidates: `tract`, `candle`, custom inference
 - ai-integration-engineer has authority to refine this choice
 
-### Storage: RocksDB + Verkle Trees (UPDATED per research)
+### Storage: redb + Verkle Trees (UPDATED per ADR-001)
 
-- RocksDB for local node state (select Apache 2.0 license option per LEGAL_LANDSCAPE.md)
+- redb for local node state (pure Rust, ACID, no C deps — ADR-001)
 - Dual storage architecture: state store (raw key-value) + state commitment (following Sei's proven pattern)
 - Verkle trees for state verification (constant-size proofs, 100x smaller than Merkle proofs)
 - ARCHITECT NOTE: Verkle trees are not post-quantum secure. Binary Merkle tree + SNARK fallback path must be designed in parallel. See Section 1, subsection 1.5 for full rationale.
 - State pruning from genesis (EIP-4444-style historical pruning)
 - Target: full node storage under 100GB for first year
-- Alternative candidates for light nodes: `sled`, `redb`
 - node-engineer has authority to refine storage choices within these constraints
 
 ### Cryptography
 
 - Hashing: BLAKE3 (faster than SHA-256, cryptographically secure)
 - Signatures: Ed25519 (via ed25519-dalek)
-- Serialization: Protobuf (wire) / Bincode (internal)
+- Serialization: postcard (wire — length-prefixed) / postcard (internal — ADR-024)
 
 ### Node Types (Server-Independence Design)
 
@@ -153,7 +152,7 @@
 
 ### 1.1 Core Design Philosophy
 
-Genesis Chain is built on three pillars that, in combination, create a genuinely unique position in the blockchain landscape as of March 2026. No existing chain combines all three. This is our moat.
+Aztibase Network is built on three pillars that, in combination, create a genuinely unique position in the blockchain landscape as of March 2026. No existing chain combines all three. This is our moat.
 
 **Pillar 1: AI as a First-Class Protocol Citizen**
 
@@ -163,7 +162,7 @@ AI is not an afterthought, a sidechain, or an oracle service. It is woven into t
 - Smart contracts can invoke verified AI inference as a built-in operation, not an external call
 - AI agents have on-chain identity and can transact autonomously (Know Your Agent / KYA framework per a16z's 2026 research)
 
-This is architecturally distinct from Bittensor (which is an AI-only network with no general smart contracts), Ritual (which is a bridge layer between AI and existing chains), and the ASI Alliance (which is a merger of three separate architectures). Genesis Chain makes AI a native protocol primitive alongside tokens, contracts, and accounts.
+This is architecturally distinct from Bittensor (which is an AI-only network with no general smart contracts), Ritual (which is a bridge layer between AI and existing chains), and the ASI Alliance (which is a merger of three separate architectures). Aztibase Network makes AI a native protocol primitive alongside tokens, contracts, and accounts.
 
 *Ref: RESEARCH_BRIEF.md Sections 4.1-4.5, 5.2, 5.6*
 
@@ -182,7 +181,7 @@ This is not just a feature; it is an architectural constraint that shapes every 
 
 **Pillar 3: Privacy at the Protocol Level**
 
-Following a16z's 2026 thesis that "privacy creates chain lock-in through a privacy network effect," Genesis Chain implements privacy as a protocol-level capability, not an application-layer add-on:
+Following a16z's 2026 thesis that "privacy creates chain lock-in through a privacy network effect," Aztibase Network implements privacy as a protocol-level capability, not an application-layer add-on:
 - All transactions support optional privacy (selective disclosure)
 - ZKP-based privacy with regulatory compliance hooks (prove attributes without revealing data)
 - Agent-to-agent private channels for confidential AI inference
@@ -199,7 +198,7 @@ Privacy at the protocol level creates a moat that is architecturally impossible 
 
 #### 1.2.1 Block Format
 
-Genesis Chain uses a **DAG-based block structure** rather than a traditional linear chain.
+Aztibase Network uses a **DAG-based block structure** rather than a traditional linear chain.
 
 **Block header:**
 ```
@@ -247,7 +246,7 @@ GenesisBlockBody {
 
 #### 1.2.3 State Model: Hybrid Account + Object
 
-Genesis Chain uses a **hybrid account-based model with first-class objects**, drawing from both Ethereum's account model and Sui's object model:
+Aztibase Network uses a **hybrid account-based model with first-class objects**, drawing from both Ethereum's account model and Sui's object model:
 
 - **Accounts:** Standard externally-owned accounts (EOAs) and contract accounts, similar to Ethereum. Familiar to developers, compatible with existing tooling.
 - **Objects:** First-class on-chain objects for assets that benefit from independent ownership and parallel processing. AI models, AI agent identities, NFTs, and complex assets are objects.
@@ -265,7 +264,7 @@ Genesis Chain uses a **hybrid account-based model with first-class objects**, dr
 
 ### 1.3 Overall Architecture: Modular Monolith
 
-Genesis Chain adopts a **modular monolith** architecture -- a single unified chain with clearly separated internal layers that can be independently upgraded, but NOT a multi-chain/rollup architecture.
+Aztibase Network adopts a **modular monolith** architecture -- a single unified chain with clearly separated internal layers that can be independently upgraded, but NOT a multi-chain/rollup architecture.
 
 **Why not fully modular (Celestia-style)?**
 - Fully modular architectures (separate DA, execution, settlement chains) add latency, complexity, and cross-layer trust assumptions.
@@ -298,7 +297,7 @@ Genesis Chain adopts a **modular monolith** architecture -- a single unified cha
 +------------------------------------------------------------------+
 |                    LAYER 1: NETWORK + DATA                        |
 |  P2P (rust-libp2p) | Gossip | Block propagation | State sync     |
-|  Storage (RocksDB + Verkle) | Data availability                  |
+|  Storage (redb + Verkle) | Data availability                  |
 +------------------------------------------------------------------+
 ```
 
@@ -307,7 +306,7 @@ Genesis Chain adopts a **modular monolith** architecture -- a single unified cha
 - Gossipsub for block/transaction propagation with priority batching
 - Kademlia DHT for peer discovery
 - WebRTC transport for browser nodes
-- RocksDB with dual storage architecture (state store + state commitment)
+- redb with dual storage architecture (state store + state commitment)
 - Verkle trees for state commitments
 - Data availability sampling for light client verification
 
@@ -380,7 +379,7 @@ Light clients use **header sync only** + Verkle state proofs for any data they n
 
 #### 1.4.5 Incentivized Relay Infrastructure
 
-NAT traversal is the Achilles heel of P2P networks. Genesis Chain solves this economically:
+NAT traversal is the Achilles heel of P2P networks. Aztibase Network solves this economically:
 - Full nodes that serve as TURN relays for NAT-traversal earn a small share of transaction fees.
 - This creates an economic incentive to run publicly reachable nodes.
 - The protocol tracks relay service quality (uptime, bandwidth, latency) and rewards accordingly.
@@ -405,7 +404,7 @@ NAT traversal is the Achilles heel of P2P networks. Genesis Chain solves this ec
 4. Binary Merkle tree + SNARK implementation is maintained as an alternative backend from day one (not deployed, but tested).
 
 **Dual storage (from Sei's architecture):**
-- **State Store:** Raw key-value store (RocksDB) optimized for read/write latency. Used by the execution layer.
+- **State Store:** Raw key-value store (redb) optimized for read/write latency. Used by the execution layer.
 - **State Commitment:** Verkle tree structure used for generating proofs. Updated asynchronously after execution.
 - This separation reduces I/O contention and allows the execution engine to operate at full speed without waiting for tree updates.
 
@@ -477,7 +476,7 @@ The execution layer provides:
 
 #### 1.7.1 Selective Disclosure Model
 
-Genesis Chain implements a **selective disclosure** privacy model, not full anonymity:
+Aztibase Network implements a **selective disclosure** privacy model, not full anonymity:
 
 - **Public transactions:** Default. Full transparency, identical to Ethereum.
 - **Shielded transactions:** Opt-in. Transaction details (sender, receiver, amount) are hidden behind ZK proofs. The chain verifies correctness without seeing the data.
@@ -518,7 +517,7 @@ The following architectural decisions are BINDING constraints for all downstream
 3. **Light node:** Header-only + Verkle state proofs. 512MB RAM. Must be able to verify any state claim without trusting the full node.
 4. **Browser node:** WASM-compiled light client. WebRTC P2P. IndexedDB/OPFS for persistence. Runs in a standard browser tab.
 5. **Mobile node:** Light client. Must handle intermittent connectivity, battery constraints, iOS background restrictions.
-6. **Storage:** RocksDB with dual storage architecture (state store + state commitment). Verkle trees for state commitments.
+6. **Storage:** redb with dual storage architecture (state store + state commitment). Verkle trees for state commitments.
 7. **State pruning:** From genesis. Nodes should be able to prune historical state beyond a configurable retention period while maintaining verifiability.
 8. **Every node is an RPC endpoint.** No architectural dependency on centralized RPC providers.
 
@@ -603,7 +602,7 @@ These are not "features to add later." The architecture is designed around them.
 Clarity on non-goals is as important as goals:
 
 1. **Not an L2 / rollup.** We are a sovereign L1. No dependency on Ethereum or any other chain for settlement or data availability.
-2. **Not an AI-only network.** Unlike Bittensor, Genesis Chain supports general smart contracts, DeFi, and arbitrary applications. AI is a first-class citizen, not the only citizen.
+2. **Not an AI-only network.** Unlike Bittensor, Aztibase Network supports general smart contracts, DeFi, and arbitrary applications. AI is a first-class citizen, not the only citizen.
 3. **Not EVM-first.** EVM compatibility is a secondary execution environment for developer adoption. Innovation happens in the WASM VM.
 4. **Not a platform controlled by a single entity.** Protocol, not platform. No single entity controls the validator set or governance. (Enterprise blockchain failure lesson: RESEARCH_BRIEF.md Section 9.3)
 5. **Not fully anonymous.** Privacy is user-controlled and compliance-friendly. Not a "dark chain."
@@ -753,7 +752,7 @@ Once an anchor vertex commits, all vertices it orders are **final and irreversib
 
 #### 2.3.1 What Constitutes "Useful Work"
 
-Useful work in Genesis Chain is **AI inference verification**. Specifically:
+Useful work in Aztibase Network is **AI inference verification**. Specifically:
 
 1. **Inference Execution:** A PoUW validator receives an `InferenceRequest` from the transaction pool. The request specifies a model (by hash from `ModelRegistry`), input data (by hash), and a required verification method.
 
@@ -776,7 +775,7 @@ Useful work in Genesis Chain is **AI inference verification**. Specifically:
 
 #### 2.3.2 Verification Without Re-Execution
 
-The critical challenge: how do you verify an inference result without re-executing the entire computation? Genesis Chain supports three verification methods, ordered by trust level:
+The critical challenge: how do you verify an inference result without re-executing the entire computation? Aztibase Network supports three verification methods, ordered by trust level:
 
 **Method A: Multi-Party Redundant Execution (MPRE)**
 
@@ -792,7 +791,7 @@ The critical challenge: how do you verify an inference result without re-executi
 - Validators execute inference inside a TEE (Intel SGX, AMD SEV, ARM TrustZone).
 - The TEE produces a hardware-signed attestation proving: (a) the correct model was loaded, (b) the correct input was used, (c) the output is genuine.
 - **Tradeoff:** Requires TEE-capable hardware. Trust shifts to hardware manufacturer. Side-channel attacks on TEEs are a known research area (but practically difficult to exploit at scale).
-- **Genesis Chain does NOT require TEE for consensus participation.** TEE is one verification option for PoUW, not a consensus requirement.
+- **Aztibase Network does NOT require TEE for consensus participation.** TEE is one verification option for PoUW, not a consensus requirement.
 
 **Method C: ZK Proofs of Inference (zkML)**
 
@@ -1295,7 +1294,7 @@ For downstream skills (security-engineer in particular), the following propertie
 
 The hard cap is a non-negotiable design choice for the following reasons:
 
-1. **Terra/Luna lesson (RESEARCH_BRIEF.md Section 9.1):** Unbounded minting mechanisms create death spiral risk. Terra's collapse was caused by reflexive unlimited minting. Genesis Chain's supply cap eliminates this attack vector entirely. There is no mechanism in the protocol that can create tokens beyond the hard cap, regardless of market conditions.
+1. **Terra/Luna lesson (RESEARCH_BRIEF.md Section 9.1):** Unbounded minting mechanisms create death spiral risk. Terra's collapse was caused by reflexive unlimited minting. Aztibase Network's supply cap eliminates this attack vector entirely. There is no mechanism in the protocol that can create tokens beyond the hard cap, regardless of market conditions.
 
 2. **Securities law clarity:** A fixed supply with transparent emission avoids the "expectation of profit from efforts of others" prong of the Howey Test more effectively than an uncapped token where a team controls inflation. The emission schedule is algorithmic and immutable -- no team discretion.
 
@@ -1525,7 +1524,7 @@ This aligns with the consensus-engineer's design and provides:
 
 #### 3.5.1 Transaction Fee Structure
 
-Genesis Chain uses the fuel-based EIP-1559 model defined in Section 7.1.3 and Section 7.7:
+Aztibase Network uses the fuel-based EIP-1559 model defined in Section 7.1.3 and Section 7.7:
 
 ```
 Transaction Fee = fuel_consumed * (base_fee_per_fuel + priority_fee_per_fuel)
@@ -1822,7 +1821,7 @@ The token may be classified as a security during the pre-launch and early post-l
 Per LEGAL_LANDSCAPE.md Section 4.3:
 
 - Crypto assets are classified as **financial products** under FAIS since October 2022.
-- If the Genesis Chain entity is SA-based, CASP licensing is mandatory.
+- If the Aztibase Network entity is SA-based, CASP licensing is mandatory.
 - The token economic model must be disclosed in the CASP license application business plan.
 
 **Tokenomics-specific FSCA considerations:**
@@ -2041,7 +2040,7 @@ Per validator:
   - PoUW reward accumulator:   u128 (16 bytes)
   - Slashing history:          Vec<SlashRecord> (~64 bytes per record, max 10)
   - Unbonding entries:         Vec<UnbondEntry> (~32 bytes per entry, max 7)
-  Total per validator: ~750 bytes (well within RocksDB per-key limits)
+  Total per validator: ~750 bytes (well within redb per-key limits)
 
 Per delegator (per delegation):
   - Delegated amount:          u128 (16 bytes)
@@ -2061,7 +2060,7 @@ Global economic state:
   Total global: ~104 bytes
 ```
 
-At 200 validators with 10,000 delegators average: ~870KB total economic state. This is negligible relative to the RocksDB state store budget. **No challenge raised.**
+At 200 validators with 10,000 delegators average: ~870KB total economic state. This is negligible relative to the redb state store budget. **No challenge raised.**
 
 #### 3.11.3 Computation Concerns
 
@@ -2103,7 +2102,7 @@ This is well within the 400-second epoch window. **No computation concern.**
 
 ### NODE ARCHITECTURE
 
-Genesis Chain defines five node types. Every node type is a first-class protocol citizen. No node type requires a central server to function. The design enables graceful degradation: a node can start as a browser light client and upgrade to a full validator without re-syncing from scratch.
+Aztibase Network defines five node types. Every node type is a first-class protocol citizen. No node type requires a central server to function. The design enables graceful degradation: a node can start as a browser light client and upgrade to a full validator without re-syncing from scratch.
 
 ---
 
@@ -2111,13 +2110,13 @@ Genesis Chain defines five node types. Every node type is a first-class protocol
 
 The full node is the backbone of the network. It stores the complete current state, validates all DAG vertices, maintains the full mempool, and serves data to light/browser/mobile clients. Every full node is also a local RPC endpoint -- no Infura/Alchemy dependency.
 
-#### 4.1.1 Storage Engine: RocksDB (ACCEPTED with refinements)
+#### 4.1.1 Storage Engine: redb (ACCEPTED with refinements)
 
-**Choice: RocksDB** (Apache 2.0 license option per LEGAL_LANDSCAPE.md)
+**Choice: redb** (Apache 2.0 license option per LEGAL_LANDSCAPE.md)
 
 **Justification:**
 
-| Criterion | RocksDB | sled | redb |
+| Criterion | redb | sled | redb |
 |-----------|---------|------|------|
 | Maturity | Production-proven at Facebook, Ethereum (geth), Solana, Sui, CockroachDB | Pre-1.0 (0.34.x), known data loss bugs in 2023-2024 | 1.x stable but young, limited production deployments |
 | Write throughput | Excellent (LSM-tree optimized for write-heavy workloads) | Good | Good for single-writer workloads |
@@ -2129,17 +2128,17 @@ The full node is the backbone of the network. It stores the complete current sta
 | Concurrent access | Multi-threaded reads, single-writer with WAL | Lock-free reads, serialized writes | Single-writer MVCC |
 | Memory control | Fine-grained block cache, write buffer sizing | Less control | Moderate control |
 
-**Why RocksDB wins for full nodes:**
+**Why redb wins for full nodes:**
 
-1. **Dual storage architecture demands column families.** Section 1.5 mandates separate state store and state commitment stores. RocksDB column families provide logical separation with shared write-ahead log and compaction management. This is exactly how Sei implements their dual storage -- we follow the proven pattern.
+1. **Dual storage architecture demands column families.** Section 1.5 mandates separate state store and state commitment stores. redb column families provide logical separation with shared write-ahead log and compaction management. This is exactly how Sei implements their dual storage -- we follow the proven pattern.
 
-2. **Write-heavy workload profile.** At 10,000+ TPS with 400ms rounds, the storage engine must handle sustained high-throughput writes. RocksDB's LSM-tree architecture is purpose-built for this workload. B-tree engines (sled, redb) are read-optimized and suffer write amplification under sustained write pressure.
+2. **Write-heavy workload profile.** At 10,000+ TPS with 400ms rounds, the storage engine must handle sustained high-throughput writes. redb's LSM-tree architecture is purpose-built for this workload. B-tree engines (sled, redb) are read-optimized and suffer write amplification under sustained write pressure.
 
-3. **Compression is mandatory for the <100GB first-year target.** RocksDB's per-column-family compression (Zstd for cold data, LZ4 for hot data) reduces storage 2-4x. Without native compression, sled/redb would require an application-level compression layer that adds complexity and latency.
+3. **Compression is mandatory for the <100GB first-year target.** redb's per-column-family compression (Zstd for cold data, LZ4 for hot data) reduces storage 2-4x. Without native compression, sled/redb would require an application-level compression layer that adds complexity and latency.
 
-4. **Production track record in blockchain.** Ethereum's geth, Solana, Sui, Aptos, and CockroachDB all use RocksDB. The failure modes, tuning patterns, and operational knowledge base are deep. sled has known data corruption issues that are disqualifying for a financial system.
+4. **Production track record in blockchain.** Ethereum's geth, Solana, Sui, Aptos, and CockroachDB all use redb. The failure modes, tuning patterns, and operational knowledge base are deep. sled has known data corruption issues that are disqualifying for a financial system.
 
-**RocksDB tuning profile for Genesis Chain full nodes:**
+**redb tuning profile for Aztibase Network full nodes:**
 
 ```
 Column Families:
@@ -2182,7 +2181,7 @@ Compaction:
   -- Max background compaction threads: 4 (configurable based on CPU cores)
 
 Memory budget:
-  -- Total RocksDB memory target: 2-3GB on 8GB system
+  -- Total redb memory target: 2-3GB on 8GB system
   -- Write buffer: 256MB total across all column families
   -- Block cache: 1.5GB shared (weighted by column family priority)
 ```
@@ -2325,7 +2324,7 @@ Verkle tree leaf:
 
 #### 4.1.4 Mempool Design
 
-The mempool buffers transactions before inclusion in DAG vertices. Genesis Chain uses a **priority-tiered mempool** with two pools:
+The mempool buffers transactions before inclusion in DAG vertices. Aztibase Network uses a **priority-tiered mempool** with two pools:
 
 **Transaction Mempool:**
 
@@ -2374,7 +2373,7 @@ Three sync strategies for new full nodes joining the network:
    - Snapshot is chunked (4MB chunks) and downloaded from multiple peers in parallel
    - Each chunk includes a Verkle proof against the state root in the anchor header
 4. Verify: the downloaded state's Verkle root matches the anchor header's state_root
-5. Reconstruct local RocksDB from the verified snapshot
+5. Reconstruct local redb from the verified snapshot
 6. Begin following the DAG from the anchor point forward (live sync)
 7. Optionally: backfill historical DAG vertices in the background
 ```
@@ -2419,14 +2418,14 @@ Three sync strategies for new full nodes joining the network:
 | Resource | Minimum | Recommended | Rationale |
 |----------|---------|-------------|-----------|
 | **CPU** | 4 cores, 2.5 GHz+ (x86_64 or ARM64) | 8 cores, 3.0 GHz+ | Block-STM parallel execution benefits from cores. 4 cores is floor for concurrent vertex validation + execution + networking. |
-| **RAM** | 8 GB | 16 GB | RocksDB block cache (2GB) + execution engine (1GB) + mempool (500MB) + networking (500MB) + OS overhead (2GB) + headroom. 8GB is tight but feasible with tuned RocksDB. |
-| **Storage** | 100 GB SSD (NVMe preferred) | 250 GB NVMe SSD | <100GB first year target (Section 1). SSD is mandatory -- RocksDB's LSM compaction on HDD is catastrophically slow. NVMe preferred for write-heavy workload. |
+| **RAM** | 8 GB | 16 GB | redb block cache (2GB) + execution engine (1GB) + mempool (500MB) + networking (500MB) + OS overhead (2GB) + headroom. 8GB is tight but feasible with tuned redb. |
+| **Storage** | 100 GB SSD (NVMe preferred) | 250 GB NVMe SSD | <100GB first year target (Section 1). SSD is mandatory -- redb's LSM compaction on HDD is catastrophically slow. NVMe preferred for write-heavy workload. |
 | **Network** | 25 Mbps symmetric | 100 Mbps symmetric | 200 validators broadcasting vertices with transactions every 400ms. Each vertex ~100KB average. Inbound: ~200 * 100KB / 0.4s = ~50 MB/s peak burst, but with Gossipsub batching, sustained requirement is ~25 Mbps. |
 | **OS** | Linux (Ubuntu 22.04+), macOS, Windows 10+ | Linux | Rust cross-platform. Linux is primary target for validators. |
 
 **Consumer hardware viability assessment:**
 
-A mid-range 2024 desktop (Ryzen 5 / Intel i5, 16GB RAM, 500GB NVMe SSD, 100 Mbps broadband) comfortably exceeds all recommended requirements. A Raspberry Pi 5 (8GB) is at the absolute floor of minimum requirements -- usable for non-validator full nodes with aggressive RocksDB tuning. This meets the server-independence mandate: no datacenter hardware required for full participation.
+A mid-range 2024 desktop (Ryzen 5 / Intel i5, 16GB RAM, 500GB NVMe SSD, 100 Mbps broadband) comfortably exceeds all recommended requirements. A Raspberry Pi 5 (8GB) is at the absolute floor of minimum requirements -- usable for non-validator full nodes with aggressive redb tuning. This meets the server-independence mandate: no datacenter hardware required for full participation.
 
 ---
 
@@ -2440,7 +2439,7 @@ Light nodes verify the chain without storing or executing the full state. They r
 
 **Justification against alternatives:**
 
-| Criterion | redb | sled | RocksDB |
+| Criterion | redb | sled | redb |
 |-----------|------|------|---------|
 | Binary size overhead | ~300KB | ~1.5MB | ~5MB (C++ static link) |
 | Memory footprint | ~10-50MB configurable | ~50-200MB | ~200MB+ even with minimal config |
@@ -2452,11 +2451,11 @@ Light nodes verify the chain without storing or executing the full state. They r
 
 **Why redb over sled:**
 
-sled's pre-1.0 status and documented data corruption issues in 2023-2024 are disqualifying for a financial application, even at the light client level. redb reached 1.0 stability, has ACID guarantees with checksum verification, and is being used in Bitcoin ecosystem tooling (ord/ordinals). Its pure-Rust implementation eliminates the C++ toolchain dependency that makes RocksDB painful for cross-compilation and mobile builds.
+sled's pre-1.0 status and documented data corruption issues in 2023-2024 are disqualifying for a financial application, even at the light client level. redb reached 1.0 stability, has ACID guarantees with checksum verification, and is being used in Bitcoin ecosystem tooling (ord/ordinals). Its pure-Rust implementation eliminates the C++ toolchain dependency that makes redb painful for cross-compilation and mobile builds.
 
-**Why not RocksDB:**
+**Why not redb:**
 
-RocksDB is overkill for light nodes. A light node stores only: headers, finality certificates, a small set of cached Verkle proofs, and local wallet state. This is <1GB of data with minimal write throughput. RocksDB's 5MB binary overhead, 200MB+ memory floor, and C++ dependency are unjustified for this workload.
+redb is overkill for light nodes. A light node stores only: headers, finality certificates, a small set of cached Verkle proofs, and local wallet state. This is <1GB of data with minimal write throughput. redb's 5MB binary overhead, 200MB+ memory floor, and C++ dependency are unjustified for this workload.
 
 **redb schema for light nodes:**
 
@@ -2624,8 +2623,8 @@ The browser node is a light client compiled to WebAssembly and running in a stan
 | `redb` | No | Uses `std::fs` for file I/O. Not usable in browser. Browser uses IndexedDB instead. |
 | `libp2p` (core) | Partial | `libp2p-webrtc` supports WASM target. `libp2p-tcp`, `libp2p-quic` do NOT (no raw socket access in browsers). `libp2p-gossipsub` compiles to WASM. `libp2p-kad` compiles to WASM. |
 | `tokio` | No (full) | `tokio` does not compile to WASM. Use `wasm-bindgen-futures` + browser event loop instead. |
-| `RocksDB` | No | C++ dependency. Not applicable to browser nodes. |
-| `serde` / `bincode` / `prost` | Yes | Pure Rust serialization. Compiles cleanly. |
+| `redb` | Possible but not targeted | Pure Rust, no C deps. Browser nodes use in-memory or IndexedDB instead. |
+| `serde` / `postcard` | Yes | Pure Rust serialization. Compiles cleanly. |
 | `tract` (AI runtime) | No | Depends on `ndarray` with native optimizations. Not targeted for browser. Browser nodes do not run inference. |
 | `verkle-trie` (proof verification only) | Yes (with feature flags) | The proof verification path is pure math (field operations, polynomial evaluation). Proof generation requires full tree and is not WASM-targeted. |
 
@@ -2977,7 +2976,7 @@ State pruning is essential for keeping full node storage requirements within the
 
 #### 4.6.1 Pruning Architecture
 
-Genesis Chain uses a **layered pruning strategy** with three independently configurable retention periods:
+Aztibase Network uses a **layered pruning strategy** with three independently configurable retention periods:
 
 ```
 +-----------------------------------------------------------------+
@@ -3059,7 +3058,7 @@ Beyond pruning (which removes old versions of state), state expiry removes state
 
 - **Concept:** State entries (accounts, objects, contract storage) that have not been read or written for M epochs are "expired" -- their data is removed from `cf_state_store` but a cryptographic witness (hash of the expired data) is retained in the Verkle tree.
 - **Resurrection:** A user can resurrect expired state by providing the original data (which matches the witness hash). The data is re-inserted into the state store.
-- **Why deferred:** State expiry is complex and controversial (see Ethereum's years-long debate). Genesis Chain launches WITHOUT state expiry. The dual storage architecture and pruning strategy keep storage manageable for the first several years. State expiry is designed as a possible future protocol upgrade via governance.
+- **Why deferred:** State expiry is complex and controversial (see Ethereum's years-long debate). Aztibase Network launches WITHOUT state expiry. The dual storage architecture and pruning strategy keep storage manageable for the first several years. State expiry is designed as a possible future protocol upgrade via governance.
 
 ---
 
@@ -3079,7 +3078,7 @@ Light Node -> Full Node:
   - While snapshot downloads, the light node continues operating normally
   - Once snapshot is verified and loaded, switch to full node mode
   - Begin validating and storing full DAG vertices going forward
-  - RocksDB is initialized alongside redb during the transition
+  - redb is initialized alongside redb during the transition
   - Once full node is operational, redb can be deprecated (or kept for
     lightweight access patterns)
 
@@ -3119,9 +3118,9 @@ Validator Node -> Validator + PoUW:
 
 ### 4.9 Stack Evaluation and Challenges
 
-#### 4.9.1 RocksDB for Full Nodes: ACCEPTED
+#### 4.9.1 redb for Full Nodes: ACCEPTED
 
-RocksDB is the correct choice for full nodes and validators. The LSM-tree architecture, column family support, compression, and proven blockchain track record are unmatched. No challenge raised.
+redb is the correct choice for full nodes and validators. The LSM-tree architecture, column family support, compression, and proven blockchain track record are unmatched. No challenge raised.
 
 #### 4.9.2 redb for Light Nodes: REFINED (was sled/redb in Section 0)
 
@@ -3135,9 +3134,9 @@ RocksDB is the correct choice for full nodes and validators. The LSM-tree archit
 
 #### 4.9.3 WASM Compilation Feasibility: ASSESSED
 
-**Feasible with constraints.** The critical crates for browser node operation (blst, ed25519-dalek, blake3, libp2p-webrtc, libp2p-gossipsub, libp2p-kad, serde, bincode/prost, verkle proof verification) all compile to `wasm32-unknown-unknown`. The primary constraint is that `tokio` does not compile to WASM, requiring the use of `wasm-bindgen-futures` and the browser's event loop instead. This is a well-understood pattern used by multiple production WASM applications.
+**Feasible with constraints.** The critical crates for browser node operation (blst, ed25519-dalek, blake3, libp2p-webrtc, libp2p-gossipsub, libp2p-kad, serde, postcard, verkle proof verification) all compile to `wasm32-unknown-unknown`. The primary constraint is that `tokio` does not compile to WASM, requiring the use of `wasm-bindgen-futures` and the browser's event loop instead. This is a well-understood pattern used by multiple production WASM applications.
 
-**Risk flag:** `libp2p-webrtc` for WASM is functional but has seen limited production deployment as of March 2026. The Webcoin project (Bitcoin in browser via WebRTC) provides a reference point, but Genesis Chain's use case (continuous header sync + Verkle proof requests) is more demanding than Webcoin's (occasional block header verification). Recommend allocating dedicated testing effort to browser node stability.
+**Risk flag:** `libp2p-webrtc` for WASM is functional but has seen limited production deployment as of March 2026. The Webcoin project (Bitcoin in browser via WebRTC) provides a reference point, but Aztibase Network's use case (continuous header sync + Verkle proof requests) is more demanding than Webcoin's (occasional block header verification). Recommend allocating dedicated testing effort to browser node stability.
 
 #### 4.9.4 BLS12-381 Stack Challenge: ENDORSED
 
@@ -3197,7 +3196,7 @@ The <100GB first-year target (Section 1) is achievable for pruned full nodes. Ar
 
 ### SECURITY MODEL
 
-This section defines the comprehensive security posture for Genesis Chain. As security-engineer, I hold elevated authority per ORCHESTRATION.md -- security challenges raised here MUST be addressed by the blockchain-architect before proceeding. Every section of the MASTER_DESIGN.md has been reviewed for security weaknesses, and findings are documented below alongside the complete threat model, cryptographic standards review, and AI security monitoring design.
+This section defines the comprehensive security posture for Aztibase Network. As security-engineer, I hold elevated authority per ORCHESTRATION.md -- security challenges raised here MUST be addressed by the blockchain-architect before proceeding. Every section of the MASTER_DESIGN.md has been reviewed for security weaknesses, and findings are documented below alongside the complete threat model, cryptographic standards review, and AI security monitoring design.
 
 ---
 
@@ -3240,7 +3239,7 @@ The following threat matrix covers all identified attack vectors across eight do
 | SC3 | **Access control bypass** | HIGH | Protocol-level agent constraints (spending limits, capability declarations enforced at VM level per Section 1.6.3); contract-level access control is developer responsibility; AI audit tooling for contract review | Misconfigured access control in user-deployed contracts. Residual: cannot be fully prevented at the protocol level. AI-based contract auditing (Section 5.4.3) mitigates. |
 | SC4 | **Oracle manipulation** | HIGH | AI Oracle is a protocol primitive (not an external service); InferenceAttestations are verified via MPRE/TEE/ZK before being available to contracts; multi-method verification prevents single-point oracle manipulation (Section 2.3.2) | MPRE with 2-of-3 agreement is vulnerable if 2 of 3 selected validators collude. Residual: for high-value inference, users should specify ZK verification or increase MPRE redundancy. |
 | SC5 | **Front-running / MEV** | HIGH | Priority fee market from genesis (not retrofitted); DAG structure reduces MEV opportunity (multiple validators propose in parallel, reducing single-proposer ordering advantage); AI-based MEV detection (Section 5.4.1) | Validators can still order transactions within their own vertex. Residual: intra-vertex MEV is possible. Future mitigation: encrypted mempool (commit-reveal scheme) or threshold decryption. See SECURITY FLAG S1-1 below. |
-| SC6 | **Flash loan attacks** | MEDIUM | Fee market creates cost for large transactions; AI anomaly detection monitors for flash loan patterns; protocol does not natively support flash loans (must be implemented by DeFi contracts) | Flash loans are a DeFi contract feature, not a protocol vulnerability. Residual: DeFi contracts on Genesis Chain can implement flash loans with their own risk profiles. |
+| SC6 | **Flash loan attacks** | MEDIUM | Fee market creates cost for large transactions; AI anomaly detection monitors for flash loan patterns; protocol does not natively support flash loans (must be implemented by DeFi contracts) | Flash loans are a DeFi contract feature, not a protocol vulnerability. Residual: DeFi contracts on Aztibase Network can implement flash loans with their own risk profiles. |
 | SC7 | **WASM sandbox escape** | CRITICAL | wasmtime runtime provides hardware-enforced sandboxing; memory isolation between contracts; bounded execution (gas metering); no raw syscall access from WASM | Zero-day vulnerabilities in wasmtime. Residual: critical dependency on wasmtime security. Mitigation: track wasmtime CVEs, maintain rapid update capability, consider running wasmtime with additional OS-level sandboxing (seccomp on Linux). See STACK SECURITY REVIEW Section 5.7. |
 
 #### 5.1.4 Cryptographic Risks
@@ -3283,7 +3282,7 @@ The following threat matrix covers all identified attack vectors across eight do
 | NL1 | **State bloat** | MEDIUM | State pruning with configurable retention (default ~4.6 days for state snapshots); Zstd compression on cold data; <100GB first-year target; state expiry as future governance-enabled upgrade (Section 4.6) | Long-term state growth beyond pruning retention still accumulates. Residual: state expiry deferred to future upgrade. Pruning keeps manageable for multi-year horizon. |
 | NL2 | **Mempool flooding** | HIGH | Priority-tiered mempool with max 50,000 transactions; max 64 per account; eviction of lowest-priority transactions; minimum base fee rejection; separate PoUW mempool with 10,000 request cap (Section 4.1.4) | Sustained flood of minimum-fee transactions consuming mempool capacity. Residual: legitimate transactions with higher fees displace flood transactions via priority eviction. Economic cost to attacker scales with flood duration. |
 | NL3 | **Resource exhaustion (CPU)** | MEDIUM | Gas metering in WASM VM; bounded execution per block (2MB max block size); parallel execution limited by available cores; rate limiting at network layer | Complex transactions consuming maximum gas. Residual: gas costs should be calibrated to reflect actual computation cost. Gas pricing review is required. |
-| NL4 | **Storage attacks (write amplification)** | MEDIUM | RocksDB write batching (WAL sync per batch, not per write); configurable compaction threads (max 4); column family separation isolates workloads; Zstd/LZ4 compression reduces write volume (Section 4.1.1) | LSM-tree compaction storms during high write throughput. Residual: RocksDB tuning mitigates but SSD wear is a long-term concern for validators. NVMe recommended. |
+| NL4 | **Storage attacks (write amplification)** | MEDIUM | redb write batching (WAL sync per batch, not per write); configurable compaction threads (max 4); column family separation isolates workloads; Zstd/LZ4 compression reduces write volume (Section 4.1.1) | LSM-tree compaction storms during high write throughput. Residual: redb tuning mitigates but SSD wear is a long-term concern for validators. NVMe recommended. |
 | NL5 | **Disk space exhaustion** | MEDIUM | State pruning enforced by default; configurable retention periods; pruned full node targets <100GB first year; storage growth projections documented (Section 4.9.6) | Misconfigured or archive nodes exhausting disk. Residual: operational concern, not protocol vulnerability. Node monitoring recommended. |
 
 #### 5.1.8 Browser/Mobile Specific Vectors
@@ -3305,7 +3304,7 @@ The following threat matrix covers all identified attack vectors across eight do
 
 **Decision: APPROVED with note.**
 
-BLAKE3 is used for transaction hashing, Merkle root computation, VRF seed computation, and general-purpose hashing throughout Genesis Chain.
+BLAKE3 is used for transaction hashing, Merkle root computation, VRF seed computation, and general-purpose hashing throughout Aztibase Network.
 
 **Security analysis:**
 
@@ -3519,13 +3518,13 @@ The modular monolith architecture with clean layer separation is a security stre
 >
 > **Priority: SECURITY-ELEVATED.**
 
-> **SECURITY FLAG S4-2 [security-engineer -> node-engineer]: RocksDB Access Control**
+> **SECURITY FLAG S4-2 [security-engineer -> node-engineer]: redb Access Control**
 >
-> Section 4.1.1 defines detailed RocksDB column family configuration but does not specify access control or encryption at rest.
+> Section 4.1.1 defines detailed redb column family configuration but does not specify access control or encryption at rest.
 >
 > **Requirements:**
-> 1. RocksDB data directory MUST have restricted file permissions (0700 on Unix, equivalent on Windows).
-> 2. Validators SHOULD enable encryption at rest for the RocksDB data directory (OS-level or RocksDB env encryption).
+> 1. redb data directory MUST have restricted file permissions (0700 on Unix, equivalent on Windows).
+> 2. Validators SHOULD enable encryption at rest for the redb data directory (OS-level or redb env encryption).
 > 3. The WAL (write-ahead log) contains unencrypted transaction data -- if the node's disk is compromised, transaction data is exposed. For validators handling sensitive PoUW inference data, WAL encryption is recommended.
 >
 > **Priority: STANDARD (operational security, not protocol vulnerability).**
@@ -3595,7 +3594,7 @@ The modular monolith architecture with clean layer separation is a security stre
 
 ### 5.4 AI Security Monitoring Design
 
-Genesis Chain integrates AI-based monitoring at the protocol level for real-time threat detection. This design defines WHAT the AI monitors and HOW it responds. The ai-integration-engineer implements the model architecture; this section defines the security requirements.
+Aztibase Network integrates AI-based monitoring at the protocol level for real-time threat detection. This design defines WHAT the AI monitors and HOW it responds. The ai-integration-engineer implements the model architecture; this section defines the security requirements.
 
 #### 5.4.1 Transaction Anomaly Detection
 
@@ -3753,7 +3752,7 @@ The only automatic responses are defensive (increase rate limiting, restrict to 
 
 **Current risk level: MEDIUM.**
 
-Nation-state actors may be recording encrypted P2P traffic today for future decryption when quantum computers become available. For Genesis Chain, this means:
+Nation-state actors may be recording encrypted P2P traffic today for future decryption when quantum computers become available. For Aztibase Network, this means:
 
 - Transaction content (sender, receiver, amount) encrypted in transit could be decrypted later.
 - For public transactions, this is not a concern (they are public on-chain anyway).
@@ -3816,7 +3815,7 @@ The architect's design (Section 1.5) provides the migration framework via the `S
 #### 5.6.1 Key Types and Hierarchy
 
 ```
-Genesis Chain Key Hierarchy:
+Aztibase Network Key Hierarchy:
 
 Master Seed (BIP-39 mnemonic or raw entropy)
   |
@@ -3897,7 +3896,7 @@ Every major dependency in the stack is evaluated for known CVEs, security track 
 | **tokio** | 1.x | MIT | CVE-2023-22466 (net module, patched). Generally strong security record. | Production-proven async runtime. Well-maintained. | **APPROVED** |
 | **rust-libp2p** | Latest | MIT/Apache 2.0 | Periodic CVEs in specific sub-crates (noise, yamux). All promptly patched. | Maintenance concern for go/js implementations does NOT affect Rust implementation. Active maintainers. | **APPROVED** with monitoring |
 | **libp2p-webrtc** | Latest | MIT/Apache 2.0 | Limited CVE history due to relative newness. | **MEDIUM-HIGH RISK** (per Section 8.10.1). Limited production deployment. | **CONDITIONALLY APPROVED** -- requires dedicated security testing before mainnet browser node launch |
-| **RocksDB** | Latest stable (Apache 2.0 option) | Dual GPL2/Apache 2.0 | Periodic memory safety CVEs (C++ codebase). Use rust-rocksdb bindings with safety wrappers. | Proven at massive scale. C++ dependency is the primary security concern (memory safety not guaranteed). | **APPROVED** with requirement: pin specific audited version; do not auto-update without testing |
+| **redb** | Latest stable (Apache 2.0 option) | Dual GPL2/Apache 2.0 | Periodic memory safety CVEs (C++ codebase). Use rust-rocksdb bindings with safety wrappers. | Proven at massive scale. C++ dependency is the primary security concern (memory safety not guaranteed). | **APPROVED** with requirement: pin specific audited version; do not auto-update without testing |
 | **redb** | 1.x | MIT/Apache 2.0 | No known CVEs. Young project with limited security audit history. | Pure Rust (memory-safe). ACID with checksums. Used in Bitcoin ordinals tooling. | **APPROVED** for light/mobile nodes (low-value data) |
 | **wasmtime** | Latest stable | Apache 2.0 + LLVM exception | Multiple historical CVEs (sandbox escapes patched). Bytecode Alliance actively maintains. CVE-2023-41880, CVE-2024-30264 (both patched). | **CRITICAL DEPENDENCY.** Wasmtime's sandbox is the security boundary between user-submitted contract code and the host system. | **APPROVED** with requirements: 1) Subscribe to Bytecode Alliance security advisories. 2) Update within 48 hours of any sandbox-related CVE. 3) Run wasmtime with OS-level sandboxing (seccomp-bpf on Linux, pledge/unveil on OpenBSD) as defense-in-depth. 4) Conduct annual third-party security audit of our wasmtime integration. |
 | **ed25519-dalek** | Latest stable | BSD-3-Clause | CVE-2022-3225 (timing side-channel, patched in 2.x). | Well-audited. Must use strict verification mode (SECURITY FLAG S0-1). | **APPROVED** with strict verification requirement |
@@ -3906,7 +3905,7 @@ Every major dependency in the stack is evaluated for known CVEs, security track 
 | **tract** (AI runtime) | Latest stable | MIT/Apache 2.0 | No known CVEs. | Pure Rust. Deterministic inference. Smaller attack surface than ONNX Runtime (C++). | **APPROVED** |
 | **candle** (AI runtime) | Latest stable | MIT/Apache 2.0 | No known CVEs. Relatively young project. | Pure Rust. GPU operations via CUDA bindings (C interface). | **APPROVED** with monitoring for GPU-related CVEs |
 | **ONNX Runtime** | Latest stable | MIT | Multiple historical CVEs (C++ codebase). CVE-2024-27099, CVE-2024-27100 (patched). | C++ dependency with larger attack surface. Optional backend only. | **CONDITIONALLY APPROVED** -- use only on validator nodes where performance justifies the risk. Not for light/browser/mobile nodes (which don't need inference). |
-| **serde + bincode + prost** | Latest stable | MIT/Apache 2.0 | serde: no significant CVEs. bincode/prost: no known CVEs. | Pure Rust serialization libraries. Must validate deserialized input sizes to prevent memory exhaustion from malformed data. | **APPROVED** with input validation requirement |
+| **serde + postcard** | Latest stable | MIT/Apache 2.0 | serde: no significant CVEs. postcard: no known CVEs. | Pure Rust serialization (postcard for both wire and internal per ADR-024). Must validate deserialized input sizes to prevent memory exhaustion from malformed data. | **APPROVED** with input validation requirement |
 
 **Supply chain security requirements:**
 
@@ -3933,7 +3932,7 @@ All security flags raised in this section, consolidated for tracking:
 | **S2-3** | consensus-engineer | MPRE quantization scheme: formal specification required | STANDARD |
 | **S3-1** | tokenomics-engineer | Governance must be flash-loan resistant (stake lock-up for voting) | SECURITY-ELEVATED |
 | **S4-1** | node-engineer | Browser node key management: spending limits, hardware wallet support, warnings | SECURITY-ELEVATED |
-| **S4-2** | node-engineer | RocksDB access control and encryption at rest | STANDARD |
+| **S4-2** | node-engineer | redb access control and encryption at rest | STANDARD |
 | **S4-3** | node-engineer | Weak subjectivity checkpoint distribution mechanism specification | SECURITY-ELEVATED |
 | **S8-1** | p2p-network-engineer | DHT record signing by validator quorum, freshness validation | SECURITY-ELEVATED |
 | **S8-2** | p2p-network-engineer | Relay trust model: diversity requirement for relay selection | STANDARD |
@@ -3986,7 +3985,7 @@ The following MUST be included in annual third-party security audits:
 
 ### AI INTEGRATION DESIGN
 
-Genesis Chain treats AI as a first-class protocol citizen. This section defines the complete implementation design for AI integration across all protocol layers — from consensus-level anomaly detection to the AI compute marketplace. Every design decision respects two hard constraints: (1) AI must never be required for basic chain operation (graceful degradation), and (2) AI features must not compromise decentralization by demanding datacenter hardware for participation.
+Aztibase Network treats AI as a first-class protocol citizen. This section defines the complete implementation design for AI integration across all protocol layers — from consensus-level anomaly detection to the AI compute marketplace. Every design decision respects two hard constraints: (1) AI must never be required for basic chain operation (graceful degradation), and (2) AI features must not compromise decentralization by demanding datacenter hardware for participation.
 
 ---
 
@@ -4159,7 +4158,7 @@ This separation ensures that consensus remains transparent, deterministic, and f
 
 ### 6.2 Layer 2 — Smart Contract AI
 
-Smart contract AI provides automated security analysis for contracts deployed on Genesis Chain. These features operate at the execution layer (Layer 3 of the architecture per Section 1.3) and interact with the WASM and EVM runtimes.
+Smart contract AI provides automated security analysis for contracts deployed on Aztibase Network. These features operate at the execution layer (Layer 3 of the architecture per Section 1.3) and interact with the WASM and EVM runtimes.
 
 #### 6.2.1 Automated Pre-Deployment Contract Auditing
 
@@ -4234,7 +4233,7 @@ Overall risk = max(
 )
 ```
 
-**The audit does NOT prevent deployment.** Any contract can be deployed on Genesis Chain regardless of audit results. The audit report is informational — attached to the deployment receipt and queryable on-chain. This design:
+**The audit does NOT prevent deployment.** Any contract can be deployed on Aztibase Network regardless of audit results. The audit report is informational — attached to the deployment receipt and queryable on-chain. This design:
 - Preserves permissionless deployment (censorship resistance)
 - Provides automatic security intelligence that wallets and dApps can display
 - Creates a public, immutable audit trail for every contract
@@ -4322,7 +4321,7 @@ This model predicts the gas cost of an InferenceRequest BEFORE it is submitted, 
 
 ### 6.3 Layer 3 — Network AI
 
-Network-layer AI monitors the P2P health of Genesis Chain and protects against network-level attacks.
+Network-layer AI monitors the P2P health of Aztibase Network and protects against network-level attacks.
 
 #### 6.3.1 P2P Health Monitoring
 
@@ -4749,7 +4748,7 @@ Quality assurance implements the multi-metric framework from Section 2.3.4, with
 
 #### 6.6.4 Differentiation from Competitors
 
-| Dimension | Bittensor (TAO) | Ritual | Fetch.ai / ASI Alliance | Genesis Chain |
+| Dimension | Bittensor (TAO) | Ritual | Fetch.ai / ASI Alliance | Aztibase Network |
 |-----------|----------------|--------|------------------------|---------------|
 | **AI's role** | AI IS the chain (subnets are AI tasks) | AI bridge layer (Infernet connects off-chain AI to on-chain) | AI agents + marketplace (separate architectures merged) | AI is one of several native protocol capabilities alongside smart contracts, privacy, and payments |
 | **Compute verification** | Subnet-specific evaluation (often speed-based, led to garbage outputs — RESEARCH_BRIEF.md 4.1) | Dual proof sharding (TEE + ZK) | Limited verification | Triple verification (MPRE + TEE + ZK), multi-metric quality scoring |
@@ -4760,7 +4759,7 @@ Quality assurance implements the multi-metric framework from Section 2.3.4, with
 | **Node-friendliness** | Light nodes projected to 1TB by 2025 (RESEARCH_BRIEF.md 4.1) | Unknown (testnet only) | Not focused on consumer hardware | Protocol AI on consumer hardware (<4MB models, <100MB RAM). PoUW is opt-in only. |
 | **Server-independence** | Governance concentrated in 3 members + 12 senate validators | Early stage, centralized | Merger complexity | Full P2P, no central coordinator, VRF leader election |
 
-**Genesis Chain's unique positioning:** No other chain combines AI compute verification with general smart contracts, protocol-level privacy, and consumer-grade node requirements. Bittensor is AI-only. Ritual requires off-chain infrastructure. ASI Alliance is a merger of three separate systems. Genesis Chain embeds AI as one pillar of a complete, self-contained blockchain.
+**Aztibase Network's unique positioning:** No other chain combines AI compute verification with general smart contracts, protocol-level privacy, and consumer-grade node requirements. Bittensor is AI-only. Ritual requires off-chain infrastructure. ASI Alliance is a merger of three separate systems. Aztibase Network embeds AI as one pillar of a complete, self-contained blockchain.
 
 ---
 
@@ -5003,13 +5002,13 @@ REMOVAL (governance):
 **Contributed by:** smart-contract-engineer
 **Date:** 2026-03-05
 **Status:** DRAFT
-**Dependencies met:** RESEARCH_BRIEF.md (complete), Section 0 stack rulings (reviewed), Section 1 architecture (reviewed -- hybrid account+object model, modular monolith Layer 3/4, AI Oracle precompile, fee market from genesis), Section 2 consensus (reviewed -- SynBFT 400ms rounds, DAG structure, PoUW InferenceAttestation lifecycle, BLS stack challenge), Section 4 node architecture (reviewed -- five node types, RocksDB dual storage, browser WASM compilation, Verkle proofs for light clients), Section 6 AI integration (reviewed -- tract-based audit pipeline, KYA framework, ModelRegistry, inference verification)
+**Dependencies met:** RESEARCH_BRIEF.md (complete), Section 0 stack rulings (reviewed), Section 1 architecture (reviewed -- hybrid account+object model, modular monolith Layer 3/4, AI Oracle precompile, fee market from genesis), Section 2 consensus (reviewed -- SynBFT 400ms rounds, DAG structure, PoUW InferenceAttestation lifecycle, BLS stack challenge), Section 4 node architecture (reviewed -- five node types, redb dual storage, browser WASM compilation, Verkle proofs for light clients), Section 6 AI integration (reviewed -- tract-based audit pipeline, KYA framework, ModelRegistry, inference verification)
 
 ---
 
 ### SMART CONTRACT LAYER
 
-The smart contract layer defines how user-deployed code executes on Genesis Chain. It spans Layer 3 (Execution) and Layer 4 (Application) of the modular monolith architecture. Every design decision below is constrained by: deterministic execution across all node types, AI-native integration as a protocol primitive, browser node interoperability via light client Verkle proofs, and the 400ms round budget established by SynBFT.
+The smart contract layer defines how user-deployed code executes on Aztibase Network. It spans Layer 3 (Execution) and Layer 4 (Application) of the modular monolith architecture. Every design decision below is constrained by: deterministic execution across all node types, AI-native integration as a protocol primitive, browser node interoperability via light client Verkle proofs, and the 400ms round budget established by SynBFT.
 
 ---
 
@@ -5023,7 +5022,7 @@ The smart contract layer defines how user-deployed code executes on Genesis Chai
 
 | Criterion | wasmtime | wasmer | Custom VM |
 |-----------|----------|--------|-----------|
-| Maintainer | Bytecode Alliance (Mozilla, Fastly, Intel, Red Hat) | Wasmer Inc. (single company) | Genesis Chain team |
+| Maintainer | Bytecode Alliance (Mozilla, Fastly, Intel, Red Hat) | Wasmer Inc. (single company) | Aztibase Network team |
 | License | Apache 2.0 | MIT | N/A |
 | Production users | Fastly Compute@Edge, Shopify, Fermyon, Wasmcloud | NEAR Protocol, Cloudflare (partial) | N/A |
 | Deterministic execution | Cranelift compiler with determinism flags; fuel-based metering; configurable epoch interruption | Singlepass compiler (deterministic but less optimized); fuel metering added later | Full control |
@@ -5077,7 +5076,7 @@ All contract execution must be bit-for-bit identical across every validator. WAS
 
 #### 7.1.3 Gas Model: Fuel-Based Metering
 
-Genesis Chain uses **fuel-based metering** via wasmtime's native fuel API. This replaces traditional instruction counting or gas table approaches.
+Aztibase Network uses **fuel-based metering** via wasmtime's native fuel API. This replaces traditional instruction counting or gas table approaches.
 
 **How fuel works:**
 
@@ -5102,8 +5101,8 @@ Genesis Chain uses **fuel-based metering** via wasmtime's native fuel API. This 
 | **Indirect call (table lookup)** | 3 | Table lookup + branch. |
 | **SIMD operation** | 3 | Vector operations on 128-bit lanes. |
 | **Host function call (base)** | 100 | Context switch from WASM to host. Actual cost added by host function. |
-| **State read (per 32 bytes)** | 500 | RocksDB point lookup from cf_state_store. |
-| **State write (per 32 bytes)** | 2,500 | RocksDB write + deferred Verkle tree update. Writes are 5x reads. |
+| **State read (per 32 bytes)** | 500 | redb point lookup from cf_state_store. |
+| **State write (per 32 bytes)** | 2,500 | redb write + deferred Verkle tree update. Writes are 5x reads. |
 | **State delete** | 500 | Refundable portion -- state deletion reduces storage burden. |
 | **BLAKE3 hash (per 32 bytes)** | 50 | Precompiled host function. |
 | **Ed25519 verify** | 3,000 | Precompiled host function. Approximately 70us wall time. |
@@ -5115,7 +5114,7 @@ Genesis Chain uses **fuel-based metering** via wasmtime's native fuel API. This 
 
 **Dynamic pricing:**
 
-The fuel costs above are the **base schedule**. Genesis Chain implements an EIP-1559-style dynamic fee market:
+The fuel costs above are the **base schedule**. Aztibase Network implements an EIP-1559-style dynamic fee market:
 
 - **Base fee per fuel unit:** Adjusts every anchor commit based on block utilization. If blocks are >50% full (by fuel), the base fee increases; if <50%, it decreases. The adjustment rate is bounded to +/- 12.5% per anchor.
 - **Priority fee (tip):** Users bid a priority fee above the base fee to incentivize inclusion. Validators receive tips; base fees are burned (deflationary pressure).
@@ -5323,7 +5322,7 @@ This returns `BLAKE3(anchor_vrf_output || seed)`, providing per-contract randomn
 
 **Strategy: Dual VM -- WASM primary, EVM secondary via revm.**
 
-Genesis Chain runs two execution environments:
+Aztibase Network runs two execution environments:
 
 1. **WASM VM (wasmtime):** Primary. All new contract development, AI integration, object model, and protocol innovation happens here.
 2. **EVM (revm):** Secondary. Provides Solidity/Vyper compatibility for developer adoption and DeFi primitives migration.
@@ -5395,7 +5394,7 @@ Both VMs read from and write to the same underlying state store. This is critica
 
 - **EVM contracts** use the standard Ethereum storage layout (256-bit key-value slots at contract address).
 - **WASM contracts** use the host function state API (arbitrary byte keys under contract address prefix).
-- Both map to the same RocksDB column family (cf_state_store) with the key prefix scheme defined in Section 4.1.2.
+- Both map to the same redb column family (cf_state_store) with the key prefix scheme defined in Section 4.1.2.
 
 **Cross-VM calls:**
 
@@ -5419,9 +5418,9 @@ EVM contract --[CALL opcode to bridge address]--> WASM contract:
 
 Cross-VM calls have a base cost of 25,000 fuel (higher than same-VM calls at 10,000) due to the encoding/decoding overhead and context switching between execution engines.
 
-**EVM limitations on Genesis Chain:**
+**EVM limitations on Aztibase Network:**
 
-EVM contracts on Genesis Chain have access to standard EVM opcodes plus:
+EVM contracts on Aztibase Network have access to standard EVM opcodes plus:
 - `BLAKE3` precompile (in addition to standard `SHA256`, `KECCAK256`)
 - Ed25519 verify precompile
 - Cross-VM bridge precompile
@@ -5436,7 +5435,7 @@ This asymmetry is deliberate: the EVM layer is for compatibility, not for innova
 
 #### 7.2.3 Migration Path for Solidity Developers
 
-1. **Day 1:** Deploy existing Solidity contracts unchanged on the EVM layer. Use Hardhat/Foundry/Remix with a Genesis Chain RPC endpoint. Most ERC-20, ERC-721, DeFi protocols work with zero modifications.
+1. **Day 1:** Deploy existing Solidity contracts unchanged on the EVM layer. Use Hardhat/Foundry/Remix with a Aztibase Network RPC endpoint. Most ERC-20, ERC-721, DeFi protocols work with zero modifications.
 2. **Day 1+:** Solidity contracts can call WASM contracts via the bridge precompile. Gradually move performance-critical or AI-dependent logic to WASM while keeping the Solidity frontend.
 3. **Incremental:** Learn Rust or AssemblyScript for WASM development. SDKs provide familiar patterns (see Section 7.3). New features and standards are WASM-first.
 4. **Long-term:** As the WASM ecosystem matures, Solidity developers optionally migrate entirely. The EVM layer remains operational indefinitely -- no forced migration.
@@ -5586,14 +5585,14 @@ Standard Solidity/Vyper compilation targeting the EVM. Developers use existing t
 
 - **Hardhat:** With `genesis-hardhat-plugin` providing network configuration, deployment scripts, and verification integration
 - **Foundry:** With `genesis-foundry-plugin` providing `forge test` and `forge deploy` support
-- **Remix:** Via the Genesis Chain RPC endpoint (standard JSON-RPC compatible)
+- **Remix:** Via the Aztibase Network RPC endpoint (standard JSON-RPC compatible)
 - **OpenZeppelin:** Standard OpenZeppelin contracts (ERC-20, ERC-721, AccessControl, etc.) deploy unchanged
 
 ---
 
 ### 7.4 Contract Standards
 
-Genesis Chain defines native standards for common contract patterns. These are reference implementations in the Rust SDK with equivalent AssemblyScript and (where applicable) EVM implementations.
+Aztibase Network defines native standards for common contract patterns. These are reference implementations in the Rust SDK with equivalent AssemblyScript and (where applicable) EVM implementations.
 
 #### 7.4.1 GEN-20: Fungible Token Standard
 
@@ -5656,11 +5655,11 @@ trait Gen721 {
 }
 ```
 
-**Object model integration:** NFTs on Genesis Chain can optionally be backed by first-class on-chain objects (Section 1.2.3). This means an NFT is not just a mapping entry in a contract -- it is an independent protocol-level object with its own ownership, transferability, and parallel execution properties. The `as_object()` method bridges the standard token interface with the object model.
+**Object model integration:** NFTs on Aztibase Network can optionally be backed by first-class on-chain objects (Section 1.2.3). This means an NFT is not just a mapping entry in a contract -- it is an independent protocol-level object with its own ownership, transferability, and parallel execution properties. The `as_object()` method bridges the standard token interface with the object model.
 
 #### 7.4.3 GEN-AGENT: AI Agent Contract Standard (NEW)
 
-This is a Genesis Chain-specific standard with no equivalent in existing blockchain ecosystems. It defines how AI agents interact with smart contracts.
+This is a Aztibase Network-specific standard with no equivalent in existing blockchain ecosystems. It defines how AI agents interact with smart contracts.
 
 ```rust
 // GEN-AGENT interface
@@ -5745,7 +5744,7 @@ enum VoteType { For, Against, Abstain }
 enum ProposalState { Pending, Active, Succeeded, Defeated, Queued, Executed, Cancelled, Expired }
 ```
 
-This follows the Governor pattern (OpenZeppelin) adapted for Genesis Chain's DAG-based timing (rounds instead of block numbers).
+This follows the Governor pattern (OpenZeppelin) adapted for Aztibase Network's DAG-based timing (rounds instead of block numbers).
 
 #### 7.4.5 GEN-MULTI: Multi-Signature and Account Abstraction Standard
 
@@ -5831,7 +5830,7 @@ Protocol-level contracts (token contract, governance contract, staking contract)
 
 #### 7.5.2 Upgrade Mechanism
 
-Genesis Chain supports **native contract upgradability** without the proxy pattern overhead.
+Aztibase Network supports **native contract upgradability** without the proxy pattern overhead.
 
 **Approach: Versioned code with immutable storage**
 
@@ -5921,7 +5920,7 @@ The cold/warm distinction follows Ethereum's EIP-2929 pattern: the first access 
 
 **Reentrancy protection:**
 
-Genesis Chain implements **protocol-level reentrancy protection** rather than relying on contract-level guards:
+Aztibase Network implements **protocol-level reentrancy protection** rather than relying on contract-level guards:
 
 1. **Call depth limit:** Maximum 32 nested calls. Exceeding this reverts the entire transaction.
 2. **Reentrancy flag (opt-in):** Contracts can declare `#[no_reentrancy]` on functions. The VM tracks a per-contract reentrancy flag; if a function marked `#[no_reentrancy]` is called while the same contract is already on the call stack, the call reverts.
@@ -6146,7 +6145,7 @@ The gas model interfaces with tokenomics (Section 3) through three channels:
 
 #### 7.8.1 wasmtime: ACCEPTED
 
-wasmtime is the correct WASM runtime for Genesis Chain's contract VM. Its Bytecode Alliance governance, fuel-based metering, determinism guarantees, and security posture are superior to wasmer for blockchain use. See Section 7.1.1 for the full evaluation.
+wasmtime is the correct WASM runtime for Aztibase Network's contract VM. Its Bytecode Alliance governance, fuel-based metering, determinism guarantees, and security posture are superior to wasmer for blockchain use. See Section 7.1.1 for the full evaluation.
 
 No challenge raised. The architect's stack ruling specifying wasmtime (Section 1.8) is confirmed.
 
@@ -6244,7 +6243,7 @@ This is consistent with the node architecture's design (Section 4.3.4) and does 
 
 ### P2P NETWORK DESIGN
 
-Genesis Chain's networking layer is the foundation upon which server-independence stands or falls. Every design decision below has been evaluated against the zero-central-server mandate. The P2P layer must simultaneously serve five node types with radically different resource profiles, propagate DAG vertices within 400ms round budgets, traverse consumer NATs reliably, and resist network-layer attacks -- all without a single centralized component after initial bootstrap.
+Aztibase Network's networking layer is the foundation upon which server-independence stands or falls. Every design decision below has been evaluated against the zero-central-server mandate. The P2P layer must simultaneously serve five node types with radically different resource profiles, propagate DAG vertices within 400ms round budgets, traverse consumer NATs reliably, and resist network-layer attacks -- all without a single centralized component after initial bootstrap.
 
 ---
 
@@ -6461,7 +6460,7 @@ These constraints are enforced at the connection manager level. When accepting n
 
 #### 8.3.3 Priority Batching (Mitigating Gossipsub Stress Degradation)
 
-To address the Gossipsub stress-performance issue flagged in RESEARCH_BRIEF.md Section 7.2, Genesis Chain implements a priority-based message batching layer on top of Gossipsub:
+To address the Gossipsub stress-performance issue flagged in RESEARCH_BRIEF.md Section 7.2, Aztibase Network implements a priority-based message batching layer on top of Gossipsub:
 
 ```
 MessagePriority {
@@ -6549,7 +6548,7 @@ GossipsubConfig {
 
 #### 8.4.1 NAT Traversal Architecture
 
-Genesis Chain uses a layered NAT traversal strategy, progressing from cheapest to most expensive:
+Aztibase Network uses a layered NAT traversal strategy, progressing from cheapest to most expensive:
 
 ```
 NAT TRAVERSAL HIERARCHY:
@@ -6707,7 +6706,7 @@ A validator behind symmetric NAT, relaying through 3 relay nodes, consumes appro
 
 #### 8.5.1 Browser-to-Network Without a Signaling Server
 
-The traditional WebRTC model requires a signaling server to exchange SDP (Session Description Protocol) offers and answers between peers. Genesis Chain eliminates this dependency using libp2p Circuit Relay v2 as the signaling channel:
+The traditional WebRTC model requires a signaling server to exchange SDP (Session Description Protocol) offers and answers between peers. Aztibase Network eliminates this dependency using libp2p Circuit Relay v2 as the signaling channel:
 
 ```
 BROWSER NODE CONNECTION SEQUENCE:
@@ -6904,7 +6903,7 @@ CompressionConfig {
 }
 ```
 
-**Why LZ4 over Zstd for wire format:** RocksDB uses Zstd for storage (higher compression ratio, acceptable decompression speed for disk reads). For wire messages, LZ4's ~3 Gbps throughput (compression) and ~5 Gbps (decompression) mean negligible CPU overhead per message, which is critical when processing 200 vertices per 400ms round. Zstd at level 3 achieves ~500 Mbps, which could add measurable latency at high message rates.
+**Why LZ4 over Zstd for wire format:** redb uses Zstd for storage (higher compression ratio, acceptable decompression speed for disk reads). For wire messages, LZ4's ~3 Gbps throughput (compression) and ~5 Gbps (decompression) mean negligible CPU overhead per message, which is critical when processing 200 vertices per 400ms round. Zstd at level 3 achieves ~500 Mbps, which could add measurable latency at high message rates.
 
 ---
 
@@ -7169,7 +7168,7 @@ DHT is method #6. If it fails (e.g., a bug in the Kademlia implementation), the 
 
 #### 8.10.1 rust-libp2p: ACCEPTED with Mitigations
 
-**Assessment:** rust-libp2p is the correct choice for Genesis Chain's P2P layer. The maintenance crisis flagged in RESEARCH_BRIEF.md Section 7.2 is real but primarily affects go-libp2p and js-libp2p. The rust-libp2p implementation has independent, active maintainers and a healthy release cadence.
+**Assessment:** rust-libp2p is the correct choice for Aztibase Network's P2P layer. The maintenance crisis flagged in RESEARCH_BRIEF.md Section 7.2 is real but primarily affects go-libp2p and js-libp2p. The rust-libp2p implementation has independent, active maintainers and a healthy release cadence.
 
 **Specific rust-libp2p component readiness assessment:**
 
@@ -7402,7 +7401,7 @@ Legal clearance was received on March 5, 2026. Of 10 candidates evaluated:
 | **Naming score** | 78/100 |
 | **Legal status** | YELLOW -- requires re-clearance from legal-ip-counsel |
 
-**Rationale:** Aztibases are the signal-receiving branches of biological neurons. The name maps directly to Genesis Chain's architecture: DAG-based topology (branching graph structure), AI-native consensus (distributed intelligence gathering), and server-independence (no central hub, signals received from many sources). The branching visual metaphor provides exceptional logo and brand design potential. Ticker AZTB is clean across all crypto and stock exchanges.
+**Rationale:** Aztibases are the signal-receiving branches of biological neurons. The name maps directly to Aztibase Network's architecture: DAG-based topology (branching graph structure), AI-native consensus (distributed intelligence gathering), and server-independence (no central hub, signals received from many sources). The branching visual metaphor provides exceptional logo and brand design potential. Ticker AZTB is clean across all crypto and stock exchanges.
 
 **Legal risk:** Aztibase Systems Inc. holds Class 9 software trademarks. Requires formal opposition analysis. Ticker changed from DND (taken) to AZTB (clean). See NAMING_REPORT.md for full risk assessment and mitigation strategy.
 
@@ -7461,7 +7460,7 @@ The full evaluation of all candidates, scoring methodology, linguistic safety ch
 | 2026-03-05 | architect | Section 0 | Added 5 STACK RULINGS: P2P (compromise), State Mgmt (accept), Consensus (accept), AI Runtime (refine), License (accept) |
 | 2026-03-05 | architect | Section 1 | Complete blockchain architecture contribution: chain structure, layered architecture, design philosophy, server-independence, AI-native architecture, privacy model, downstream skill framework |
 | 2026-03-05 | consensus-engineer | Section 2 | Complete consensus mechanism contribution: Synaptic Consensus (SynBFT + PoUW). DAG-BFT with anchor-based ordering, AI reputation-weighted leader selection, multi-method PoUW verification, validator selection with stake caps and diversity quotas. STACK CHALLENGE raised: BLS12-381 signatures needed alongside Ed25519. |
-| 2026-03-05 | node-engineer | Section 4 | Complete node architecture contribution: Full node (RocksDB, dual storage, DAG processing pipeline, priority mempool, 3 sync strategies, 8GB RAM target), Light node (redb, Verkle proof verification, BLS finality verification, 512MB RAM target), Browser node (WASM compilation strategy, WebRTC transport, IndexedDB storage, browser compat matrix), Mobile node (Android+iOS, battery optimization, light client variant), Validator node (vertex proposal pipeline, VRF computation, PoUW tiers, NAT traversal), State pruning (snapshot+diff model, archive vs pruned, Verkle GC). STACK ENDORSEMENT: BLS12-381 (supporting consensus-engineer). STACK REFINEMENT: redb over sled for light nodes. STACK FLAG: bandwidth concern for full nodes. |
+| 2026-03-05 | node-engineer | Section 4 | Complete node architecture contribution: Full node (redb, dual storage, DAG processing pipeline, priority mempool, 3 sync strategies, 8GB RAM target), Light node (redb, Verkle proof verification, BLS finality verification, 512MB RAM target), Browser node (WASM compilation strategy, WebRTC transport, IndexedDB storage, browser compat matrix), Mobile node (Android+iOS, battery optimization, light client variant), Validator node (vertex proposal pipeline, VRF computation, PoUW tiers, NAT traversal), State pruning (snapshot+diff model, archive vs pruned, Verkle GC). STACK ENDORSEMENT: BLS12-381 (supporting consensus-engineer). STACK REFINEMENT: redb over sled for light nodes. STACK FLAG: bandwidth concern for full nodes. |
 | 2026-03-05 | p2p-network-engineer | Section 8 | Complete P2P network design: Protocol stack (QUIC primary, TCP+Noise fallback, WebRTC for browsers, NetworkTransport abstraction), Peer discovery (6-layer bootstrap strategy, Kademlia DHT with k=20, peer diversity policy for eclipse resistance), Gossipsub v1.1 with priority batching and flow control (6 gossip topics, mesh size 8, 50ms batch flush), NAT traversal (AutoNAT + DCUtR hole punching ~85% + incentivized TURN relays ~15%, validators behind NAT supported), WebRTC browser nodes (Circuit Relay v2 for signaling, no dedicated signaling server, WebSocket fallback), Bandwidth optimization (compact block relay ~95% reduction, LZ4 wire compression, bloom filter dedup, transaction suppression), Network security (eclipse prevention via diversity + anchor detection, Sybil resistance via stake-gated scoring, DDoS rate limiting, Gossipsub peer scoring, Noise/TLS/DTLS encryption), Server-independence checklist (all 6 items PASS), Bandwidth requirements table (full node 8-12 Mbps with compact relay, light node 100-500 Kbps, browser 50-200 Kbps). No stack challenges raised. libp2p-webrtc flagged as medium-high risk requiring dedicated testing. |
 | 2026-03-05 | naming-council | Section 9 | Complete naming and branding contribution: Legal gate review (1 GREEN, 4 YELLOW, 5 RED). Critical finding: Quen (QEN) is phonetically identical to Alibaba's Qwen AI brand -- severe branding risk for AI-native chain. Primary recommendation: Aztibase Network (AZTB), scoring 78/100 -- exceptional AI/DAG meaning resonance, clean ticker, strong visual identity. CONDITIONAL on legal re-clearance (Aztibase Systems Inc. Class 9 trademark requires opposition analysis). Fallback: Quen (QEN), scoring 57/100 -- legally clean but brand-compromised. Trademark roadmap: USPTO, EUIPO, CIPC, WIPO Madrid Protocol. Full evaluation in NAMING_REPORT.md. |
 | 2026-03-05 | security-engineer | Section 5 | Complete security model contribution: Threat matrix (44 attack vectors across 8 domains: consensus, network, smart contract, cryptographic, AI-specific, economic, node-level, browser/mobile), Cryptographic standards review (BLAKE3 APPROVED, Ed25519 APPROVED with strict verification mandate, BLS12-381 APPROVED with PoP/domain separation/subgroup checking, Noise APPROVED, Verkle trees CONDITIONALLY APPROVED with quantum migration requirement), Security review of all existing sections (Sections 1, 2, 4, 8 reviewed with 13 security flags raised -- 9 SECURITY-ELEVATED, 4 STANDARD), AI security monitoring design (4 monitors: transaction anomaly, consensus behavior, contract exploit, network health + graduated threat response model with principle that AI never autonomously slashes/freezes), Quantum readiness assessment (4-phase PQC migration plan, HNDL risk analysis, Verkle-to-Merkle migration requirements), Key management (key hierarchy, wallet security tiers, HSM recommendations for validators, key rotation and recovery), Stack security review (15 dependencies evaluated with CVE analysis, supply chain security requirements including cargo-audit/cargo-vet/reproducible builds). STACK ENDORSEMENT: BLS12-381. 2 CONFLICTS raised: agent spending limit enforcement layer, VRF last-revealer bias. |

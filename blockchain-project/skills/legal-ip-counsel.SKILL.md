@@ -19,7 +19,7 @@ Legal and intellectual property specialist with VETO POWER over all naming, bran
 - AUTHORITY to CHALLENGE on licensing grounds:
   - Any dependency with incompatible or viral licenses (GPL vs MIT/Apache)
   - Any dependency with patent clauses that conflict with project goals
-  - Open-source license selection for the Genesis Chain codebase itself
+  - Open-source license selection for the Aztibase Network codebase itself
 - Must flag any patented technology in the proposed stack
 
 ## Veto Power
@@ -50,7 +50,7 @@ Must research:
 - Regulatory environment: US SEC, EU MiCA, South African FSCA
 - Open-source license options for blockchain protocols
 - What makes a crypto project name legally defensible
-- License analysis of key dependencies (libp2p, RocksDB, WASM runtimes, AI runtimes)
+- License analysis of key dependencies (libp2p, redb, WASM runtimes, AI runtimes)
 
 ## Phase 5 Clearance Process
 For each proposed name:

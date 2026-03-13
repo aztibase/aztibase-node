@@ -29,8 +29,8 @@
 
 ### Completed
 - Full design phase (Phases 3-6) delivered
-- All 12 skills defined and operational
-- Workspace scaffolded: 8 Rust crates in monorepo
+- All 13 skills defined and operational
+- Workspace scaffolded: 9 Rust crates in monorepo
 - Build-phase tracking infrastructure (5 documents)
 - Implementation depth audit (Sprint 001, Task 7)
 - Reference repos cloned (MystiCeti, Sui, Lighthouse, rust-libp2p, redb)
@@ -67,23 +67,24 @@
 
 ### Crate Status
 
-| Crate | Depth | Owner | M1-Ready | M3-Ready |
-|-------|-------|-------|----------|----------|
-| aztibase-core | COMPLETE | blockchain-architect | YES | YES |
-| aztibase-consensus | PARTIAL | consensus-engineer | YES | YES |
-| aztibase-storage | PARTIAL | node-engineer | YES | YES |
-| aztibase-network | PARTIAL | p2p-network-engineer | YES | YES |
-| aztibase-execution | PARTIAL | smart-contract-engineer | YES | YES |
-| aztibase-runtime | PARTIAL | ai-integration-engineer | YES | YES |
-| aztibase-rpc | PARTIAL | node-engineer | NO | YES |
-| aztibase-node | PARTIAL | node-engineer | YES | YES |
-| aztibase-wasm | PARTIAL | p2p-network-engineer | NO | YES |
+| Crate | Depth | Owner | Status |
+|-------|-------|-------|--------|
+| aztibase-core | COMPLETE | blockchain-architect | Types, crypto, hashing — feature-complete |
+| aztibase-consensus | FEATURE-COMPLETE | consensus-engineer | DAG-BFT, commit rule, finality certs, equivocation, checkpoints |
+| aztibase-storage | FEATURE-COMPLETE | node-engineer | redb tables, light store, Verkle placeholder, protocol store persistence |
+| aztibase-network | FEATURE-COMPLETE | p2p-network-engineer | Gossipsub, Kademlia, peer scoring, NAT, WebRTC scaffold |
+| aztibase-execution | FEATURE-COMPLETE | smart-contract-engineer | 27 TxKinds, fee market, staking, governance, tokenomics, AI market, L2 bridge |
+| aztibase-runtime | PARTIAL | ai-integration-engineer | tract inference, anomaly scorer — stubs for advanced features |
+| aztibase-rpc | FEATURE-COMPLETE | node-engineer | 48 RPC methods, WebSocket subscriptions, Prometheus metrics |
+| aztibase-node | FEATURE-COMPLETE | node-engineer | Pipeline, mempool, genesis, CLI, wallet, config, snapshots |
+| aztibase-wasm | PARTIAL | p2p-network-engineer | Tx signing, header verification — BLS verify incomplete (C-WASM-2) |
 
 ### In Progress
-- Pre-mainnet audit fixes (15 CRITICAL, 25 HIGH findings — see AUDIT_REPORT_2026-03-12.md)
+- Validator go-to-market planning and friends testnet invitations
+- Mainnet launch preparation (M9)
 
 ### Blocked
-- Mainnet launch blocked on: DagBlock signature verification (H-CON-1), committed batch delivery guarantee (H-CON-3), faucet mainnet gate (H-NODE-3)
+- Mainnet launch blocked on: Aztibase Systems coexistence agreement (legal), public testnet infrastructure deployment (VPS provisioning)
 
 ### Recently Completed
 - **Sprint 059 (2026-03-12)**: Friends testnet — genesis ceremony CLI (init, add-validator, add-account, validate, show), wallet --validator flag (Ed25519+BLS), --boot-node CLI flag, setup-validator.sh custom network support, friends testnet guide + coordinator script
@@ -92,7 +93,7 @@
 - P2P mesh fix: 0.0.0.0 bind + staggered starts → full 3-node mesh, continuous block production
 - Live testnet re-validated: faucet drips (2x), transfers (2x), cross-node balance consistency confirmed
 - Open risk resolution: nChain FTO (LOW-MEDIUM, ADR-028), quinn-proto DoS fix (ADR-029), wasmtime v42 Windows clean, domain acquisition confirmed
-- Live testnet validation: 2226+ batches, 0 equivocations, 49 RPC methods, 3 validators, staking metrics fix
+- Live testnet validation: 2226+ batches, 0 equivocations, 48 RPC methods, 3 validators, staking metrics fix
 - Sprint 057: Validator business-in-a-box — one-click setup script, Grafana Cloud free tier monitoring, VPS guide (6 providers, from €3.99/mo)
 - Sprint 056: Full state snapshots & mainnet genesis — ProtocolStoreBundle, snapshot CLI, mainnet_genesis() 400M AZTB, ADR-027
 - Sprint 055: Public testnet launch infrastructure — faucet UI, testnet landing page, seed node configs, systemd service, bootstrap script, ADR-026
@@ -263,9 +264,9 @@
 - Sprint 005 Phase 1: Consensus-to-execution wiring, TxKind routing, ExecutionPipeline
 
 ### Next Up
-1. Open risk resolution: nChain FTO analysis, dependency audit, coexistence agreement
-2. Live testnet validation: full RPC suite, multi-transfer stress test, monitoring verification
-3. Sprint 058 planning: mainnet launch checklist
+1. Friends testnet invitations and validator onboarding
+2. Public testnet infrastructure deployment (3 seed nodes on VPS)
+3. Sprint 060 planning: public testnet launch or mainnet checklist
 
 ### Deferred to M9+ (Locked in FUTURE_PLANNING.md)
 
@@ -286,11 +287,11 @@
 - EIP-1559 fee burning (governance-controlled)
 - Full tokenomics (emission, vesting, APY curves, staking, delegation, slashing, 759 tests)
 
-### M8 Scope: Monitoring Infrastructure (Planned)
+### M8 Monitoring Infrastructure (DONE)
 - **Prometheus**: `prometheus-client` crate (pure Rust), `/metrics` endpoint in Prometheus text format
 - **Grafana**: Docker Compose service, auto-provisioned dashboards (Node Health, Consensus)
 - **Dashboards**: Block height, TPS, finality latency, peer count, mempool depth, round progression, equivocations
-- **Alerting**: Missed rounds, peer drops, mempool overflow (Phase 2+)
+- **Grafana Cloud**: Free-tier setup guide for validators (`docs/GRAFANA_CLOUD_SETUP.md`)
 
 ---
 

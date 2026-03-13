@@ -44,7 +44,7 @@ Research specialist. Conducts comprehensive research on the blockchain landscape
 
 ## Output Format
 ```
-# RESEARCH BRIEF - Genesis Chain
+# RESEARCH BRIEF - Aztibase Network
 
 ## 1. Innovative Blockchains (Last 3 Years)
 [For each: name, innovation, tech stack, what worked, what didn't]
@@ -74,5 +74,5 @@ Research specialist. Conducts comprehensive research on the blockchain landscape
 [Failed projects and their technical mistakes]
 
 ## 10. Key Recommendations
-[Top-line recommendations for Genesis Chain based on research]
+[Top-line recommendations for Aztibase Network based on research]
 ```

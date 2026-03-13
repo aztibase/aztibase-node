@@ -225,7 +225,7 @@ Aztibase Network defines five node types. Every type is a first-class protocol c
 
 | Node Type | Purpose | CPU | RAM | Storage | Network | Key Technology |
 |-----------|---------|-----|-----|---------|---------|----------------|
-| **Full Node** | Complete state, validation, local RPC | 4+ cores | 8 GB min | 100 GB SSD | 25 Mbps | RocksDB (dual storage), Verkle trees |
+| **Full Node** | Complete state, validation, local RPC | 4+ cores | 8 GB min | 100 GB SSD | 25 Mbps | redb (embedded, pure Rust), Verkle trees |
 | **Light Node** | Header-only, Verkle proof verification | 2+ cores | 512 MB min | 2 GB | 1 Mbps | redb, BLS aggregate finality certs |
 | **Browser Node** | WASM-compiled light client in browser tab | Browser | Browser tab | IndexedDB (<50MB) | 1 Mbps | WASM (wasm32), WebRTC, IndexedDB |
 | **Mobile Node** | Light client for smartphones | ARM64 | 256 MB app | 100 MB | Intermittent | Rust core via JNI/FFI, redb |
@@ -248,13 +248,13 @@ Aztibase Network defines five node types. Every type is a first-class protocol c
 
 ### Graceful Upgrade Path
 
-A user can start with a browser light client, upgrade to a desktop light node (redb-based), then to a full node (RocksDB), and finally to a validator -- each step adding capability without discarding previous state. The Rust core is shared across light, mobile, and full node implementations.
+A user can start with a browser light client, upgrade to a desktop light node (redb-based), then to a full node (redb), and finally to a validator -- each step adding capability without discarding previous state. The Rust core is shared across light, mobile, and full node implementations.
 
 ### Storage Architecture
 
 Dual storage following Sei's production-proven pattern:
-- **State Store (RocksDB cf_state_store):** Raw key-value optimized for read/write latency. Used by the execution engine.
-- **State Commitment (RocksDB cf_state_commitment):** Verkle tree structure for proof generation. Updated asynchronously after execution to reduce I/O contention.
+- **State Store (redb):** Raw key-value optimized for read/write latency. Used by the execution engine.
+- **State Commitment (redb):** Verkle tree structure for proof generation. Updated asynchronously after execution to reduce I/O contention.
 
 Six column families: state_store, state_commitment, dag_vertices, transactions, receipts, ai_attestations. Per-family compression (LZ4 for hot data, Zstd for cold). Target: <100GB first year storage.
 
@@ -585,7 +585,7 @@ Four monitoring subsystems run on every full node:
 | **Async Runtime** | tokio | MIT | Production-proven, multi-threaded, battle-tested. |
 | **P2P Framework** | rust-libp2p | MIT/Apache 2.0 | DHT, Gossipsub, WebRTC, Noise. Independent maintainers from go/js implementations. NetworkTransport abstraction for swappability. |
 | **Consensus Transport** | QUIC (primary) | N/A (protocol) | 0-RTT, built-in encryption, UDP NAT friendliness, multiplexed streams. |
-| **State Storage (Full)** | RocksDB (Apache 2.0 option) | Dual GPL2/Apache 2.0 | Dual storage architecture, column families, compression, production-proven at scale. |
+| **State Storage (Full)** | redb | MIT/Apache 2.0 | Dual storage architecture, typed tables, ACID transactions, pure Rust, no C++ dependency. |
 | **State Storage (Light/Mobile)** | redb | MIT/Apache 2.0 | Pure Rust, ACID, lightweight, no C++ dependency. Used in Bitcoin ordinals tooling. |
 | **State Commitment** | Verkle Trees | Research | 100x smaller proofs than Merkle. Critical for light/browser/mobile nodes. Post-quantum escape hatch designed in. |
 | **Hashing** | BLAKE3 | CC0/Apache 2.0 | Faster than SHA-256, cryptographically secure, tree hashing mode. |
@@ -625,7 +625,7 @@ This follows the Rust ecosystem convention and provides:
 
 All proposed dependencies are GREEN (compatible):
 - libp2p, tokio, serde, blake3, ed25519-dalek: MIT/Apache 2.0
-- RocksDB: Select Apache 2.0 option (not GPLv2)
+- redb: MIT/Apache 2.0 (pure Rust, no native deps)
 - wasmtime: Apache 2.0 + LLVM exception
 - tract, candle: MIT/Apache 2.0
 - blst: Apache 2.0
@@ -662,10 +662,10 @@ This roadmap covers the first 4 weeks of implementation. The goal is a minimal t
 | 1-2 | Project scaffolding | Cargo workspace with crates: `aztibase-types`, `aztibase-crypto`, `aztibase-storage`, `aztibase-consensus`, `aztibase-network`, `aztibase-vm`, `aztibase-node`. CI/CD pipeline with cargo-audit and cargo-clippy. Dual MIT/Apache-2.0 license headers. |
 | 2-3 | Core types | `GenesisBlockHeader`, `GenesisBlockBody`, `Transaction`, `Account`, `ObjectState`, `AIAgentState`, `InferenceRequest`, `InferenceAttestation`, `AIComputeCommitment`. Serde serialization (Bincode internal, Protobuf wire). |
 | 3-4 | Cryptography | BLAKE3 hashing wrappers. Ed25519 keypair generation, signing, verification (strict mode). BLS12-381 keypair, signing, aggregation, verification (with proof-of-possession). VRF implementation (ECVRF-EDWARDS25519-SHA512-TAI per RFC 9381). |
-| 4-5 | Storage engine | RocksDB integration with 6 column families. Dual storage architecture (state store + state commitment). Basic key-value state read/write/delete. Genesis state initialization. |
+| 4-5 | Storage engine | redb integration with typed tables. Dual storage architecture (state store + state commitment). Basic key-value state read/write/delete. Genesis state initialization. |
 | 5 | Verkle tree stub | `StateCommitment` trait definition. Placeholder implementation using binary Merkle tree (production Verkle tree implementation is a multi-week effort; Merkle placeholder enables all other work to proceed). |
 
-**Week 1 milestone:** A node binary that can initialize genesis state, create and sign transactions, hash blocks, and persist state to RocksDB. No networking, no consensus.
+**Week 1 milestone:** A node binary that can initialize genesis state, create and sign transactions, hash blocks, and persist state to redb. No networking, no consensus.
 
 ### Week 2: P2P Networking + Basic Consensus
 
@@ -794,7 +794,7 @@ This section provides an honest accounting of open issues. A credible plan ackno
 | S2-3 | consensus-engineer | MPRE quantization scheme: formal specification of 16-bit fixed-point comparison | STANDARD |
 | S3-1 | tokenomics-engineer | Governance must be flash-loan resistant (addressed via epoch-lock voting but needs formal verification) | SECURITY-ELEVATED |
 | S4-1 | node-engineer | Browser node key management: enforce spending limits, hardware wallet support, warnings | SECURITY-ELEVATED |
-| S4-2 | node-engineer | RocksDB access control and encryption at rest | STANDARD |
+| S4-2 | node-engineer | redb access control and encryption at rest | STANDARD |
 | S4-3 | node-engineer | Weak subjectivity checkpoint distribution mechanism must be specified | SECURITY-ELEVATED |
 | S8-1 | p2p-network-engineer | DHT records must be signed by validator quorum with freshness validation | SECURITY-ELEVATED |
 | S8-2 | p2p-network-engineer | Relay trust: distribute relay connections across 3+ operators, not just 3 connections | STANDARD |

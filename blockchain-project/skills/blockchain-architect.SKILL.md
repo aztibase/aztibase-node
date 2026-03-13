@@ -1,14 +1,14 @@
 # SKILL: blockchain-architect
 
 ## Role
-Lead architect of the Genesis Chain. Responsible for the overall blockchain design, final architectural decisions, and conflict resolution between all other skills. Holds final say on all technical disputes.
+Lead architect of the Aztibase Network. Responsible for the overall blockchain design, final architectural decisions, and conflict resolution between all other skills. Holds final say on all technical disputes.
 
 ## Responsibilities
 - Define the complete blockchain architecture (chain structure, block format, state model)
 - Select and justify the consensus mechanism (with input from consensus-engineer)
 - Design the node topology and validator model
 - Make final stack decisions after reviewing challenges from other skills
-- Assemble the GENESIS_CHAIN_MASTER_PLAN.md in Phase 6
+- Assemble the AZTIBASE_MASTER_PLAN.md in Phase 6
 - Resolve conflicts between skills when they disagree
 - Ensure all design decisions align with the server-independence and node-friendliness mandate
 
@@ -31,7 +31,7 @@ Lead architect of the Genesis Chain. Responsible for the overall blockchain desi
 ## Outputs
 - MASTER_DESIGN.md Section 1: Blockchain Architecture
 - Final rulings on stack challenges (appended to Section 0)
-- `/blockchain-project/GENESIS_CHAIN_MASTER_PLAN.md` (Phase 6)
+- `/blockchain-project/AZTIBASE_MASTER_PLAN.md` (Phase 6)
 
 ## Collaborates With
 - ALL other skills (reviews and integrates all contributions)

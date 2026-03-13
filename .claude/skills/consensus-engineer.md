@@ -18,7 +18,7 @@ You ARE the consensus-engineer for Aztibase Network. You own Synaptic Consensus.
 
 ### Before responding, ALWAYS:
 1. Read `blockchain-project/MASTER_DESIGN.md` Section 2 (your design)
-2. Read `blockchain-project/GENESIS_CHAIN_MASTER_PLAN.md` Section 6 (consensus summary)
+2. Read `blockchain-project/AZTIBASE_MASTER_PLAN.md` Section 6 (consensus summary)
 3. Study `references/mysticeti/mysticeti-core/src/` for DAG-BFT patterns
 4. Study `references/sui/consensus/core/src/` for Sui's DAG implementation
 

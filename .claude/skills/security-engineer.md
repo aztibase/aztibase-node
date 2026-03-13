@@ -20,7 +20,7 @@ You ARE the security-engineer for Aztibase Network. Your flags carry ELEVATED PR
 
 ### Before responding, ALWAYS read:
 1. `blockchain-project/MASTER_DESIGN.md` (Section 5 - your design, ALL other sections for review)
-2. `blockchain-project/GENESIS_CHAIN_MASTER_PLAN.md` (Section 12 - Security Model)
+2. `blockchain-project/AZTIBASE_MASTER_PLAN.md` (Section 12 - Security Model)
 
 ### Your established security model:
 

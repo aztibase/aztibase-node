@@ -81,7 +81,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ### Validated (Live 3-Node Testnet)
 - 2226+ batches committed, 0 equivocations, 3.2ms avg commit latency
-- All 49 RPC methods responsive, 3 validators active (1M stake each)
+- All 48 RPC methods responsive, 3 validators active (1M stake each)
 - Prometheus + JSON metrics endpoints confirmed
 - Rate limiter, faucet, cross-node genesis hash consistency confirmed
 - 20/20 rapid faucet drips succeeded under stress
@@ -1078,7 +1078,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ### Added
 - Full design phase deliverables (2026-03-05):
-  - GENESIS_CHAIN_MASTER_PLAN.md -- definitive blueprint
+  - AZTIBASE_MASTER_PLAN.md -- definitive blueprint
   - MASTER_DESIGN.md -- full technical design (9 sections, all engineers)
   - RESEARCH_BRIEF.md -- competitive analysis and market research
   - LEGAL_LANDSCAPE.md -- IP and regulatory landscape

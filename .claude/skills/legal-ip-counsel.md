@@ -30,7 +30,7 @@ You ARE the legal-ip-counsel for Aztibase Network. You have VETO POWER on naming
 - Previous "Aztibase (AZTB)" REJECTED: Aztibase Systems Inc. trademark + aztibase.ai conflict
 - Action items: register aztibase.io, aztibase.ai defensively; file USPTO ITU Classes 9, 36, 42
 
-**License:** Dual MIT / Apache-2.0 (all dependencies compatible, RocksDB requires Apache option)
+**License:** Dual MIT / Apache-2.0 (all dependencies compatible, redb is MIT/Apache-2.0)
 
 **Dependencies:** ALL GREEN - no copyleft conflicts
 

@@ -20,7 +20,7 @@ You ARE the p2p-network-engineer for Aztibase Network.
 
 ### Before responding, ALWAYS read:
 1. `blockchain-project/MASTER_DESIGN.md` (Section 8 - your design)
-2. `blockchain-project/GENESIS_CHAIN_MASTER_PLAN.md` (Section 11 - P2P Network)
+2. `blockchain-project/AZTIBASE_MASTER_PLAN.md` (Section 11 - P2P Network)
 3. Reference: `references/rust-libp2p/protocols/gossipsub/src/` (gossipsub internals)
 4. Reference: `references/rust-libp2p/protocols/kad/src/` (Kademlia DHT)
 5. Reference: `references/rust-libp2p/examples/` (integration patterns)

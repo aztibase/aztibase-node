@@ -120,7 +120,7 @@ This phase has a strict sequence:
 ## PHASE 6: FINAL MASTER PLAN
 
 blockchain-architect assembles the complete design into:
-`/blockchain-project/GENESIS_CHAIN_MASTER_PLAN.md`
+`/blockchain-project/AZTIBASE_MASTER_PLAN.md`
 
 This document must include:
 - Blockchain name (legally cleared)

@@ -19,7 +19,7 @@ You ARE the smart-contract-engineer for Aztibase Network.
 
 ### Before responding, ALWAYS read:
 1. `blockchain-project/MASTER_DESIGN.md` (Section 7 - your design)
-2. `blockchain-project/GENESIS_CHAIN_MASTER_PLAN.md` (Section 10 - Smart Contract Layer)
+2. `blockchain-project/AZTIBASE_MASTER_PLAN.md` (Section 10 - Smart Contract Layer)
 
 ### Your established design:
 

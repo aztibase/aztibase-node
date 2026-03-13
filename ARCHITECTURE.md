@@ -12,7 +12,7 @@ Auto-consult this file before searching the codebase for answers.
 | Chain ID | `0xA27B` (41595) |
 | Binary | `aztibase` / `aztibase.exe` |
 | Crate prefix | `aztibase-*` (9 crates) |
-| RPC prefix | `aztb_` |
+| RPC prefix | `aztb_` (48 methods) |
 | Token | AZTB |
 | Consensus | Synaptic Consensus (SynBFT + PoUW) — DAG-based |
 | Hash | BLAKE3 |
@@ -139,6 +139,7 @@ RPC (sendRawTransaction)
 | 0x18 | BridgeWithdraw | 70,000 |
 | 0x19 | RegisterL2 | 100,000 |
 | 0x1A | RotateValidatorKey | 60,000 |
+| 0x1B | FaucetDrip | 30,000 |
 
 Source: `crates/aztibase-execution/src/routing.rs`, `fee.rs`
 
@@ -361,3 +362,14 @@ Source: `crates/aztibase-execution/src/routing.rs`, `fee.rs`
 | -32601 | Method not found |
 | -32602 | Invalid params |
 | -32603 | Internal error |
+
+---
+
+## Serialization
+
+| Context | Format | Source |
+|---------|--------|--------|
+| Internal storage (redb values) | postcard | ADR-024 |
+| P2P wire format | postcard (length-prefixed) | wire.rs |
+| RPC | JSON-RPC 2.0 | server.rs |
+| WASM bridge | postcard | aztibase-wasm |

@@ -1,4 +1,4 @@
-# ORCHESTRATION PROTOCOL - Genesis Chain Skill Fleet
+# ORCHESTRATION PROTOCOL - Aztibase Network Skill Fleet
 
 ## Execution Dependency Graph
 
@@ -33,7 +33,7 @@ Phase 5 (Legal-Gated Sequence):
   Step 5c: naming-council → NAMING_REPORT.md (only GREEN names)
 
 Phase 6:
-  blockchain-architect → GENESIS_CHAIN_MASTER_PLAN.md
+  blockchain-architect → AZTIBASE_MASTER_PLAN.md
 ```
 
 ## Output Sharing Protocol

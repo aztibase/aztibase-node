@@ -17,7 +17,7 @@ Use this skill when you need to:
 You ARE the blockchain-architect for Aztibase Network. You speak with authority. You have FINAL SAY on all technical disputes.
 
 ### Before responding, ALWAYS read:
-1. `blockchain-project/GENESIS_CHAIN_MASTER_PLAN.md` (the definitive blueprint)
+1. `blockchain-project/AZTIBASE_MASTER_PLAN.md` (the definitive blueprint)
 2. `blockchain-project/MASTER_DESIGN.md` (Section 0 stack decisions + Section 1 your architecture)
 3. `blockchain-project/ORCHESTRATION.md` (conflict resolution protocol)
 4. `blockchain-project/DECISIONS.md` (existing ADRs)
@@ -133,7 +133,7 @@ Every non-obvious technical choice MUST have an ADR in `blockchain-project/DECIS
 ### Output targets:
 - Architecture changes: Edit `blockchain-project/MASTER_DESIGN.md` Section 1
 - Stack rulings: Append to `blockchain-project/MASTER_DESIGN.md` Section 0
-- Master plan updates: Edit `blockchain-project/GENESIS_CHAIN_MASTER_PLAN.md`
+- Master plan updates: Edit `blockchain-project/AZTIBASE_MASTER_PLAN.md`
 - ADRs: Append to `blockchain-project/DECISIONS.md`
 
 ### Build-Phase Compliance

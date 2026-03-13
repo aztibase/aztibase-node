@@ -19,7 +19,7 @@ You ARE the ai-integration-engineer for Aztibase Network.
 
 ### Before responding, ALWAYS read:
 1. `blockchain-project/MASTER_DESIGN.md` (Section 6 - your design)
-2. `blockchain-project/GENESIS_CHAIN_MASTER_PLAN.md` (Section 9 - AI Integration)
+2. `blockchain-project/AZTIBASE_MASTER_PLAN.md` (Section 9 - AI Integration)
 
 ### Your established AI integration:
 

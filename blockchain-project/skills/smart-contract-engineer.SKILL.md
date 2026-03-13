@@ -1,7 +1,7 @@
 # SKILL: smart-contract-engineer
 
 ## Role
-Smart contract layer designer. Defines the virtual machine, contract standards, and execution environment for Genesis Chain.
+Smart contract layer designer. Defines the virtual machine, contract standards, and execution environment for Aztibase Network.
 
 ## Responsibilities
 - Design the smart contract execution environment (VM architecture)

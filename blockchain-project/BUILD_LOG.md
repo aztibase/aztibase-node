@@ -24,7 +24,7 @@ Entries are prepended (newest first).
 ### Sprint 059 — Friends Testnet: Genesis Ceremony & Multi-Party Setup (2026-03-12)
 - **Date**: 2026-03-12
 - **Sprint**: 059 (Friends Testnet)
-- **Commit**: (pending)
+- **Commit**: d418dc9
 - **Files changed**:
   - `crates/aztibase-node/src/wallet.rs` — Added `generate_validator_key()` producing Ed25519 + BLS keypair, `--validator` flag test
   - `crates/aztibase-node/src/main.rs` — Added `--validator` flag to `WalletAction::Generate`, added `--boot-node` CLI flag with `apply_overrides` wiring, refactored `Command::Genesis` to `GenesisAction` subcommand enum (generate, init, add-validator, add-account, validate, show), fixed 3 test sites for new `boot_node` field
@@ -38,7 +38,7 @@ Entries are prepended (newest first).
 ### Sprint 058 — Audit Fix: decode_vertex Signature Verification (2026-03-12)
 - **Date**: 2026-03-12
 - **Sprint**: 058 (Pre-Mainnet Audit Fixes)
-- **Commit**: (pending — in progress)
+- **Commit**: 614ccd2
 - **Files changed**:
   - `crates/aztibase-consensus/src/validator.rs` — Added `ed25519_pubkey` field to `ValidatorRecord`, `set_ed25519_key()` and `ed25519_key()` methods on `ValidatorSet`
   - `crates/aztibase-consensus/src/wire.rs` — Fixed `decode_vertex()` to look up Ed25519 pubkey from `ValidatorSet` instead of assuming `block.author` is a raw pubkey (it's a BLAKE3 address hash in production)
@@ -57,7 +57,7 @@ Entries are prepended (newest first).
 
 ### Pre-Mainnet Audit (M9 — Full Codebase)
 - **Date**: 2026-03-12
-- **Commit**: (this commit)
+- **Commit**: 614ccd2 (included in Sprint 058 commit)
 - **Files changed**:
   - `blockchain-project/AUDIT_REPORT_2026-03-12.md` — NEW: Full pre-mainnet audit report across all 9 crates + architecture alignment
 - **Summary**: 7-agent parallel code audit covering security, code quality, architecture alignment, and completeness. 15 CRITICAL, 25 HIGH, 31 MEDIUM findings. Top blockers: no DagBlock signatures, silent committed batch drops, WASM light client accepts forged data, `blst` C dep, faucet has no mainnet gate. Code quality clean (zero AI fingerprints, zero unsafe, 931 tests). 8 architecture gaps identified (object model, Block-STM integration, WASM execution, privacy, DAS).
@@ -86,7 +86,7 @@ Entries are prepended (newest first).
   - `blockchain-project/STATUS.md` — Updated open risks (domain resolved, FTO in progress, wasmtime v42 clean, quinn-proto fixed)
   - `blockchain-project/DECISIONS.md` — ADR-028 (nChain FTO analysis), ADR-029 (quinn-proto patch)
   - `test-testnet.sh` — NEW: Comprehensive testnet validation script (12 phases)
-- **Review Notes**: Live 3-node testnet validated: 2226+ batches, 0 equivocations, 3.2ms commit latency, 2 peers per node, all 49 RPC methods responsive. nChain FTO: overall LOW-MEDIUM risk, PoUW attestation approach is architecturally distinct. wasmtime v42 Windows trap handling confirmed resolved (setjmp/longjmp rewrite shipped). 223 node tests pass, 0 clippy warnings.
+- **Review Notes**: Live 3-node testnet validated: 2226+ batches, 0 equivocations, 3.2ms commit latency, 2 peers per node, all 48 RPC methods responsive. nChain FTO: overall LOW-MEDIUM risk, PoUW attestation approach is architecturally distinct. wasmtime v42 Windows trap handling confirmed resolved (setjmp/longjmp rewrite shipped). 223 node tests pass, 0 clippy warnings.
 - **Security Flags**: None
 
 ### Admin Dashboard & Testnet Hardening (M9-S18.2)

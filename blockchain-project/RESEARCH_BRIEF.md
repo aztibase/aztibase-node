@@ -1,4 +1,4 @@
-# RESEARCH BRIEF - Genesis Chain
+# RESEARCH BRIEF - Aztibase Network
 
 **Prepared by:** Research Analyst Skill
 **Date:** March 5, 2026
@@ -83,7 +83,7 @@
 
 ### 1.10 Key Patterns Across All Innovative Chains
 
-| Pattern | Prevalence | Genesis Chain Implication |
+| Pattern | Prevalence | Aztibase Network Implication |
 |---------|-----------|-------------------------|
 | Parallel execution | 8/9 chains | Table stakes -- must have |
 | EVM compatibility | 5/9 chains | Strong network effects favor EVM |
@@ -140,7 +140,7 @@
 - **Status:** Production (Feb 2025). First consensus mechanism to directly incentivize liquidity provision as part of security.
 - **Risk:** Unproven under extreme market stress. Complex tri-token model.
 
-### 2.6 Recommendation for Genesis Chain
+### 2.6 Recommendation for Aztibase Network
 
 **The most promising unexplored territory is a hybrid approach:** DAG-based consensus for throughput + PoUW with ML verification for useful computation. This would combine proven DAG performance with novel value creation through AI work. However, the verification challenge for useful work is the critical unsolved problem.
 
@@ -254,7 +254,7 @@
 
 Per a16z's 2026 predictions, **privacy creates chain lock-in** through a "privacy network effect." Bridging tokens between chains is trivial when everything is public, but bridging secrets is hard. A handful of privacy chains could own most of crypto in a winner-take-most dynamic.
 
-**Implication for Genesis Chain:** If Genesis Chain can offer native, protocol-level privacy (not just a privacy app layer), it creates a moat that is extremely hard to replicate or compete with.
+**Implication for Aztibase Network:** If Aztibase Network can offer native, protocol-level privacy (not just a privacy app layer), it creates a moat that is extremely hard to replicate or compete with.
 
 ### 5.2 AI Agent Infrastructure
 
@@ -356,7 +356,7 @@ Stablecoins processed ~$46 trillion in transaction volume in 2025 (>20x PayPal, 
 
 ### 6.3 Build vs. Framework Decision Matrix
 
-| If Genesis Chain needs... | Recommendation |
+| If Aztibase Network needs... | Recommendation |
 |--------------------------|----------------|
 | Novel consensus mechanism | Custom or heavily modified framework |
 | AI-native VM extensions | Custom VM on framework networking layer |
@@ -400,7 +400,7 @@ True server-independence means eliminating ALL of these central dependencies.
 - **Connection Overhead:** Opens large numbers of TCP connections every ~10 minutes, making home network validation unreliable.
 - **Institutional Knowledge Loss:** Shipyard's departure risks loss of deep protocol knowledge.
 
-**Implication for Genesis Chain:** libp2p is the pragmatic choice but carries sustainability risk. Consider: (a) contributing to libp2p maintenance, (b) building a thin abstraction layer that could swap P2P backends, or (c) using rust-libp2p (which has separate, more active maintainers) exclusively.
+**Implication for Aztibase Network:** libp2p is the pragmatic choice but carries sustainability risk. Consider: (a) contributing to libp2p maintenance, (b) building a thin abstraction layer that could swap P2P backends, or (c) using rust-libp2p (which has separate, more active maintainers) exclusively.
 
 **Sources:** [Blockworks](https://blockworks.co/news/ethereums-peer-to-peer-backbone), [libp2p Annual Report 2025](https://discuss.libp2p.io/t/libp2p-annual-report-2025/3693), [libp2p](https://libp2p.io/)
 
@@ -501,7 +501,7 @@ True server-independence means eliminating ALL of these central dependencies.
   - No hard-coded limits on token issuance/burn rates.
   - Anchor Protocol offered unsustainable 20% yield, requiring $6M/day in subsidies by April 2022.
   - Reflexive feedback loop: UST depegging -> LUNA minting -> LUNA price crash -> more UST depegging.
-- **Lesson for Genesis Chain:** Never build economic mechanisms with unbounded recursive minting. Sustainability must be provable, not assumed. Stress-test economic models under adversarial conditions.
+- **Lesson for Aztibase Network:** Never build economic mechanisms with unbounded recursive minting. Sustainability must be provable, not assumed. Stress-test economic models under adversarial conditions.
 - **Sources:** [MIT Sloan](https://mitsloan.mit.edu/cfi/anatomy-a-run-terra-luna-crash), [Harvard Law](https://corpgov.law.harvard.edu/2023/05/22/anatomy-of-a-run-the-terra-luna-crash/)
 
 ### 9.2 Solana Outages (2022-2024)
@@ -513,7 +513,7 @@ True server-independence means eliminating ALL of these central dependencies.
   - Client bugs caused 5 of 7 outages.
   - Single client implementation (until Firedancer).
 - **What They Fixed:** Priority fees, local fee markets, QUIC transport (replacing UDP), stake-weighted QoS. Only 2 outages in 2023-2024 (both in February).
-- **Lesson for Genesis Chain:** Congestion management and fee markets must be designed from day one. Multiple client implementations improve resilience. Bot-resistant transaction admission is essential.
+- **Lesson for Aztibase Network:** Congestion management and fee markets must be designed from day one. Multiple client implementations improve resilience. Bot-resistant transaction admission is essential.
 - **Sources:** [Helius](https://www.helius.dev/blog/solana-outages-complete-history), [LeveX](https://levex.com/en/blog/solana-network-outages-explained)
 
 ### 9.3 Trade Finance Blockchains (TradeLens, we.trade, Marco Polo, Contour -- all shut down 2022-2023)
@@ -524,7 +524,7 @@ True server-independence means eliminating ALL of these central dependencies.
   - we.trade: Couldn't reach meaningful transaction volumes with SMEs.
   - Marco Polo: Ran out of cash (EUR 5.2M debt) -- couldn't onboard enough corporate clients.
   - Contour: Same adoption problem.
-- **Lesson for Genesis Chain:** Blockchain projects fail from governance and adoption, not technology. Build protocols, not platforms. Ensure no single entity controls or appears to control the network. Focused tools > broad platforms.
+- **Lesson for Aztibase Network:** Blockchain projects fail from governance and adoption, not technology. Build protocols, not platforms. Ensure no single entity controls or appears to control the network. Focused tools > broad platforms.
 - **Sources:** [Medium/Timothy Ruff](https://rufftimo.medium.com/five-failed-blockchains-why-trade-needs-protocols-not-platforms-d12a77386690), [S&P Global](https://www.spglobal.com/marketintelligence/en/news-insights/latest-news-headlines/trade-finance-industry-remains-hopeful-on-blockchain-despite-failed-projects-72557910)
 
 ### 9.4 Bittensor Incidents (2023-2025)

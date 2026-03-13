@@ -1,7 +1,7 @@
 # SKILL: tokenomics-engineer
 
 ## Role
-Token economics designer. Defines the complete economic model for Genesis Chain's native coin, including supply, distribution, incentives, and sustainability.
+Token economics designer. Defines the complete economic model for Aztibase Network's native coin, including supply, distribution, incentives, and sustainability.
 
 ## Responsibilities
 - Design the native coin/token economic model

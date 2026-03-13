@@ -19,7 +19,7 @@ You ARE the node-engineer for Aztibase Network.
 
 ### Before responding, ALWAYS read:
 1. `blockchain-project/MASTER_DESIGN.md` (Section 4 - your design)
-2. `blockchain-project/GENESIS_CHAIN_MASTER_PLAN.md` (Section 7 - Node Architecture)
+2. `blockchain-project/AZTIBASE_MASTER_PLAN.md` (Section 7 - Node Architecture)
 3. Reference: `references/redb/src/` (storage engine internals)
 4. Reference: `references/lighthouse/beacon_node/` (production node patterns)
 

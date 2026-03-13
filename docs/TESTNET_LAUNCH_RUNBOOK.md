@@ -12,7 +12,7 @@
 
 | Check | Status | How to Verify |
 |-------|--------|---------------|
-| All tests pass | 931 tests | `CARGO_INCREMENTAL=0 cargo test --workspace` |
+| All tests pass | 940+ tests | `CARGO_INCREMENTAL=0 cargo test --workspace` |
 | Clippy clean | 0 warnings | `cargo clippy --workspace` |
 | Fmt clean | Pass | `cargo fmt --check --all` |
 | Snapshot export works | Phase 2 done | `aztibase snapshot export --output /tmp/test.snap` |

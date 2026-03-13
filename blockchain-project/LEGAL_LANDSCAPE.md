@@ -1,4 +1,4 @@
-# LEGAL LANDSCAPE ANALYSIS - Project Genesis Chain
+# LEGAL LANDSCAPE ANALYSIS - Project Aztibase Network
 
 **Phase 3 Deliverable | Legal-IP-Counsel Skill**
 **Date: March 5, 2026**
@@ -28,7 +28,7 @@ The trademark landscape for blockchain and cryptocurrency projects is complex, f
 
 - **Early filing is essential.** Even early-stage projects with limited public adoption can assert enforceable trademark rights. Filing federal applications, documenting first use in commerce, and maintaining consistent brand guidelines are foundational for future enforcement.
 - **Crypto-specific trademark filings have surged** in recent years, with thousands of applications filed across Nice Classes 9, 36, and 42 in major jurisdictions.
-- **The USPTO, EUIPO, and WIPO** are the three primary trademark systems relevant to Genesis Chain.
+- **The USPTO, EUIPO, and WIPO** are the three primary trademark systems relevant to Aztibase Network.
 
 ### 1.2 Key Jurisdictions
 
@@ -59,7 +59,7 @@ The trademark landscape for blockchain and cryptocurrency projects is complex, f
 - **BProtocol v. Uniswap (Feb 2026):** Court found blockchain patents covered patent-ineligible subject matter under Section 101, a positive precedent for defendants.
 - **NFT trademark disputes:** Multiple cases over brands extending into digital goods (Nike, Hermes "MetaBirkin" case).
 
-**FLAG: The Genesis Chain name itself must avoid collision with the existing "Genesis" brand used by Genesis Trading/Genesis Global Capital (a Digital Currency Group subsidiary that filed for bankruptcy in 2023). While weakened, the brand still has trademark presence.**
+**FLAG: The Aztibase Network name itself must avoid collision with the existing "Genesis" brand used by Genesis Trading/Genesis Global Capital (a Digital Currency Group subsidiary that filed for bankruptcy in 2023). While weakened, the brand still has trademark presence.**
 
 ---
 
@@ -67,7 +67,7 @@ The trademark landscape for blockchain and cryptocurrency projects is complex, f
 
 ### 2.1 CRITICAL: Names to Avoid Collision With
 
-The following is a comprehensive list of the top 150+ cryptocurrency project names and tickers that Genesis Chain must not collide with. Any proposed name or ticker must be checked against this list.
+The following is a comprehensive list of the top 150+ cryptocurrency project names and tickers that Aztibase Network must not collide with. Any proposed name or ticker must be checked against this list.
 
 #### Top 20 by Market Cap (March 2026)
 
@@ -165,7 +165,7 @@ The following is a comprehensive list of the top 150+ cryptocurrency project nam
 | **Gensyn** | AI compute network | **MEDIUM** |
 | **Genopets** | Move-to-earn on Solana | **LOW** |
 
-**FLAG: The word "Genesis" has significant prior use in the crypto space. Multiple projects already use this name. "Genesis Chain" specifically may face opposition from Genesis Trading/Global Capital even though they are in bankruptcy. The project MUST consider alternative names or prepare a strong distinctiveness argument.**
+**FLAG: The word "Genesis" has significant prior use in the crypto space. Multiple projects already use this name. "Aztibase Network" specifically may face opposition from Genesis Trading/Global Capital even though they are in bankruptcy. The project MUST consider alternative names or prepare a strong distinctiveness argument.**
 
 #### Stablecoins to Note
 
@@ -184,7 +184,7 @@ The following is a comprehensive list of the top 150+ cryptocurrency project nam
 - Must not match or be phonetically similar to any existing top-500 ticker
 - Avoid tickers that spell common words (e.g., SOL, NEAR, FLOW)
 - Check for potential offensive meanings in major languages
-- **Proposed tickers for Genesis Chain to AVOID:** GEN (too close to multiple "gen-" projects), GNS (already used by Gains Network), GENE (already used by GenomeFi), GCH (check needed), GNSS (satellite system acronym)
+- **Proposed tickers for Aztibase Network to AVOID:** GEN (too close to multiple "gen-" projects), GNS (already used by Gains Network), GENE (already used by GenomeFi), GCH (check needed), GNSS (satellite system acronym)
 
 ---
 
@@ -192,7 +192,7 @@ The following is a comprehensive list of the top 150+ cryptocurrency project nam
 
 ### 3.1 Major Patent Holders in Blockchain
 
-| Entity | Est. Patent Count | Focus Areas | Risk to Genesis Chain |
+| Entity | Est. Patent Count | Focus Areas | Risk to Aztibase Network |
 |---|---|---|---|
 | **nChain Holdings** | ~1,308 | Bitcoin protocol, consensus, smart contracts | **HIGH** |
 | **IBM** | ~790 | Supply chain, digital identity, sharding, consensus optimization | **MEDIUM** |
@@ -212,7 +212,7 @@ The following is a comprehensive list of the top 150+ cryptocurrency project nam
 - Multiple patents exist on BFT variants, though many are being challenged.
 - **AI + consensus mechanism combinations** are an emerging patent area with fewer existing patents but rapidly increasing filings.
 
-**Specific risks for Genesis Chain's proposed architecture:**
+**Specific risks for Aztibase Network's proposed architecture:**
 1. **Hybrid PoS/BFT consensus:** Multiple patent holders claim aspects of BFT-based consensus. Must conduct freedom-to-operate (FTO) analysis.
 2. **AI-integrated consensus or validation:** Emerging patent space. nChain and IBM both filing in this area. Novel implementations may be patentable but must avoid existing claims.
 3. **Sharding mechanisms:** IBM has significant patent coverage here.
@@ -237,7 +237,7 @@ The following is a comprehensive list of the top 150+ cryptocurrency project nam
 - 300+ companies including Square, Coinbase, Kraken, Blockstream, SatoshiLabs.
 - COPA + Unified Patents launched "Blockchain Zone" in Oct 2024 to challenge NPE patents.
 - No barrier to entry; open to individuals, startups, and large corporations.
-- **Cost: Free to join. Highly recommended for Genesis Chain.**
+- **Cost: Free to join. Highly recommended for Aztibase Network.**
 
 **Additional defensive measures:**
 1. File provisional patents on novel consensus mechanism before publication
@@ -283,15 +283,15 @@ The Howey Test remains the primary framework for determining if a token is a sec
 | **CLARITY Act** | Under consideration | Divides crypto into: digital commodities, investment contract assets, and permitted payment stablecoins. Aims to separate token transactions from Howey analysis. |
 | **FIT21 (Financial Innovation and Technology Act)** | Passed House, Senate pending | Market structure bill defining CFTC vs SEC jurisdiction. |
 
-#### Implications for Genesis Chain
+#### Implications for Aztibase Network
 
 **FLAG: MEDIUM RISK**
 
-- If Genesis Chain issues a native token, the token **may initially be classified as a security** during the fundraising phase (if sold to raise capital).
+- If Aztibase Network issues a native token, the token **may initially be classified as a security** during the fundraising phase (if sold to raise capital).
 - Once the network is sufficiently decentralized and functional, the token may transition to a **non-security digital commodity**.
 - **Do NOT offer token sales to U.S. persons** during initial distribution without securities counsel.
 - Consider a **"fair launch"** mechanism or **airdrop + mining** model to avoid securities classification.
-- The GENIUS Act framework could apply if Genesis Chain issues any stablecoin functionality.
+- The GENIUS Act framework could apply if Aztibase Network issues any stablecoin functionality.
 
 ### 4.2 European Union - MiCA (Markets in Crypto-Assets Regulation)
 
@@ -303,7 +303,7 @@ The Howey Test remains the primary framework for determining if a token is a sec
 - **Full enforcement deadline:** July 1, 2026 (transitional period ends)
 - **Over 540 million EUR in penalties already issued** as of 2025
 
-#### Compliance Requirements for Genesis Chain
+#### Compliance Requirements for Aztibase Network
 
 | Requirement | Details | Priority |
 |---|---|---|
@@ -316,7 +316,7 @@ The Howey Test remains the primary framework for determining if a token is a sec
 | **Consumer Protection** | Fair marketing, risk disclosure, complaint handling | MEDIUM |
 | **Operational Resilience** | Business continuity planning, incident reporting | MEDIUM |
 
-#### Implications for Genesis Chain
+#### Implications for Aztibase Network
 
 **FLAG: HIGH COMPLIANCE BURDEN**
 
@@ -352,11 +352,11 @@ The Howey Test remains the primary framework for determining if a token is a sec
 - FSCA conducting inspections (21 completed, more planned through March 2026).
 - Unlicensed crypto services: fines up to **ZAR 10 million (~USD 550,000)**.
 
-#### Implications for Genesis Chain
+#### Implications for Aztibase Network
 
 **FLAG: CRITICAL IF SA-BASED**
 
-- If the Genesis Chain entity is based in South Africa, **CASP licensing is mandatory**.
+- If the Aztibase Network entity is based in South Africa, **CASP licensing is mandatory**.
 - Key individuals must have passed regulatory examinations.
 - The Travel Rule applies to all transfers above ZAR 25,000.
 - Stablecoin regulation clarity expected in 2026 - monitor closely.
@@ -409,7 +409,7 @@ The Howey Test remains the primary framework for determining if a token is a sec
 - **Apache 2.0:** Contains an **explicit patent grant** from contributors. Section 3 grants a perpetual, irrevocable patent license for contributions. Also includes a **patent retaliation clause** (Section 3, final paragraph) - if you sue for patent infringement, your patent license terminates.
 - **GPLv3:** Contains implicit patent grant through its broader copyleft terms and an anti-tivoization clause.
 
-**RECOMMENDATION: Apache 2.0 or dual MIT/Apache 2.0 is strongly preferred for Genesis Chain due to the explicit patent grant, which is critical given the active patent troll landscape.**
+**RECOMMENDATION: Apache 2.0 or dual MIT/Apache 2.0 is strongly preferred for Aztibase Network due to the explicit patent grant, which is critical given the active patent troll landscape.**
 
 ### 5.4 CLA (Contributor License Agreement) Best Practices
 
@@ -452,15 +452,15 @@ Examples:    Examples:      Examples:      Examples:    Examples:
 "Chain"      "BlockFi"     "Celestia"     "Manta"
 ```
 
-**RECOMMENDATION: Genesis Chain should aim for a SUGGESTIVE, ARBITRARY, or FANCIFUL name.**
+**RECOMMENDATION: Aztibase Network should aim for a SUGGESTIVE, ARBITRARY, or FANCIFUL name.**
 
 - "Genesis" alone is **suggestive** (suggests origin/beginning but doesn't describe blockchain technology directly). However, it has **extensive prior use** in the crypto space.
-- "Genesis Chain" is more **descriptive** because "Chain" directly describes blockchain technology.
+- "Aztibase Network" is more **descriptive** because "Chain" directly describes blockchain technology.
 - A fanciful or arbitrary name would provide the strongest trademark protection.
 
 ### 6.2 International Trademark Classes for Blockchain Projects
 
-| Nice Class | Description | Relevance to Genesis Chain |
+| Nice Class | Description | Relevance to Aztibase Network |
 |---|---|---|
 | **Class 9** | Computer software; cryptocurrency hardware wallets; mining hardware; downloadable software for blockchain | **ESSENTIAL** - covers the node software, wallet software, SDK |
 | **Class 36** | Financial services; financial exchange services; cryptocurrency trading; digital currency exchange | **ESSENTIAL** - covers any token/financial functionality |
@@ -497,7 +497,7 @@ Examples:    Examples:      Examples:      Examples:    Examples:
 | Dependency | License | Patent Grant | Copyleft | Risk Level | Notes |
 |---|---|---|---|---|---|
 | **libp2p (rust-libp2p)** | MIT OR Apache-2.0 | Yes (via Apache) | No | **GREEN** | Standard Rust dual license. Fully compatible. |
-| **RocksDB** | GPLv2 OR Apache-2.0 (dual) | Yes (via Apache) | **Optional** | **GREEN** | Select Apache 2.0 option. No copyleft obligation if Apache chosen. |
+| **redb** | MIT OR Apache-2.0 | Yes (via Apache) | No | **GREEN** | Pure Rust embedded database. Standard Rust dual license. Fully compatible. |
 | **tokio** | MIT | No | No | **GREEN** | Permissive. Standard Rust async runtime. |
 | **serde** | MIT OR Apache-2.0 | Yes (via Apache) | No | **GREEN** | Standard Rust dual license. |
 | **ed25519-dalek** | BSD-3-Clause | No | No | **GREEN** | Permissive. No issues. |
@@ -532,7 +532,7 @@ Examples:    Examples:      Examples:      Examples:    Examples:
 ### 7.5 License Compatibility Matrix
 
 ```
-Genesis Chain (Apache 2.0 or MIT/Apache dual) can safely use:
+Aztibase Network (Apache 2.0 or MIT/Apache dual) can safely use:
   [OK] MIT
   [OK] Apache 2.0
   [OK] MIT OR Apache 2.0
@@ -550,7 +550,7 @@ Genesis Chain (Apache 2.0 or MIT/Apache dual) can safely use:
   [BLOCK] SSPL - Not open source, incompatible
 ```
 
-**FLAG: No RED-flagged dependencies found in the proposed stack. All listed dependencies are GREEN (compatible with Apache 2.0 or dual MIT/Apache 2.0 licensing). RocksDB requires selecting the Apache 2.0 license option (not GPLv2).**
+**FLAG: No RED-flagged dependencies found in the proposed stack. All listed dependencies are GREEN (compatible with Apache 2.0 or dual MIT/Apache 2.0 licensing).**
 
 ---
 
@@ -571,7 +571,7 @@ Justification:
 
 Dependency compatibility:
   - All core dependencies (libp2p, tokio, serde, blake3, ed25519-dalek): COMPATIBLE
-  - RocksDB: COMPATIBLE (select Apache 2.0 option)
+  - redb: COMPATIBLE (MIT/Apache 2.0 dual license)
   - WASM runtimes (wasmtime, wasmer): COMPATIBLE
   - AI runtimes (ONNX Runtime, tract, candle): COMPATIBLE
   - No GPL or copyleft conflicts identified
@@ -631,7 +631,7 @@ The following MUST be resolved before the naming-council can finalize:
 3. **.com domain availability** confirmation
 4. **Phonetic and visual similarity** analysis against top 150 crypto names
 5. **International language check** for offensive or unintended meanings
-6. **"Genesis" viability assessment** - dedicated analysis of whether "Genesis Chain" can survive opposition from existing "Genesis" branded crypto entities
+6. **"Genesis" viability assessment** - dedicated analysis of whether "Aztibase Network" can survive opposition from existing "Genesis" branded crypto entities
 
 ---
 

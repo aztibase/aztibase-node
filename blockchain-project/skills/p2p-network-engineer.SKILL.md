@@ -1,7 +1,7 @@
 # SKILL: p2p-network-engineer
 
 ## Role
-Peer-to-peer networking specialist. Designs the entire networking layer that makes Genesis Chain truly server-independent and decentralized.
+Peer-to-peer networking specialist. Designs the entire networking layer that makes Aztibase Network truly server-independent and decentralized.
 
 ## Responsibilities
 - Design the P2P networking stack (protocol selection, transport layer)
