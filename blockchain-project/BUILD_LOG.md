@@ -24,7 +24,7 @@ Entries are prepended (newest first).
 ### Public Testnet Infrastructure & Docs (2026-03-13)
 - **Date**: 2026-03-13
 - **Sprint**: Post-059 (Testnet Deployment)
-- **Commit**: TBD
+- **Commit**: 923aac8
 - **Files changed**:
   - `start-testnet-public.sh` — Combined launcher for testnet + Cloudflare Tunnel
   - `docs/VALIDATOR_ONBOARDING.md` — Validator onboarding guide (Tailscale + public RPC)
