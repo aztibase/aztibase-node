@@ -13,7 +13,7 @@
       <div class="logo">A</div>
       <h1>Aztibase</h1>
     </div>
-    <span class="network-badge" id="network-name" onclick="showView('settings')">Testnet</span>
+    <span class="network-badge" id="network-name" data-view="settings">Testnet</span>
   </div>
 
   <!-- Onboarding view -->
@@ -25,8 +25,21 @@
         Create or import a wallet to get started.
       </p>
       <div style="display:flex;flex-direction:column;gap:10px">
-        <button class="btn btn-primary" onclick="showView('create')">Create New Wallet</button>
-        <button class="btn btn-outline" onclick="showView('import')">Import Wallet</button>
+        <button class="btn btn-primary" data-view="create">Create New Wallet</button>
+        <button class="btn btn-outline" data-view="import">Import Wallet</button>
+      </div>
+      <div style="margin-top:20px;border-top:1px solid var(--border);padding-top:16px">
+        <p style="color:var(--text-muted);font-size:12px;margin-bottom:10px">or continue with</p>
+        <div style="display:flex;gap:8px">
+          <button class="btn btn-outline" style="flex:1;display:flex;align-items:center;justify-content:center;gap:6px" data-action="signInGoogle">
+            <svg width="16" height="16" viewBox="0 0 48 48"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#34A853" d="M10.53 28.59A14.5 14.5 0 019.5 24c0-1.59.28-3.14.76-4.59l-7.98-6.19A23.99 23.99 0 000 24c0 3.77.9 7.35 2.56 10.54l7.97-5.95z"/><path fill="#FBBC05" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 5.95C6.51 42.62 14.62 48 24 48z"/></svg>
+            Google
+          </button>
+          <button class="btn btn-outline" style="flex:1;display:flex;align-items:center;justify-content:center;gap:6px" data-action="signInGitHub">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+            GitHub
+          </button>
+        </div>
       </div>
     </div>
   </div>
@@ -34,7 +47,7 @@
   <!-- Create wallet -->
   <div class="view" id="view-create">
     <div class="view-header">
-      <button class="back-btn" onclick="goBack()">&larr;</button>
+      <button class="back-btn" data-action="goBack">&larr;</button>
       <h2>Create Wallet</h2>
     </div>
     <div class="form-group">
@@ -45,21 +58,21 @@
       <label>Confirm password</label>
       <input type="password" id="create-pass2" placeholder="Confirm password" />
     </div>
-    <button class="btn btn-primary" onclick="createWallet()">Create</button>
+    <button class="btn btn-primary" data-action="createWallet">Create</button>
 
     <div id="mnemonic-display" style="display:none;margin-top:20px">
       <div class="form-group">
         <label>Recovery phrase — write this down and store it safely</label>
         <textarea id="mnemonic-words" readonly style="height:80px"></textarea>
       </div>
-      <button class="btn btn-primary" onclick="confirmMnemonic()">I've saved my recovery phrase</button>
+      <button class="btn btn-primary" data-action="confirmMnemonic">I've saved my recovery phrase</button>
     </div>
   </div>
 
   <!-- Import wallet -->
   <div class="view" id="view-import">
     <div class="view-header">
-      <button class="back-btn" onclick="goBack()">&larr;</button>
+      <button class="back-btn" data-action="goBack">&larr;</button>
       <h2>Import Wallet</h2>
     </div>
     <div class="form-group">
@@ -70,7 +83,28 @@
       <label>Set a password</label>
       <input type="password" id="import-pass" placeholder="Password (min 8 chars)" />
     </div>
-    <button class="btn btn-primary" onclick="importWallet()">Import</button>
+    <button class="btn btn-primary" data-action="importWallet">Import</button>
+  </div>
+
+  <!-- Social auth password view -->
+  <div class="view" id="view-social-auth">
+    <div class="view-header">
+      <button class="back-btn" data-action="goBack">&larr;</button>
+      <h2>Set Password</h2>
+    </div>
+    <p style="font-size:13px;color:var(--text-muted);margin-bottom:16px">
+      Signed in as <strong id="social-email">--</strong> via <span id="social-provider">Google</span>.
+      Your wallet key is derived from your account + this password. Use the same account and password to recover on any device.
+    </p>
+    <div class="form-group">
+      <label>Password (min 8 chars)</label>
+      <input type="password" id="social-pass" placeholder="Password" />
+    </div>
+    <div class="form-group">
+      <label>Confirm password</label>
+      <input type="password" id="social-pass2" placeholder="Confirm password" />
+    </div>
+    <button class="btn btn-primary" data-action="completeSocialAuth">Create Wallet</button>
   </div>
 
   <!-- Unlock view -->
@@ -81,14 +115,14 @@
       <div class="form-group">
         <input type="password" id="unlock-pass" placeholder="Enter password" />
       </div>
-      <button class="btn btn-primary" onclick="unlockWallet()">Unlock</button>
+      <button class="btn btn-primary" data-action="unlockWallet">Unlock</button>
     </div>
   </div>
 
   <!-- Main wallet view -->
   <div class="view" id="view-main">
     <div class="account-card">
-      <div class="account-address" id="main-address" onclick="copyAddress()" title="Click to copy">
+      <div class="account-address" id="main-address" data-action="copyAddress" title="Click to copy">
         Loading...
       </div>
       <div class="balance-display">
@@ -98,27 +132,27 @@
     </div>
 
     <div class="actions">
-      <button class="action-btn" onclick="showView('send')">
+      <button class="action-btn" data-view="send">
         <div class="action-icon">&uarr;</div>
         Send
       </button>
-      <button class="action-btn" onclick="showView('receive')">
+      <button class="action-btn" data-view="receive">
         <div class="action-icon">&darr;</div>
         Receive
       </button>
-      <button class="action-btn" onclick="showView('staking')">
+      <button class="action-btn" data-view="staking">
         <div class="action-icon">&diams;</div>
         Stake
       </button>
-      <button class="action-btn" onclick="showView('settings')">
+      <button class="action-btn" data-view="settings">
         <div class="action-icon">&equiv;</div>
         Settings
       </button>
     </div>
 
     <div class="tabs">
-      <div class="tab active" onclick="switchTab('activity')">Activity</div>
-      <div class="tab" onclick="switchTab('staking-tab')">Staking</div>
+      <div class="tab active" data-tab="activity">Activity</div>
+      <div class="tab" data-tab="staking-tab">Staking</div>
     </div>
 
     <div id="tab-activity" class="tx-list">
@@ -145,8 +179,8 @@
         </div>
       </div>
       <div class="btn-row" style="margin-top:12px">
-        <button class="btn btn-outline btn-sm" onclick="showView('staking')">Stake</button>
-        <button class="btn btn-outline btn-sm" onclick="showView('unstake')">Unstake</button>
+        <button class="btn btn-outline btn-sm" data-view="staking">Stake</button>
+        <button class="btn btn-outline btn-sm" data-view="unstake">Unstake</button>
       </div>
     </div>
   </div>
@@ -154,7 +188,7 @@
   <!-- Send view -->
   <div class="view" id="view-send">
     <div class="view-header">
-      <button class="back-btn" onclick="showView('main')">&larr;</button>
+      <button class="back-btn" data-view="main">&larr;</button>
       <h2>Send AZTB</h2>
     </div>
     <div class="form-group">
@@ -169,23 +203,23 @@
       <label>Gas price</label>
       <input type="text" id="send-gas" placeholder="1" value="1" />
     </div>
-    <button class="btn btn-primary" id="btn-send" onclick="sendTransfer()">Send</button>
+    <button class="btn btn-primary" id="btn-send" data-action="sendTransfer">Send</button>
   </div>
 
   <!-- Receive view -->
   <div class="view" id="view-receive">
     <div class="view-header">
-      <button class="back-btn" onclick="showView('main')">&larr;</button>
+      <button class="back-btn" data-view="main">&larr;</button>
       <h2>Receive AZTB</h2>
     </div>
     <div style="text-align:center;padding:20px 0">
       <p style="font-size:13px;color:var(--text-muted);margin-bottom:16px">
         Share your address to receive AZTB
       </p>
-      <div class="account-address" id="receive-address" onclick="copyAddress()" style="padding:12px;background:var(--surface);border:1px solid var(--border);border-radius:6px;font-size:12px">
+      <div class="account-address" id="receive-address" data-action="copyAddress" style="padding:12px;background:var(--surface);border:1px solid var(--border);border-radius:6px;font-size:12px">
         Loading...
       </div>
-      <button class="btn btn-outline btn-sm" style="margin-top:12px;width:auto;padding:8px 24px" onclick="copyAddress()">
+      <button class="btn btn-outline btn-sm" style="margin-top:12px;width:auto;padding:8px 24px" data-action="copyAddress">
         Copy Address
       </button>
     </div>
@@ -194,7 +228,7 @@
   <!-- Staking view -->
   <div class="view" id="view-staking">
     <div class="view-header">
-      <button class="back-btn" onclick="showView('main')">&larr;</button>
+      <button class="back-btn" data-view="main">&larr;</button>
       <h2>Stake AZTB</h2>
     </div>
     <div class="form-group">
@@ -208,7 +242,7 @@
     <p style="font-size:12px;color:var(--text-muted);margin-bottom:14px">
       Minimum stake: 50,000 AZTB. Staking registers you as a validator if you aren't one already.
     </p>
-    <button class="btn btn-primary" onclick="sendStake()">Stake</button>
+    <button class="btn btn-primary" data-action="sendStake">Stake</button>
 
     <div style="margin-top:24px">
       <h3 style="font-size:14px;margin-bottom:12px">Or delegate to a validator</h3>
@@ -220,14 +254,14 @@
         <label>Amount to delegate (AZTB)</label>
         <input type="text" id="delegate-amount" placeholder="1000" />
       </div>
-      <button class="btn btn-outline" onclick="sendDelegate()">Delegate</button>
+      <button class="btn btn-outline" data-action="sendDelegate">Delegate</button>
     </div>
   </div>
 
   <!-- Unstake view -->
   <div class="view" id="view-unstake">
     <div class="view-header">
-      <button class="back-btn" onclick="showView('main')">&larr;</button>
+      <button class="back-btn" data-view="main">&larr;</button>
       <h2>Unstake AZTB</h2>
     </div>
     <div class="form-group">
@@ -237,10 +271,10 @@
     <p style="font-size:12px;color:var(--text-muted);margin-bottom:14px">
       Unstaked tokens enter a 21-day unbonding period before becoming available.
     </p>
-    <button class="btn btn-danger" onclick="sendUnstake()">Unstake</button>
+    <button class="btn btn-danger" data-action="sendUnstake">Unstake</button>
 
     <div style="margin-top:24px">
-      <button class="btn btn-outline" onclick="sendUndelegate()">Undelegate All</button>
+      <button class="btn btn-outline" data-action="sendUndelegate">Undelegate All</button>
       <p style="font-size:11px;color:var(--text-muted);margin-top:6px">
         Removes your delegation from the current validator.
       </p>
@@ -250,7 +284,7 @@
   <!-- 2FA Setup view -->
   <div class="view" id="view-2fa-setup">
     <div class="view-header">
-      <button class="back-btn" onclick="showView('settings')">&larr;</button>
+      <button class="back-btn" data-view="settings">&larr;</button>
       <h2>Setup 2FA</h2>
     </div>
 
@@ -268,7 +302,7 @@
         </div>
       </div>
       <div id="totp-setup-btn">
-        <button class="btn btn-primary" onclick="startTotpSetup()">Generate TOTP Secret</button>
+        <button class="btn btn-primary" data-action="startTotpSetup">Generate TOTP Secret</button>
       </div>
       <div id="totp-confirm" style="display:none;margin-top:12px">
         <div class="form-group">
@@ -276,7 +310,7 @@
           <input type="text" id="totp-confirm-code" placeholder="000000" maxlength="6"
                  style="text-align:center;font-size:20px;letter-spacing:8px" />
         </div>
-        <button class="btn btn-primary" onclick="confirmTotpSetup()">Verify &amp; Enable TOTP</button>
+        <button class="btn btn-primary" data-action="confirmTotpSetup">Verify &amp; Enable TOTP</button>
       </div>
       <div id="totp-enabled-badge" style="display:none;margin-top:8px">
         <span style="color:var(--green);font-size:13px;font-weight:600">TOTP Enabled</span>
@@ -290,7 +324,7 @@
         Use fingerprint, face recognition, or a hardware security key (YubiKey) for quick verification.
       </p>
       <div id="webauthn-status"></div>
-      <button class="btn btn-outline" id="btn-webauthn-setup" onclick="startWebAuthnSetup()">
+      <button class="btn btn-outline" id="btn-webauthn-setup" data-action="startWebAuthnSetup">
         Register Biometric / Key
       </button>
       <div id="webauthn-enabled-badge" style="display:none;margin-top:8px">
@@ -300,7 +334,7 @@
 
     <!-- Disable 2FA -->
     <div id="disable-2fa-section" style="display:none;border-top:1px solid var(--border);padding-top:20px;margin-top:20px">
-      <button class="btn btn-danger" onclick="disable2FA()">Disable All 2FA</button>
+      <button class="btn btn-danger" data-action="disable2FA">Disable All 2FA</button>
     </div>
   </div>
 
@@ -309,7 +343,7 @@
     <div style="max-width:340px;margin:80px auto;background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:24px">
       <h3 style="text-align:center;margin-bottom:16px">2FA Verification</h3>
       <div id="twofa-webauthn-section" style="text-align:center;margin-bottom:16px">
-        <button class="btn btn-primary" onclick="verify2FAWebAuthn()" id="btn-2fa-webauthn">
+        <button class="btn btn-primary" data-action="verify2FAWebAuthn" id="btn-2fa-webauthn">
           Verify with Biometric
         </button>
         <p style="font-size:11px;color:var(--text-muted);margin-top:8px">or enter TOTP code below</p>
@@ -320,23 +354,23 @@
           <input type="text" id="twofa-code" placeholder="000000" maxlength="6"
                  style="text-align:center;font-size:20px;letter-spacing:8px" />
         </div>
-        <button class="btn btn-primary" onclick="verify2FATotp()">Verify</button>
+        <button class="btn btn-primary" data-action="verify2FATotp">Verify</button>
       </div>
-      <button class="btn btn-outline" style="margin-top:12px" onclick="cancel2FA()">Cancel</button>
+      <button class="btn btn-outline" style="margin-top:12px" data-action="cancel2FA">Cancel</button>
     </div>
   </div>
 
   <!-- Settings view -->
   <div class="view" id="view-settings">
     <div class="view-header">
-      <button class="back-btn" onclick="showView('main')">&larr;</button>
+      <button class="back-btn" data-view="main">&larr;</button>
       <h2>Settings</h2>
     </div>
     <div class="form-group">
       <label>RPC endpoint</label>
       <input type="text" id="settings-rpc" placeholder="https://rpc.aztibase.com" />
     </div>
-    <button class="btn btn-outline btn-sm" style="margin-bottom:20px" onclick="saveSettings()">Save</button>
+    <button class="btn btn-outline btn-sm" style="margin-bottom:20px" data-action="saveSettings">Save</button>
 
     <!-- 2FA Settings -->
     <div style="margin-bottom:20px;padding:14px;background:var(--surface);border:1px solid var(--border);border-radius:8px">
@@ -345,7 +379,7 @@
           <div style="font-size:14px;font-weight:600">Two-Factor Authentication</div>
           <div style="font-size:12px;color:var(--text-muted)" id="2fa-status-text">Not configured</div>
         </div>
-        <button class="btn btn-outline btn-sm" style="width:auto;padding:6px 14px" onclick="showView('2fa-setup')">
+        <button class="btn btn-outline btn-sm" style="width:auto;padding:6px 14px" data-view="2fa-setup">
           Setup
         </button>
       </div>
@@ -356,14 +390,14 @@
       <div class="form-group">
         <input type="password" id="export-pass" placeholder="Enter password to reveal" />
       </div>
-      <button class="btn btn-outline btn-sm" onclick="exportKey()">Show Key</button>
+      <button class="btn btn-outline btn-sm" data-action="exportKey">Show Key</button>
       <div id="export-result" style="display:none;margin-top:10px">
         <textarea id="export-key-display" readonly style="height:40px;font-size:11px"></textarea>
       </div>
     </div>
 
-    <button class="btn btn-danger" style="margin-top:20px" onclick="lockWallet()">Lock Wallet</button>
-    <button class="btn btn-outline" style="margin-top:8px" onclick="resetWallet()">Reset Wallet</button>
+    <button class="btn btn-danger" style="margin-top:20px" data-action="lockWallet">Lock Wallet</button>
+    <button class="btn btn-outline" style="margin-top:8px" data-action="resetWallet">Reset Wallet</button>
   </div>
 
   <!-- Toast -->

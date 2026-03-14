@@ -7,6 +7,7 @@ let rpcUrl = "https://rpc.aztibase.com";
 let currentNonce = 0;
 const twofa = new TwoFactorAuth();
 let pending2FAResolve = null;
+let socialAuthData = null;
 
 const DECIMALS = 18;
 const BASE = 10n ** BigInt(DECIMALS);
@@ -187,7 +188,6 @@ function showView(name) {
   }
 }
 
-window.showView = showView;
 
 function goBack() {
   const stored = localStorage.getItem("encryptedKey") ||
@@ -198,16 +198,14 @@ function goBack() {
     showView("onboard");
   }
 }
-window.goBack = goBack;
 
-function switchTab(tabId) {
+function switchTab(tabId, clickedEl) {
   document.querySelectorAll(".tab").forEach(t => t.classList.remove("active"));
-  event.target.classList.add("active");
+  if (clickedEl) clickedEl.classList.add("active");
   document.querySelectorAll(".tx-list").forEach(l => l.style.display = "none");
   const el = document.getElementById(`tab-${tabId}`);
   if (el) el.style.display = "block";
 }
-window.switchTab = switchTab;
 
 // --- Wallet operations ---
 
@@ -228,18 +226,21 @@ async function createWallet() {
   const encrypted = await encryptSecret(secretHex, pass);
   await storageSet({ encryptedKey: encrypted, address: addressHex });
 
+  chrome.runtime?.sendMessage?.({
+    type: "wallet_unlocked", secret: secretHex, address: addressHex,
+  }).catch(() => {});
+
   document.getElementById("mnemonic-display").style.display = "block";
   document.getElementById("mnemonic-words").value =
     `Private key (hex) — save this securely:\n${kp.secret}`;
 }
-window.createWallet = createWallet;
+
 
 function confirmMnemonic() {
   showView("main");
   updateMainView();
   toast("Wallet created", "success");
 }
-window.confirmMnemonic = confirmMnemonic;
 
 async function importWallet() {
   if (!wasm) { toast("WASM module not loaded", "error"); return; }
@@ -263,11 +264,91 @@ async function importWallet() {
   const encrypted = await encryptSecret(secretHex, pass);
   await storageSet({ encryptedKey: encrypted, address: addressHex });
 
+  chrome.runtime?.sendMessage?.({
+    type: "wallet_unlocked", secret: secretHex, address: addressHex,
+  }).catch(() => {});
+
   showView("main");
   updateMainView();
   toast("Wallet imported", "success");
 }
-window.importWallet = importWallet;
+
+// --- Social sign-in (OAuth runs in background service worker) ---
+
+async function signInGoogle() {
+  try {
+    const result = await chrome.runtime.sendMessage({ type: "oauth_google" });
+    if (result?.error) throw new Error(result.error);
+
+    socialAuthData = { provider: "google", userId: result.data.userId, email: result.data.email || "" };
+    document.getElementById("social-provider").textContent = "Google";
+    document.getElementById("social-email").textContent = result.data.email || result.data.userId;
+    showView("social-auth");
+  } catch (e) {
+    toast("Google sign-in failed: " + e.message, "error");
+  }
+}
+
+async function signInGitHub() {
+  try {
+    const result = await chrome.runtime.sendMessage({ type: "oauth_github" });
+    if (result?.error) throw new Error(result.error);
+
+    socialAuthData = {
+      provider: "github",
+      userId: String(result.data.userId),
+      email: result.data.login || "",
+    };
+    document.getElementById("social-provider").textContent = "GitHub";
+    document.getElementById("social-email").textContent = result.data.login || result.data.userId;
+    showView("social-auth");
+  } catch (e) {
+    toast("GitHub sign-in failed: " + e.message, "error");
+  }
+}
+
+async function completeSocialAuth() {
+  if (!socialAuthData) { toast("No auth data", "error"); return; }
+  if (!wasm) { toast("WASM module not loaded", "error"); return; }
+
+  const pass = document.getElementById("social-pass").value;
+  const pass2 = document.getElementById("social-pass2").value;
+  if (pass.length < 8) { toast("Password must be at least 8 characters", "error"); return; }
+  if (pass !== pass2) { toast("Passwords do not match", "error"); return; }
+
+  const enc = new TextEncoder();
+  const salt = enc.encode("aztibase:" + socialAuthData.provider + ":" + socialAuthData.userId);
+  const keyMaterial = await crypto.subtle.importKey(
+    "raw", enc.encode(pass), "PBKDF2", false, ["deriveBits"]
+  );
+  const seedBits = await crypto.subtle.deriveBits(
+    { name: "PBKDF2", salt, iterations: 600000, hash: "SHA-256" },
+    keyMaterial,
+    256
+  );
+
+  secretHex = bufToHex(new Uint8Array(seedBits));
+  const addr = wasm.addressFromSecret(secretHex);
+  if (addr.startsWith("error:")) { toast(addr, "error"); return; }
+  addressHex = addr;
+
+  const encrypted = await encryptSecret(secretHex, pass);
+  await storageSet({
+    encryptedKey: encrypted,
+    address: addressHex,
+    socialAuth: { provider: socialAuthData.provider, email: socialAuthData.email },
+  });
+
+  chrome.runtime?.sendMessage?.({
+    type: "wallet_unlocked", secret: secretHex, address: addressHex,
+  }).catch(() => {});
+
+  const provider = socialAuthData.provider;
+  socialAuthData = null;
+  showView("main");
+  updateMainView();
+  toast("Wallet created via " + provider, "success");
+}
 
 async function unlockWallet() {
   const pass = document.getElementById("unlock-pass").value;
@@ -278,20 +359,24 @@ async function unlockWallet() {
   try {
     secretHex = await decryptSecret(stored.encryptedKey, pass);
     addressHex = stored.address;
+
+    chrome.runtime?.sendMessage?.({
+      type: "wallet_unlocked", secret: secretHex, address: addressHex,
+    }).catch(() => {});
+
     showView("main");
     updateMainView();
   } catch {
     toast("Wrong password", "error");
   }
 }
-window.unlockWallet = unlockWallet;
 
 function lockWallet() {
   secretHex = null;
+  chrome.runtime?.sendMessage?.({ type: "wallet_locked" }).catch(() => {});
   showView("unlock");
   toast("Wallet locked", "info");
 }
-window.lockWallet = lockWallet;
 
 async function resetWallet() {
   if (!confirm("This will remove your wallet. Make sure you have backed up your key.")) return;
@@ -301,7 +386,6 @@ async function resetWallet() {
   showView("onboard");
   toast("Wallet reset", "info");
 }
-window.resetWallet = resetWallet;
 
 function updateMainView() {
   if (addressHex) {
@@ -395,7 +479,6 @@ async function verify2FAWebAuthn() {
     toast(`WebAuthn error: ${e.message}`, "error");
   }
 }
-window.verify2FAWebAuthn = verify2FAWebAuthn;
 
 async function verify2FATotp() {
   const code = document.getElementById("twofa-code").value.trim();
@@ -409,13 +492,11 @@ async function verify2FATotp() {
     toast("Invalid code", "error");
   }
 }
-window.verify2FATotp = verify2FATotp;
 
 function cancel2FA() {
   document.getElementById("twofa-modal").style.display = "none";
   if (pending2FAResolve) { pending2FAResolve(false); pending2FAResolve = null; }
 }
-window.cancel2FA = cancel2FA;
 
 // --- 2FA Setup ---
 
@@ -430,7 +511,6 @@ async function startTotpSetup() {
   document.getElementById("totp-confirm").style.display = "block";
   document.getElementById("totp-setup-btn").style.display = "none";
 }
-window.startTotpSetup = startTotpSetup;
 
 async function confirmTotpSetup() {
   const code = document.getElementById("totp-confirm-code").value.trim();
@@ -447,7 +527,6 @@ async function confirmTotpSetup() {
     toast("Invalid code — try again", "error");
   }
 }
-window.confirmTotpSetup = confirmTotpSetup;
 
 async function startWebAuthnSetup() {
   try {
@@ -466,7 +545,6 @@ async function startWebAuthnSetup() {
     toast(`Passkey setup failed: ${e.message}`, "error");
   }
 }
-window.startWebAuthnSetup = startWebAuthnSetup;
 
 async function disable2FA() {
   if (!confirm("Disable all 2FA? Transactions will no longer require verification.")) return;
@@ -482,7 +560,6 @@ async function disable2FA() {
   update2FAStatusText();
   toast("2FA disabled", "info");
 }
-window.disable2FA = disable2FA;
 
 function update2FAStatusText() {
   const el = document.getElementById("2fa-status-text");
@@ -530,7 +607,6 @@ async function sendTransfer() {
     toast(`Send failed: ${e.message}`, "error");
   }
 }
-window.sendTransfer = sendTransfer;
 
 async function sendStake() {
   if (!wasm || !secretHex) { toast("Wallet not ready", "error"); return; }
@@ -556,7 +632,6 @@ async function sendStake() {
     toast(`Stake failed: ${e.message}`, "error");
   }
 }
-window.sendStake = sendStake;
 
 async function sendUnstake() {
   if (!wasm || !secretHex) { toast("Wallet not ready", "error"); return; }
@@ -581,7 +656,6 @@ async function sendUnstake() {
     toast(`Unstake failed: ${e.message}`, "error");
   }
 }
-window.sendUnstake = sendUnstake;
 
 async function sendDelegate() {
   if (!wasm || !secretHex) { toast("Wallet not ready", "error"); return; }
@@ -607,7 +681,6 @@ async function sendDelegate() {
     toast(`Delegate failed: ${e.message}`, "error");
   }
 }
-window.sendDelegate = sendDelegate;
 
 async function sendUndelegate() {
   if (!wasm || !secretHex) { toast("Wallet not ready", "error"); return; }
@@ -628,7 +701,6 @@ async function sendUndelegate() {
     toast(`Undelegate failed: ${e.message}`, "error");
   }
 }
-window.sendUndelegate = sendUndelegate;
 
 // --- Activity list ---
 
@@ -667,9 +739,9 @@ async function saveSettings() {
   });
   document.getElementById("network-name").textContent =
     rpcUrl.includes("rpc.aztibase.com") ? "Testnet" : "Custom";
+  chrome.runtime?.sendMessage?.({ type: "network_changed", rpc: rpcUrl }).catch(() => {});
   toast("Settings saved", "success");
 }
-window.saveSettings = saveSettings;
 
 async function exportKey() {
   const pass = document.getElementById("export-pass").value;
@@ -688,7 +760,6 @@ async function exportKey() {
     toast("Wrong password", "error");
   }
 }
-window.exportKey = exportKey;
 
 // --- Copy ---
 
@@ -699,7 +770,6 @@ function copyAddress() {
     toast("Address copied", "info");
   });
 }
-window.copyAddress = copyAddress;
 
 // --- Toast ---
 
@@ -709,6 +779,35 @@ function toast(msg, type) {
   el.className = `toast ${type} show`;
   setTimeout(() => { el.className = "toast"; }, 3000);
 }
+
+// --- Delegated click handler (MV3 CSP forbids inline onclick) ---
+
+const actions = {
+  goBack, createWallet, confirmMnemonic, importWallet, unlockWallet,
+  lockWallet, resetWallet, copyAddress, sendTransfer, sendStake,
+  sendUnstake, sendDelegate, sendUndelegate, saveSettings, exportKey,
+  startTotpSetup, confirmTotpSetup, startWebAuthnSetup, disable2FA,
+  verify2FAWebAuthn, verify2FATotp, cancel2FA,
+  signInGoogle, signInGitHub, completeSocialAuth,
+};
+
+document.addEventListener("click", (e) => {
+  const el = e.target.closest("[data-view],[data-action],[data-tab]");
+  if (!el) return;
+
+  if (el.dataset.view) {
+    showView(el.dataset.view);
+    return;
+  }
+  if (el.dataset.tab) {
+    switchTab(el.dataset.tab, el);
+    return;
+  }
+  if (el.dataset.action) {
+    const fn = actions[el.dataset.action];
+    if (typeof fn === "function") fn();
+  }
+});
 
 // --- Init ---
 init();
