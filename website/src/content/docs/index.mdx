@@ -14,254 +14,180 @@ hero:
   </h1>
   <p class="hero-tagline">Layer-1 · AI-Native · Server-Independent</p>
   <p class="hero-subtitle">
-    A blockchain built from scratch in Rust — DAG consensus with sub-second finality,
+    A blockchain built from scratch in Rust — DAG consensus with sub-two-second finality,
     on-chain AI verification, and zero central points of failure.
   </p>
   <div class="hero-actions">
-    <a href="/guides/introduction/" class="btn-primary">
-      Read the Docs
-    </a>
-    <a href="/guides/run-validator/" class="btn-primary btn-launch">
-      Launch Node
-    </a>
-    <a href="/network/testnet/" class="btn-secondary">
-      Join Testnet
-    </a>
+    <a href="/guides/introduction/" class="btn-primary">Read the Docs</a>
+    <a href="/guides/run-validator/" class="btn-primary btn-launch">Launch Node</a>
+    <a href="/network/testnet/" class="btn-secondary">Join Testnet</a>
   </div>
-  <div class="stats-bar">
-    <div class="stat-item">
-      <span class="stat-value">400ms</span>
-      <span class="stat-label">Block Time</span>
-    </div>
-    <div class="stat-item">
-      <span class="stat-value">&lt;1.6s</span>
-      <span class="stat-label">Finality</span>
-    </div>
-    <div class="stat-item">
-      <span class="stat-value">10k+</span>
-      <span class="stat-label">TPS Target</span>
-    </div>
-    <div class="stat-item">
-      <span class="stat-value">4</span>
-      <span class="stat-label">Testnet Validators</span>
-    </div>
-  </div>
-  <div class="brand-tags">
-    <span class="brand-tag">Neural</span>
-    <span class="brand-tag coral">Luminous</span>
-    <span class="brand-tag seafoam">Precise</span>
-    <span class="brand-tag gold">Modular</span>
-    <span class="brand-tag navy">Independent</span>
-    <span class="brand-tag">Resilient</span>
-    <span class="brand-tag seafoam">Accessible</span>
-    <span class="brand-tag coral">Living</span>
-  </div>
+  <p class="hero-stats">
+    <span class="hero-stat"><strong>400ms</strong> block time</span>
+    <span class="hero-stat"><strong>&lt;1.6s</strong> finality</span>
+    <span class="hero-stat"><strong>10k+</strong> TPS target</span>
+    <span class="hero-stat"><strong>4</strong> testnet validators</span>
+  </p>
 </div>
 
-<div class="features-section">
-  <div class="section-header">
-    <p class="section-eyebrow">Core Architecture</p>
-    <h2 class="section-title">Built Different, By Design</h2>
-    <p class="section-subtitle">
-      Every design decision optimizes for decentralization, performance, and AI-native capabilities.
-    </p>
-  </div>
-  <div class="features-grid">
-    <div class="feature-card" style="--card-accent: #6B5B8A; --icon-bg: rgba(107,91,138,0.06); --icon-color: #6B5B8A; --icon-bg-dark: rgba(136,120,166,0.12); --icon-color-dark: #8878A6;">
-      <div class="feature-icon">◇</div>
-      <h3 class="feature-title">Synaptic Consensus</h3>
-      <p class="feature-description">
-        DAG-based SynBFT with Proof of Useful Work. Blocks have multiple parents — no single
-        chain bottleneck. 2/3 supermajority finality in 4 rounds.
-      </p>
+<div class="arch-section">
+  <div class="arch-inner">
+    <div class="arch-header">
+      <p class="section-eyebrow">Architecture</p>
+      <h2 class="section-title">How it works</h2>
     </div>
-    <div class="feature-card" style="--card-accent: #6BA89E; --icon-bg: rgba(107,168,158,0.06); --icon-color: #6BA89E; --icon-bg-dark: rgba(136,192,182,0.12); --icon-color-dark: #88C0B6;">
-      <div class="feature-icon">⬡</div>
-      <h3 class="feature-title">Server-Independent</h3>
-      <p class="feature-description">
-        Every component works if all centralized servers go offline. P2P via Kademlia DHT,
-        QUIC transport, gossipsub mesh. Zero single points of failure.
-      </p>
+    <div class="arch-lead">
+      <div class="arch-lead-item">
+        <h3 class="arch-lead-title">Synaptic Consensus</h3>
+        <p class="arch-lead-body">
+          DAG-based SynBFT with Proof of Useful Work. Blocks reference multiple parents —
+          no single chain bottleneck. 2/3 supermajority finality in 4 rounds. Leader election
+          via VRF, round-paced at 400ms.
+        </p>
+      </div>
+      <div class="arch-lead-item">
+        <h3 class="arch-lead-title">Server-Independent</h3>
+        <p class="arch-lead-body">
+          Every component works if all centralized servers go offline. Peer discovery via
+          Kademlia DHT, QUIC transport, gossipsub mesh. No DNS seeds, no bootstrap servers,
+          no single points of failure.
+        </p>
+      </div>
     </div>
-    <div class="feature-card" style="--card-accent: #C9927E; --icon-bg: rgba(201,146,126,0.06); --icon-color: #C0846E; --icon-bg-dark: rgba(222,174,156,0.12); --icon-color-dark: #DEAE9C;">
-      <div class="feature-icon">△</div>
-      <h3 class="feature-title">AI-Native Runtime</h3>
-      <p class="feature-description">
-        On-chain AI verification with off-chain inference. Model registry, compute market,
-        and attestation protocol built into L1 — not bolted on.
-      </p>
-    </div>
-    <div class="feature-card" style="--card-accent: #8878A6; --icon-bg: rgba(136,120,166,0.06); --icon-color: #8878A6; --icon-bg-dark: rgba(136,120,166,0.14); --icon-color-dark: #A898C0;">
-      <div class="feature-icon">◈</div>
-      <h3 class="feature-title">Chrome Wallet + 2FA</h3>
-      <p class="feature-description">
-        Browser extension wallet with send, stake, and delegate. AES-256-GCM encrypted keys,
-        TOTP and WebAuthn/Passkey two-factor auth on every transaction.
-      </p>
-    </div>
-    <div class="feature-card" style="--card-accent: #B8A67E; --icon-bg: rgba(184,166,126,0.06); --icon-color: #A89668; --icon-bg-dark: rgba(184,166,126,0.12); --icon-color-dark: #D4C498;">
-      <div class="feature-icon">⊞</div>
-      <h3 class="feature-title">Dual VM Execution</h3>
-      <p class="feature-description">
-        WASM and EVM side by side. Deploy in Rust, AssemblyScript, or Solidity.
-        One chain, two ecosystems. No bridges needed.
-      </p>
-    </div>
-    <div class="feature-card" style="--card-accent: #6B5B8A; --icon-bg: rgba(107,91,138,0.04); --icon-color: #6B5B8A; --icon-bg-dark: rgba(107,91,138,0.10); --icon-color-dark: #8878A6;">
-      <div class="feature-icon">⊘</div>
-      <h3 class="feature-title">Pure Rust, Zero C Deps</h3>
-      <p class="feature-description">
-        Every dependency is pure Rust — no C/C++ build chains, no native compilation surprises.
-        Cross-compiles to any target. redb + BLAKE3.
-      </p>
-    </div>
-    <div class="feature-card" style="--card-accent: #6BA89E; --icon-bg: rgba(107,168,158,0.05); --icon-color: #6BA89E; --icon-bg-dark: rgba(136,192,182,0.10); --icon-color-dark: #88C0B6;">
-      <div class="feature-icon">◎</div>
-      <h3 class="feature-title">Verkle State Trees</h3>
-      <p class="feature-description">
-        Verkle commitments for state proofs — smaller than Merkle Patricia Tries, enabling
-        stateless validation and instant light client sync.
-      </p>
-    </div>
-    <div class="feature-card" style="--card-accent: #C9927E; --icon-bg: rgba(201,146,126,0.05); --icon-color: #C0846E; --icon-bg-dark: rgba(222,174,156,0.10); --icon-color-dark: #DEAE9C;">
-      <div class="feature-icon">⊕</div>
-      <h3 class="feature-title">WASM Staking SDK</h3>
-      <p class="feature-description">
-        Compile-to-browser staking transactions via WebAssembly. Stake, unstake, delegate,
-        and undelegate — all signed client-side with full type safety.
-      </p>
+    <hr class="gold-rule"/>
+    <div class="arch-grid">
+      <div class="arch-item">
+        <span class="arch-item-label">AI Runtime</span>
+        <span class="arch-item-desc">On-chain verification, off-chain inference. Model registry and compute market at L1.</span>
+      </div>
+      <div class="arch-item">
+        <span class="arch-item-label">Dual VM</span>
+        <span class="arch-item-desc">WASM and EVM side by side. Deploy in Rust, AssemblyScript, or Solidity.</span>
+      </div>
+      <div class="arch-item">
+        <span class="arch-item-label">Verkle Trees</span>
+        <span class="arch-item-desc">Verkle commitments for state proofs — smaller than Merkle, enabling stateless validation.</span>
+      </div>
+      <div class="arch-item">
+        <span class="arch-item-label">Pure Rust</span>
+        <span class="arch-item-desc">One C dependency (blst for BLS12-381). Everything else — redb, BLAKE3, Ed25519 — native Rust.</span>
+      </div>
+      <div class="arch-item">
+        <span class="arch-item-label">Chrome Wallet</span>
+        <span class="arch-item-desc">Browser extension with send, stake, delegate. AES-256-GCM keys, TOTP + WebAuthn 2FA.</span>
+      </div>
+      <div class="arch-item">
+        <span class="arch-item-label">WASM Staking</span>
+        <span class="arch-item-desc">Compile-to-browser staking transactions. Client-side signing with full type safety.</span>
+      </div>
     </div>
   </div>
 </div>
 
 <div class="tech-section">
-  <div class="section-header">
-    <p class="section-eyebrow">Technology</p>
-    <h2 class="section-title">The Stack</h2>
-    <p class="section-subtitle">
-      Pure Rust from the ground up. No C dependencies. No compromises.
-    </p>
-  </div>
-  <div class="tech-grid">
-    <div class="tech-item">
-      <div>
-        <div class="tech-item-name">Rust</div>
-        <div class="tech-item-role">Language</div>
-      </div>
+  <div class="tech-inner">
+    <div class="tech-header">
+      <p class="section-eyebrow">Technology</p>
+      <h2 class="section-title">The Stack</h2>
     </div>
-    <div class="tech-item">
-      <div>
-        <div class="tech-item-name">tokio</div>
-        <div class="tech-item-role">Async Runtime</div>
+    <div class="tech-list">
+      <div class="tech-row">
+        <span class="tech-name">Rust</span>
+        <span class="tech-role">Language</span>
       </div>
-    </div>
-    <div class="tech-item">
-      <div>
-        <div class="tech-item-name">rust-libp2p</div>
-        <div class="tech-item-role">P2P Networking</div>
+      <div class="tech-row">
+        <span class="tech-name">tokio</span>
+        <span class="tech-role">Async Runtime</span>
       </div>
-    </div>
-    <div class="tech-item">
-      <div>
-        <div class="tech-item-name">redb</div>
-        <div class="tech-item-role">Embedded Storage</div>
+      <div class="tech-row">
+        <span class="tech-name">rust-libp2p</span>
+        <span class="tech-role">P2P Networking</span>
       </div>
-    </div>
-    <div class="tech-item">
-      <div>
-        <div class="tech-item-name">wasmtime + revm</div>
-        <div class="tech-item-role">Dual VM</div>
+      <div class="tech-row">
+        <span class="tech-name">redb</span>
+        <span class="tech-role">Embedded Storage</span>
       </div>
-    </div>
-    <div class="tech-item">
-      <div>
-        <div class="tech-item-name">BLAKE3</div>
-        <div class="tech-item-role">Hashing</div>
+      <div class="tech-row">
+        <span class="tech-name">wasmtime + revm</span>
+        <span class="tech-role">Dual VM Execution</span>
       </div>
-    </div>
-    <div class="tech-item">
-      <div>
-        <div class="tech-item-name">Ed25519 + BLS12-381</div>
-        <div class="tech-item-role">Cryptography</div>
+      <div class="tech-row">
+        <span class="tech-name">BLAKE3</span>
+        <span class="tech-role">Hashing</span>
       </div>
-    </div>
-    <div class="tech-item">
-      <div>
-        <div class="tech-item-name">tract + candle</div>
-        <div class="tech-item-role">AI Inference</div>
+      <div class="tech-row">
+        <span class="tech-name">Ed25519 + BLS12-381</span>
+        <span class="tech-role">Cryptography</span>
+      </div>
+      <div class="tech-row">
+        <span class="tech-name">tract</span>
+        <span class="tech-role">AI Inference (ONNX)</span>
       </div>
     </div>
   </div>
 </div>
 
-<div class="features-section">
-  <div class="section-header">
-    <p class="section-eyebrow">Tokenomics</p>
-    <h2 class="section-title">AZTB Token</h2>
-    <p class="section-subtitle">
-      Fixed supply with halving emissions. Designed for long-term validator sustainability.
-    </p>
-  </div>
-  <div class="features-grid" style="max-width: 1000px;">
-    <div class="feature-card" style="--card-accent: #6B5B8A;">
-      <div class="token-badge">A</div>
-      <h3 class="feature-title">1B Total Supply</h3>
-      <p class="feature-description">
-        Fixed supply. 400M genesis mint (40%), 600M emission pool over ~10 years with
-        2-year halving and perpetual tail emission.
-      </p>
+<div class="token-section">
+  <div class="token-inner">
+    <div class="token-header">
+      <p class="section-eyebrow">Tokenomics</p>
+      <h2 class="section-title">AZTB</h2>
     </div>
-    <div class="feature-card" style="--card-accent: #6BA89E;">
-      <h3 class="feature-title">Validator Rewards</h3>
-      <p class="feature-description">
-        70% of emissions to validators, 15% to AI compute providers (PoUW), 10% treasury,
-        5% insurance fund. 3-12% APY range.
-      </p>
-    </div>
-    <div class="feature-card" style="--card-accent: #B8A67E;">
-      <h3 class="feature-title">EIP-1559 Dynamic Fees</h3>
-      <p class="feature-description">
-        Dynamic base fee with 15M gas target per batch. Predictable pricing,
-        MEV-resistant ordering, 21,000 gas for transfers.
-      </p>
+    <div class="token-blocks">
+      <div class="token-block">
+        <h3 class="token-block-title">1B Fixed Supply</h3>
+        <p class="token-block-body">
+          400M genesis mint (40%). 600M emission pool over ~10 years
+          with 2-year halving and perpetual tail emission.
+        </p>
+      </div>
+      <div class="token-block">
+        <h3 class="token-block-title">Validator Rewards</h3>
+        <p class="token-block-body">
+          70% of emissions to validators. 15% AI compute providers (PoUW).
+          10% treasury. 5% insurance fund. 3-12% APY range.
+        </p>
+      </div>
+      <div class="token-block">
+        <h3 class="token-block-title">EIP-1559 Fees</h3>
+        <p class="token-block-body">
+          Dynamic base fee with 15M gas target per batch. Predictable pricing,
+          MEV-resistant ordering. 21,000 gas for transfers.
+        </p>
+      </div>
     </div>
   </div>
 </div>
 
 <div class="cta-section">
-  <div class="section-header">
-    <p class="section-eyebrow">Get Involved</p>
-    <h2 class="section-title">Build the Future With Us</h2>
-    <p class="section-subtitle">
-      Aztibase is open infrastructure. Run a validator, build on the dual VM,
-      or contribute to the protocol.
+  <div class="cta-inner">
+    <h2 class="cta-title">Build with us</h2>
+    <p class="cta-body">
+      Run a validator, build on the dual VM, or contribute to the protocol.
     </p>
-  </div>
-  <div class="hero-actions" style="justify-content: center; margin-top: 2rem;">
-    <a href="/guides/run-validator/" class="btn-primary btn-launch">
-      Launch Node
-    </a>
-    <a href="/api/rpc/" class="btn-secondary">
-      API Reference
-    </a>
-    <a href="/guides/introduction/" class="btn-secondary">
-      Documentation
-    </a>
+    <div class="hero-actions">
+      <a href="/guides/run-validator/" class="btn-primary btn-launch">Launch Node</a>
+      <a href="/api/rpc/" class="btn-secondary">API Reference</a>
+      <a href="/guides/introduction/" class="btn-secondary">Documentation</a>
+    </div>
   </div>
 </div>
 
 <footer class="site-footer">
-  <div class="footer-brand">Aztibase</div>
-  <div class="footer-brand-sub">Network</div>
-  <div class="footer-links">
-    <a href="/guides/introduction/">Docs</a>
-    <a href="/api/rpc/">API</a>
-    <a href="/network/testnet/">Testnet</a>
-    <a href="/guides/run-validator/">Validators</a>
-    <a href="https://x.com/aztibase">Twitter</a>
-    <a href="https://github.com/aztibase">GitHub</a>
+  <div class="footer-inner">
+    <div class="footer-left">
+      <div class="footer-brand">Aztibase Network</div>
+      <p class="footer-copy">
+        Aztibase (Pty) Ltd · Dual MIT / Apache-2.0 · Chain ID 0xA27B
+      </p>
+    </div>
+    <div class="footer-links">
+      <a href="/guides/introduction/">Docs</a>
+      <a href="/api/rpc/">API</a>
+      <a href="/network/testnet/">Testnet</a>
+      <a href="/guides/run-validator/">Validators</a>
+      <a href="https://x.com/aztibase">Twitter</a>
+      <a href="https://github.com/aztibase">GitHub</a>
+    </div>
   </div>
-  <p class="footer-copy">
-    Aztibase (Pty) Ltd · Dual MIT / Apache-2.0 · Chain ID 0xA27B · Infrastructure for distributed intelligence
-  </p>
 </footer>

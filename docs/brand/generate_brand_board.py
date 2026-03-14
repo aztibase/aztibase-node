@@ -59,8 +59,8 @@ def hex_str(c):
 def blend(c1, c2, t):
     return tuple(int(c1[i]*(1-t) + c2[i]*t) for i in range(3))
 
-def draw_dendrite_element(draw, x, y, angle, length, depth, color, base_alpha=200):
-    """Dendrite branching — the core visual element"""
+def draw_branch_element(draw, x, y, angle, length, depth, color, base_alpha=200):
+    """Neural branching — the core visual element"""
     if depth <= 0 or length < 3:
         # Terminal bulb (synaptic bouton)
         if length >= 3:
@@ -85,10 +85,10 @@ def draw_dendrite_element(draw, x, y, angle, length, depth, color, base_alpha=20
 
     spread = 0.4 + depth * 0.1
     shrink = 0.6
-    draw_dendrite_element(draw, end_x, end_y, angle - spread, length*shrink, depth-1, color, base_alpha*0.85)
-    draw_dendrite_element(draw, end_x, end_y, angle + spread, length*shrink, depth-1, color, base_alpha*0.85)
+    draw_branch_element(draw, end_x, end_y, angle - spread, length*shrink, depth-1, color, base_alpha*0.85)
+    draw_branch_element(draw, end_x, end_y, angle + spread, length*shrink, depth-1, color, base_alpha*0.85)
     if depth > 2:
-        draw_dendrite_element(draw, end_x, end_y, angle + spread*0.3, length*shrink*0.7, depth-2, color, base_alpha*0.7)
+        draw_branch_element(draw, end_x, end_y, angle + spread*0.3, length*shrink*0.7, depth-2, color, base_alpha*0.7)
 
 
 def draw_soft_circle(draw, cx, cy, r, color, border=None):
@@ -103,13 +103,13 @@ def draw_soft_circle(draw, cx, cy, r, color, border=None):
 
 
 # ═══════════════════════════════════════════════════════════════════
-# Subtle background texture — faint dendrite watermark
+# Subtle background texture — faint neural branch watermark
 # ═══════════════════════════════════════════════════════════════════
 for bx, by, ba, bl in [
     (180, 300, -0.3, 200), (2250, 500, 2.7, 180),
     (200, 2200, -0.6, 160), (2200, 2600, 2.4, 140),
 ]:
-    draw_dendrite_element(draw, bx, by, ba, bl, 5, HAIRLINE, 80)
+    draw_branch_element(draw, bx, by, ba, bl, 5, HAIRLINE, 80)
 
 
 # ═══════════════════════════════════════════════════════════════════
@@ -205,8 +205,8 @@ draw.text((100, ey), "02", fill=SILVER, font=f_label)
 draw.text((130, ey), "VISUAL ELEMENT  /  MASCOT CONCEPTS", fill=GRAPHITE, font=f_section)
 ey += 45
 
-# --- Element A: The Dendrite Specimen ---
-# A detailed dendrite branch rendered like a botanical/anatomical illustration
+# --- Element A: The Neural Specimen ---
+# A detailed neural branch rendered like a botanical/anatomical illustration
 ea_cx, ea_cy = 340, ey + 200
 
 # Specimen plate background
@@ -217,7 +217,7 @@ draw.ellipse([ea_cx-plate_r, ea_cy-plate_r, ea_cx+plate_r, ea_cy+plate_r], fill=
 soma_r = 18
 draw_soft_circle(draw, ea_cx, ea_cy, soma_r, DEEP_VIOLET)
 
-# Main dendrite branches radiating outward — anatomical style
+# Main neural branches radiating outward — anatomical style
 branch_configs = [
     (-1.5, 120, 5),   # up-left
     (-1.1, 110, 5),   # up
@@ -228,27 +228,27 @@ branch_configs = [
     (1.2, 85, 4),     # down
 ]
 for angle, length, depth in branch_configs:
-    draw_dendrite_element(draw, ea_cx, ea_cy, angle, length, depth, DEEP_VIOLET, 220)
+    draw_branch_element(draw, ea_cx, ea_cy, angle, length, depth, DEEP_VIOLET, 220)
 
 # Secondary finer branches
 for angle in [0.8, -0.2, -2.8, 2.5]:
-    draw_dendrite_element(draw, ea_cx, ea_cy, angle, 60, 3, SOFT_VIOLET, 150)
+    draw_branch_element(draw, ea_cx, ea_cy, angle, 60, 3, SOFT_VIOLET, 150)
 
 # Annotation lines (scientific illustration style)
 draw.line([(ea_cx+plate_r+10, ea_cy-40), (ea_cx+plate_r+60, ea_cy-40)], fill=SILVER, width=1)
-draw.text((ea_cx+plate_r+65, ea_cy-47), "dendrite", fill=GRAPHITE, font=f_label)
+draw.text((ea_cx+plate_r+65, ea_cy-47), "branch", fill=GRAPHITE, font=f_label)
 
 draw.line([(ea_cx, ea_cy+soma_r+2), (ea_cx+plate_r+10, ea_cy+30), (ea_cx+plate_r+60, ea_cy+30)], fill=SILVER, width=1)
 draw.text((ea_cx+plate_r+65, ea_cy+23), "soma", fill=GRAPHITE, font=f_label)
 
 draw.text((ea_cx, ey+400), "ELEMENT A", fill=INK, font=f_label_lg, anchor="ma")
-draw.text((ea_cx, ey+420), "The Dendrite Specimen", fill=GRAPHITE, font=f_label, anchor="ma")
+draw.text((ea_cx, ey+420), "The Neural Specimen", fill=GRAPHITE, font=f_label, anchor="ma")
 draw.text((ea_cx, ey+436), "Anatomical illustration style — works as", fill=SILVER, font=f_label, anchor="ma")
 draw.text((ea_cx, ey+450), "watermark, icon, pattern element, merch", fill=SILVER, font=f_label, anchor="ma")
 
 
 # --- Element B: The Axolotl (Mascot) ---
-# Axolotls regenerate neurons/dendrites — perfect fit
+# Axolotls regenerate neurons — perfect fit
 eb_cx, eb_cy = 920, ey + 200
 
 # Soft circular frame
@@ -278,7 +278,7 @@ for ex_off in [-22, 22]:
 # Smile
 draw.arc([eb_cx-15, head_cy+2, eb_cx+15, head_cy+20], start=0, end=180, fill=INK, width=2)
 
-# Gills (the iconic axolotl feature — rendered as dendrite branches!)
+# Gills (the iconic axolotl feature — rendered as branching elements!)
 gill_configs = [
     (eb_cx-50, head_cy-20, -2.0, 55, 4, DEEP_VIOLET),
     (eb_cx-45, head_cy-35, -1.6, 50, 4, DEEP_VIOLET),
@@ -288,7 +288,7 @@ gill_configs = [
     (eb_cx+35, head_cy-48, -1.9, 45, 3, WARM_CORAL),
 ]
 for gx, gy_pos, ga, gl, gd, gc in gill_configs:
-    draw_dendrite_element(draw, gx, gy_pos, ga, gl, gd, gc, 200)
+    draw_branch_element(draw, gx, gy_pos, ga, gl, gd, gc, 200)
 
 # Tiny limbs
 for lx_off, ly_off in [(-60, 30), (60, 30), (-50, 60), (50, 60)]:
@@ -315,7 +315,7 @@ for i in range(len(tail_pts)-1):
 # Annotation
 draw.text((eb_cx, ey+400), "ELEMENT B", fill=INK, font=f_label_lg, anchor="ma")
 draw.text((eb_cx, ey+420), 'The Axolotl  "Azi"', fill=GRAPHITE, font=f_label, anchor="ma")
-draw.text((eb_cx, ey+436), "Regenerates neurons — gills ARE dendrites", fill=SILVER, font=f_label, anchor="ma")
+draw.text((eb_cx, ey+436), "Regenerates neurons — gills ARE neural branches", fill=SILVER, font=f_label, anchor="ma")
 draw.text((eb_cx, ey+450), "Friendly, memorable, unique in crypto", fill=SILVER, font=f_label, anchor="ma")
 
 
@@ -338,7 +338,7 @@ coral_branches = [
     (ec_cx+30, base_y, -1.1, 85, 4, SEAFOAM),
 ]
 for cx, cy, ca, cl, cd, cc in coral_branches:
-    draw_dendrite_element(draw, cx, cy, ca, cl, cd, cc, 210)
+    draw_branch_element(draw, cx, cy, ca, cl, cd, cc, 210)
 
 # Small fish/particles around coral
 particles = [
@@ -366,9 +366,9 @@ rec_lines = [
     ("", None, None),
     ("Why it works:", INK, f_label_lg),
     ("• Axolotls regenerate", GRAPHITE, f_label),
-    ("  neurons (dendrites!)", GRAPHITE, f_label),
+    ("  neurons (branching!)", GRAPHITE, f_label),
     ("• Gills = branching", GRAPHITE, f_label),
-    ("  dendrite structures", GRAPHITE, f_label),
+    ("  neural structures", GRAPHITE, f_label),
     ("• Name starts with A", GRAPHITE, f_label),
     ("• Friendly + memorable", GRAPHITE, f_label),
     ("• Zero crypto mascot", GRAPHITE, f_label),
@@ -378,7 +378,7 @@ rec_lines = [
     ("  alone or in groups)", GRAPHITE, f_label),
     ("", None, None),
     ("Best pattern element:", INK, f_label_lg),
-    ("Dendrite Specimen", DEEP_VIOLET, font("InstrumentSans-Bold.ttf", 18)),
+    ("Neural Specimen", DEEP_VIOLET, font("InstrumentSans-Bold.ttf", 18)),
     ("For watermarks, bg", GRAPHITE, f_label),
     ("patterns, loading", GRAPHITE, f_label),
     ("states, 404 pages", GRAPHITE, f_label),

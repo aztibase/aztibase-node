@@ -127,7 +127,7 @@ These rules are non-negotiable. Every line of code must look like it was written
 - Storage: redb (all node types -- ADR-001, pure Rust, no native deps)
 - State: Verkle trees
 - Crypto: BLAKE3, Ed25519, BLS12-381
-- AI Runtime: tract (primary), candle (secondary)
+- AI Runtime: tract (ONNX inference)
 - License: Dual MIT / Apache-2.0
 
 ## Reference Repos (in /references/)
@@ -142,7 +142,7 @@ Study these BEFORE writing implementation code for the corresponding domain:
 These are non-negotiable. Violating any of these is a bug:
 1. **Server-independence**: Every design must work if all centralized servers go offline
 2. **DAG consensus**: Blocks have multiple parents (Vec<BlockHash>), NOT linear chain
-3. **400ms target block time**, <1s finality, 10k+ TPS at launch
+3. **400ms target block time**, <1.6s finality (4 rounds), 10k+ TPS at launch
 4. **Verkle trees** for state (NOT Merkle Patricia Tries) — but design binary Merkle + SNARK escape hatch
 5. **Hybrid account + object model** (not pure account like Ethereum, not pure object like Sui)
 6. **AI inference is OFF-CHAIN** with ON-CHAIN verification only

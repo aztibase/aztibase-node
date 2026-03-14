@@ -595,11 +595,14 @@ function deriveAddress(publicKey) {
 let walletKeypair = null;
 let walletAddress = null;
 let walletSecretHex = null;
+let extensionConnected = false;
+const hasExtension = () => !!(window.aztibase && window.aztibase.isAztibase);
 
 function walletFromSeed(seedBytes) {
   walletKeypair = nacl.sign.keyPair.fromSeed(seedBytes);
   walletAddress = toHex(deriveAddress(walletKeypair.publicKey));
   walletSecretHex = toHex(seedBytes);
+  extensionConnected = false;
 }
 
 const params = new URLSearchParams(window.location.search);
@@ -1246,10 +1249,12 @@ async function loadAccountTxs(addr) {
 
 function showWallet() {
   const el = document.getElementById('content');
-  const connected = walletKeypair !== null;
+  const connected = walletKeypair !== null || extensionConnected;
+  const isExt = extensionConnected;
+  const extAvailable = hasExtension();
 
   el.innerHTML = `
-    <div class="view-title">Wallet ${connected ? '<span class="badge green">connected</span>' : '<span class="badge">not connected</span>'}</div>
+    <div class="view-title">Wallet ${connected ? (isExt ? '<span class="badge green">extension</span>' : '<span class="badge green">connected</span>') : '<span class="badge">not connected</span>'}</div>
     <div class="wallet-grid">
       <div>
         <div class="wallet-section">
@@ -1260,6 +1265,12 @@ function showWallet() {
                 <div class="card-label">Address</div>
                 <div class="card-value" style="color:var(--accent)">${walletAddress}</div>
               </div>
+              ${isExt ? `
+              <div class="card-row">
+                <div class="card-label">Source</div>
+                <div class="card-value" style="color:var(--green)">Aztibase Extension</div>
+              </div>
+              ` : `
               <div class="card-row">
                 <div class="card-label">Secret Key</div>
                 <div class="card-value">
@@ -1269,8 +1280,9 @@ function showWallet() {
               </div>
               <div class="card-row">
                 <div class="card-label">Public Key</div>
-                <div class="card-value">${toHex(walletKeypair.publicKey)}</div>
+                <div class="card-value">${walletKeypair ? toHex(walletKeypair.publicKey) : '--'}</div>
               </div>
+              `}
               <div class="card-row">
                 <div class="card-label">Balance</div>
                 <div class="card-value" id="wallet-balance">loading...</div>
@@ -1284,6 +1296,10 @@ function showWallet() {
             <button class="btn btn-green" onclick="walletFaucetDrip()">Faucet Drip (1M AZTB)</button>
             <button class="btn btn-red" onclick="disconnectWallet()">Disconnect</button>
           ` : `
+            ${extAvailable ? `
+            <button class="btn btn-primary" onclick="connectExtension()" style="margin-bottom:12px;background:var(--green)">Connect Aztibase Extension</button>
+            <div style="color:var(--muted);font-size:12px;margin-bottom:16px;text-align:center">— or connect manually —</div>
+            ` : ''}
             <button class="btn btn-primary" onclick="generateNewWallet()">Generate New Keypair</button>
             <div style="margin-top:16px">
               <div class="field-label" style="color:var(--muted);font-size:12px;margin-bottom:6px">Or import secret key (64 hex chars):</div>
@@ -1314,10 +1330,17 @@ function showWallet() {
         <div class="wallet-section">
           <h3>Getting Started</h3>
           <div class="card">
+            ${extAvailable ? `
+            <div class="card-row" style="flex-direction:column;gap:8px">
+              <div style="font-size:14px;font-weight:600">1. Connect your extension wallet</div>
+              <div style="color:var(--muted);font-size:13px">Click "Connect Aztibase Extension" to use your browser wallet. Make sure the extension is unlocked.</div>
+            </div>
+            ` : `
             <div class="card-row" style="flex-direction:column;gap:8px">
               <div style="font-size:14px;font-weight:600">1. Generate or import a keypair</div>
               <div style="color:var(--muted);font-size:13px">Click "Generate New Keypair" to create a fresh Ed25519 key, or paste an existing secret key.</div>
             </div>
+            `}
             <div class="card-row" style="flex-direction:column;gap:8px">
               <div style="font-size:14px;font-weight:600">2. Get testnet tokens</div>
               <div style="color:var(--muted);font-size:13px">Use the Faucet button to receive 1,000,000 AZTB for testing.</div>
@@ -1348,6 +1371,33 @@ function sendStatus(msg, cls) {
   if (el) el.innerHTML = `<div class="wallet-alert ${cls}">${escapeHtml(msg)}</div>`;
 }
 
+async function connectExtension() {
+  if (!hasExtension()) {
+    walletStatus('Aztibase extension not detected. Install it first.', 'error');
+    return;
+  }
+  try {
+    walletStatus('Connecting to extension...', 'info');
+    const result = await window.aztibase.connect();
+    if (result?.address) {
+      walletAddress = result.address;
+      walletKeypair = null;
+      walletSecretHex = null;
+      extensionConnected = true;
+      showWallet();
+      if (result.locked) {
+        walletStatus('Extension wallet is locked. Open the extension and unlock it to sign transactions.', 'warn');
+      } else {
+        walletStatus('Connected via Aztibase extension.', 'success');
+      }
+    } else {
+      walletStatus('No wallet found in extension.', 'error');
+    }
+  } catch (e) {
+    walletStatus('Extension connect failed: ' + e.message, 'error');
+  }
+}
+
 function generateNewWallet() {
   const seed = nacl.randomBytes(32);
   walletFromSeed(seed);
@@ -1371,7 +1421,9 @@ function disconnectWallet() {
   walletKeypair = null;
   walletAddress = null;
   walletSecretHex = null;
+  extensionConnected = false;
   txLog = [];
+  if (hasExtension()) window.aztibase.disconnect().catch(() => {});
   showWallet();
 }
 
@@ -1387,14 +1439,22 @@ function toggleSecret() {
 async function refreshWalletBalance() {
   if (!walletAddress) return;
   try {
-    const [balance, nonce] = await Promise.all([
-      rpc('aztb_getBalance', [walletAddress]),
-      rpc('aztb_getNonce', [walletAddress]),
-    ]);
-    const balEl = document.getElementById('wallet-balance');
-    const nonceEl = document.getElementById('wallet-nonce');
-    if (balEl) balEl.textContent = formatNumber(balance) + ' AZTB';
-    if (nonceEl) nonceEl.textContent = String(nonce);
+    if (extensionConnected && hasExtension()) {
+      const result = await window.aztibase.getBalance();
+      const balEl = document.getElementById('wallet-balance');
+      const nonceEl = document.getElementById('wallet-nonce');
+      if (balEl) balEl.textContent = formatNumber(result.balance) + ' AZTB';
+      if (nonceEl) nonceEl.textContent = String(result.nonce);
+    } else {
+      const [balance, nonce] = await Promise.all([
+        rpc('aztb_getBalance', [walletAddress]),
+        rpc('aztb_getNonce', [walletAddress]),
+      ]);
+      const balEl = document.getElementById('wallet-balance');
+      const nonceEl = document.getElementById('wallet-nonce');
+      if (balEl) balEl.textContent = formatNumber(balance) + ' AZTB';
+      if (nonceEl) nonceEl.textContent = String(nonce);
+    }
   } catch (e) {
     const balEl = document.getElementById('wallet-balance');
     if (balEl) balEl.textContent = 'error: ' + e.message;
@@ -1405,7 +1465,12 @@ async function walletFaucetDrip() {
   if (!walletAddress) return;
   walletStatus('Requesting faucet drip...', 'info');
   try {
-    const result = await rpc('aztb_faucetDrip', [walletAddress]);
+    let result;
+    if (extensionConnected && hasExtension()) {
+      result = await window.aztibase.faucetDrip();
+    } else {
+      result = await rpc('aztb_faucetDrip', [walletAddress]);
+    }
     const txHash = typeof result === 'object' ? JSON.stringify(result) : (result || 'sent');
     walletStatus('Faucet drip sent! Balance: ' + (result?.balance ?? txHash), 'success');
     addTxLog('Faucet Drip', '1,000,000 AZTB', result?.address || txHash);
@@ -1416,7 +1481,9 @@ async function walletFaucetDrip() {
 }
 
 async function sendTransfer() {
-  if (!walletKeypair) return;
+  const connected = walletKeypair !== null || extensionConnected;
+  if (!connected) return;
+
   const toHexVal = (document.getElementById('send-to').value || '').trim().replace(/^0x/, '');
   const amountStr = (document.getElementById('send-amount').value || '').trim();
   const gasPriceStr = (document.getElementById('send-gas').value || '1').trim();
@@ -1431,6 +1498,20 @@ async function sendTransfer() {
     return;
   }
   const gasPrice = parseInt(gasPriceStr, 10) || 1;
+
+  if (extensionConnected && hasExtension()) {
+    sendStatus('Signing via extension...', 'info');
+    try {
+      const result = await window.aztibase.signAndSendTransfer(toHexVal, amount, gasPrice);
+      const txHash = result?.txHash || result || 'submitted';
+      sendStatus('Transaction sent! Hash: ' + txHash, 'success');
+      addTxLog('Transfer ' + amount + ' AZTB', 'to ' + toHexVal.slice(0, 12) + '...', txHash);
+      setTimeout(refreshWalletBalance, 3000);
+    } catch (e) {
+      sendStatus('Send error: ' + e.message, 'error');
+    }
+    return;
+  }
 
   sendStatus('Fetching nonce...', 'info');
   try {

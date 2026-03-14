@@ -5,6 +5,23 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ---
 
+## Chrome Wallet Extension + 2FA + WASM Staking (2026-03-14)
+
+### Added
+- **Chrome MV3 wallet extension**: `wallet-extension/` — send, stake, delegate, balance queries in browser popup
+- **Two-factor authentication**: TOTP (RFC 6238) and WebAuthn/Passkey on every transaction — `twofa.js` (601 LOC)
+- **AES-256-GCM key encryption**: PBKDF2 600K iteration key derivation, encrypted keystore in browser
+- **WASM staking SDK**: `aztibase-wasm` compile-to-browser transaction signing (stake, unstake, delegate, undelegate)
+- **Wallet staking CLI**: `aztibase wallet stake`, `unstake`, `delegate`, `undelegate` commands with `--validator` flag
+- **Dynamic validator registration**: `TxKind::RegisterValidator` pipeline support for post-genesis validator joining
+- **Wallet extension packaging**: Icons, build script, release zip for Chrome Web Store sideloading
+
+### Security
+- **WebAuthn/Passkey**: Hardware key or biometric verification as 2FA option alongside TOTP
+- **Client-side signing**: All transaction signing happens in-browser via WASM — private keys never leave the client
+
+---
+
 ## Generic Validator Package + Explorer/Dashboard Split (2026-03-14)
 
 ### Added
