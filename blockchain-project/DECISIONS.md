@@ -37,6 +37,7 @@ Every non-obvious technical decision is recorded here. Each ADR is immutable onc
 | ADR-027 | Full state snapshots & mainnet genesis ceremony | 2026-03-11 | ACCEPTED | node-engineer + blockchain-architect |
 | ADR-028 | nChain patent FTO preliminary analysis | 2026-03-12 | ACCEPTED | legal-ip-counsel + blockchain-architect |
 | ADR-029 | quinn-proto security patch (RUSTSEC-2026-0037) | 2026-03-12 | ACCEPTED | security-engineer |
+| ADR-030 | Consensus round fast-forward for late-joining validators | 2026-03-14 | ACCEPTED | consensus-engineer + blockchain-architect |
 
 ---
 
@@ -907,3 +908,34 @@ Patch-level bump with no breaking changes. Eliminates a high-severity DoS attack
 - QUIC DoS vulnerability eliminated
 - 2 remaining vulnerabilities (ring AES panic, tracing-subscriber ANSI injection) are transitive and low-impact for Aztibase's use case
 - Will be fully resolved when libp2p releases a version using ring 0.17+
+
+---
+
+## ADR-030: Consensus Round Fast-Forward for Late-Joining Validators
+
+**Date:** 2026-03-14
+**Status:** ACCEPTED
+**Decided by:** consensus-engineer + blockchain-architect
+
+### Context
+When a new validator joins a running network, it starts at round 0 while existing validators may be at round 700+. The wire-level `decode_vertex` previously rejected any vertex more than 100 rounds ahead (`FutureRound` error), making it impossible for late joiners to participate in consensus. This was discovered when validator 4 (on a second machine via Tailscale) could never sync with the 3-node testnet.
+
+Research into production DAG-BFT protocols (Mysticeti, Sui, Lighthouse) showed a universal pattern: **accept and buffer far-future blocks, never reject them**.
+
+### Decision
+Replace hard `FutureRound` rejection with a `RoundGap` detection + round fast-forward mechanism:
+
+1. **`wire.rs`**: When a vertex is >100 rounds ahead, return `WireError::RoundGap` instead of `WireError::FutureRound`
+2. **`engine.rs`**: On `RoundGap`, fast-forward `state.current_round`, `last_proposed_round`, and `threshold_clock` to `vertex_round - 50`, then re-decode and accept the vertex
+3. The fast-forward skips intermediate rounds without proposing (the joining node lacks DAG history for valid proposals in those rounds)
+4. `insert_relaxed()` already handles missing parents — no DAG layer changes needed
+
+### Alternatives Considered
+- **Increase `max_future` to a very large number**: Simpler but doesn't solve the ThresholdClock/RoundState desync
+- **Full Mysticeti-style BlockManager + BlockFetcher**: Correct long-term solution (Phase 2) but too complex for the immediate testnet fix
+- **Always require full testnet reset**: Not viable for production
+
+### Consequences
+- Late-joining validators can now catch up to a running network within seconds
+- The joining validator skips historical commits (VRF seed, balances from skipped waves won't match); this is acceptable for testnet and will be addressed by Phase 2 (block sync protocol)
+- Phase 2 (Mysticeti-style block fetching) is tracked as future work for production readiness

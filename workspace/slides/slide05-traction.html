@@ -35,11 +35,11 @@ body {
 </div>
 <div class="metrics">
   <div class="metric"><div>
-    <h3>44,900</h3>
+    <h3>44,900+</h3>
     <p>LINES OF RUST CODE</p>
   </div></div>
   <div class="metric"><div>
-    <h3>940+</h3>
+    <h3>709+</h3>
     <p>PASSING TESTS</p>
   </div></div>
   <div class="metric"><div>
@@ -47,7 +47,7 @@ body {
     <p>TPS PER CORE</p>
   </div></div>
   <div class="metric"><div>
-    <h3>59</h3>
+    <h3>59+</h3>
     <p>COMPLETED SPRINTS</p>
   </div></div>
 </div>
@@ -55,20 +55,20 @@ body {
   <div class="detail-col">
     <h4>Live Infrastructure</h4>
     <ul>
-      <li>3-node testnet running continuously</li>
+      <li>4-validator testnet across 2 machines (Tailscale P2P)</li>
       <li>400ms block time, sub-second finality</li>
-      <li>48 JSON-RPC methods, all functional</li>
-      <li>One-click validator deployment script</li>
-      <li>Prometheus + Grafana monitoring</li>
+      <li>48 JSON-RPC methods, public RPC endpoints live</li>
+      <li>Chrome MV3 browser wallet (send, stake, delegate)</li>
+      <li>2FA security: TOTP + WebAuthn/Passkey on all transactions</li>
     </ul>
   </div>
   <div class="detail-col">
     <h4>Quality &amp; Security</h4>
     <ul>
-      <li>Pre-mainnet audit: 71 findings, 70%+ resolved</li>
+      <li>AES-256-GCM key encryption, PBKDF2 600K rounds</li>
+      <li>WASM staking SDK (38 tests, compile-to-browser)</li>
       <li>0 Clippy warnings, cargo fmt clean</li>
       <li>29 Architecture Decision Records</li>
-      <li>103 git commits, full build traceability</li>
       <li>Pure Rust — zero C/C++ dependencies</li>
     </ul>
   </div>

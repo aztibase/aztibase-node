@@ -4,7 +4,7 @@
 **Updated By:** node-engineer + p2p-network-engineer
 **Current Phase:** M9 -- Mainnet Prep
 **Current Sprint:** Post-059 -- Testnet Expansion
-**Sprint Status:** 4-validator genesis deployed, remote validator package ready. Public GitHub repo (aztibase/aztibase-node) with releases. Cloudflare Tunnel live. Next: restart testnet and connect remote validator via Tailscale.
+**Sprint Status:** Generic validator release package on GitHub (v0.1.1). Explorer/Dashboard naming split. Round fast-forward for late-joining validators. Chrome wallet extension with 2FA. Next: test remote validator joining, Phase 2 block sync protocol.
 
 ---
 
@@ -87,6 +87,7 @@
 - Mainnet launch blocked on: Aztibase Systems coexistence agreement (legal), public testnet infrastructure deployment (VPS provisioning)
 
 ### Recently Completed
+- **Post-059 (2026-03-14)**: Generic validator release package (no bundled keys, auto-keygen), Explorer/Dashboard hostname-based split, dashboard in release packages, consensus round fast-forward (ADR-030), Chrome wallet extension with 2FA (TOTP + WebAuthn), WASM staking signing, wallet CLI staking commands, GitHub release v0.1.1 updated
 - **Sprint 059 (2026-03-12)**: Friends testnet — genesis ceremony CLI (init, add-validator, add-account, validate, show), wallet --validator flag (Ed25519+BLS), --boot-node CLI flag, setup-validator.sh custom network support, friends testnet guide + coordinator script
 - **Pre-mainnet audit (2026-03-12)**: 7-agent parallel audit of all 9 crates. 15C/25H/31M findings. Code quality clean. 8 architecture gaps. Prioritized 4-phase fix plan.
 - Consensus-based FaucetDrip: TxKind 0x1B, signed envelope through mempool→consensus→pipeline. Fixes node-local state divergence. Nonce increment fix for repeat drips.

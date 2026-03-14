@@ -5,6 +5,23 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ---
 
+## Generic Validator Package + Explorer/Dashboard Split (2026-03-14)
+
+### Added
+- **Generic validator package**: `packaging/validator/` — download, generate keys, configure boot_nodes, start
+- **Auto-keygen**: `start.sh` generates validator keypair on first run via `aztibase wallet generate --validator`
+- **Explorer/Dashboard split**: explorer.aztibase.com shows "Aztibase Explorer" (public), local nodes show "Validator Dashboard" with wallet tab
+- **Validator dashboard**: Port 8080 dashboard included in release packages
+
+### Changed
+- **GitHub release v0.1.1**: Replaced validator4-specific package with generic `aztibase-validator-v0.1.1-windows-x64.tar.gz`
+- **No bundled keys**: Release packages ship with empty `keys/` — users generate their own identity
+
+### Security
+- **Removed private keys from public release**: validator4 keys no longer bundled in downloadable package
+
+---
+
 ## 4th Validator + Remote Node Support (2026-03-14)
 
 ### Added

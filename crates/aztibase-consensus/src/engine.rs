@@ -473,6 +473,35 @@ impl ConsensusEngine {
         Ok(())
     }
 
+    /// Fast-forward local round state when we detect we're far behind the
+    /// network. This lets a late-joining validator accept vertices from peers
+    /// that are hundreds of rounds ahead, instead of rejecting them.
+    ///
+    /// Advances the threshold clock and round state to `target_round` without
+    /// proposing blocks for the skipped rounds (we don't have the DAG history
+    /// to produce valid proposals for them anyway).
+    fn fast_forward_round(&mut self, target_round: u64) {
+        if target_round <= self.state.current_round {
+            return;
+        }
+        let old = self.state.current_round;
+        self.state.current_round = target_round;
+        self.last_proposed_round = target_round.saturating_sub(1);
+        self.round_start = Instant::now();
+
+        // Advance the threshold clock to match, so try_advance doesn't
+        // try to propose for every skipped round.
+        while self.threshold_clock.get_round() < target_round {
+            self.threshold_clock.force_advance();
+        }
+
+        info!(
+            from_round = old,
+            to_round = target_round,
+            "Fast-forwarded consensus round"
+        );
+    }
+
     /// RANDAO-style VRF seed accumulation (S2-2).
     /// Mixes the previous seed with the anchor hash and the deterministic
     /// committed batch vertex order. All inputs are guaranteed identical
@@ -638,6 +667,27 @@ impl ConsensusEngine {
     pub fn handle_received_vertex(&mut self, data: &[u8]) -> Result<()> {
         let block = match wire::decode_vertex(data, &self.validators, self.state.current_round) {
             Ok(b) => b,
+            Err(wire::WireError::RoundGap { vertex, local }) => {
+                // Late-joiner catch-up: we're far behind the network.
+                // Fast-forward our round to near the network's round, then
+                // re-decode. The vertex has already passed all validation
+                // (hash, signature, known validator) before the gap check.
+                let target = vertex.saturating_sub(50);
+                info!(
+                    local_round = local,
+                    network_round = vertex,
+                    fast_forward_to = target,
+                    "Round gap detected — fast-forwarding to catch up"
+                );
+                self.fast_forward_round(target);
+                match wire::decode_vertex(data, &self.validators, self.state.current_round) {
+                    Ok(b) => b,
+                    Err(e) => {
+                        warn!(error = %e, "Rejected vertex after fast-forward");
+                        return Ok(());
+                    }
+                }
+            }
             Err(e) => {
                 warn!(error = %e, "Rejected incoming vertex");
                 return Ok(());
@@ -1065,17 +1115,27 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn engine_rejects_future_round_vertex() {
+    async fn engine_fast_forwards_on_round_gap() {
         let (mut engine, _in_tx, _out_rx, path) = make_test_engine();
         engine.insert_genesis().unwrap();
+
         let kp2 = test_keypair(2);
         let v2 = test_validator_id(2);
         let genesis_hashes: Vec<BlockHash> = engine.state.vertices_at_round(0).to_vec();
         let block = DagBlock::new(150, v2, genesis_hashes, vec![], now_ms(), Some(&kp2)).unwrap();
         let data = crate::wire::encode_vertex(&block).unwrap();
 
+        let old_round = engine.state.current_round;
         engine.handle_received_vertex(&data).unwrap();
-        assert_eq!(engine.state.vertices_at_round(150).len(), 0);
+
+        // Engine should have fast-forwarded and accepted the vertex
+        assert_eq!(engine.state.vertices_at_round(150).len(), 1);
+        assert!(
+            engine.state.current_round > old_round + 50,
+            "round should have fast-forwarded: {} -> {}",
+            old_round,
+            engine.state.current_round
+        );
         cleanup(&path);
     }
 

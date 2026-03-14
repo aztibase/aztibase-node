@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Aztibase Validator 4 (Remote)
+# Aztibase Validator Node
 # Usage: bash start.sh [stop]
 
 cd "$(dirname "$0")"
@@ -11,7 +11,27 @@ if [ "$1" = "stop" ]; then
     exit 0
 fi
 
-echo "=== Aztibase Validator 4 ==="
+echo "=== Aztibase Validator ==="
+
+# Check for keys
+if [ ! -f "keys/validator.json" ]; then
+    echo ""
+    echo "No validator key found. Generating one now..."
+    mkdir -p keys
+    ./aztibase.exe wallet generate --validator --output keys/validator.json
+    echo ""
+    echo "Key saved to keys/validator.json"
+    echo "IMPORTANT: Back up this file. If you lose it, you lose your validator identity."
+    echo ""
+fi
+
+# Check boot_nodes
+if grep -q 'boot_nodes = \[\]' node.toml 2>/dev/null; then
+    echo "[WARN] boot_nodes is empty in node.toml"
+    echo "       Edit node.toml and add at least one boot node address."
+    echo "       Example: boot_nodes = [\"/ip4/203.0.113.10/tcp/30333\"]"
+    echo ""
+fi
 
 # Kill any running instance
 taskkill //F //IM aztibase.exe 2>/dev/null

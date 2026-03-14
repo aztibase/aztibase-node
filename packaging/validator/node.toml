@@ -1,0 +1,28 @@
+data_dir = "./data"
+genesis_path = "./genesis.toml"
+validator_key = "./keys/validator.json"
+
+[network]
+listen_addresses = [
+    "/ip4/0.0.0.0/tcp/30333",
+    "/ip4/0.0.0.0/udp/30333/quic-v1",
+]
+# Add the IP addresses of existing validators here.
+# Example: "/ip4/203.0.113.10/tcp/30333"
+boot_nodes = []
+idle_timeout_secs = 60
+stun_servers = []
+
+[rpc]
+listen_addr = "0.0.0.0:9944"
+enabled = true
+
+[log]
+level = "info"
+
+[ai]
+enabled = false
+models = []
+
+[metrics]
+enabled = true

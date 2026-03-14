@@ -29,6 +29,9 @@ pub enum WireError {
     #[error("round {vertex} is too far ahead of local round {local}")]
     FutureRound { vertex: u64, local: u64 },
 
+    #[error("round gap detected: vertex at {vertex}, local at {local}")]
+    RoundGap { vertex: u64, local: u64 },
+
     #[error("invalid Ed25519 signature on vertex")]
     InvalidSignature,
 }
@@ -95,9 +98,9 @@ pub fn decode_vertex(
         }
     }
 
-    let max_future = 100;
-    if block.round > local_round + max_future {
-        return Err(WireError::FutureRound {
+    let catchup_threshold = 100;
+    if block.round > local_round + catchup_threshold {
+        return Err(WireError::RoundGap {
             vertex: block.round,
             local: local_round,
         });
@@ -215,7 +218,7 @@ mod tests {
     }
 
     #[test]
-    fn rejects_future_round() {
+    fn detects_round_gap() {
         let kps = test_keypairs();
         let vs = test_validators_from_keypairs(&kps);
         let author = *kps.0.public_key().as_bytes();
@@ -226,7 +229,7 @@ mod tests {
         let result = decode_vertex(&encoded, &vs, 0);
         assert!(matches!(
             result,
-            Err(WireError::FutureRound {
+            Err(WireError::RoundGap {
                 vertex: 150,
                 local: 0
             })

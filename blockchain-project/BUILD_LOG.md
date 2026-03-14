@@ -21,6 +21,32 @@ Entries are prepended (newest first).
 
 ## Entries
 
+### Generic Validator Release Package + Explorer/Dashboard Split (2026-03-14)
+- **Date**: 2026-03-14
+- **Sprint**: Post-059 (Testnet Expansion)
+- **Commit**: TBD (this commit)
+- **Files changed**:
+  - `packaging/validator/` — New generic validator package (replaces validator4-specific package in GitHub releases)
+  - `packaging/validator/node.toml` — Template config with empty boot_nodes (user fills in)
+  - `packaging/validator/start.sh` — Auto-generates validator keys on first run, warns on empty boot_nodes
+  - `packaging/validator/README.txt` — Setup guide with keygen, boot_nodes, staking instructions
+  - `packaging/validator4/start.sh` — Added dashboard server (npx serve on port 8080)
+  - `packaging/validator4/README.txt` — Added dashboard info and Node.js prerequisite
+  - `packaging/validator4/explorer/index.html` — Validator Dashboard UI copy
+  - `explorer/index.html` — Auto-detect public vs local context: "Aztibase Explorer" on explorer.aztibase.com, "Validator Dashboard" locally; wallet tab hidden on public
+- **Review Notes**: GitHub release v0.1.1 updated: replaced `aztibase-validator4-v0.1.1-windows-x64.tar.gz` with generic `aztibase-validator-v0.1.1-windows-x64.tar.gz`. No private keys bundled — start.sh runs `aztibase wallet generate --validator` on first launch. Explorer/Dashboard naming split uses hostname detection (no build step needed).
+- **Security Flags**: None — removed bundled private keys from public release (security improvement)
+
+### Consensus Round Fast-Forward for Late-Joining Validators (2026-03-14)
+- **Date**: 2026-03-14
+- **Sprint**: Post-059 (Testnet Stability)
+- **Commit**: TBD
+- **Files changed**:
+  - `crates/aztibase-consensus/src/wire.rs` — Replaced `FutureRound` hard rejection with `RoundGap` detection (catchup_threshold = 100)
+  - `crates/aztibase-consensus/src/engine.rs` — Added `fast_forward_round()` method, `RoundGap` handler in `handle_received_vertex`, updated test
+- **Review Notes**: Root cause: validator 4 (Tailscale remote) received vertices from round ~748 while at round 17. All vertices rejected by `max_future = 100` check. Research into Mysticeti/Sui/Lighthouse confirmed universal pattern: accept and buffer, never reject. Phase 1 fix fast-forwards the local round. Phase 2 (block sync protocol) tracked for production. ADR-030.
+- **Security Flags**: None — vertex signature/hash validation unchanged, only round proximity check relaxed
+
 ### Chrome Extension Wallet + WASM Staking Signing (2026-03-14)
 - **Date**: 2026-03-14
 - **Sprint**: Post-059 (Wallet Infrastructure)
