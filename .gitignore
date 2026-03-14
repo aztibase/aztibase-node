@@ -1,5 +1,6 @@
 # Rust build artifacts
 /target/
+/dist/
 **/*.rs.bk
 
 # IDE
@@ -39,6 +40,7 @@ packaging/**/*.tar.gz
 
 # Screenshots and personal notes
 *.png
+!wallet-extension/icons/*.png
 *.txt
 !packaging/**/README.txt
 
