@@ -24,7 +24,7 @@ Entries are prepended (newest first).
 ### 4th Validator + Remote Node Support (2026-03-14)
 - **Date**: 2026-03-14
 - **Sprint**: Post-059 (Testnet Expansion)
-- **Commit**: (pending)
+- **Commit**: 0863265
 - **Files changed**:
   - `data/genesis/genesis.toml` — Added validator-4 to genesis (4-validator testnet)
   - `data/node4/keys/validator4.json` — Generated Ed25519 + BLS keypair for validator-4
@@ -41,7 +41,7 @@ Entries are prepended (newest first).
 ### Fix: Consensus Commit Stall — Three Interrelated Bugs (2026-03-13)
 - **Date**: 2026-03-13
 - **Sprint**: Post-059 (Bugfix)
-- **Commit**: (pending)
+- **Commit**: 0863265
 - **Files changed**:
   - `crates/aztibase-consensus/src/engine.rs`:
     1. **VRF seed divergence**: Rewrote `accumulate_vrf_seed()` to use deterministic inputs only (prev_seed + anchor_hash + batch vertex_order). Removed non-deterministic `dag.causal_order()` walk.
