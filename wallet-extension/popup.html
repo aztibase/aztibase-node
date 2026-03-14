@@ -247,6 +247,85 @@
     </div>
   </div>
 
+  <!-- 2FA Setup view -->
+  <div class="view" id="view-2fa-setup">
+    <div class="view-header">
+      <button class="back-btn" onclick="showView('settings')">&larr;</button>
+      <h2>Setup 2FA</h2>
+    </div>
+
+    <!-- TOTP Setup -->
+    <div style="margin-bottom:24px">
+      <h3 style="font-size:14px;margin-bottom:8px">Authenticator App (TOTP)</h3>
+      <p style="font-size:12px;color:var(--text-muted);margin-bottom:12px">
+        Scan the QR code with Google Authenticator, Authy, or any TOTP app.
+      </p>
+      <div id="totp-qr" style="text-align:center;margin:12px 0;background:#fff;border-radius:8px;padding:12px;display:none"></div>
+      <div id="totp-secret-display" style="display:none">
+        <div class="form-group">
+          <label>Manual entry key</label>
+          <input type="text" id="totp-secret-text" readonly style="font-size:11px;letter-spacing:2px" />
+        </div>
+      </div>
+      <div id="totp-setup-btn">
+        <button class="btn btn-primary" onclick="startTotpSetup()">Generate TOTP Secret</button>
+      </div>
+      <div id="totp-confirm" style="display:none;margin-top:12px">
+        <div class="form-group">
+          <label>Enter 6-digit code to confirm</label>
+          <input type="text" id="totp-confirm-code" placeholder="000000" maxlength="6"
+                 style="text-align:center;font-size:20px;letter-spacing:8px" />
+        </div>
+        <button class="btn btn-primary" onclick="confirmTotpSetup()">Verify &amp; Enable TOTP</button>
+      </div>
+      <div id="totp-enabled-badge" style="display:none;margin-top:8px">
+        <span style="color:var(--green);font-size:13px;font-weight:600">TOTP Enabled</span>
+      </div>
+    </div>
+
+    <!-- WebAuthn Setup -->
+    <div style="border-top:1px solid var(--border);padding-top:20px">
+      <h3 style="font-size:14px;margin-bottom:8px">Biometric / Security Key</h3>
+      <p style="font-size:12px;color:var(--text-muted);margin-bottom:12px">
+        Use fingerprint, face recognition, or a hardware security key (YubiKey) for quick verification.
+      </p>
+      <div id="webauthn-status"></div>
+      <button class="btn btn-outline" id="btn-webauthn-setup" onclick="startWebAuthnSetup()">
+        Register Biometric / Key
+      </button>
+      <div id="webauthn-enabled-badge" style="display:none;margin-top:8px">
+        <span style="color:var(--green);font-size:13px;font-weight:600">Passkey Enabled</span>
+      </div>
+    </div>
+
+    <!-- Disable 2FA -->
+    <div id="disable-2fa-section" style="display:none;border-top:1px solid var(--border);padding-top:20px;margin-top:20px">
+      <button class="btn btn-danger" onclick="disable2FA()">Disable All 2FA</button>
+    </div>
+  </div>
+
+  <!-- 2FA Verification modal (overlay before signing) -->
+  <div id="twofa-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.85);z-index:200;padding:16px">
+    <div style="max-width:340px;margin:80px auto;background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:24px">
+      <h3 style="text-align:center;margin-bottom:16px">2FA Verification</h3>
+      <div id="twofa-webauthn-section" style="text-align:center;margin-bottom:16px">
+        <button class="btn btn-primary" onclick="verify2FAWebAuthn()" id="btn-2fa-webauthn">
+          Verify with Biometric
+        </button>
+        <p style="font-size:11px;color:var(--text-muted);margin-top:8px">or enter TOTP code below</p>
+      </div>
+      <div id="twofa-totp-section">
+        <div class="form-group">
+          <label>Authenticator code</label>
+          <input type="text" id="twofa-code" placeholder="000000" maxlength="6"
+                 style="text-align:center;font-size:20px;letter-spacing:8px" />
+        </div>
+        <button class="btn btn-primary" onclick="verify2FATotp()">Verify</button>
+      </div>
+      <button class="btn btn-outline" style="margin-top:12px" onclick="cancel2FA()">Cancel</button>
+    </div>
+  </div>
+
   <!-- Settings view -->
   <div class="view" id="view-settings">
     <div class="view-header">
@@ -258,6 +337,19 @@
       <input type="text" id="settings-rpc" placeholder="https://rpc.aztibase.com" />
     </div>
     <button class="btn btn-outline btn-sm" style="margin-bottom:20px" onclick="saveSettings()">Save</button>
+
+    <!-- 2FA Settings -->
+    <div style="margin-bottom:20px;padding:14px;background:var(--surface);border:1px solid var(--border);border-radius:8px">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <div>
+          <div style="font-size:14px;font-weight:600">Two-Factor Authentication</div>
+          <div style="font-size:12px;color:var(--text-muted)" id="2fa-status-text">Not configured</div>
+        </div>
+        <button class="btn btn-outline btn-sm" style="width:auto;padding:6px 14px" onclick="showView('2fa-setup')">
+          Setup
+        </button>
+      </div>
+    </div>
 
     <div class="form-group">
       <label>Export private key</label>

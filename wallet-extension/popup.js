@@ -1,8 +1,12 @@
+import { TwoFactorAuth, isWebAuthnAvailable } from "./twofa.js";
+
 let wasm = null;
 let secretHex = null;
 let addressHex = null;
 let rpcUrl = "https://rpc.aztibase.com";
 let currentNonce = 0;
+const twofa = new TwoFactorAuth();
+let pending2FAResolve = null;
 
 const DECIMALS = 18;
 const BASE = 10n ** BigInt(DECIMALS);
@@ -15,6 +19,8 @@ async function init() {
   } catch (e) {
     console.error("WASM load failed:", e);
   }
+
+  await twofa.load();
 
   const stored = await storageGet(["network", "encryptedKey"]);
   if (stored.network?.rpc) {
@@ -159,9 +165,25 @@ function showView(name) {
   if (name === "main") {
     refreshBalance();
     refreshStaking();
+    update2FAStatusText();
   } else if (name === "receive") {
     document.getElementById("receive-address").textContent =
       addressHex ? "0x" + addressHex : "No wallet";
+  } else if (name === "settings") {
+    update2FAStatusText();
+  } else if (name === "2fa-setup") {
+    // Reflect current state
+    if (twofa.totpSecret && twofa.enabled) {
+      document.getElementById("totp-enabled-badge").style.display = "block";
+      document.getElementById("totp-setup-btn").style.display = "none";
+    }
+    if (twofa.webauthnCredentialId && twofa.enabled) {
+      document.getElementById("webauthn-enabled-badge").style.display = "block";
+      document.getElementById("btn-webauthn-setup").style.display = "none";
+    }
+    if (twofa.enabled) {
+      document.getElementById("disable-2fa-section").style.display = "block";
+    }
   }
 }
 
@@ -341,6 +363,145 @@ async function refreshStaking() {
   }
 }
 
+// --- 2FA gate ---
+
+function require2FA() {
+  if (!twofa.enabled) return Promise.resolve(true);
+
+  return new Promise((resolve) => {
+    pending2FAResolve = resolve;
+    const modal = document.getElementById("twofa-modal");
+    modal.style.display = "block";
+
+    const hasWebAuthn = twofa.method === "webauthn" || twofa.method === "both";
+    const hasTotp = twofa.method === "totp" || twofa.method === "both";
+
+    document.getElementById("twofa-webauthn-section").style.display = hasWebAuthn ? "block" : "none";
+    document.getElementById("twofa-totp-section").style.display = hasTotp ? "block" : "none";
+    document.getElementById("twofa-code").value = "";
+  });
+}
+
+async function verify2FAWebAuthn() {
+  try {
+    const ok = await twofa.verify(null);
+    if (ok) {
+      document.getElementById("twofa-modal").style.display = "none";
+      if (pending2FAResolve) { pending2FAResolve(true); pending2FAResolve = null; }
+    } else {
+      toast("Biometric verification failed", "error");
+    }
+  } catch (e) {
+    toast(`WebAuthn error: ${e.message}`, "error");
+  }
+}
+window.verify2FAWebAuthn = verify2FAWebAuthn;
+
+async function verify2FATotp() {
+  const code = document.getElementById("twofa-code").value.trim();
+  if (code.length !== 6) { toast("Enter 6-digit code", "error"); return; }
+
+  const ok = await twofa.verify(code);
+  if (ok) {
+    document.getElementById("twofa-modal").style.display = "none";
+    if (pending2FAResolve) { pending2FAResolve(true); pending2FAResolve = null; }
+  } else {
+    toast("Invalid code", "error");
+  }
+}
+window.verify2FATotp = verify2FATotp;
+
+function cancel2FA() {
+  document.getElementById("twofa-modal").style.display = "none";
+  if (pending2FAResolve) { pending2FAResolve(false); pending2FAResolve = null; }
+}
+window.cancel2FA = cancel2FA;
+
+// --- 2FA Setup ---
+
+async function startTotpSetup() {
+  const account = addressHex ? shortenAddress(addressHex) : "wallet";
+  const result = await twofa.setupTotp(account);
+
+  document.getElementById("totp-qr").innerHTML = result.qrSvg;
+  document.getElementById("totp-qr").style.display = "block";
+  document.getElementById("totp-secret-text").value = result.secret;
+  document.getElementById("totp-secret-display").style.display = "block";
+  document.getElementById("totp-confirm").style.display = "block";
+  document.getElementById("totp-setup-btn").style.display = "none";
+}
+window.startTotpSetup = startTotpSetup;
+
+async function confirmTotpSetup() {
+  const code = document.getElementById("totp-confirm-code").value.trim();
+  if (code.length !== 6) { toast("Enter 6-digit code from your authenticator", "error"); return; }
+
+  const ok = await twofa.confirmTotp(code);
+  if (ok) {
+    document.getElementById("totp-enabled-badge").style.display = "block";
+    document.getElementById("totp-confirm").style.display = "none";
+    document.getElementById("disable-2fa-section").style.display = "block";
+    update2FAStatusText();
+    toast("TOTP enabled", "success");
+  } else {
+    toast("Invalid code — try again", "error");
+  }
+}
+window.confirmTotpSetup = confirmTotpSetup;
+
+async function startWebAuthnSetup() {
+  try {
+    const available = await isWebAuthnAvailable();
+    if (!available) {
+      toast("Biometric / security key not available on this device", "error");
+      return;
+    }
+    await twofa.setupWebAuthn(addressHex || "aztibase-wallet");
+    document.getElementById("webauthn-enabled-badge").style.display = "block";
+    document.getElementById("btn-webauthn-setup").style.display = "none";
+    document.getElementById("disable-2fa-section").style.display = "block";
+    update2FAStatusText();
+    toast("Passkey registered", "success");
+  } catch (e) {
+    toast(`Passkey setup failed: ${e.message}`, "error");
+  }
+}
+window.startWebAuthnSetup = startWebAuthnSetup;
+
+async function disable2FA() {
+  if (!confirm("Disable all 2FA? Transactions will no longer require verification.")) return;
+  await twofa.disable();
+  document.getElementById("totp-enabled-badge").style.display = "none";
+  document.getElementById("webauthn-enabled-badge").style.display = "none";
+  document.getElementById("totp-setup-btn").style.display = "block";
+  document.getElementById("totp-qr").style.display = "none";
+  document.getElementById("totp-secret-display").style.display = "none";
+  document.getElementById("totp-confirm").style.display = "none";
+  document.getElementById("btn-webauthn-setup").style.display = "block";
+  document.getElementById("disable-2fa-section").style.display = "none";
+  update2FAStatusText();
+  toast("2FA disabled", "info");
+}
+window.disable2FA = disable2FA;
+
+function update2FAStatusText() {
+  const el = document.getElementById("2fa-status-text");
+  if (!el) return;
+  if (!twofa.enabled) {
+    el.textContent = "Not configured";
+    el.style.color = "var(--text-muted)";
+  } else if (twofa.method === "both") {
+    el.textContent = "TOTP + Passkey enabled";
+    el.style.color = "var(--green)";
+  } else if (twofa.method === "totp") {
+    el.textContent = "TOTP enabled";
+    el.style.color = "var(--green)";
+  } else if (twofa.method === "webauthn") {
+    el.textContent = "Passkey enabled";
+    el.style.color = "var(--green)";
+  }
+}
+
 // --- Send operations ---
 
 async function sendTransfer() {
@@ -351,6 +512,9 @@ async function sendTransfer() {
   const gasPrice = parseInt(document.getElementById("send-gas").value || "1", 10);
 
   if (!to || !amount) { toast("Fill in recipient and amount", "error"); return; }
+
+  const authed = await require2FA();
+  if (!authed) return;
 
   try {
     await refreshNonce();
@@ -375,6 +539,9 @@ async function sendStake() {
   const gasPrice = parseInt(document.getElementById("stake-gas").value || "1", 10);
   if (!amount) { toast("Enter stake amount", "error"); return; }
 
+  const authed = await require2FA();
+  if (!authed) return;
+
   try {
     await refreshNonce();
     const baseAmount = toBaseUnits(amount);
@@ -396,6 +563,9 @@ async function sendUnstake() {
 
   const amount = document.getElementById("unstake-amount").value.trim();
   if (!amount) { toast("Enter unstake amount", "error"); return; }
+
+  const authed = await require2FA();
+  if (!authed) return;
 
   try {
     await refreshNonce();
@@ -420,6 +590,9 @@ async function sendDelegate() {
   const amount = document.getElementById("delegate-amount").value.trim();
   if (!validator || !amount) { toast("Fill in validator and amount", "error"); return; }
 
+  const authed = await require2FA();
+  if (!authed) return;
+
   try {
     await refreshNonce();
     const baseAmount = toBaseUnits(amount);
@@ -438,6 +611,9 @@ window.sendDelegate = sendDelegate;
 
 async function sendUndelegate() {
   if (!wasm || !secretHex) { toast("Wallet not ready", "error"); return; }
+
+  const authed = await require2FA();
+  if (!authed) return;
 
   try {
     await refreshNonce();

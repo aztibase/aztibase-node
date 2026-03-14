@@ -30,6 +30,9 @@ data/*/*.redb
 # Website build output
 website/dist/
 
+# WASM build output (rebuilt via wallet-extension/build.sh)
+wallet-extension/wasm/
+
 # Packaging binaries (release artifacts live on GitHub Releases / D: drive)
 packaging/**/*.exe
 packaging/**/*.tar.gz
