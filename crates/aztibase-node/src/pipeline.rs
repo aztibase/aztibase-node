@@ -292,16 +292,29 @@ impl ExecutionPipeline {
 
     /// Register genesis validators in the StakingStore so staking RPCs return
     /// data from round 0. Call after `apply_genesis()`.
-    pub async fn bootstrap_genesis_validators(&self, validators: &[([u8; 32], u128)]) {
+    #[allow(clippy::type_complexity)]
+    pub async fn bootstrap_genesis_validators(
+        &self,
+        validators: &[([u8; 32], u128, Option<[u8; 32]>)],
+    ) {
         let mut staking = self.staking_store.write().await;
-        for &(vid, stake) in validators {
+        for &(vid, stake, ed25519_pubkey) in validators {
             if staking
-                .register_validator(vid, stake, 0, MAX_VALIDATOR_STAKE_CAP, 0)
+                .register_validator_with_keys(
+                    vid,
+                    stake,
+                    0,
+                    MAX_VALIDATOR_STAKE_CAP,
+                    0,
+                    ed25519_pubkey,
+                    None,
+                )
                 .is_ok()
             {
                 tracing::info!(
                     validator = %short_hex(&vid),
                     stake,
+                    has_ed25519 = ed25519_pubkey.is_some(),
                     "Genesis validator registered in StakingStore"
                 );
             }
@@ -576,7 +589,8 @@ impl ExecutionPipeline {
         let mut deregister_models = Vec::new();
         let mut create_proposals = Vec::new();
         let mut cast_votes = Vec::new();
-        let mut stakes: Vec<([u8; 32], u128, u64)> = Vec::new();
+        #[allow(clippy::type_complexity)]
+        let mut stakes: Vec<([u8; 32], u128, u64, Option<[u8; 32]>)> = Vec::new();
         let mut unstakes: Vec<([u8; 32], u128, u64)> = Vec::new();
         let mut delegates: Vec<([u8; 32], [u8; 32], u128, u64)> = Vec::new();
         let mut undelegates: Vec<([u8; 32], u64)> = Vec::new();
@@ -814,7 +828,8 @@ impl ExecutionPipeline {
                     nonce,
                     ..
                 } => {
-                    stakes.push((*staker, *amount, *nonce));
+                    let pubkey = sender_pubkeys.get(staker).copied();
+                    stakes.push((*staker, *amount, *nonce, pubkey));
                 }
                 TxKind::Unstake {
                     staker,
@@ -1945,7 +1960,7 @@ impl ExecutionPipeline {
         }
 
         // Execute Stake transactions.
-        for (staker, amount, nonce) in &stakes {
+        for (staker, amount, nonce, ed25519_pubkey) in &stakes {
             let mut preimage = Vec::new();
             preimage.extend_from_slice(staker);
             preimage.extend_from_slice(&amount.to_le_bytes());
@@ -1988,12 +2003,14 @@ impl ExecutionPipeline {
             let result = if staking.get_validator(staker).is_some() {
                 staking.add_stake(*staker, *amount, MAX_VALIDATOR_STAKE_CAP)
             } else {
-                staking.register_validator(
+                staking.register_validator_with_keys(
                     *staker,
                     *amount,
                     MIN_VALIDATOR_STAKE,
                     MAX_VALIDATOR_STAKE_CAP,
                     self.current_round,
+                    *ed25519_pubkey,
+                    None,
                 )
             };
             drop(staking);
@@ -3074,9 +3091,16 @@ impl ExecutionPipeline {
                     // Propagate updated validator set to consensus engine.
                     if let Some(ref ctx) = self.consensus_tx {
                         let mut new_vs = aztibase_consensus::ValidatorSet::new();
+                        let staking_read = self.staking_store.read().await;
                         for (vid, stake) in &active_set {
                             new_vs.add(*vid, *stake);
+                            if let Some(vs) = staking_read.get_validator(vid)
+                                && let Some(pk) = vs.ed25519_pubkey
+                            {
+                                new_vs.set_ed25519_key(vid, pk);
+                            }
                         }
+                        drop(staking_read);
                         let _ = ctx.try_send(
                             aztibase_consensus::ConsensusInput::UpdateValidatorSet(new_vs),
                         );
@@ -5917,7 +5941,10 @@ mod tests {
     async fn genesis_bootstrap_registers_validators() {
         let (_tx, rx) = mpsc::channel(1);
         let pipeline = make_pipeline(rx);
-        let validators = vec![([1u8; 32], 100_000u128), ([2u8; 32], 200_000u128)];
+        let validators = vec![
+            ([1u8; 32], 100_000u128, None),
+            ([2u8; 32], 200_000u128, None),
+        ];
         pipeline.bootstrap_genesis_validators(&validators).await;
 
         let staking = pipeline.staking_store.read().await;

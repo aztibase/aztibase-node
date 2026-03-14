@@ -18,6 +18,10 @@ pub struct ValidatorStake {
     pub total_delegated: u128,
     pub active: bool,
     pub registered_round: u64,
+    #[serde(default)]
+    pub ed25519_pubkey: Option<[u8; 32]>,
+    #[serde(default)]
+    pub bls_pubkey: Option<Vec<u8>>,
 }
 
 impl ValidatorStake {
@@ -110,6 +114,28 @@ impl StakingStore {
         max_cap: u128,
         round: u64,
     ) -> Result<(), StakingError> {
+        self.register_validator_with_keys(
+            validator_id,
+            self_stake,
+            min_stake,
+            max_cap,
+            round,
+            None,
+            None,
+        )
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub fn register_validator_with_keys(
+        &mut self,
+        validator_id: Address,
+        self_stake: u128,
+        min_stake: u128,
+        max_cap: u128,
+        round: u64,
+        ed25519_pubkey: Option<[u8; 32]>,
+        bls_pubkey: Option<Vec<u8>>,
+    ) -> Result<(), StakingError> {
         if self_stake == 0 {
             return Err(StakingError::ZeroAmount);
         }
@@ -130,8 +156,29 @@ impl StakingStore {
                 total_delegated: 0,
                 active: true,
                 registered_round: round,
+                ed25519_pubkey,
+                bls_pubkey,
             },
         );
+        Ok(())
+    }
+
+    pub fn set_validator_keys(
+        &mut self,
+        validator_id: &Address,
+        ed25519_pubkey: Option<[u8; 32]>,
+        bls_pubkey: Option<Vec<u8>>,
+    ) -> Result<(), StakingError> {
+        let v = self
+            .validators
+            .get_mut(validator_id)
+            .ok_or(StakingError::ValidatorNotFound)?;
+        if let Some(pk) = ed25519_pubkey {
+            v.ed25519_pubkey = Some(pk);
+        }
+        if let Some(bls) = bls_pubkey {
+            v.bls_pubkey = Some(bls);
+        }
         Ok(())
     }
 

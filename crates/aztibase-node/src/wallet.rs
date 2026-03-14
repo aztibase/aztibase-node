@@ -320,6 +320,327 @@ pub fn import_keyfile(json: &str, output_path: &Path) -> Result<String> {
     Ok(address)
 }
 
+pub fn sign_stake(
+    keyfile_path: &Path,
+    amount: u128,
+    nonce: u64,
+    gas_price: u64,
+) -> Result<Vec<u8>> {
+    let (kp, staker) = load_keyfile(keyfile_path)?;
+    build_signed_tx(
+        &kp,
+        TxKind::Stake {
+            staker,
+            amount,
+            nonce,
+            gas_price,
+        },
+    )
+}
+
+pub fn sign_stake_encrypted(
+    keyfile_path: &Path,
+    passphrase: &str,
+    amount: u128,
+    nonce: u64,
+    gas_price: u64,
+) -> Result<Vec<u8>> {
+    let kp = load_encrypted_keyfile(keyfile_path, passphrase)?;
+    let staker = address_from_pubkey(kp.public_key().as_bytes());
+    build_signed_tx(
+        &kp,
+        TxKind::Stake {
+            staker,
+            amount,
+            nonce,
+            gas_price,
+        },
+    )
+}
+
+pub fn sign_unstake(
+    keyfile_path: &Path,
+    amount: u128,
+    nonce: u64,
+    gas_price: u64,
+) -> Result<Vec<u8>> {
+    let (kp, staker) = load_keyfile(keyfile_path)?;
+    build_signed_tx(
+        &kp,
+        TxKind::Unstake {
+            staker,
+            amount,
+            nonce,
+            gas_price,
+        },
+    )
+}
+
+pub fn sign_unstake_encrypted(
+    keyfile_path: &Path,
+    passphrase: &str,
+    amount: u128,
+    nonce: u64,
+    gas_price: u64,
+) -> Result<Vec<u8>> {
+    let kp = load_encrypted_keyfile(keyfile_path, passphrase)?;
+    let staker = address_from_pubkey(kp.public_key().as_bytes());
+    build_signed_tx(
+        &kp,
+        TxKind::Unstake {
+            staker,
+            amount,
+            nonce,
+            gas_price,
+        },
+    )
+}
+
+pub fn sign_delegate(
+    keyfile_path: &Path,
+    validator_hex: &str,
+    amount: u128,
+    nonce: u64,
+    gas_price: u64,
+) -> Result<Vec<u8>> {
+    let (kp, delegator) = load_keyfile(keyfile_path)?;
+    let validator_id = parse_address(validator_hex)?;
+    build_signed_tx(
+        &kp,
+        TxKind::Delegate {
+            delegator,
+            validator_id,
+            amount,
+            nonce,
+            gas_price,
+        },
+    )
+}
+
+pub fn sign_delegate_encrypted(
+    keyfile_path: &Path,
+    passphrase: &str,
+    validator_hex: &str,
+    amount: u128,
+    nonce: u64,
+    gas_price: u64,
+) -> Result<Vec<u8>> {
+    let kp = load_encrypted_keyfile(keyfile_path, passphrase)?;
+    let delegator = address_from_pubkey(kp.public_key().as_bytes());
+    let validator_id = parse_address(validator_hex)?;
+    build_signed_tx(
+        &kp,
+        TxKind::Delegate {
+            delegator,
+            validator_id,
+            amount,
+            nonce,
+            gas_price,
+        },
+    )
+}
+
+pub fn sign_undelegate(keyfile_path: &Path, nonce: u64, gas_price: u64) -> Result<Vec<u8>> {
+    let (kp, delegator) = load_keyfile(keyfile_path)?;
+    build_signed_tx(
+        &kp,
+        TxKind::Undelegate {
+            delegator,
+            nonce,
+            gas_price,
+        },
+    )
+}
+
+pub fn sign_undelegate_encrypted(
+    keyfile_path: &Path,
+    passphrase: &str,
+    nonce: u64,
+    gas_price: u64,
+) -> Result<Vec<u8>> {
+    let kp = load_encrypted_keyfile(keyfile_path, passphrase)?;
+    let delegator = address_from_pubkey(kp.public_key().as_bytes());
+    build_signed_tx(
+        &kp,
+        TxKind::Undelegate {
+            delegator,
+            nonce,
+            gas_price,
+        },
+    )
+}
+
+fn parse_address(hex: &str) -> Result<[u8; 32]> {
+    let cleaned = hex.strip_prefix("0x").unwrap_or(hex);
+    let bytes = hex_decode(cleaned).context("Invalid address hex")?;
+    bytes
+        .as_slice()
+        .try_into()
+        .map_err(|_| anyhow::anyhow!("Address must be 32 bytes"))
+}
+
+fn build_signed_tx(kp: &Keypair, tx: TxKind) -> Result<Vec<u8>> {
+    let signed = SignedTx::new(tx.encode(), kp);
+    Ok(signed.encode())
+}
+
+pub async fn query_staking_info(rpc_url: &str, address_hex: &str) -> Result<()> {
+    let client = reqwest::Client::new();
+    let addr = format!(
+        "0x{}",
+        address_hex.strip_prefix("0x").unwrap_or(address_hex)
+    );
+
+    let stake_body = serde_json::json!({
+        "jsonrpc": "2.0",
+        "method": "aztb_getValidatorStake",
+        "params": [addr],
+        "id": 1
+    });
+    let delegation_body = serde_json::json!({
+        "jsonrpc": "2.0",
+        "method": "aztb_getDelegation",
+        "params": [addr],
+        "id": 2
+    });
+    let unbonding_body = serde_json::json!({
+        "jsonrpc": "2.0",
+        "method": "aztb_getUnbondingStatus",
+        "params": [addr],
+        "id": 3
+    });
+
+    let (stake_resp, delegation_resp, unbonding_resp) = tokio::try_join!(
+        async {
+            client
+                .post(rpc_url)
+                .json(&stake_body)
+                .send()
+                .await
+                .context("Failed to query validator stake")
+        },
+        async {
+            client
+                .post(rpc_url)
+                .json(&delegation_body)
+                .send()
+                .await
+                .context("Failed to query delegation")
+        },
+        async {
+            client
+                .post(rpc_url)
+                .json(&unbonding_body)
+                .send()
+                .await
+                .context("Failed to query unbonding status")
+        },
+    )?;
+
+    let stake: serde_json::Value = stake_resp.json().await.context("Invalid stake JSON")?;
+    let delegation: serde_json::Value = delegation_resp
+        .json()
+        .await
+        .context("Invalid delegation JSON")?;
+    let unbonding: serde_json::Value = unbonding_resp
+        .json()
+        .await
+        .context("Invalid unbonding JSON")?;
+
+    println!("Staking info for {addr}");
+    println!("---");
+
+    if let Some(result) = stake.get("result") {
+        if result.is_null() {
+            println!("Validator stake: not registered");
+        } else {
+            println!("Validator stake:");
+            if let Some(self_stake) = result.get("self_stake") {
+                println!("  Self stake:      {self_stake}");
+            }
+            if let Some(delegated) = result.get("total_delegated") {
+                println!("  Total delegated: {delegated}");
+            }
+            if let Some(active) = result.get("active") {
+                println!("  Active:          {active}");
+            }
+        }
+    }
+
+    if let Some(result) = delegation.get("result") {
+        if result.is_null() {
+            println!("Delegation: none");
+        } else {
+            println!("Delegation:");
+            if let Some(validator) = result.get("validator_id") {
+                println!("  To validator: {validator}");
+            }
+            if let Some(amount) = result.get("amount") {
+                println!("  Amount:       {amount}");
+            }
+        }
+    }
+
+    if let Some(result) = unbonding.get("result") {
+        if result.is_null() || (result.is_array() && result.as_array().is_none_or(|a| a.is_empty()))
+        {
+            println!("Unbonding: none");
+        } else {
+            println!("Unbonding: {result}");
+        }
+    }
+
+    Ok(())
+}
+
+pub async fn query_active_validators(rpc_url: &str) -> Result<()> {
+    let client = reqwest::Client::new();
+    let body = serde_json::json!({
+        "jsonrpc": "2.0",
+        "method": "aztb_getActiveValidators",
+        "params": [],
+        "id": 1
+    });
+
+    let resp = client
+        .post(rpc_url)
+        .json(&body)
+        .send()
+        .await
+        .context("Failed to query active validators")?;
+    let parsed: serde_json::Value = resp.json().await.context("Invalid JSON from RPC")?;
+
+    if let Some(result) = parsed.get("result") {
+        if let Some(validators) = result.as_array() {
+            println!("{} active validator(s):", validators.len());
+            println!(
+                "{:<68}  {:>15}  {:>15}  ACTIVE",
+                "ADDRESS", "SELF_STAKE", "DELEGATED"
+            );
+            for v in validators {
+                let addr = v
+                    .get("validator_id")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("?");
+                let self_stake = v.get("self_stake").unwrap_or(&serde_json::Value::Null);
+                let delegated = v.get("total_delegated").unwrap_or(&serde_json::Value::Null);
+                let active = v.get("active").and_then(|v| v.as_bool()).unwrap_or(false);
+                println!("{addr}  {self_stake:>15}  {delegated:>15}  {active}");
+            }
+        } else {
+            println!("No active validators");
+        }
+    } else if let Some(err) = parsed.get("error") {
+        let msg = err
+            .get("message")
+            .and_then(|v| v.as_str())
+            .unwrap_or("unknown");
+        anyhow::bail!("RPC error: {msg}");
+    }
+
+    Ok(())
+}
+
 pub async fn query_balance(rpc_url: &str, address_hex: &str) -> Result<(String, u64)> {
     let client = reqwest::Client::new();
 
@@ -405,22 +726,17 @@ fn build_signed_transfer(
     nonce: u64,
     gas_price: u64,
 ) -> Result<Vec<u8>> {
-    let to_bytes = hex_decode(to_hex).context("Invalid recipient address hex")?;
-    let to: [u8; 32] = to_bytes
-        .as_slice()
-        .try_into()
-        .map_err(|_| anyhow::anyhow!("Recipient address must be 32 bytes"))?;
-
-    let tx = TxKind::Transfer {
-        from: sender,
-        to,
-        value,
-        nonce,
-        gas_price,
-    };
-
-    let signed = SignedTx::new(tx.encode(), kp);
-    Ok(signed.encode())
+    let to = parse_address(to_hex)?;
+    build_signed_tx(
+        kp,
+        TxKind::Transfer {
+            from: sender,
+            to,
+            value,
+            nonce,
+            gas_price,
+        },
+    )
 }
 
 pub async fn broadcast_transaction(rpc_url: &str, tx_hex: &str) -> Result<String> {
@@ -802,6 +1118,108 @@ mod tests {
         let url = format!("http://{addr}/");
         let result = broadcast_transaction(&url, "aabbccdd").await.unwrap();
         assert_eq!(result, "0xdeadbeef");
+    }
+
+    #[test]
+    fn sign_stake_produces_valid_envelope() {
+        let dir = std::env::temp_dir().join(format!("aztibase_stake_test_{}", std::process::id()));
+        let keyfile_path = dir.join("validator.json");
+        generate_key(&keyfile_path).unwrap();
+
+        let envelope = sign_stake(&keyfile_path, 100_000, 0, 1).unwrap();
+        let routed = verify_and_route(&envelope).unwrap();
+        match routed {
+            TxKind::Stake {
+                amount,
+                nonce,
+                gas_price,
+                ..
+            } => {
+                assert_eq!(amount, 100_000);
+                assert_eq!(nonce, 0);
+                assert_eq!(gas_price, 1);
+            }
+            _ => panic!("expected Stake"),
+        }
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn sign_unstake_produces_valid_envelope() {
+        let dir =
+            std::env::temp_dir().join(format!("aztibase_unstake_test_{}", std::process::id()));
+        let keyfile_path = dir.join("validator.json");
+        generate_key(&keyfile_path).unwrap();
+
+        let envelope = sign_unstake(&keyfile_path, 50_000, 1, 1).unwrap();
+        let routed = verify_and_route(&envelope).unwrap();
+        match routed {
+            TxKind::Unstake {
+                amount,
+                nonce,
+                gas_price,
+                ..
+            } => {
+                assert_eq!(amount, 50_000);
+                assert_eq!(nonce, 1);
+                assert_eq!(gas_price, 1);
+            }
+            _ => panic!("expected Unstake"),
+        }
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn sign_delegate_produces_valid_envelope() {
+        let dir =
+            std::env::temp_dir().join(format!("aztibase_delegate_test_{}", std::process::id()));
+        let keyfile_path = dir.join("delegator.json");
+        generate_key(&keyfile_path).unwrap();
+
+        let validator = [0xDD; 32];
+        let envelope = sign_delegate(&keyfile_path, &hex_encode(&validator), 75_000, 0, 1).unwrap();
+        let routed = verify_and_route(&envelope).unwrap();
+        match routed {
+            TxKind::Delegate {
+                validator_id,
+                amount,
+                nonce,
+                gas_price,
+                ..
+            } => {
+                assert_eq!(validator_id, validator);
+                assert_eq!(amount, 75_000);
+                assert_eq!(nonce, 0);
+                assert_eq!(gas_price, 1);
+            }
+            _ => panic!("expected Delegate"),
+        }
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn sign_undelegate_produces_valid_envelope() {
+        let dir =
+            std::env::temp_dir().join(format!("aztibase_undelegate_test_{}", std::process::id()));
+        let keyfile_path = dir.join("delegator.json");
+        generate_key(&keyfile_path).unwrap();
+
+        let envelope = sign_undelegate(&keyfile_path, 2, 1).unwrap();
+        let routed = verify_and_route(&envelope).unwrap();
+        match routed {
+            TxKind::Undelegate {
+                nonce, gas_price, ..
+            } => {
+                assert_eq!(nonce, 2);
+                assert_eq!(gas_price, 1);
+            }
+            _ => panic!("expected Undelegate"),
+        }
+
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[tokio::test]
