@@ -30,5 +30,14 @@ data/*/*.redb
 # Website build output
 website/dist/
 
+# Packaging binaries (release artifacts live on GitHub Releases / D: drive)
+packaging/**/*.exe
+packaging/**/*.tar.gz
+
+# Screenshots and personal notes
+*.png
+*.txt
+!packaging/**/README.txt
+
 # Reference repos (not part of our codebase)
 /references/
