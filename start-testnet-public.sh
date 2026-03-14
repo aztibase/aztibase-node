@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Aztibase Public Testnet Launcher
-# Starts the 3-node testnet + Cloudflare Tunnel in one command
+# Starts the 3-node local testnet + Cloudflare Tunnel in one command
+# Node 4 (validator-4) runs on a remote machine via Tailscale
 # Run: bash start-testnet-public.sh
 # Stop: bash start-testnet-public.sh stop
 
@@ -23,7 +24,7 @@ taskkill //F //IM aztibase.exe 2>/dev/null
 taskkill //F //IM cloudflared.exe 2>/dev/null
 
 # Reset old data
-for node in data/node1 data/node2 data/node3; do
+for node in data/node1 data/node2 data/node3 data/node4; do
     rm -f "$node/db" "$node/execution_db" "$node/peer_store.redb" "$node/peer_reputation.redb" "$node/"*.log
 done
 echo "[OK] Old data cleared"
@@ -34,7 +35,7 @@ sleep 2
 ./target/release/aztibase.exe --config data/node2/node2-local.toml > data/node2/node2.log 2>&1 &
 sleep 2
 ./target/release/aztibase.exe --config data/node3/node3-local.toml > data/node3/node3.log 2>&1 &
-echo "[OK] 3 validator nodes started"
+echo "[OK] 3 local validator nodes started (validator-4 runs on remote machine)"
 
 # Start explorer web server
 cd explorer && npx -y serve -l 8080 -s . > /dev/null 2>&1 &

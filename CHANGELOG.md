@@ -5,6 +5,20 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ---
 
+## 4th Validator + Remote Node Support (2026-03-14)
+
+### Added
+- **4-validator genesis**: Added validator-4 to genesis config for multi-machine testnet
+- **Keygen utility**: `cargo run --package aztibase-core --example keygen` generates Ed25519 + BLS keypairs
+- **Remote validator package**: Pre-configured package for Tailscale-connected remote validators
+- **GitHub releases**: Public repo at `aztibase/aztibase-node` with fullnode + validator4 packages
+
+### Changed
+- **Genesis**: Updated from 3 to 4 validators (requires testnet reset)
+- **Public launcher**: `start-testnet-public.sh` now clears node4 data and notes remote validator
+
+---
+
 ## Public Testnet Infrastructure (2026-03-13)
 
 ### Added

@@ -16,7 +16,7 @@ use crate::validator::ValidatorSet;
 use crate::wire;
 
 const EQUIVOCATION_PRUNE_DEPTH: u64 = 100;
-const MAX_CATCHUP_ROUNDS: usize = 100;
+const MAX_CATCHUP_ROUNDS: usize = 4;
 
 /// Message-driven threshold clock for DAG-BFT round advancement.
 ///
@@ -358,14 +358,20 @@ impl ConsensusEngine {
             "Threshold clock seeded — waiting for peers before first proposal"
         );
 
-        // Wait for at least 1 peer before the first proposal.
-        // Without peers, gossipsub silently drops published vertices (dedup cache
-        // prevents re-broadcast), leaving other nodes permanently behind.
+        // Wait for all other validators before starting consensus.
+        // Starting with fewer peers causes fast nodes to race ahead, producing
+        // blocks that late-joining nodes can never sync (gossipsub doesn't
+        // retroactively deliver old rounds), leading to permanent phantom parents.
+        let required_peers = self.validators.len().saturating_sub(1).max(1) as u64;
         let peer_deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(30);
-        while self.peer_count == 0 {
+        while self.peer_count < required_peers {
             tokio::select! {
                 _ = tokio::time::sleep_until(peer_deadline) => {
-                    warn!("No peers after 30s — starting consensus without peers");
+                    warn!(
+                        peers = self.peer_count,
+                        required = required_peers,
+                        "Peer wait timeout — starting consensus with available peers"
+                    );
                     break;
                 }
                 msg = self.inbox.recv() => {
@@ -373,8 +379,12 @@ impl ConsensusEngine {
                         Some(input) => {
                             let was_peer_update = matches!(&input, ConsensusInput::PeerCountChanged(_));
                             self.handle_input(input)?;
-                            if was_peer_update && self.peer_count > 0 {
-                                info!(peer_count = self.peer_count, "First peer connected — starting consensus");
+                            if was_peer_update && self.peer_count >= required_peers {
+                                info!(
+                                    peer_count = self.peer_count,
+                                    required = required_peers,
+                                    "All validators connected — starting consensus"
+                                );
                                 break;
                             }
                         }
@@ -386,27 +396,30 @@ impl ConsensusEngine {
 
         self.try_advance()?;
 
-        let timeout_duration = self.config.round_duration * 25;
+        let advance_pace = self.config.round_duration / 2;
+        let liveness_threshold = self.config.round_duration * 25;
+        let mut advance_ticker = tokio::time::interval(advance_pace);
+        advance_ticker.tick().await; // skip first immediate tick
 
         loop {
             tokio::select! {
-                _ = tokio::time::sleep(timeout_duration) => {
-                    info!(
-                        clock = self.threshold_clock.get_round(),
-                        proposed = self.last_proposed_round,
-                        "Liveness timeout, forcing round advance"
-                    );
-                    self.threshold_clock.force_advance();
-                    self.try_advance()?;
+                _ = advance_ticker.tick() => {
+                    if self.threshold_clock.get_round() > self.last_proposed_round {
+                        self.try_advance()?;
+                    } else if self.round_start.elapsed() > liveness_threshold {
+                        info!(
+                            clock = self.threshold_clock.get_round(),
+                            proposed = self.last_proposed_round,
+                            "Liveness timeout, forcing round advance"
+                        );
+                        self.threshold_clock.force_advance();
+                        self.try_advance()?;
+                    }
                 }
                 msg = self.inbox.recv() => {
                     match msg {
                         Some(input) => {
-                            let is_vertex = matches!(&input, ConsensusInput::ReceivedVertex(_));
                             self.handle_input(input)?;
-                            if is_vertex {
-                                self.try_advance()?;
-                            }
                         }
                         None => {
                             info!("Consensus inbox closed, shutting down");
@@ -461,26 +474,23 @@ impl ConsensusEngine {
     }
 
     /// RANDAO-style VRF seed accumulation (S2-2).
-    /// Mixes the previous seed with the anchor hash AND all vertex hashes
-    /// in the committed batch's causal history. This prevents a single
-    /// last-revealer from biasing the next seed by withholding their anchor,
-    /// since randomness from multiple validators is already mixed in.
+    /// Mixes the previous seed with the anchor hash and the deterministic
+    /// committed batch vertex order. All inputs are guaranteed identical
+    /// across nodes: prev_seed (from prior commit), anchor_hash (leader
+    /// block selected by commit rule), and batch vertices (extracted via
+    /// `extract_committed_batch` which uses the anchor's parent edges
+    /// embedded in the block itself).
     fn accumulate_vrf_seed(
         prev_seed: &[u8; 32],
         anchor_hash: &BlockHash,
-        dag: &DagStore,
-        committed: &HashSet<BlockHash>,
+        batch_vertices: &[BlockHash],
     ) -> [u8; 32] {
-        let mut buf = Vec::with_capacity(64 + 32 * 4);
+        let mut buf = Vec::with_capacity(64 + 32 * batch_vertices.len());
         buf.extend_from_slice(prev_seed);
         buf.extend_from_slice(anchor_hash);
 
-        if let Ok(causal) = dag.causal_order(&[*anchor_hash]) {
-            for h in &causal {
-                if !committed.contains(h) {
-                    buf.extend_from_slice(h);
-                }
-            }
+        for h in batch_vertices {
+            buf.extend_from_slice(h);
         }
 
         aztibase_core::hash(&buf)
@@ -518,6 +528,11 @@ impl ConsensusEngine {
     }
 
     fn propose_vertex(&mut self) -> Result<()> {
+        // Full nodes (not in the validator set) observe but don't propose.
+        if !self.validators.contains(&self.identity) {
+            return Ok(());
+        }
+
         let round = self.state.current_round;
         let parents = self.state.select_parents(self.config.max_parents);
 
@@ -735,18 +750,17 @@ impl ConsensusEngine {
                             self.state.prune_before(wave * wave_len);
                             last_prune_round = Some(wave * wave_len);
                         }
-                        self.vrf_seed = Self::accumulate_vrf_seed(
-                            &self.vrf_seed,
-                            &hash,
-                            &self.dag,
-                            self.state.committed_blocks(),
-                        );
                         match crate::ordering::extract_committed_batch(
                             &self.dag,
                             hash,
                             self.state.committed_blocks(),
                         ) {
                             Ok(batch) => {
+                                self.vrf_seed = Self::accumulate_vrf_seed(
+                                    &self.vrf_seed,
+                                    &hash,
+                                    &batch.vertex_order,
+                                );
                                 for vh in &batch.vertex_order {
                                     self.state.record_commit(*vh);
                                 }
@@ -774,6 +788,8 @@ impl ConsensusEngine {
                                 }
                             }
                             Err(e) => {
+                                self.vrf_seed =
+                                    Self::accumulate_vrf_seed(&self.vrf_seed, &hash, &[hash]);
                                 self.state.record_commit(hash);
                                 tracing::warn!("Failed to extract committed batch: {e}");
                             }
@@ -1316,9 +1332,9 @@ mod tests {
             engine.run().await.unwrap();
         });
 
-        // Simulate a peer connecting so the engine starts proposing.
+        // Simulate all peers connecting so the engine starts proposing.
         in_tx
-            .send(ConsensusInput::PeerCountChanged(1))
+            .send(ConsensusInput::PeerCountChanged(2))
             .await
             .unwrap();
 
@@ -1361,39 +1377,30 @@ mod tests {
     }
 
     #[test]
-    fn vrf_seed_accumulates_from_multiple_hashes() {
-        let path = test_db_path();
-        let store = StateStore::open(path.to_str().unwrap()).unwrap();
-        let mut dag = DagStore::new(store).unwrap();
-
-        let g1 = DagBlock::genesis([1u8; 32], 1000);
-        let g2 = DagBlock::genesis([2u8; 32], 1000);
-        let g1h = g1.hash;
-        let g2h = g2.hash;
-        dag.insert(g1).unwrap();
-        dag.insert(g2).unwrap();
-
-        let child = DagBlock::new(1, [1u8; 32], vec![g1h, g2h], vec![], 2000, None).unwrap();
-        let ch = child.hash;
-        dag.insert(child).unwrap();
+    fn vrf_seed_accumulates_from_batch_vertices() {
+        let g1h = aztibase_core::hash(b"genesis1");
+        let g2h = aztibase_core::hash(b"genesis2");
+        let anchor = aztibase_core::hash(b"anchor");
 
         let prev_seed = [42u8; 32];
-        let committed = HashSet::new();
+        let batch_vertices = vec![g1h, g2h, anchor];
 
-        let seed = ConsensusEngine::accumulate_vrf_seed(&prev_seed, &ch, &dag, &committed);
+        let seed = ConsensusEngine::accumulate_vrf_seed(&prev_seed, &anchor, &batch_vertices);
 
-        // Seed is not just hash(anchor) — it incorporates causal history
-        let naive_seed = aztibase_core::hash(&ch);
+        // Seed incorporates batch vertices, not just anchor
+        let naive_seed = aztibase_core::hash(&anchor);
         assert_ne!(seed, naive_seed);
 
         // Deterministic
-        let seed2 = ConsensusEngine::accumulate_vrf_seed(&prev_seed, &ch, &dag, &committed);
+        let seed2 = ConsensusEngine::accumulate_vrf_seed(&prev_seed, &anchor, &batch_vertices);
         assert_eq!(seed, seed2);
 
         // Different prev_seed → different output
-        let seed3 = ConsensusEngine::accumulate_vrf_seed(&[99u8; 32], &ch, &dag, &committed);
+        let seed3 = ConsensusEngine::accumulate_vrf_seed(&[99u8; 32], &anchor, &batch_vertices);
         assert_ne!(seed, seed3);
 
-        cleanup(&path);
+        // Different batch vertices → different output
+        let seed4 = ConsensusEngine::accumulate_vrf_seed(&prev_seed, &anchor, &[g1h]);
+        assert_ne!(seed, seed4);
     }
 }

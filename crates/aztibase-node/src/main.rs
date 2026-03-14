@@ -802,26 +802,25 @@ async fn main() -> Result<()> {
         }
         let id = if let Some((_, key_addr)) = &validator_keypair {
             if !vs.contains(key_addr) {
-                anyhow::bail!(
-                    "Validator key address {} not found in genesis validators",
-                    genesis::hex_encode(key_addr)
+                tracing::info!(
+                    address = %genesis::hex_encode(key_addr),
+                    "Key not in genesis validators — running as full node (can stake to become validator)"
+                );
+            } else {
+                tracing::info!(
+                    address = %genesis::hex_encode(key_addr),
+                    "Validator identity from key file"
                 );
             }
-            tracing::info!(
-                address = %genesis::hex_encode(key_addr),
-                "Validator identity from key file"
-            );
             *key_addr
         } else {
-            let idx = (cli.validator_index as usize).saturating_sub(1);
-            gen_cfg
-                .validators
-                .get(idx)
-                .and_then(|e| {
-                    genesis::hex_decode(&e.address)
-                        .and_then(|b| <[u8; 32]>::try_from(b.as_slice()).ok())
-                })
-                .unwrap_or([cli.validator_index; 32])
+            let mut rng_bytes = [0u8; 32];
+            rand::RngCore::fill_bytes(&mut rand::rngs::OsRng, &mut rng_bytes);
+            tracing::info!(
+                address = %genesis::hex_encode(&rng_bytes),
+                "No validator key — running as full node"
+            );
+            rng_bytes
         };
         tracing::info!(validators = vs.len(), "Validator set loaded from genesis");
         (id, vs)

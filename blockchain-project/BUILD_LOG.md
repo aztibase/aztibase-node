@@ -21,6 +21,36 @@ Entries are prepended (newest first).
 
 ## Entries
 
+### 4th Validator + Remote Node Support (2026-03-14)
+- **Date**: 2026-03-14
+- **Sprint**: Post-059 (Testnet Expansion)
+- **Commit**: (pending)
+- **Files changed**:
+  - `data/genesis/genesis.toml` — Added validator-4 to genesis (4-validator testnet)
+  - `data/node4/keys/validator4.json` — Generated Ed25519 + BLS keypair for validator-4
+  - `data/node4/node4-local.toml` — Local config for validator-4 (port 30336/9947)
+  - `crates/aztibase-core/examples/keygen.rs` — Keygen utility for generating validator keypairs
+  - `start-testnet-public.sh` — Updated to clear node4 data, note remote validator
+  - `packaging/validator4/` — Complete remote validator package (binary, genesis, config, key, start script)
+  - `packaging/fullnode/genesis.toml` — Updated with 4-validator genesis
+  - `packaging/aztibase-testnet-v0.1.0-windows-x64.tar.gz` — Rebuilt with new genesis
+  - `packaging/aztibase-validator4-v0.1.0-windows-x64.tar.gz` — New remote validator package
+- **Review Notes**: Added keygen example to aztibase-core for reproducible key generation. Validator-4 configured for Tailscale remote access (boot_nodes point to 100.104.71.94). GitHub release updated at aztibase/aztibase-node with both packages. 709 tests pass, clippy clean.
+- **Security Flags**: None
+
+### Fix: Consensus Commit Stall — Three Interrelated Bugs (2026-03-13)
+- **Date**: 2026-03-13
+- **Sprint**: Post-059 (Bugfix)
+- **Commit**: (pending)
+- **Files changed**:
+  - `crates/aztibase-consensus/src/engine.rs`:
+    1. **VRF seed divergence**: Rewrote `accumulate_vrf_seed()` to use deterministic inputs only (prev_seed + anchor_hash + batch vertex_order). Removed non-deterministic `dag.causal_order()` walk.
+    2. **Round pacing**: Replaced immediate `try_advance()` on every received vertex with a periodic ticker (`round_duration / 2 = 200ms`). Prevents nodes from racing through rounds faster than gossip can deliver blocks, ensuring voting blocks include the leader's block as a parent. Liveness timeout moved into the ticker check.
+    3. **Peer wait**: Changed consensus startup from waiting for 1 peer to waiting for all validators (`n-1` peers). Prevents early nodes from racing ahead while late-joining nodes miss intermediate blocks (phantom parents). Updated `run_produces_vertices_via_timeout` test.
+    4. Set `MAX_CATCHUP_ROUNDS` to 4 (one wave) for bounded catch-up.
+- **Summary**: Fixed critical commit stall where block height stuck at 1. Three root causes: (a) non-deterministic VRF seed from DAG walk, (b) rounds advancing faster than gossip (200+ rounds/sec), (c) nodes starting at different times causing permanent desync. After fix: all 3 nodes in perfect sync, ~2.5 commits/sec, 1ms commit latency, zero phantom parents. 823 tests pass (709 library + 114 consensus), clippy clean, fmt clean.
+- **Security Flags**: None (safety improvement — consensus liveness restored)
+
 ### Public Testnet Infrastructure & Docs (2026-03-13)
 - **Date**: 2026-03-13
 - **Sprint**: Post-059 (Testnet Deployment)

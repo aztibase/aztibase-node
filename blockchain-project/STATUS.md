@@ -1,10 +1,10 @@
 # PROJECT STATUS: Aztibase Network
 
-**Last Updated:** 2026-03-13
-**Updated By:** documentation-engineer + p2p-network-engineer
+**Last Updated:** 2026-03-14
+**Updated By:** node-engineer + p2p-network-engineer
 **Current Phase:** M9 -- Mainnet Prep
-**Current Sprint:** Post-059 -- Public Testnet Infrastructure
-**Sprint Status:** Cloudflare Tunnel live (rpc.aztibase.com), Tailscale mesh configured, validator onboarding guide written. DNS propagation pending.
+**Current Sprint:** Post-059 -- Testnet Expansion
+**Sprint Status:** 4-validator genesis deployed, remote validator package ready. Public GitHub repo (aztibase/aztibase-node) with releases. Cloudflare Tunnel live. Next: restart testnet and connect remote validator via Tailscale.
 
 ---
 
