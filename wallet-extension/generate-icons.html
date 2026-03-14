@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html>
+<head><title>Generate Aztibase Wallet Icons</title></head>
+<body>
+<p>Right-click each canvas and "Save image as" to icons/ folder.</p>
+<div style="display:flex;gap:20px;padding:20px">
+  <div>
+    <p>icon16.png</p>
+    <canvas id="c16" width="16" height="16"></canvas>
+  </div>
+  <div>
+    <p>icon48.png</p>
+    <canvas id="c48" width="48" height="48"></canvas>
+  </div>
+  <div>
+    <p>icon128.png</p>
+    <canvas id="c128" width="128" height="128"></canvas>
+  </div>
+</div>
+<script>
+function draw(id, size) {
+  const c = document.getElementById(id);
+  const ctx = c.getContext("2d");
+  const grad = ctx.createLinearGradient(0, 0, size, size);
+  grad.addColorStop(0, "#58a6ff");
+  grad.addColorStop(1, "#1f6feb");
+  ctx.fillStyle = grad;
+  ctx.beginPath();
+  ctx.arc(size/2, size/2, size/2, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = "#fff";
+  ctx.font = `bold ${size * 0.55}px sans-serif`;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillText("A", size/2, size/2 + size * 0.03);
+}
+draw("c16", 16);
+draw("c48", 48);
+draw("c128", 128);
+</script>
+</body>
+</html>

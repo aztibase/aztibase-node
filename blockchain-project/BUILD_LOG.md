@@ -21,6 +21,34 @@ Entries are prepended (newest first).
 
 ## Entries
 
+### Chrome Extension Wallet + WASM Staking Signing (2026-03-14)
+- **Date**: 2026-03-14
+- **Sprint**: Post-059 (Wallet Infrastructure)
+- **Commit**: TBD
+- **Files changed**:
+  - `crates/aztibase-wasm/src/tx_signing.rs` — Added staking TX signing (Stake/Unstake/Delegate/Undelegate) with WASM exports, RPC request builders for validator queries, 5 new tests
+  - `wallet-extension/manifest.json` — Chrome MV3 extension manifest
+  - `wallet-extension/popup.html` — Wallet popup UI (create/import/unlock, send, stake, delegate, settings)
+  - `wallet-extension/popup.js` — Wallet logic: Web Crypto API encryption, RPC calls, WASM integration
+  - `wallet-extension/styles.css` — Dark theme matching Aztibase brand
+  - `wallet-extension/background.js` — Service worker for default network config
+  - `wallet-extension/build.sh` — Build script (wasm-pack → extension/wasm/)
+  - `wallet-extension/generate-icons.html` — Canvas-based icon generator
+- **Review Notes**: Extension uses vanilla JS (no React build step). Private keys encrypted with AES-256-GCM via PBKDF2 (600K iterations). WASM crate now has 38 passing tests. Extension requires wasm-pack build before loading in Chrome.
+- **Security Flags**: None — keys encrypted at rest, 30s auto-clear on export, browser spending limits enforced
+
+### Wallet CLI Staking + Dynamic Validator Registration (2026-03-14)
+- **Date**: 2026-03-14
+- **Sprint**: Post-059 (Staking Infrastructure)
+- **Commit**: cf96fcc
+- **Files changed**:
+  - `crates/aztibase-node/src/wallet.rs` — 8 staking signing functions, RPC query helpers, 4 tests (+450 lines)
+  - `crates/aztibase-node/src/main.rs` — 7 WalletAction CLI subcommands, genesis bootstrap pubkey propagation (+204 lines)
+  - `crates/aztibase-execution/src/staking.rs` — Ed25519/BLS pubkey fields, register_validator_with_keys, set_validator_keys (+47 lines)
+  - `crates/aztibase-node/src/pipeline.rs` — Ed25519 pubkey capture from Stake TX, epoch boundary propagation (+43 lines)
+- **Review Notes**: Dynamic validator registration — Stake TX auto-registers validators with Ed25519 pubkeys propagated from signed envelopes through StakingStore to consensus ValidatorSet at epoch boundaries. 51 tests pass (23 wallet + 28 staking).
+- **Security Flags**: None
+
 ### 4th Validator + Remote Node Support (2026-03-14)
 - **Date**: 2026-03-14
 - **Sprint**: Post-059 (Testnet Expansion)

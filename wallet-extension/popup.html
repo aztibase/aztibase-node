@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="stylesheet" href="styles.css" />
+  <title>Aztibase Wallet</title>
+</head>
+<body>
+  <!-- Header -->
+  <div class="header">
+    <div class="header-left">
+      <div class="logo">A</div>
+      <h1>Aztibase</h1>
+    </div>
+    <span class="network-badge" id="network-name" onclick="showView('settings')">Testnet</span>
+  </div>
+
+  <!-- Onboarding view -->
+  <div class="view active" id="view-onboard">
+    <div style="text-align:center; padding:40px 0 20px">
+      <div class="logo" style="width:64px;height:64px;font-size:28px;margin:0 auto 16px">A</div>
+      <h2 style="margin-bottom:8px">Welcome to Aztibase</h2>
+      <p style="color:var(--text-muted);font-size:13px;margin-bottom:32px">
+        Create or import a wallet to get started.
+      </p>
+      <div style="display:flex;flex-direction:column;gap:10px">
+        <button class="btn btn-primary" onclick="showView('create')">Create New Wallet</button>
+        <button class="btn btn-outline" onclick="showView('import')">Import Wallet</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Create wallet -->
+  <div class="view" id="view-create">
+    <div class="view-header">
+      <button class="back-btn" onclick="goBack()">&larr;</button>
+      <h2>Create Wallet</h2>
+    </div>
+    <div class="form-group">
+      <label>Set a password to encrypt your wallet</label>
+      <input type="password" id="create-pass" placeholder="Password (min 8 chars)" />
+    </div>
+    <div class="form-group">
+      <label>Confirm password</label>
+      <input type="password" id="create-pass2" placeholder="Confirm password" />
+    </div>
+    <button class="btn btn-primary" onclick="createWallet()">Create</button>
+
+    <div id="mnemonic-display" style="display:none;margin-top:20px">
+      <div class="form-group">
+        <label>Recovery phrase — write this down and store it safely</label>
+        <textarea id="mnemonic-words" readonly style="height:80px"></textarea>
+      </div>
+      <button class="btn btn-primary" onclick="confirmMnemonic()">I've saved my recovery phrase</button>
+    </div>
+  </div>
+
+  <!-- Import wallet -->
+  <div class="view" id="view-import">
+    <div class="view-header">
+      <button class="back-btn" onclick="goBack()">&larr;</button>
+      <h2>Import Wallet</h2>
+    </div>
+    <div class="form-group">
+      <label>Enter your private key (hex) or recovery phrase</label>
+      <textarea id="import-secret" placeholder="64-char hex key or 12/24 word mnemonic"></textarea>
+    </div>
+    <div class="form-group">
+      <label>Set a password</label>
+      <input type="password" id="import-pass" placeholder="Password (min 8 chars)" />
+    </div>
+    <button class="btn btn-primary" onclick="importWallet()">Import</button>
+  </div>
+
+  <!-- Unlock view -->
+  <div class="view" id="view-unlock">
+    <div style="text-align:center;padding:60px 0 20px">
+      <div class="logo" style="width:56px;height:56px;font-size:24px;margin:0 auto 16px">A</div>
+      <h2 style="margin-bottom:20px">Unlock Wallet</h2>
+      <div class="form-group">
+        <input type="password" id="unlock-pass" placeholder="Enter password" />
+      </div>
+      <button class="btn btn-primary" onclick="unlockWallet()">Unlock</button>
+    </div>
+  </div>
+
+  <!-- Main wallet view -->
+  <div class="view" id="view-main">
+    <div class="account-card">
+      <div class="account-address" id="main-address" onclick="copyAddress()" title="Click to copy">
+        Loading...
+      </div>
+      <div class="balance-display">
+        <span class="balance-amount" id="main-balance">0</span>
+        <span class="balance-symbol">AZTB</span>
+      </div>
+    </div>
+
+    <div class="actions">
+      <button class="action-btn" onclick="showView('send')">
+        <div class="action-icon">&uarr;</div>
+        Send
+      </button>
+      <button class="action-btn" onclick="showView('receive')">
+        <div class="action-icon">&darr;</div>
+        Receive
+      </button>
+      <button class="action-btn" onclick="showView('staking')">
+        <div class="action-icon">&diams;</div>
+        Stake
+      </button>
+      <button class="action-btn" onclick="showView('settings')">
+        <div class="action-icon">&equiv;</div>
+        Settings
+      </button>
+    </div>
+
+    <div class="tabs">
+      <div class="tab active" onclick="switchTab('activity')">Activity</div>
+      <div class="tab" onclick="switchTab('staking-tab')">Staking</div>
+    </div>
+
+    <div id="tab-activity" class="tx-list">
+      <div class="empty-state">No transactions yet</div>
+    </div>
+
+    <div id="tab-staking-tab" class="tx-list" style="display:none">
+      <div class="staking-overview">
+        <div class="staking-row">
+          <span class="staking-label">Your Stake</span>
+          <span class="staking-value" id="staking-self">0 AZTB</span>
+        </div>
+        <div class="staking-row">
+          <span class="staking-label">Delegated</span>
+          <span class="staking-value" id="staking-delegated">0 AZTB</span>
+        </div>
+        <div class="staking-row">
+          <span class="staking-label">Unbonding</span>
+          <span class="staking-value" id="staking-unbonding">0 AZTB</span>
+        </div>
+        <div class="staking-row">
+          <span class="staking-label">Rewards (est.)</span>
+          <span class="staking-value" id="staking-rewards">-- AZTB</span>
+        </div>
+      </div>
+      <div class="btn-row" style="margin-top:12px">
+        <button class="btn btn-outline btn-sm" onclick="showView('staking')">Stake</button>
+        <button class="btn btn-outline btn-sm" onclick="showView('unstake')">Unstake</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Send view -->
+  <div class="view" id="view-send">
+    <div class="view-header">
+      <button class="back-btn" onclick="showView('main')">&larr;</button>
+      <h2>Send AZTB</h2>
+    </div>
+    <div class="form-group">
+      <label>Recipient address</label>
+      <input type="text" id="send-to" placeholder="0x..." />
+    </div>
+    <div class="form-group">
+      <label>Amount (AZTB)</label>
+      <input type="text" id="send-amount" placeholder="0.0" />
+    </div>
+    <div class="form-group">
+      <label>Gas price</label>
+      <input type="text" id="send-gas" placeholder="1" value="1" />
+    </div>
+    <button class="btn btn-primary" id="btn-send" onclick="sendTransfer()">Send</button>
+  </div>
+
+  <!-- Receive view -->
+  <div class="view" id="view-receive">
+    <div class="view-header">
+      <button class="back-btn" onclick="showView('main')">&larr;</button>
+      <h2>Receive AZTB</h2>
+    </div>
+    <div style="text-align:center;padding:20px 0">
+      <p style="font-size:13px;color:var(--text-muted);margin-bottom:16px">
+        Share your address to receive AZTB
+      </p>
+      <div class="account-address" id="receive-address" onclick="copyAddress()" style="padding:12px;background:var(--surface);border:1px solid var(--border);border-radius:6px;font-size:12px">
+        Loading...
+      </div>
+      <button class="btn btn-outline btn-sm" style="margin-top:12px;width:auto;padding:8px 24px" onclick="copyAddress()">
+        Copy Address
+      </button>
+    </div>
+  </div>
+
+  <!-- Staking view -->
+  <div class="view" id="view-staking">
+    <div class="view-header">
+      <button class="back-btn" onclick="showView('main')">&larr;</button>
+      <h2>Stake AZTB</h2>
+    </div>
+    <div class="form-group">
+      <label>Amount to stake (AZTB)</label>
+      <input type="text" id="stake-amount" placeholder="50000" />
+    </div>
+    <div class="form-group">
+      <label>Gas price</label>
+      <input type="text" id="stake-gas" placeholder="1" value="1" />
+    </div>
+    <p style="font-size:12px;color:var(--text-muted);margin-bottom:14px">
+      Minimum stake: 50,000 AZTB. Staking registers you as a validator if you aren't one already.
+    </p>
+    <button class="btn btn-primary" onclick="sendStake()">Stake</button>
+
+    <div style="margin-top:24px">
+      <h3 style="font-size:14px;margin-bottom:12px">Or delegate to a validator</h3>
+      <div class="form-group">
+        <label>Validator address</label>
+        <input type="text" id="delegate-validator" placeholder="0x..." />
+      </div>
+      <div class="form-group">
+        <label>Amount to delegate (AZTB)</label>
+        <input type="text" id="delegate-amount" placeholder="1000" />
+      </div>
+      <button class="btn btn-outline" onclick="sendDelegate()">Delegate</button>
+    </div>
+  </div>
+
+  <!-- Unstake view -->
+  <div class="view" id="view-unstake">
+    <div class="view-header">
+      <button class="back-btn" onclick="showView('main')">&larr;</button>
+      <h2>Unstake AZTB</h2>
+    </div>
+    <div class="form-group">
+      <label>Amount to unstake (AZTB)</label>
+      <input type="text" id="unstake-amount" placeholder="1000" />
+    </div>
+    <p style="font-size:12px;color:var(--text-muted);margin-bottom:14px">
+      Unstaked tokens enter a 21-day unbonding period before becoming available.
+    </p>
+    <button class="btn btn-danger" onclick="sendUnstake()">Unstake</button>
+
+    <div style="margin-top:24px">
+      <button class="btn btn-outline" onclick="sendUndelegate()">Undelegate All</button>
+      <p style="font-size:11px;color:var(--text-muted);margin-top:6px">
+        Removes your delegation from the current validator.
+      </p>
+    </div>
+  </div>
+
+  <!-- Settings view -->
+  <div class="view" id="view-settings">
+    <div class="view-header">
+      <button class="back-btn" onclick="showView('main')">&larr;</button>
+      <h2>Settings</h2>
+    </div>
+    <div class="form-group">
+      <label>RPC endpoint</label>
+      <input type="text" id="settings-rpc" placeholder="https://rpc.aztibase.com" />
+    </div>
+    <button class="btn btn-outline btn-sm" style="margin-bottom:20px" onclick="saveSettings()">Save</button>
+
+    <div class="form-group">
+      <label>Export private key</label>
+      <div class="form-group">
+        <input type="password" id="export-pass" placeholder="Enter password to reveal" />
+      </div>
+      <button class="btn btn-outline btn-sm" onclick="exportKey()">Show Key</button>
+      <div id="export-result" style="display:none;margin-top:10px">
+        <textarea id="export-key-display" readonly style="height:40px;font-size:11px"></textarea>
+      </div>
+    </div>
+
+    <button class="btn btn-danger" style="margin-top:20px" onclick="lockWallet()">Lock Wallet</button>
+    <button class="btn btn-outline" style="margin-top:8px" onclick="resetWallet()">Reset Wallet</button>
+  </div>
+
+  <!-- Toast -->
+  <div class="toast" id="toast"></div>
+
+  <script type="module" src="popup.js"></script>
+</body>
+</html>

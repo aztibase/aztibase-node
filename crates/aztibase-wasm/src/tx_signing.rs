@@ -7,11 +7,19 @@ use zeroize::Zeroize;
 const TX_DOMAIN: &[u8] = b"AZTB_TX_V1";
 const ENVELOPE_MAGIC: u8 = 0xAA;
 const PREFIX_TRANSFER: u8 = 0x01;
+const PREFIX_STAKE: u8 = 0x10;
+const PREFIX_UNSTAKE: u8 = 0x11;
+const PREFIX_DELEGATE: u8 = 0x12;
+const PREFIX_UNDELEGATE: u8 = 0x13;
+
+const VARIANT_TRANSFER: u32 = 0;
+const VARIANT_STAKE: u32 = 15;
+const VARIANT_UNSTAKE: u32 = 16;
+const VARIANT_DELEGATE: u32 = 17;
+const VARIANT_UNDELEGATE: u32 = 18;
 
 type Address = [u8; 32];
 
-/// Minimal Transfer representation matching aztibase-execution's TxKind::Transfer.
-/// Serialized via postcard to produce a wire-compatible payload.
 #[derive(Serialize, Deserialize)]
 struct TransferFields {
     from: Address,
@@ -21,22 +29,109 @@ struct TransferFields {
     gas_price: u64,
 }
 
-/// Postcard encodes enums with a variant index. TxKind::Transfer is variant 0.
-/// The full TxKind enum serialization is: [varint(variant_index)][fields...].
-/// We replicate only variant 0 (Transfer) here.
-fn encode_transfer(from: Address, to: Address, value: u128, nonce: u64, gas_price: u64) -> Vec<u8> {
-    let fields = TransferFields {
-        from,
-        to,
-        value,
-        nonce,
-        gas_price,
-    };
-    let enum_payload = postcard::to_allocvec(&(0u32, fields)).expect("serialization cannot fail");
+#[derive(Serialize, Deserialize)]
+struct StakeFields {
+    staker: Address,
+    amount: u128,
+    nonce: u64,
+    gas_price: u64,
+}
+
+#[derive(Serialize, Deserialize)]
+struct DelegateFields {
+    delegator: Address,
+    validator_id: Address,
+    amount: u128,
+    nonce: u64,
+    gas_price: u64,
+}
+
+#[derive(Serialize, Deserialize)]
+struct UndelegateFields {
+    delegator: Address,
+    nonce: u64,
+    gas_price: u64,
+}
+
+fn encode_variant(prefix: u8, variant: u32, fields: &impl Serialize) -> Vec<u8> {
+    let enum_payload =
+        postcard::to_allocvec(&(variant, fields)).expect("serialization cannot fail");
     let mut buf = Vec::with_capacity(1 + enum_payload.len());
-    buf.push(PREFIX_TRANSFER);
+    buf.push(prefix);
     buf.extend_from_slice(&enum_payload);
     buf
+}
+
+fn encode_transfer(from: Address, to: Address, value: u128, nonce: u64, gas_price: u64) -> Vec<u8> {
+    encode_variant(
+        PREFIX_TRANSFER,
+        VARIANT_TRANSFER,
+        &TransferFields {
+            from,
+            to,
+            value,
+            nonce,
+            gas_price,
+        },
+    )
+}
+
+fn encode_stake(staker: Address, amount: u128, nonce: u64, gas_price: u64) -> Vec<u8> {
+    encode_variant(
+        PREFIX_STAKE,
+        VARIANT_STAKE,
+        &StakeFields {
+            staker,
+            amount,
+            nonce,
+            gas_price,
+        },
+    )
+}
+
+fn encode_unstake(staker: Address, amount: u128, nonce: u64, gas_price: u64) -> Vec<u8> {
+    encode_variant(
+        PREFIX_UNSTAKE,
+        VARIANT_UNSTAKE,
+        &StakeFields {
+            staker,
+            amount,
+            nonce,
+            gas_price,
+        },
+    )
+}
+
+fn encode_delegate(
+    delegator: Address,
+    validator_id: Address,
+    amount: u128,
+    nonce: u64,
+    gas_price: u64,
+) -> Vec<u8> {
+    encode_variant(
+        PREFIX_DELEGATE,
+        VARIANT_DELEGATE,
+        &DelegateFields {
+            delegator,
+            validator_id,
+            amount,
+            nonce,
+            gas_price,
+        },
+    )
+}
+
+fn encode_undelegate(delegator: Address, nonce: u64, gas_price: u64) -> Vec<u8> {
+    encode_variant(
+        PREFIX_UNDELEGATE,
+        VARIANT_UNDELEGATE,
+        &UndelegateFields {
+            delegator,
+            nonce,
+            gas_price,
+        },
+    )
 }
 
 fn signing_message(payload: &[u8]) -> Vec<u8> {
@@ -210,6 +305,112 @@ pub fn js_build_estimate_gas_request(tx_type: &str, id: u32) -> String {
     .to_string()
 }
 
+/// Sign a Stake transaction and return the raw signed envelope as hex.
+#[wasm_bindgen(js_name = "signStake")]
+pub fn js_sign_stake(secret_hex: &str, amount_str: &str, nonce: u64, gas_price: u64) -> String {
+    let sk = match parse_secret_key(secret_hex) {
+        Ok(sk) => sk,
+        Err(e) => return format!("error: {e}"),
+    };
+    let amount: u128 = match amount_str.parse() {
+        Ok(v) => v,
+        Err(_) => return "error: invalid amount (expected decimal u128)".to_string(),
+    };
+    let pk = sk.verifying_key();
+    let staker = address_from_pubkey(pk.as_bytes());
+    let payload = encode_stake(staker, amount, nonce, gas_price);
+    let envelope = sign_payload(&payload, &sk);
+    drop(sk);
+    hex_encode(&envelope)
+}
+
+/// Sign an Unstake transaction and return the raw signed envelope as hex.
+#[wasm_bindgen(js_name = "signUnstake")]
+pub fn js_sign_unstake(secret_hex: &str, amount_str: &str, nonce: u64, gas_price: u64) -> String {
+    let sk = match parse_secret_key(secret_hex) {
+        Ok(sk) => sk,
+        Err(e) => return format!("error: {e}"),
+    };
+    let amount: u128 = match amount_str.parse() {
+        Ok(v) => v,
+        Err(_) => return "error: invalid amount (expected decimal u128)".to_string(),
+    };
+    let pk = sk.verifying_key();
+    let staker = address_from_pubkey(pk.as_bytes());
+    let payload = encode_unstake(staker, amount, nonce, gas_price);
+    let envelope = sign_payload(&payload, &sk);
+    drop(sk);
+    hex_encode(&envelope)
+}
+
+/// Sign a Delegate transaction and return the raw signed envelope as hex.
+#[wasm_bindgen(js_name = "signDelegate")]
+pub fn js_sign_delegate(
+    secret_hex: &str,
+    validator_hex: &str,
+    amount_str: &str,
+    nonce: u64,
+    gas_price: u64,
+) -> String {
+    let sk = match parse_secret_key(secret_hex) {
+        Ok(sk) => sk,
+        Err(e) => return format!("error: {e}"),
+    };
+    let validator_id = match parse_hex_address(validator_hex) {
+        Ok(a) => a,
+        Err(e) => return format!("error: {e}"),
+    };
+    let amount: u128 = match amount_str.parse() {
+        Ok(v) => v,
+        Err(_) => return "error: invalid amount (expected decimal u128)".to_string(),
+    };
+    let pk = sk.verifying_key();
+    let delegator = address_from_pubkey(pk.as_bytes());
+    let payload = encode_delegate(delegator, validator_id, amount, nonce, gas_price);
+    let envelope = sign_payload(&payload, &sk);
+    drop(sk);
+    hex_encode(&envelope)
+}
+
+/// Sign an Undelegate transaction and return the raw signed envelope as hex.
+#[wasm_bindgen(js_name = "signUndelegate")]
+pub fn js_sign_undelegate(secret_hex: &str, nonce: u64, gas_price: u64) -> String {
+    let sk = match parse_secret_key(secret_hex) {
+        Ok(sk) => sk,
+        Err(e) => return format!("error: {e}"),
+    };
+    let pk = sk.verifying_key();
+    let delegator = address_from_pubkey(pk.as_bytes());
+    let payload = encode_undelegate(delegator, nonce, gas_price);
+    let envelope = sign_payload(&payload, &sk);
+    drop(sk);
+    hex_encode(&envelope)
+}
+
+/// Build a JSON-RPC request for `aztb_getValidatorStake`.
+#[wasm_bindgen(js_name = "buildGetValidatorStakeRequest")]
+pub fn js_build_get_validator_stake_request(address_hex: &str, id: u32) -> String {
+    serde_json::json!({
+        "jsonrpc": "2.0",
+        "method": "aztb_getValidatorStake",
+        "params": [address_hex],
+        "id": id,
+    })
+    .to_string()
+}
+
+/// Build a JSON-RPC request for `aztb_getActiveValidators`.
+#[wasm_bindgen(js_name = "buildGetActiveValidatorsRequest")]
+pub fn js_build_get_active_validators_request(id: u32) -> String {
+    serde_json::json!({
+        "jsonrpc": "2.0",
+        "method": "aztb_getActiveValidators",
+        "params": [],
+        "id": id,
+    })
+    .to_string()
+}
+
 fn parse_secret_key(hex: &str) -> Result<SigningKey, String> {
     let clean = hex.strip_prefix("0x").unwrap_or(hex);
     if clean.len() != 64 {
@@ -317,6 +518,51 @@ mod tests {
             assert_eq!(v["jsonrpc"], "2.0");
             assert!(v["method"].is_string());
         }
+    }
+
+    #[test]
+    fn sign_stake_produces_valid_envelope() {
+        let sk = SigningKey::generate(&mut OsRng);
+        let secret_hex = hex_encode(&sk.to_bytes());
+        let result = js_sign_stake(&secret_hex, "50000000000000000000000", 0, 1);
+        assert!(!result.starts_with("error:"), "{result}");
+        assert!(result.len() > 100);
+    }
+
+    #[test]
+    fn sign_unstake_produces_valid_envelope() {
+        let sk = SigningKey::generate(&mut OsRng);
+        let secret_hex = hex_encode(&sk.to_bytes());
+        let result = js_sign_unstake(&secret_hex, "10000000000000000000000", 1, 1);
+        assert!(!result.starts_with("error:"), "{result}");
+    }
+
+    #[test]
+    fn sign_delegate_produces_valid_envelope() {
+        let sk = SigningKey::generate(&mut OsRng);
+        let secret_hex = hex_encode(&sk.to_bytes());
+        let validator_hex = hex_encode(&[2u8; 32]);
+        let result = js_sign_delegate(&secret_hex, &validator_hex, "5000", 0, 1);
+        assert!(!result.starts_with("error:"), "{result}");
+    }
+
+    #[test]
+    fn sign_undelegate_produces_valid_envelope() {
+        let sk = SigningKey::generate(&mut OsRng);
+        let secret_hex = hex_encode(&sk.to_bytes());
+        let result = js_sign_undelegate(&secret_hex, 0, 1);
+        assert!(!result.starts_with("error:"), "{result}");
+    }
+
+    #[test]
+    fn stake_envelope_has_correct_prefix() {
+        let sk = SigningKey::generate(&mut OsRng);
+        let pk = sk.verifying_key();
+        let staker = address_from_pubkey(pk.as_bytes());
+        let payload = encode_stake(staker, 1000, 0, 1);
+        assert_eq!(payload[0], PREFIX_STAKE);
+        let envelope = sign_payload(&payload, &sk);
+        assert_eq!(envelope[0], ENVELOPE_MAGIC);
     }
 
     #[test]
