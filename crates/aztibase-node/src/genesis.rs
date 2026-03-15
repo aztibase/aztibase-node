@@ -115,6 +115,22 @@ pub struct GeneratedGenesis {
 }
 
 pub fn generate_genesis(n_validators: usize, n_funded: usize, timestamp: u64) -> GeneratedGenesis {
+    use aztibase_execution::tokenomics::GENESIS_MINT;
+
+    let allocations: [(&str, u128); 8] = [
+        ("team", GENESIS_MINT * 15 / 100),      // 60M
+        ("investors", GENESIS_MINT * 10 / 100), // 40M
+        ("ecosystem", GENESIS_MINT * 25 / 100), // 100M
+        ("community", GENESIS_MINT * 20 / 100), // 80M
+        ("treasury", GENESIS_MINT * 15 / 100),  // 60M
+        ("validators", GENESIS_MINT * 5 / 100), // 20M
+        ("advisors", GENESIS_MINT * 5 / 100),   // 20M
+        ("reserve", GENESIS_MINT * 5 / 100),    // 20M
+    ];
+
+    let validator_pool = allocations[5].1;
+    let stake_per_validator = validator_pool / n_validators as u128;
+
     let mut validators = Vec::with_capacity(n_validators);
     let mut validator_keys = Vec::with_capacity(n_validators);
 
@@ -128,7 +144,7 @@ pub fn generate_genesis(n_validators: usize, n_funded: usize, timestamp: u64) ->
         validators.push(ValidatorEntry {
             name: format!("validator-{}", i + 1),
             address: hex_addr.clone(),
-            stake: 1_000_000,
+            stake: stake_per_validator,
             public_key: Some(ed25519_pub_hex),
             bls_public_key: Some(bls_pub_hex),
         });
@@ -138,6 +154,21 @@ pub fn generate_genesis(n_validators: usize, n_funded: usize, timestamp: u64) ->
     let mut accounts = BTreeMap::new();
     let mut funded_keys = Vec::with_capacity(n_funded);
 
+    for &(name, amount) in &allocations {
+        if name == "validators" {
+            continue;
+        }
+        let seed = blake3::hash(format!("aztibase-genesis-{name}-{timestamp}").as_bytes());
+        let kp = Keypair::from_secret_bytes(seed.as_bytes());
+        let addr = address_from_pubkey(kp.public_key().as_bytes());
+        let hex_addr = hex_encode(&addr);
+        accounts.insert(hex_addr.clone(), AccountEntry { balance: amount });
+        funded_keys.push((hex_addr, kp));
+    }
+
+    // Extra faucet accounts funded from the community allocation (not additional supply)
+    let faucet_amount = 1_000_000u128;
+    let community_key_idx = funded_keys.iter().position(|(_, _)| true).unwrap_or(0);
     for _ in 0..n_funded {
         let kp = Keypair::generate();
         let addr = address_from_pubkey(kp.public_key().as_bytes());
@@ -145,10 +176,17 @@ pub fn generate_genesis(n_validators: usize, n_funded: usize, timestamp: u64) ->
         accounts.insert(
             hex_addr.clone(),
             AccountEntry {
-                balance: 10_000_000,
+                balance: faucet_amount,
             },
         );
         funded_keys.push((hex_addr, kp));
+
+        // Deduct from first allocation account so total stays within GENESIS_SUPPLY
+        if let Some((first_key, _)) = funded_keys.get(community_key_idx)
+            && let Some(acct) = accounts.get_mut(first_key)
+        {
+            acct.balance = acct.balance.saturating_sub(faucet_amount);
+        }
     }
 
     let config = GenesisConfig {
@@ -924,14 +962,34 @@ mod tests {
         let generated = generate_genesis(3, 2, 1000);
         assert_eq!(generated.config.chain_id, CHAIN_ID);
         assert_eq!(generated.config.validators.len(), 3);
-        assert_eq!(generated.config.accounts.len(), 2);
+        // 7 allocation accounts + 2 faucet accounts = 9
+        assert_eq!(generated.config.accounts.len(), 9);
         assert_eq!(generated.validator_keys.len(), 3);
-        assert_eq!(generated.funded_keys.len(), 2);
+        // 7 allocation keys + 2 faucet keys = 9
+        assert_eq!(generated.funded_keys.len(), 9);
 
         let toml_str = toml::to_string_pretty(&generated.config).unwrap();
         let parsed: GenesisConfig = toml::from_str(&toml_str).unwrap();
         assert_eq!(parsed.chain_id, CHAIN_ID);
         assert_eq!(parsed.validators.len(), 3);
+
+        // Total supply should not exceed GENESIS_SUPPLY
+        let total: u128 = generated
+            .config
+            .validators
+            .iter()
+            .map(|v| v.stake)
+            .sum::<u128>()
+            + generated
+                .config
+                .accounts
+                .values()
+                .map(|a| a.balance)
+                .sum::<u128>();
+        assert!(
+            total <= GENESIS_SUPPLY,
+            "total {total} exceeds cap {GENESIS_SUPPLY}"
+        );
     }
 
     #[test]
@@ -942,7 +1000,8 @@ mod tests {
         assert_eq!(parsed.chain_id, generated.config.chain_id);
         assert_eq!(parsed.timestamp, generated.config.timestamp);
         assert_eq!(parsed.validators.len(), 1);
-        assert_eq!(parsed.accounts.len(), 1);
+        // 7 allocations + 1 faucet = 8
+        assert_eq!(parsed.accounts.len(), 8);
     }
 
     #[test]
@@ -1062,14 +1121,16 @@ mod tests {
         let loaded = load_genesis(&dir.join("genesis.toml")).unwrap();
         assert_eq!(loaded.chain_id, CHAIN_ID);
         assert_eq!(loaded.validators.len(), 2);
-        assert_eq!(loaded.accounts.len(), 1);
+        // 7 allocations + 1 faucet = 8
+        assert_eq!(loaded.accounts.len(), 8);
 
         let keys_dir = dir.join("keys");
         let key_files: Vec<_> = std::fs::read_dir(&keys_dir)
             .unwrap()
             .filter_map(|e| e.ok())
             .collect();
-        assert_eq!(key_files.len(), 3);
+        // 2 validators + 8 funded accounts = 10
+        assert_eq!(key_files.len(), 10);
 
         let _ = std::fs::remove_dir_all(&dir);
     }

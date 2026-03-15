@@ -2185,7 +2185,8 @@ mod tests {
 
         // Loaded key address must be in the validator set
         assert!(vs.contains(&loaded_addr));
-        assert_eq!(vs.get(&loaded_addr), Some(1_000_000));
+        // 20M validator pool / 3 validators = 6,666,666 each
+        assert_eq!(vs.get(&loaded_addr), Some(6_666_666));
 
         let _ = std::fs::remove_dir_all(&dir);
     }
@@ -2241,7 +2242,8 @@ mod tests {
             }
         }
         assert_eq!(vs.len(), 3);
-        assert_eq!(vs.total_stake(), 3_000_000);
+        // 20M validator pool / 3 validators = 6,666,666 each × 3 = 19,999,998
+        assert_eq!(vs.total_stake(), 19_999_998);
 
         // Verify each genesis validator is in the set with correct stake
         for entry in &cfg.validators {

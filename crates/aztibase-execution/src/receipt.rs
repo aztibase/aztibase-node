@@ -24,7 +24,30 @@ pub struct ExecutionReceipt {
 
 /// Store a batch of receipts atomically alongside state flush.
 pub fn store_receipts(store: &StateStore, receipts: &[ExecutionReceipt]) -> StorageResult<()> {
-    let serialized: Vec<(TxHash, Vec<u8>)> = receipts
+    let mut best: std::collections::HashMap<TxHash, &ExecutionReceipt> =
+        std::collections::HashMap::new();
+    for r in receipts {
+        match best.get(&r.tx_hash) {
+            Some(existing) if existing.success => {}
+            _ => {
+                best.insert(r.tx_hash, r);
+            }
+        }
+    }
+
+    let keep: Vec<&ExecutionReceipt> = best
+        .into_values()
+        .filter(|r| {
+            if !r.success
+                && let Ok(Some(existing)) = get_receipt(store, &r.tx_hash)
+            {
+                return !existing.success;
+            }
+            true
+        })
+        .collect();
+
+    let serialized: Vec<(TxHash, Vec<u8>)> = keep
         .iter()
         .filter_map(|r| postcard::to_allocvec(r).ok().map(|data| (r.tx_hash, data)))
         .collect();

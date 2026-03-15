@@ -65,7 +65,7 @@ pub use staking::{
 };
 pub use state::{AccountState, AccountType, MerkleCommitment};
 pub use tokenomics::{
-    AllocationCategory, EmissionTracker, EpochDistribution, GenesisAllocationEntry,
+    AllocationCategory, EmissionTracker, EpochDistribution, GenesisAllocationEntry, RewardEvent,
     VestingSchedule, calculate_apy_bps, cumulative_emission, distribute_emission,
     emission_for_year, emission_per_epoch, genesis_allocations, validate_genesis_allocations,
     validator_epoch_reward,

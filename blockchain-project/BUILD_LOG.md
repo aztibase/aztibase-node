@@ -21,10 +21,56 @@ Entries are prepended (newest first).
 
 ## Entries
 
+### TX Status Fix, Explorer Dedup, Wallet UX, Epoch Rewards (2026-03-14)
+- **Date**: 2026-03-14
+- **Sprint**: Post-059 (Testnet Expansion)
+- **Commit**: (pending)
+- **Files changed**:
+  - `crates/aztibase-execution/src/receipt.rs` — Receipt dedup: HashMap-based batch dedup keeps successful receipts over failed duplicates, checks store before overwriting
+  - `crates/aztibase-execution/src/chain_params.rs` — Default epoch_length 10,000 → 1,000; minimum 1,000 → 100
+  - `crates/aztibase-node/src/pipeline.rs` — Round 0 epoch guard, participation tracking for all active validators, epoch_length default fallback to 1,000; test updates
+  - `crates/aztibase-rpc/src/server.rs` — `aztb_getTransactionByHash` returns decoded TX fields (type, from, to, value, nonce, gasPrice) for all TxKind variants
+  - `explorer/index.html` — TX display uses `aztb_getBlockByNumber` (not batch hash), Set-based dedup, full block fetch for grid tx counts, formatAZTB shows full numbers below 10M
+  - `wallet-extension/popup.js` — Refresh button, session password caching (chrome.storage.session), activity persistence (chrome.storage.local), refreshStaking on tab switch
+  - `wallet-extension/popup.html` — Refresh button in balance display, min stake text update
+  - `wallet-extension/styles.css` — Refresh button styling with spin animation
+- **Review Notes**: Fixed 3 root causes for "Fail" TX status: (1) DAG duplicate receipts overwriting successful ones — solved with HashMap dedup in store_receipts. (2) Explorer using wrong block hash for TX lookup — switched to aztb_getBlockByNumber. (3) Triple TX rows from DAG — Set-based dedup. Fixed epoch rewards: round 0 false epoch boundary, empty participation set, epoch_length too long for testnet. Wallet extension: session-scoped password caching, refresh button, activity persistence.
+- **Security Flags**: None
+
+### Wallet Extension dApp Provider + Content Script Injection (2026-03-14)
+- **Date**: 2026-03-14
+- **Sprint**: Post-059 (Testnet Expansion)
+- **Commit**: 73e8f94
+- **Files changed**:
+  - `wallet-extension/content-script.js` — New: injects provider.js into web pages for dApp integration
+  - `wallet-extension/provider.js` — New: window.aztibase provider API (connect, signTransaction, getBalance)
+  - `wallet-extension/background.js` — Updated: message routing for dApp requests, permission management
+  - `wallet-extension/manifest.json` — Updated: content_scripts declaration, host permissions
+  - `wallet-extension/popup.html` — Updated: connected sites UI, permission prompts
+  - `wallet-extension/popup.js` — Updated: dApp connection handling, site permission storage
+- **Review Notes**: Enables web3-style dApp integration. Pages can call `window.aztibase.connect()` to request wallet access. Content script bridges page context to extension background via message passing.
+- **Security Flags**: None — content script runs in isolated world, provider uses postMessage with origin checks
+
+### Swiss Editorial Website Redesign + Explorer/Brand Updates (2026-03-14)
+- **Date**: 2026-03-14
+- **Sprint**: Post-059 (Testnet Expansion)
+- **Commit**: 9c64296
+- **Files changed**:
+  - `website/src/content/docs/index.mdx` — Complete rewrite: card-based layout replaced with editorial design (ruled lists, asymmetric columns, gold hairline dividers, sticky section headers)
+  - `website/src/styles/custom.css` — Complete rewrite: ~500 LOC editorial CSS (arch-grid, tech-list, token-blocks, responsive breakpoints)
+  - `explorer/index.html` — Aztibase rename consistency updates
+  - `packaging/validator4/explorer/index.html` — Mirror of explorer updates
+  - `docs/brand/generate_brand_board.py` — Renamed dendrite references to branch (Aztibase rebrand)
+  - `CHANGELOG.md` — Added entries for website redesign and dApp provider
+  - `CLAUDE.md` — Minor updates
+  - `blockchain-project/STATUS.md` — Updated current state
+- **Review Notes**: Landing page redesigned to eliminate generic AI-generated aesthetic. Swiss editorial style with asymmetric 2-column text, ruled lists, gold hairline dividers, sticky headers, left-aligned CTAs. No cards anywhere.
+- **Security Flags**: None — frontend only
+
 ### Generic Validator Release Package + Explorer/Dashboard Split (2026-03-14)
 - **Date**: 2026-03-14
 - **Sprint**: Post-059 (Testnet Expansion)
-- **Commit**: TBD (this commit)
+- **Commit**: f0af3f5
 - **Files changed**:
   - `packaging/validator/` — New generic validator package (replaces validator4-specific package in GitHub releases)
   - `packaging/validator/node.toml` — Template config with empty boot_nodes (user fills in)
@@ -40,7 +86,7 @@ Entries are prepended (newest first).
 ### Consensus Round Fast-Forward for Late-Joining Validators (2026-03-14)
 - **Date**: 2026-03-14
 - **Sprint**: Post-059 (Testnet Stability)
-- **Commit**: TBD
+- **Commit**: f0af3f5
 - **Files changed**:
   - `crates/aztibase-consensus/src/wire.rs` — Replaced `FutureRound` hard rejection with `RoundGap` detection (catchup_threshold = 100)
   - `crates/aztibase-consensus/src/engine.rs` — Added `fast_forward_round()` method, `RoundGap` handler in `handle_received_vertex`, updated test
@@ -50,7 +96,7 @@ Entries are prepended (newest first).
 ### Chrome Extension Wallet + WASM Staking Signing (2026-03-14)
 - **Date**: 2026-03-14
 - **Sprint**: Post-059 (Wallet Infrastructure)
-- **Commit**: TBD
+- **Commit**: 0742042
 - **Files changed**:
   - `crates/aztibase-wasm/src/tx_signing.rs` — Added staking TX signing (Stake/Unstake/Delegate/Undelegate) with WASM exports, RPC request builders for validator queries, 5 new tests
   - `wallet-extension/manifest.json` — Chrome MV3 extension manifest

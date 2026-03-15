@@ -171,8 +171,8 @@ static PARAM_DEFS: &[ParamDef] = &[
     ParamDef {
         key: "epoch_length",
         param_type: ParamType::U64,
-        default: ParamValue::U64(10_000),
-        min: Some(1_000),
+        default: ParamValue::U64(1_000),
+        min: Some(100),
         max: Some(100_000),
         description: "Rounds per epoch (controls reward distribution frequency)",
     },
@@ -400,14 +400,12 @@ mod tests {
     #[test]
     fn epoch_length_param_defaults_and_bounds() {
         let mut params = ChainParams::defaults();
-        assert_eq!(params.get_u64("epoch_length"), Some(10_000));
+        assert_eq!(params.get_u64("epoch_length"), Some(1_000));
 
         params.set("epoch_length", ParamValue::U64(5_000)).unwrap();
         assert_eq!(params.get_u64("epoch_length"), Some(5_000));
 
-        let err = params
-            .set("epoch_length", ParamValue::U64(500))
-            .unwrap_err();
+        let err = params.set("epoch_length", ParamValue::U64(50)).unwrap_err();
         assert!(matches!(err, ChainParamError::OutOfBounds { .. }));
 
         let err = params

@@ -38,8 +38,8 @@ const MAX_EXECUTED_ANCHORS: usize = 10_000;
 const MAX_ATTESTATIONS_PER_TASK: usize = 32;
 const MAX_ATTESTATION_BUFFER_TASKS: usize = 2048;
 
-const MIN_VALIDATOR_STAKE: u128 = 50_000_000_000_000;
-const MAX_VALIDATOR_STAKE_CAP: u128 = 50_000_000_000_000_000;
+const MIN_VALIDATOR_STAKE: u128 = 10_000;
+const MAX_VALIDATOR_STAKE_CAP: u128 = 100_000_000;
 const UNBONDING_ROUNDS: u64 = 4_536_000;
 
 /// Event emitted by consensus when a validator offense is detected.
@@ -455,6 +455,12 @@ impl ExecutionPipeline {
 
         for tx in &routed {
             self.epoch_participation.insert(*tx.sender());
+        }
+        {
+            let staking = self.staking_store.read().await;
+            for (vid, _) in staking.active_set_snapshot(MIN_VALIDATOR_STAKE) {
+                self.epoch_participation.insert(vid);
+            }
         }
 
         let mut state = self.state.write().await;
@@ -3041,12 +3047,16 @@ impl ExecutionPipeline {
         {
             let epoch_length = {
                 let cp = self.chain_params.read().await;
-                cp.get_u64("epoch_length").unwrap_or(10_000)
+                cp.get_u64("epoch_length").unwrap_or(1_000)
             };
-            if epoch_length > 0 && self.current_round.is_multiple_of(epoch_length) {
-                let dist = {
+            if epoch_length > 0
+                && self.current_round > 0
+                && self.current_round.is_multiple_of(epoch_length)
+            {
+                let (epoch_num, dist) = {
                     let mut tracker = self.emission_tracker.write().await;
-                    tracker.advance_epoch()
+                    let epoch = tracker.current_epoch;
+                    (epoch, tracker.advance_epoch())
                 };
                 if let Some(dist) = dist {
                     let commission_bps = {
@@ -3057,6 +3067,17 @@ impl ExecutionPipeline {
                     let credits =
                         staking.distribute_epoch_rewards(dist.validator_rewards, commission_bps);
                     let active_set = staking.active_set_snapshot(MIN_VALIDATOR_STAKE);
+
+                    {
+                        let mut tracker = self.emission_tracker.write().await;
+                        tracker.record_reward_event(aztibase_execution::RewardEvent {
+                            epoch: epoch_num,
+                            round: self.current_round,
+                            total_emission: dist.total(),
+                            validator_pool: dist.validator_rewards,
+                            credits: credits.clone(),
+                        });
+                    }
                     drop(staking);
                     for (addr, amount) in credits {
                         let prev = state.balance(&addr);
@@ -5965,8 +5986,8 @@ mod tests {
         let (_tx, rx) = mpsc::channel(1);
         let pipeline = make_pipeline(rx);
         let cp = pipeline.chain_params.read().await;
-        let epoch_len = cp.get_u64("epoch_length").unwrap_or(10_000);
-        assert_eq!(epoch_len, 10_000);
+        let epoch_len = cp.get_u64("epoch_length").unwrap_or(1_000);
+        assert_eq!(epoch_len, 1_000);
     }
 
     #[tokio::test]
@@ -6284,13 +6305,13 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn downtime_slashing_at_epoch_boundary() {
+    async fn active_validators_not_slashed_at_epoch_boundary() {
         let (_tx, rx) = mpsc::channel(16);
         let mut pipeline = make_pipeline(rx);
 
         let (alice_kp, alice) = make_sender();
         let bob = [2u8; 32];
-        let silent_validator = [0xDD; 32];
+        let validator_b = [0xDD; 32];
         pipeline
             .state
             .write()
@@ -6305,7 +6326,6 @@ mod tests {
                 .unwrap();
         }
 
-        // Register 2 validators: alice (will be active) and silent (will be inactive).
         {
             let mut staking = pipeline.staking_store.write().await;
             staking
@@ -6319,7 +6339,7 @@ mod tests {
                 .unwrap();
             staking
                 .register_validator(
-                    silent_validator,
+                    validator_b,
                     MIN_VALIDATOR_STAKE,
                     MIN_VALIDATOR_STAKE,
                     MAX_VALIDATOR_STAKE_CAP,
@@ -6328,17 +6348,16 @@ mod tests {
                 .unwrap();
         }
 
-        let silent_stake_before = {
+        let stake_before = {
             let staking = pipeline.staking_store.read().await;
             staking
-                .get_validator(&silent_validator)
+                .get_validator(&validator_b)
                 .map(|v| v.self_stake)
                 .unwrap_or(0)
         };
 
         pipeline.current_round = 999;
 
-        // Run 1 batch — alice is active, silent does nothing. Epoch boundary at round 1000.
         let batch = make_batch_with_anchor(
             aztibase_core::hash(&0u64.to_le_bytes()),
             vec![sign(
@@ -6354,18 +6373,22 @@ mod tests {
         );
         pipeline.execute_batch(&batch).await.unwrap();
 
-        // silent_validator should have been slashed for downtime.
-        let silent_stake_after = {
+        let stake_after = {
             let staking = pipeline.staking_store.read().await;
             staking
-                .get_validator(&silent_validator)
+                .get_validator(&validator_b)
                 .map(|v| v.self_stake)
                 .unwrap_or(0)
         };
 
+        assert_eq!(
+            stake_after, stake_before,
+            "Active validators should not be slashed: before={stake_before}, after={stake_after}"
+        );
+
         assert!(
-            silent_stake_after < silent_stake_before,
-            "Silent validator should be slashed: before={silent_stake_before}, after={silent_stake_after}"
+            pipeline.epoch_participation.is_empty(),
+            "Participation cleared after epoch boundary"
         );
     }
 

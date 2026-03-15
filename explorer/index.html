@@ -663,6 +663,19 @@ function escapeHtml(s) {
   return d.innerHTML;
 }
 
+function showToast(msg) {
+  const t = document.createElement('div');
+  t.textContent = msg;
+  Object.assign(t.style, {
+    position:'fixed',bottom:'24px',right:'24px',background:'var(--green)',color:'#000',
+    padding:'12px 20px',borderRadius:'8px',fontSize:'14px',fontWeight:'600',zIndex:'9999',
+    boxShadow:'0 4px 12px rgba(0,0,0,0.3)',opacity:'0',transition:'opacity 0.3s',
+  });
+  document.body.appendChild(t);
+  requestAnimationFrame(() => t.style.opacity = '1');
+  setTimeout(() => { t.style.opacity = '0'; setTimeout(() => t.remove(), 300); }, 5000);
+}
+
 function formatNumber(n) {
   if (n === undefined || n === null) return '--';
   return Number(n).toLocaleString();
@@ -670,8 +683,8 @@ function formatNumber(n) {
 
 function formatAZTB(raw) {
   const n = Number(raw || 0);
-  if (n >= 1_000_000) return (n / 1_000_000).toFixed(1) + 'M';
-  if (n >= 1_000) return (n / 1_000).toFixed(1) + 'K';
+  if (n >= 1_000_000_000) return (n / 1_000_000_000).toFixed(2) + 'B';
+  if (n >= 10_000_000) return (n / 1_000_000).toFixed(1) + 'M';
   return n.toLocaleString();
 }
 
@@ -727,9 +740,26 @@ const TX_TYPE_MAP = {
   0x18: ['Bridge Withdraw', 'bridge'],
   0x19: ['Register L2', 'bridge'],
   0x1A: ['Rotate Key', 'security'],
+  0x1B: ['Faucet Drip', 'transfer'],
+};
+
+const TX_NAME_TO_CLASS = {
+  Transfer: 'transfer', ContractDeploy: 'contract', ContractCall: 'contract',
+  EvmDeploy: 'contract', EvmCall: 'contract', AiInfer: 'ai', CreateAgent: 'ai',
+  RegisterModel: 'ai', PostTask: 'ai', SubmitAttestation: 'ai', CommitCompute: 'ai',
+  DeregisterCompute: 'ai', DeregisterModel: 'ai', CreateProposal: 'governance',
+  CastVote: 'governance', Stake: 'staking', Unstake: 'staking', Delegate: 'staking',
+  Undelegate: 'staking', SetAgentPolicy: 'ai', AgentExecute: 'ai', AnchorL2State: 'bridge',
+  BridgeDeposit: 'bridge', BridgeWithdraw: 'bridge', RegisterL2: 'bridge',
+  RotateValidatorKey: 'security', FaucetDrip: 'transfer',
 };
 
 function txBadge(typeCode) {
+  if (typeof typeCode === 'string' && TX_NAME_TO_CLASS[typeCode]) {
+    const cls = TX_NAME_TO_CLASS[typeCode];
+    const label = typeCode.replace(/([A-Z])/g, ' $1').trim();
+    return `<span class="tx-badge ${cls}">${label}</span>`;
+  }
   const code = typeof typeCode === 'string' ? parseInt(typeCode, 16) : (typeCode || 0);
   const entry = TX_TYPE_MAP[code];
   if (!entry) return '<span class="tx-badge unknown">Unknown</span>';
@@ -737,6 +767,9 @@ function txBadge(typeCode) {
 }
 
 function txTypeName(typeCode) {
+  if (typeof typeCode === 'string' && TX_NAME_TO_CLASS[typeCode]) {
+    return typeCode.replace(/([A-Z])/g, ' $1').trim();
+  }
   const code = typeof typeCode === 'string' ? parseInt(typeCode, 16) : (typeCode || 0);
   const entry = TX_TYPE_MAP[code];
   return entry ? entry[0] : 'Unknown';
@@ -867,7 +900,7 @@ async function showDashboard() {
       if (blocks && blocks.length > 0) {
         container.innerHTML = '<div class="card">' + blocks.reverse().map(b => {
           const num = typeof b.number === 'string' ? parseInt(b.number, 16) : b.number;
-          const txCount = b.transactions ? b.transactions.length : (b.tx_count || 0);
+          const txCount = b.transactions ? b.transactions.length : (b.tx_count || b.txCount || 0);
           return `<div class="card-row" style="cursor:pointer" onclick="showBlock(${num})">
             <div class="card-label" style="color:var(--accent);font-weight:600">#${num}</div>
             <div class="card-value" style="flex:1">${shortHash(b.hash)}</div>
@@ -913,17 +946,20 @@ async function showBlocks() {
     }
 
     const from = Math.max(0, h - 23);
-    const blocks = await rpc('aztb_getBlockRange', [from, h]);
+    const rangeBlocks = await rpc('aztb_getBlockRange', [from, h]);
     const grid = document.getElementById('block-grid');
 
-    if (!blocks || blocks.length === 0) {
+    if (!rangeBlocks || rangeBlocks.length === 0) {
       grid.innerHTML = '<div class="empty-state">No blocks in range</div>';
       return;
     }
 
-    grid.innerHTML = blocks.reverse().map(b => {
+    const blockNums = rangeBlocks.map(b => typeof b.number === 'string' ? parseInt(b.number, 16) : b.number);
+    const fullBlocks = await Promise.all(blockNums.map(n => rpc('aztb_getBlockByNumber', [n]).catch(() => null)));
+
+    grid.innerHTML = fullBlocks.filter(Boolean).reverse().map(b => {
       const num = typeof b.number === 'string' ? parseInt(b.number, 16) : b.number;
-      const txCount = b.transactions ? b.transactions.length : (b.tx_count || 0);
+      const txCount = new Set(b.transactions || []).size;
       const hash = b.hash || '--';
       return `<div class="block-card" onclick="showBlock(${num})">
         <div class="block-num">Block #${num}</div>
@@ -941,44 +977,96 @@ async function showBlocks() {
 
 // --- Validators ---
 
+let lastKnownEpoch = -1;
+
 async function showValidators() {
   const el = document.getElementById('content');
   el.innerHTML = '<div class="empty-state">Loading validators...</div>';
 
   try {
-    const [validators, metrics] = await Promise.all([
+    const [validators, metrics, emissionInfo, epochRewards] = await Promise.all([
       rpc('aztb_getActiveValidators').catch(() => []),
       fetchMetrics(),
+      rpc('aztb_getEmissionInfo').catch(() => null),
+      rpc('aztb_getEpochRewards', [5]).catch(() => []),
     ]);
 
     const staking = (metrics || {}).staking || {};
+    const ei = emissionInfo || {};
+
+    if (lastKnownEpoch >= 0 && ei.current_epoch > lastKnownEpoch) {
+      showToast(`Epoch ${ei.current_epoch - 1} complete \u2014 rewards distributed`);
+    }
+    if (ei.current_epoch != null) lastKnownEpoch = ei.current_epoch;
+
+    const lastRewards = {};
+    let totalRewardsThisEpoch = 0;
+    if (Array.isArray(epochRewards) && epochRewards.length > 0) {
+      const latest = epochRewards[epochRewards.length - 1];
+      (latest.credits || []).forEach(c => {
+        lastRewards[c.validator] = Number(c.amount);
+        totalRewardsThisEpoch += Number(c.amount);
+      });
+    }
+
+    const balances = {};
+    if (Array.isArray(validators) && validators.length > 0) {
+      const balResults = await Promise.all(validators.map(v => {
+        const addr = v.validator_id || v.address || (typeof v === 'string' ? v : '');
+        const hexAddr = typeof addr === 'string' && addr.startsWith('0x') ? addr : '0x' + addr;
+        return rpc('aztb_getBalance', [hexAddr]).then(b => [addr, b]).catch(() => [addr, null]);
+      }));
+      for (const [addr, bal] of balResults) {
+        if (bal != null) balances[addr] = typeof bal === 'string' ? parseInt(bal, 16) : Number(bal);
+      }
+    }
 
     let tableRows = '';
     if (Array.isArray(validators) && validators.length > 0) {
       tableRows = validators.map((v, i) => {
         const addr = v.validator_id || v.address || (typeof v === 'string' ? v : JSON.stringify(v));
+        const addrStr = typeof addr === 'string' ? addr : '';
+        const addrLookup = addrStr.startsWith('0x') ? addrStr : '0x' + addrStr;
         const stake = v.effective_stake != null ? formatAZTB(v.effective_stake) : (v.stake != null ? formatAZTB(v.stake) : '--');
+        const bal = balances[addr] != null ? formatAZTB(balances[addr]) : '--';
+        const reward = lastRewards[addrLookup] != null ? formatAZTB(lastRewards[addrLookup]) : (lastRewards[addrStr] != null ? formatAZTB(lastRewards[addrStr]) : '--');
         const status = v.active !== false ? '<span style="color:var(--green)">Active</span>' : '<span style="color:var(--red)">Inactive</span>';
         return `<tr>
           <td>${i + 1}</td>
-          <td><a onclick="showAccount('${escapeHtml(typeof addr === 'string' ? addr : '')}')">${shortHash(typeof addr === 'string' ? addr : JSON.stringify(addr))}</a></td>
+          <td><a onclick="showAccount('${escapeHtml(addrStr)}')">${shortHash(addrStr || JSON.stringify(addr))}</a></td>
+          <td>${bal} AZTB</td>
           <td>${stake} AZTB</td>
+          <td>${reward} AZTB</td>
           <td>${status}</td>
         </tr>`;
       }).join('');
     } else {
-      tableRows = '<tr><td colspan="4" style="text-align:center;color:var(--muted)">No validator data available</td></tr>';
+      tableRows = '<tr><td colspan="6" style="text-align:center;color:var(--muted)">No validator data available</td></tr>';
     }
+
+    const epochProgress = ei.epoch_length ? Math.round(((ei.rounds_in_current_epoch || 0) / ei.epoch_length) * 100) : 0;
+    const roundsLeft = ei.rounds_until_next_epoch != null ? formatNumber(ei.rounds_until_next_epoch) : '--';
 
     el.innerHTML = `
       <div class="stats-row" style="margin-bottom:24px">
         <div class="stat"><div class="val">${formatNumber(staking.active_validators || (Array.isArray(validators) ? validators.length : '--'))}</div><div class="label">Active Validators</div></div>
         <div class="stat"><div class="val">${formatAZTB(staking.total_staked)}</div><div class="label">Total Staked</div></div>
-        <div class="stat"><div class="val">${formatNumber(staking.slashes_applied)}</div><div class="label">Slashes</div></div>
+        <div class="stat"><div class="val">${formatNumber(ei.current_epoch != null ? ei.current_epoch : '--')}</div><div class="label">Current Epoch</div></div>
+        <div class="stat"><div class="val">${roundsLeft}</div><div class="label">Next Epoch In</div></div>
+      </div>
+      <div style="margin-bottom:20px;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:16px">
+        <div style="display:flex;justify-content:space-between;margin-bottom:8px">
+          <span style="color:var(--muted);font-size:13px">Epoch Progress</span>
+          <span style="color:var(--text);font-size:13px">${ei.rounds_in_current_epoch || 0} / ${ei.epoch_length || '--'} rounds</span>
+        </div>
+        <div style="background:var(--bg);border-radius:4px;height:6px;overflow:hidden">
+          <div style="background:var(--primary);height:100%;width:${epochProgress}%;transition:width 0.3s"></div>
+        </div>
+        ${totalRewardsThisEpoch > 0 ? `<div style="color:var(--green);font-size:12px;margin-top:8px">Last epoch distributed ${formatAZTB(totalRewardsThisEpoch)} AZTB to validators</div>` : ''}
       </div>
       <div class="view-title">Validator Set</div>
       <table class="data-table">
-        <thead><tr><th>#</th><th>Address</th><th>Stake</th><th>Status</th></tr></thead>
+        <thead><tr><th>#</th><th>Address</th><th>Balance</th><th>Stake</th><th>Last Reward</th><th>Status</th></tr></thead>
         <tbody>${tableRows}</tbody>
       </table>
     `;
@@ -1005,7 +1093,7 @@ async function showTransactions() {
       return;
     }
 
-    const from = Math.max(0, h - 15);
+    const from = Math.max(0, h - 50);
     const blocks = await rpc('aztb_getBlockRange', [from, h]);
     if (!blocks || blocks.length === 0) {
       document.getElementById('tx-table').innerHTML = '<div class="empty-state">No blocks in range</div>';
@@ -1013,13 +1101,21 @@ async function showTransactions() {
     }
 
     const txRows = [];
+    const seenHashes = new Set();
     for (const b of blocks.reverse()) {
       const num = typeof b.number === 'string' ? parseInt(b.number, 16) : b.number;
-      const txs = b.transactions || [];
-      for (const txHash of txs) {
+      let txHashes = [];
+      try {
+        const full = await rpc('aztb_getBlockByNumber', [num]);
+        txHashes = [...new Set((full && full.transactions) || [])];
+      } catch (_) {}
+      for (const txHash of txHashes) {
+        if (seenHashes.has(txHash)) continue;
+        seenHashes.add(txHash);
         try {
           const tx = await rpc('aztb_getTransactionByHash', [txHash]);
           if (tx) {
+            const receipt = tx.receipt || {};
             txRows.push({
               hash: txHash,
               block: num,
@@ -1027,8 +1123,8 @@ async function showTransactions() {
               from: tx.from || tx.sender || '--',
               to: tx.to || tx.recipient || '--',
               value: tx.value || 0,
-              gas: tx.gas_used || tx.gas_limit || '--',
-              status: tx.status != null ? tx.status : (tx.success != null ? (tx.success ? 1 : 0) : null),
+              gas: receipt.gasUsed || tx.gas_used || tx.gas_limit || '--',
+              status: receipt.success != null ? (receipt.success ? 1 : 0) : (tx.status != null ? tx.status : null),
             });
           }
         } catch (_) {}
@@ -1081,7 +1177,7 @@ async function showBlock(num) {
       return;
     }
 
-    const txs = block.transactions || [];
+    const txs = [...new Set(block.transactions || [])];
     const hash = block.hash || '--';
     const stateRoot = block.stateRoot || block.state_root || '--';
     const parentHash = block.parentHash || block.parent_hash || '--';
@@ -1206,7 +1302,12 @@ async function loadAccountTxs(addr) {
 
     for (const b of (blocks || []).reverse()) {
       const num = typeof b.number === 'string' ? parseInt(b.number, 16) : b.number;
-      for (const txHash of (b.transactions || [])) {
+      let txHashes = [];
+      try {
+        const full = await rpc('aztb_getBlockByNumber', [num]);
+        txHashes = (full && full.transactions) || [];
+      } catch (_) {}
+      for (const txHash of txHashes) {
         try {
           const tx = await rpc('aztb_getTransactionByHash', [txHash]);
           if (!tx) continue;

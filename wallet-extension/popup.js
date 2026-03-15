@@ -9,8 +9,19 @@ const twofa = new TwoFactorAuth();
 let pending2FAResolve = null;
 let socialAuthData = null;
 
-const DECIMALS = 18;
-const BASE = 10n ** BigInt(DECIMALS);
+const DECIMALS = 0;
+const BASE = 1n;
+
+const LOCAL_RPC = "http://127.0.0.1:9944";
+const PUBLIC_RPC = "https://rpc.aztibase.com";
+
+async function detectRpc() {
+  try {
+    const resp = await fetch(LOCAL_RPC + "/health", { signal: AbortSignal.timeout(1500) });
+    if (resp.ok) return { rpc: LOCAL_RPC, name: "Local Testnet" };
+  } catch {}
+  return { rpc: PUBLIC_RPC, name: "Testnet" };
+}
 
 async function init() {
   try {
@@ -26,12 +37,26 @@ async function init() {
   const stored = await storageGet(["network", "encryptedKey"]);
   if (stored.network?.rpc) {
     rpcUrl = stored.network.rpc;
-    document.getElementById("settings-rpc").value = rpcUrl;
-    document.getElementById("network-name").textContent = stored.network.name || "Testnet";
+  } else {
+    const detected = await detectRpc();
+    rpcUrl = detected.rpc;
   }
+  const rpcInput = document.getElementById("settings-rpc");
+  if (rpcInput) rpcInput.value = rpcUrl;
+  const netLabel = rpcUrl.includes("127.0.0.1") ? "Local Testnet" : (stored.network?.name || "Testnet");
+  const netEl = document.getElementById("network-name");
+  if (netEl) netEl.textContent = netLabel;
 
   if (stored.encryptedKey) {
-    showView("unlock");
+    const session = await sessionGet(["sessionSecret", "sessionAddress"]);
+    if (session.sessionSecret && session.sessionAddress) {
+      secretHex = session.sessionSecret;
+      addressHex = session.sessionAddress;
+      showView("main");
+      updateMainView();
+    } else {
+      showView("unlock");
+    }
   } else {
     showView("onboard");
   }
@@ -95,19 +120,11 @@ function hexToBuf(hex) {
 }
 
 function toBaseUnits(amountStr) {
-  const parts = amountStr.split(".");
-  const whole = parts[0] || "0";
-  let frac = (parts[1] || "").padEnd(DECIMALS, "0").slice(0, DECIMALS);
-  return (BigInt(whole) * BASE + BigInt(frac)).toString();
+  return BigInt(amountStr.split(".")[0] || "0").toString();
 }
 
 function fromBaseUnits(baseStr) {
-  const val = BigInt(baseStr);
-  const whole = val / BASE;
-  const frac = val % BASE;
-  const fracStr = frac.toString().padStart(DECIMALS, "0").replace(/0+$/, "");
-  if (fracStr === "") return whole.toString();
-  return `${whole}.${fracStr}`;
+  return BigInt(baseStr || "0").toLocaleString();
 }
 
 function shortenAddress(addr) {
@@ -156,6 +173,45 @@ function storageRemove(keys) {
   });
 }
 
+function sessionGet(keys) {
+  return new Promise((resolve) => {
+    if (chrome?.storage?.session) {
+      chrome.storage.session.get(keys, resolve);
+    } else {
+      const result = {};
+      for (const k of keys) {
+        const v = sessionStorage.getItem(k);
+        if (v) result[k] = JSON.parse(v);
+      }
+      resolve(result);
+    }
+  });
+}
+
+function sessionSet(obj) {
+  return new Promise((resolve) => {
+    if (chrome?.storage?.session) {
+      chrome.storage.session.set(obj, resolve);
+    } else {
+      for (const [k, v] of Object.entries(obj)) {
+        sessionStorage.setItem(k, JSON.stringify(v));
+      }
+      resolve();
+    }
+  });
+}
+
+function sessionRemove(keys) {
+  return new Promise((resolve) => {
+    if (chrome?.storage?.session) {
+      chrome.storage.session.remove(keys, resolve);
+    } else {
+      for (const k of keys) sessionStorage.removeItem(k);
+      resolve();
+    }
+  });
+}
+
 // --- View navigation ---
 
 function showView(name) {
@@ -166,6 +222,7 @@ function showView(name) {
   if (name === "main") {
     refreshBalance();
     refreshStaking();
+    loadTxHistory();
     update2FAStatusText();
   } else if (name === "receive") {
     document.getElementById("receive-address").textContent =
@@ -205,6 +262,7 @@ function switchTab(tabId, clickedEl) {
   document.querySelectorAll(".tx-list").forEach(l => l.style.display = "none");
   const el = document.getElementById(`tab-${tabId}`);
   if (el) el.style.display = "block";
+  if (tabId === "staking") refreshStaking();
 }
 
 // --- Wallet operations ---
@@ -225,6 +283,7 @@ async function createWallet() {
 
   const encrypted = await encryptSecret(secretHex, pass);
   await storageSet({ encryptedKey: encrypted, address: addressHex });
+  await sessionSet({ sessionSecret: secretHex, sessionAddress: addressHex });
 
   chrome.runtime?.sendMessage?.({
     type: "wallet_unlocked", secret: secretHex, address: addressHex,
@@ -263,6 +322,7 @@ async function importWallet() {
 
   const encrypted = await encryptSecret(secretHex, pass);
   await storageSet({ encryptedKey: encrypted, address: addressHex });
+  await sessionSet({ sessionSecret: secretHex, sessionAddress: addressHex });
 
   chrome.runtime?.sendMessage?.({
     type: "wallet_unlocked", secret: secretHex, address: addressHex,
@@ -338,6 +398,7 @@ async function completeSocialAuth() {
     address: addressHex,
     socialAuth: { provider: socialAuthData.provider, email: socialAuthData.email },
   });
+  await sessionSet({ sessionSecret: secretHex, sessionAddress: addressHex });
 
   chrome.runtime?.sendMessage?.({
     type: "wallet_unlocked", secret: secretHex, address: addressHex,
@@ -360,6 +421,8 @@ async function unlockWallet() {
     secretHex = await decryptSecret(stored.encryptedKey, pass);
     addressHex = stored.address;
 
+    await sessionSet({ sessionSecret: secretHex, sessionAddress: addressHex });
+
     chrome.runtime?.sendMessage?.({
       type: "wallet_unlocked", secret: secretHex, address: addressHex,
     }).catch(() => {});
@@ -371,8 +434,9 @@ async function unlockWallet() {
   }
 }
 
-function lockWallet() {
+async function lockWallet() {
   secretHex = null;
+  await sessionRemove(["sessionSecret", "sessionAddress"]);
   chrome.runtime?.sendMessage?.({ type: "wallet_locked" }).catch(() => {});
   showView("unlock");
   toast("Wallet locked", "info");
@@ -383,6 +447,7 @@ async function resetWallet() {
   secretHex = null;
   addressHex = null;
   await storageRemove(["encryptedKey", "address"]);
+  await sessionRemove(["sessionSecret", "sessionAddress"]);
   showView("onboard");
   toast("Wallet reset", "info");
 }
@@ -438,12 +503,40 @@ async function refreshNonce() {
 async function refreshStaking() {
   if (!addressHex) return;
   try {
-    const stake = await rpcCall("aztb_getValidatorStake", [addressHex]);
-    if (stake && stake !== "0") {
-      document.getElementById("staking-self").textContent = fromBaseUnits(stake) + " AZTB";
+    const info = await rpcCall("aztb_getValidatorStake", [addressHex]);
+    if (info && typeof info === "object") {
+      const self_stake = info.self_stake || info.selfStake || 0;
+      const delegated = info.total_delegated || info.totalDelegated || 0;
+      document.getElementById("staking-self").textContent = fromBaseUnits(String(self_stake)) + " AZTB";
+      const delEl = document.getElementById("staking-delegated");
+      if (delEl) delEl.textContent = fromBaseUnits(String(delegated)) + " AZTB";
+    } else if (info && info !== "0") {
+      document.getElementById("staking-self").textContent = fromBaseUnits(String(info)) + " AZTB";
     }
   } catch {
     // staking info may not be available
+  }
+
+  try {
+    const rewards = await rpcCall("aztb_getEpochRewards", [10]);
+    const rewardsEl = document.getElementById("staking-rewards");
+    if (rewardsEl && Array.isArray(rewards)) {
+      const addrClean = addressHex.replace(/^0x/, '').toLowerCase();
+      let total = 0n;
+      for (const evt of rewards) {
+        for (const c of (evt.credits || [])) {
+          const cAddr = (c.validator || '').replace(/^0x/, '').toLowerCase();
+          if (cAddr === addrClean) total += BigInt(c.amount);
+        }
+      }
+      if (total > 0n) {
+        rewardsEl.textContent = fromBaseUnits(total.toString()) + " AZTB";
+      } else {
+        rewardsEl.textContent = "0 AZTB";
+      }
+    }
+  } catch {
+    // rewards may not be available yet
   }
 }
 
@@ -596,7 +689,7 @@ async function sendTransfer() {
   try {
     await refreshNonce();
     const baseAmount = toBaseUnits(amount);
-    const signedHex = wasm.signTransfer(secretHex, to, baseAmount, currentNonce, gasPrice);
+    const signedHex = wasm.signTransfer(secretHex, to, baseAmount, BigInt(currentNonce), BigInt(gasPrice));
     if (signedHex.startsWith("error:")) { toast(signedHex, "error"); return; }
 
     const txHash = await rpcCall("aztb_sendRawTransaction", [signedHex]);
@@ -621,12 +714,14 @@ async function sendStake() {
   try {
     await refreshNonce();
     const baseAmount = toBaseUnits(amount);
-    const signedHex = wasm.signStake(secretHex, baseAmount, currentNonce, gasPrice);
+    const signedHex = wasm.signStake(secretHex, baseAmount, BigInt(currentNonce), BigInt(gasPrice));
     if (signedHex.startsWith("error:")) { toast(signedHex, "error"); return; }
 
     const txHash = await rpcCall("aztb_sendRawTransaction", [signedHex]);
     toast(`Staked! TX: ${txHash.slice(0, 16)}...`, "success");
     addTxToHistory("Stake", addressHex, amount, "stake");
+    refreshBalance();
+    refreshStaking();
     showView("main");
   } catch (e) {
     toast(`Stake failed: ${e.message}`, "error");
@@ -645,7 +740,7 @@ async function sendUnstake() {
   try {
     await refreshNonce();
     const baseAmount = toBaseUnits(amount);
-    const signedHex = wasm.signUnstake(secretHex, baseAmount, currentNonce, 1);
+    const signedHex = wasm.signUnstake(secretHex, baseAmount, BigInt(currentNonce), 1n);
     if (signedHex.startsWith("error:")) { toast(signedHex, "error"); return; }
 
     const txHash = await rpcCall("aztb_sendRawTransaction", [signedHex]);
@@ -670,7 +765,7 @@ async function sendDelegate() {
   try {
     await refreshNonce();
     const baseAmount = toBaseUnits(amount);
-    const signedHex = wasm.signDelegate(secretHex, validator, baseAmount, currentNonce, 1);
+    const signedHex = wasm.signDelegate(secretHex, validator, baseAmount, BigInt(currentNonce), 1n);
     if (signedHex.startsWith("error:")) { toast(signedHex, "error"); return; }
 
     const txHash = await rpcCall("aztb_sendRawTransaction", [signedHex]);
@@ -690,7 +785,7 @@ async function sendUndelegate() {
 
   try {
     await refreshNonce();
-    const signedHex = wasm.signUndelegate(secretHex, currentNonce, 1);
+    const signedHex = wasm.signUndelegate(secretHex, BigInt(currentNonce), 1n);
     if (signedHex.startsWith("error:")) { toast(signedHex, "error"); return; }
 
     const txHash = await rpcCall("aztb_sendRawTransaction", [signedHex]);
@@ -704,26 +799,54 @@ async function sendUndelegate() {
 
 // --- Activity list ---
 
-function addTxToHistory(label, addr, amount, type) {
-  const list = document.getElementById("tab-activity");
-  const empty = list.querySelector(".empty-state");
-  if (empty) empty.remove();
-
-  const iconClass = type === "negative" ? "send" : type === "positive" ? "receive" : "stake";
-  const symbol = type === "negative" ? "&uarr;" : type === "positive" ? "&darr;" : "&diams;";
-  const amountClass = type === "negative" ? "negative" : type === "positive" ? "positive" : "";
-
+function renderTxItem(entry) {
+  const iconClass = entry.type === "negative" ? "send" : entry.type === "positive" ? "receive" : "stake";
+  const symbol = entry.type === "negative" ? "&uarr;" : entry.type === "positive" ? "&darr;" : "&diams;";
+  const amountClass = entry.type === "negative" ? "negative" : entry.type === "positive" ? "positive" : "";
   const item = document.createElement("div");
   item.className = "tx-item";
   item.innerHTML = `
     <div class="tx-icon ${iconClass}">${symbol}</div>
     <div class="tx-info">
-      <div class="tx-label">${label}</div>
-      <div class="tx-addr">${shortenAddress(addr)}</div>
+      <div class="tx-label">${entry.label}</div>
+      <div class="tx-addr">${shortenAddress(entry.addr)}</div>
     </div>
-    <div class="tx-amount ${amountClass}">${amount} AZTB</div>
+    <div class="tx-amount ${amountClass}">${entry.amount} AZTB</div>
   `;
-  list.prepend(item);
+  return item;
+}
+
+async function loadTxHistory() {
+  if (!addressHex) return;
+  const key = "txHistory_" + addressHex;
+  const stored = await storageGet([key]);
+  const entries = stored[key] || [];
+  const list = document.getElementById("tab-activity");
+  list.innerHTML = "";
+  if (entries.length === 0) {
+    list.innerHTML = '<div class="empty-state">No transactions yet</div>';
+    return;
+  }
+  for (const entry of entries) {
+    list.appendChild(renderTxItem(entry));
+  }
+}
+
+async function addTxToHistory(label, addr, amount, type) {
+  const list = document.getElementById("tab-activity");
+  const empty = list.querySelector(".empty-state");
+  if (empty) empty.remove();
+
+  const entry = { label, addr, amount, type, ts: Date.now() };
+  list.prepend(renderTxItem(entry));
+
+  if (!addressHex) return;
+  const key = "txHistory_" + addressHex;
+  const stored = await storageGet([key]);
+  const entries = stored[key] || [];
+  entries.unshift(entry);
+  if (entries.length > 50) entries.length = 50;
+  await storageSet({ [key]: entries });
 }
 
 // --- Settings ---
@@ -782,13 +905,42 @@ function toast(msg, type) {
 
 // --- Delegated click handler (MV3 CSP forbids inline onclick) ---
 
+async function refreshAll() {
+  const btn = document.querySelector('.refresh-btn');
+  if (btn) btn.classList.add('spinning');
+  await Promise.all([refreshBalance(), refreshStaking(), refreshNonce()]);
+  if (btn) {
+    btn.classList.remove('spinning');
+    setTimeout(() => btn.classList.add('spinning'), 0);
+    setTimeout(() => btn.classList.remove('spinning'), 600);
+  }
+  toast("Refreshed", "info");
+}
+
+async function walletFaucet() {
+  if (!addressHex) return;
+  toast("Requesting faucet drip...", "info");
+  try {
+    const result = await rpcCall("aztb_faucetDrip", [addressHex]);
+    if (result && result.amount) {
+      toast("Received " + fromBaseUnits(String(result.amount)) + " AZTB", "success");
+      addTxToHistory("Faucet Drip", "faucet", fromBaseUnits(String(result.amount)) + " AZTB");
+    } else {
+      toast("Faucet drip sent", "success");
+    }
+    setTimeout(refreshAll, 2000);
+  } catch (e) {
+    toast("Faucet error: " + e.message, "error");
+  }
+}
+
 const actions = {
   goBack, createWallet, confirmMnemonic, importWallet, unlockWallet,
   lockWallet, resetWallet, copyAddress, sendTransfer, sendStake,
   sendUnstake, sendDelegate, sendUndelegate, saveSettings, exportKey,
   startTotpSetup, confirmTotpSetup, startWebAuthnSetup, disable2FA,
   verify2FAWebAuthn, verify2FATotp, cancel2FA,
-  signInGoogle, signInGitHub, completeSocialAuth,
+  signInGoogle, signInGitHub, completeSocialAuth, refreshAll, walletFaucet,
 };
 
 document.addEventListener("click", (e) => {

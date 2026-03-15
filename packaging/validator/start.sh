@@ -25,23 +25,15 @@ if [ ! -f "keys/validator.json" ]; then
     echo ""
 fi
 
-# Check boot_nodes
-if grep -q 'boot_nodes = \[\]' node.toml 2>/dev/null; then
-    echo "[WARN] boot_nodes is empty in node.toml"
-    echo "       Edit node.toml and add at least one boot node address."
-    echo "       Example: boot_nodes = [\"/ip4/203.0.113.10/tcp/30333\"]"
-    echo ""
-fi
-
 # Kill any running instance
 taskkill //F //IM aztibase.exe 2>/dev/null
 
 # Create data directory
 mkdir -p data
 
-# Start the node
+# Start the node (--testnet uses built-in genesis config and boot nodes)
 echo "Starting validator..."
-./aztibase.exe --config node.toml > node.log 2>&1 &
+./aztibase.exe --config node.toml --testnet > node.log 2>&1 &
 
 # Start dashboard on port 8080
 if [ -d "explorer" ]; then

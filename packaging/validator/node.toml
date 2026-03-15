@@ -1,5 +1,4 @@
 data_dir = "./data"
-genesis_path = "./genesis.toml"
 validator_key = "./keys/validator.json"
 
 [network]
@@ -7,11 +6,16 @@ listen_addresses = [
     "/ip4/0.0.0.0/tcp/30333",
     "/ip4/0.0.0.0/udp/30333/quic-v1",
 ]
-# Add the IP addresses of existing validators here.
-# Example: "/ip4/203.0.113.10/tcp/30333"
-boot_nodes = []
+boot_nodes = [
+    "/dns4/testnet1.aztibase.com/tcp/30333",
+    "/dns4/testnet2.aztibase.com/tcp/30334",
+    "/dns4/testnet3.aztibase.com/tcp/30335",
+]
 idle_timeout_secs = 60
-stun_servers = []
+stun_servers = [
+    "stun:stun.l.google.com:19302",
+    "stun:stun1.l.google.com:19302",
+]
 
 [rpc]
 listen_addr = "0.0.0.0:9944"

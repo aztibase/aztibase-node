@@ -604,6 +604,7 @@ async fn dispatch(state: &RpcState, req: &JsonRpcRequest) -> JsonRpcResponse {
         "aztb_getChainParam" => handle_get_chain_param(state, req).await,
         "aztb_listChainParams" => handle_list_chain_params(state, req).await,
         "aztb_getEmissionInfo" => handle_get_emission_info(state, req).await,
+        "aztb_getEpochRewards" => handle_get_epoch_rewards(state, req).await,
         "aztb_getVestingStatus" => handle_get_vesting_status(state, req).await,
         "aztb_getValidatorStake" => handle_get_validator_stake(state, req).await,
         "aztb_getDelegation" => handle_get_delegation(state, req).await,
@@ -1519,6 +1520,171 @@ async fn handle_get_transaction_by_hash(state: &RpcState, req: &JsonRpcRequest) 
                 "hash": format!("0x{}", hex::encode(hash)),
                 "raw": format!("0x{}", hex::encode(&data)),
             });
+            if let Ok(tx) = postcard::from_bytes::<TxKind>(&data) {
+                let hex_addr = |a: &[u8; 32]| format!("0x{}", hex::encode(a));
+                let val128 = |v: u128| -> serde_json::Value {
+                    serde_json::Value::Number(serde_json::Number::from(v as u64))
+                };
+                match &tx {
+                    TxKind::Transfer {
+                        from,
+                        to,
+                        value,
+                        nonce,
+                        gas_price,
+                    } => {
+                        result["type"] = "Transfer".into();
+                        result["from"] = hex_addr(from).into();
+                        result["to"] = hex_addr(to).into();
+                        result["value"] = val128(*value);
+                        result["nonce"] = (*nonce).into();
+                        result["gasPrice"] = (*gas_price).into();
+                    }
+                    TxKind::Stake {
+                        staker,
+                        amount,
+                        nonce,
+                        gas_price,
+                    } => {
+                        result["type"] = "Stake".into();
+                        result["from"] = hex_addr(staker).into();
+                        result["to"] = hex_addr(staker).into();
+                        result["value"] = val128(*amount);
+                        result["nonce"] = (*nonce).into();
+                        result["gasPrice"] = (*gas_price).into();
+                    }
+                    TxKind::Unstake {
+                        staker,
+                        amount,
+                        nonce,
+                        gas_price,
+                    } => {
+                        result["type"] = "Unstake".into();
+                        result["from"] = hex_addr(staker).into();
+                        result["to"] = hex_addr(staker).into();
+                        result["value"] = val128(*amount);
+                        result["nonce"] = (*nonce).into();
+                        result["gasPrice"] = (*gas_price).into();
+                    }
+                    TxKind::Delegate {
+                        delegator,
+                        validator_id,
+                        amount,
+                        nonce,
+                        gas_price,
+                    } => {
+                        result["type"] = "Delegate".into();
+                        result["from"] = hex_addr(delegator).into();
+                        result["to"] = hex_addr(validator_id).into();
+                        result["value"] = val128(*amount);
+                        result["nonce"] = (*nonce).into();
+                        result["gasPrice"] = (*gas_price).into();
+                    }
+                    TxKind::Undelegate {
+                        delegator,
+                        nonce,
+                        gas_price,
+                    } => {
+                        result["type"] = "Undelegate".into();
+                        result["from"] = hex_addr(delegator).into();
+                        result["nonce"] = (*nonce).into();
+                        result["gasPrice"] = (*gas_price).into();
+                    }
+                    TxKind::FaucetDrip {
+                        validator,
+                        recipient,
+                        amount,
+                        nonce,
+                        gas_price,
+                    } => {
+                        result["type"] = "FaucetDrip".into();
+                        result["from"] = hex_addr(validator).into();
+                        result["to"] = hex_addr(recipient).into();
+                        result["value"] = val128(*amount);
+                        result["nonce"] = (*nonce).into();
+                        result["gasPrice"] = (*gas_price).into();
+                    }
+                    TxKind::ContractDeploy {
+                        deployer,
+                        nonce,
+                        gas_limit,
+                        gas_price,
+                        ..
+                    } => {
+                        result["type"] = "ContractDeploy".into();
+                        result["from"] = hex_addr(deployer).into();
+                        result["nonce"] = (*nonce).into();
+                        result["gasLimit"] = (*gas_limit).into();
+                        result["gasPrice"] = (*gas_price).into();
+                    }
+                    TxKind::ContractCall {
+                        caller,
+                        contract,
+                        func_name,
+                        nonce,
+                        gas_limit,
+                        gas_price,
+                        ..
+                    } => {
+                        result["type"] = "ContractCall".into();
+                        result["from"] = hex_addr(caller).into();
+                        result["to"] = hex_addr(contract).into();
+                        result["func"] = func_name.clone().into();
+                        result["nonce"] = (*nonce).into();
+                        result["gasLimit"] = (*gas_limit).into();
+                        result["gasPrice"] = (*gas_price).into();
+                    }
+                    TxKind::EvmDeploy {
+                        deployer,
+                        nonce,
+                        gas_limit,
+                        gas_price,
+                        ..
+                    } => {
+                        result["type"] = "EvmDeploy".into();
+                        result["from"] = hex_addr(deployer).into();
+                        result["nonce"] = (*nonce).into();
+                        result["gasLimit"] = (*gas_limit).into();
+                        result["gasPrice"] = (*gas_price).into();
+                    }
+                    TxKind::EvmCall {
+                        caller,
+                        contract,
+                        nonce,
+                        gas_limit,
+                        value,
+                        gas_price,
+                        ..
+                    } => {
+                        result["type"] = "EvmCall".into();
+                        result["from"] = hex_addr(caller).into();
+                        result["to"] = hex_addr(contract).into();
+                        result["value"] = val128(*value);
+                        result["nonce"] = (*nonce).into();
+                        result["gasLimit"] = (*gas_limit).into();
+                        result["gasPrice"] = (*gas_price).into();
+                    }
+                    TxKind::BridgeDeposit {
+                        depositor,
+                        l2_chain_id,
+                        l2_recipient,
+                        amount,
+                        nonce,
+                        gas_price,
+                    } => {
+                        result["type"] = "BridgeDeposit".into();
+                        result["from"] = hex_addr(depositor).into();
+                        result["to"] = hex_addr(l2_recipient).into();
+                        result["value"] = val128(*amount);
+                        result["nonce"] = (*nonce).into();
+                        result["gasPrice"] = (*gas_price).into();
+                        result["l2ChainId"] = hex_addr(l2_chain_id).into();
+                    }
+                    _ => {
+                        result["type"] = format!("{:?}", std::mem::discriminant(&tx)).into();
+                    }
+                }
+            }
             if let Ok(Some(r)) = aztibase_execution::get_receipt(store, &hash) {
                 result["receipt"] = serde_json::json!({
                     "success": r.success,
@@ -1848,6 +2014,12 @@ async fn handle_get_emission_info(state: &RpcState, req: &JsonRpcRequest) -> Jso
     };
 
     let et = tracker.read().await;
+    let current_round = state.batch_count.load(Ordering::Relaxed);
+    let rounds_in_epoch = if et.epoch_length > 0 {
+        current_round % et.epoch_length
+    } else {
+        0
+    };
     JsonRpcResponse::success(
         req.id.clone(),
         serde_json::json!({
@@ -1858,10 +2030,46 @@ async fn handle_get_emission_info(state: &RpcState, req: &JsonRpcRequest) -> Jso
             "hard_cap": aztibase_execution::tokenomics::TOTAL_SUPPLY.to_string(),
             "genesis_mint": aztibase_execution::tokenomics::GENESIS_MINT.to_string(),
             "epoch_length": et.epoch_length,
+            "rounds_in_current_epoch": rounds_in_epoch,
+            "rounds_until_next_epoch": et.epoch_length.saturating_sub(rounds_in_epoch),
             "treasury_balance": et.treasury_balance.to_string(),
             "insurance_balance": et.insurance_balance.to_string(),
         }),
     )
+}
+
+async fn handle_get_epoch_rewards(state: &RpcState, req: &JsonRpcRequest) -> JsonRpcResponse {
+    let tracker = match &state.emission_tracker {
+        Some(t) => t,
+        None => {
+            return JsonRpcResponse::error(
+                req.id.clone(),
+                -32000,
+                "emission tracker not available".into(),
+            );
+        }
+    };
+    let count = req.params.get(0).and_then(|v| v.as_u64()).unwrap_or(10) as usize;
+    let et = tracker.read().await;
+    let events: Vec<serde_json::Value> = et
+        .recent_rewards(count.min(50))
+        .iter()
+        .map(|e| {
+            serde_json::json!({
+                "epoch": e.epoch,
+                "round": e.round,
+                "total_emission": e.total_emission.to_string(),
+                "validator_pool": e.validator_pool.to_string(),
+                "credits": e.credits.iter().map(|(addr, amt)| {
+                    serde_json::json!({
+                        "validator": format!("0x{}", hex::encode(addr)),
+                        "amount": amt.to_string(),
+                    })
+                }).collect::<Vec<_>>(),
+            })
+        })
+        .collect();
+    JsonRpcResponse::success(req.id.clone(), serde_json::json!(events))
 }
 
 async fn handle_get_vesting_status(state: &RpcState, req: &JsonRpcRequest) -> JsonRpcResponse {

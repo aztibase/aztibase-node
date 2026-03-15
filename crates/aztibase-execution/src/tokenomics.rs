@@ -426,6 +426,17 @@ pub fn check_anti_concentration(allocations: &[GenesisAllocationEntry]) -> bool 
 // EmissionTracker (runtime state)
 // ---------------------------------------------------------------------------
 
+const MAX_REWARD_HISTORY: usize = 50;
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct RewardEvent {
+    pub epoch: u64,
+    pub round: u64,
+    pub total_emission: u128,
+    pub validator_pool: u128,
+    pub credits: Vec<([u8; 32], u128)>,
+}
+
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct EmissionTracker {
     pub current_epoch: u64,
@@ -434,6 +445,8 @@ pub struct EmissionTracker {
     pub epochs_per_year: u64,
     pub treasury_balance: u128,
     pub insurance_balance: u128,
+    #[serde(default)]
+    pub reward_history: Vec<RewardEvent>,
 }
 
 impl EmissionTracker {
@@ -450,6 +463,7 @@ impl EmissionTracker {
             epochs_per_year,
             treasury_balance: 0,
             insurance_balance: 0,
+            reward_history: Vec::new(),
         }
     }
 
@@ -471,6 +485,20 @@ impl EmissionTracker {
         self.current_epoch += 1;
 
         Some(dist)
+    }
+
+    pub fn record_reward_event(&mut self, event: RewardEvent) {
+        self.reward_history.push(event);
+        if self.reward_history.len() > MAX_REWARD_HISTORY {
+            self.reward_history
+                .drain(..self.reward_history.len() - MAX_REWARD_HISTORY);
+        }
+    }
+
+    pub fn recent_rewards(&self, count: usize) -> &[RewardEvent] {
+        let len = self.reward_history.len();
+        let start = len.saturating_sub(count);
+        &self.reward_history[start..]
     }
 
     pub fn remaining_emission(&self) -> u128 {
@@ -786,5 +814,43 @@ mod tests {
             .find(|a| a.category == AllocationCategory::CommunityAirdrop)
             .unwrap();
         assert_eq!(air.vesting.vested_at(0), air.amount);
+    }
+
+    #[test]
+    fn reward_history_records_and_truncates() {
+        let mut tracker = EmissionTracker::new(1_000);
+        for i in 0..60 {
+            tracker.record_reward_event(RewardEvent {
+                epoch: i,
+                round: i * 1_000,
+                total_emission: 1_000,
+                validator_pool: 700,
+                credits: vec![([0xAA; 32], 350), ([0xBB; 32], 350)],
+            });
+        }
+        assert_eq!(tracker.reward_history.len(), 50);
+        assert_eq!(tracker.reward_history[0].epoch, 10);
+        assert_eq!(tracker.reward_history[49].epoch, 59);
+    }
+
+    #[test]
+    fn recent_rewards_returns_correct_slice() {
+        let mut tracker = EmissionTracker::new(1_000);
+        for i in 0..5 {
+            tracker.record_reward_event(RewardEvent {
+                epoch: i,
+                round: i * 1_000,
+                total_emission: 1_000,
+                validator_pool: 700,
+                credits: vec![],
+            });
+        }
+        let recent = tracker.recent_rewards(3);
+        assert_eq!(recent.len(), 3);
+        assert_eq!(recent[0].epoch, 2);
+        assert_eq!(recent[2].epoch, 4);
+
+        let all = tracker.recent_rewards(100);
+        assert_eq!(all.len(), 5);
     }
 }

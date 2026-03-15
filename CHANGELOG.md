@@ -5,6 +5,42 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ---
 
+## TX Status Fix, Explorer Dedup, Wallet UX, Epoch Rewards (2026-03-14)
+
+### Fixed
+- **TX "Fail" status**: DAG duplicate receipts overwrote successful receipts — receipt store now deduplicates within batch (HashMap) and checks existing store before writing failed receipts
+- **"No transactions in recent blocks"**: Explorer used batch anchor hash (mismatched) — switched to `aztb_getBlockByNumber` for correct TX lookup
+- **Triple TX rows**: DAG produces same TX in 3 validator blocks — Set-based dedup in explorer
+- **Block grid "0 txs"**: `getBlockRange` omits transactions — now fetches full blocks for accurate count
+- **Epoch rewards not distributing**: Three bugs — round 0 false epoch boundary (`0.is_multiple_of(n)` = true), empty participation set (only TX senders tracked, not block authors), epoch_length too long for testnet (10K → 1K)
+
+### Added
+- **Wallet refresh button**: Spin-animated refresh for balance, staking, and nonce
+- **Session password caching**: `chrome.storage.session` keeps wallet unlocked across popup reopens within browser session
+- **Wallet activity persistence**: TX history saved to `chrome.storage.local`, restored on popup open
+- **RPC decoded TX fields**: `aztb_getTransactionByHash` returns type, from, to, value, nonce, gasPrice for all TxKind variants
+
+### Changed
+- **Default epoch_length**: 10,000 → 1,000 (testnet-friendly, ~3 min per epoch)
+- **formatAZTB**: Shows full numbers below 10M instead of abbreviated
+
+---
+
+## Swiss Editorial Website Redesign + dApp Provider (2026-03-14)
+
+### Added
+- **dApp provider injection**: `wallet-extension/content-script.js` + `provider.js` — web pages can call `window.aztibase.connect()` for wallet access
+- **Site permission management**: popup UI for approving/revoking dApp connections
+
+### Changed
+- **Website landing page**: Complete editorial redesign — replaced card-based layout with Swiss editorial style (ruled lists, asymmetric columns, gold hairline dividers, sticky section headers)
+- **Brand consistency**: Explorer and brand assets updated for Aztibase rename (dendrite → branch references)
+
+### Removed
+- **Card-based layout**: Eliminated generic AI-generated aesthetic from landing page
+
+---
+
 ## Chrome Wallet Extension + 2FA + WASM Staking (2026-03-14)
 
 ### Added
