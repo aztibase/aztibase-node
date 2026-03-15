@@ -1821,13 +1821,6 @@ async fn main() -> Result<()> {
                         let _ = slash_tx.send(event).await;
                     }
                     Some(ConsensusOutput::BatchCommitted(batch)) => {
-                        tracing::info!(
-                            anchor = %format!("{:02x}{:02x}{:02x}{:02x}",
-                                batch.anchor_hash[0], batch.anchor_hash[1],
-                                batch.anchor_hash[2], batch.anchor_hash[3]),
-                            txs = batch.transactions.len(),
-                            "Batch committed — forwarding to execution"
-                        );
                         let snap = consensus_metrics.snapshot();
                         node_metrics.update_consensus(
                             snap.vertices_proposed,
@@ -1837,22 +1830,29 @@ async fn main() -> Result<()> {
                             snap.equivocations,
                             snap.last_commit_latency_us,
                         );
-                        // Broadcast committed batch on gossip for full node sync
-                        let announce = CommittedBatchAnnounce {
-                            index: batch_index + 1,
-                            anchor_hash: batch.anchor_hash,
-                            state_root: [0u8; 32], // filled after execution
-                            transactions: batch.transactions.clone(),
-                        };
-                        if let Ok(encoded) = aztibase_network::encode_batch_announce(&announce) {
-                            let _ = transport.publish(&topic_committed_batches, encoded);
-                        }
-
-                        if pipeline_tx.send(batch).await.is_err() {
-                            tracing::error!(
-                                "Execution pipeline channel closed — halting node"
+                        if node_is_validator {
+                            tracing::info!(
+                                anchor = %format!("{:02x}{:02x}{:02x}{:02x}",
+                                    batch.anchor_hash[0], batch.anchor_hash[1],
+                                    batch.anchor_hash[2], batch.anchor_hash[3]),
+                                txs = batch.transactions.len(),
+                                "Batch committed — forwarding to execution"
                             );
-                            break;
+                            let announce = CommittedBatchAnnounce {
+                                index: batch_index + 1,
+                                anchor_hash: batch.anchor_hash,
+                                state_root: [0u8; 32],
+                                transactions: batch.transactions.clone(),
+                            };
+                            if let Ok(encoded) = aztibase_network::encode_batch_announce(&announce) {
+                                let _ = transport.publish(&topic_committed_batches, encoded);
+                            }
+                            if pipeline_tx.send(batch).await.is_err() {
+                                tracing::error!(
+                                    "Execution pipeline channel closed — halting node"
+                                );
+                                break;
+                            }
                         }
                     }
                     None => {
@@ -1942,23 +1942,35 @@ async fn main() -> Result<()> {
                 }
             }
             _ = catchup_ticker.tick() => {
-                if !node_is_validator
-                    && sync_proto.needs_sync()
-                    && !catchup_pending
-                    && !connected_peers.is_empty()
-                    && let Some(req_msg) = sync_proto.next_request()
-                {
-                    let peer_idx = (batch_index as usize) % connected_peers.len();
-                    let peer = connected_peers[peer_idx];
-                    if let Ok(encoded) = aztibase_network::block_sync::encode_request(&req_msg) {
-                        tracing::info!(
-                            peer = %peer,
-                            from = sync_proto.last_synced_index() + 1,
-                            behind = sync_proto.batches_behind(),
-                            "Sending catch-up request"
-                        );
-                        transport.send_block_sync_request(&peer, encoded);
-                        catchup_pending = true;
+                if !node_is_validator {
+                    let needs = sync_proto.needs_sync();
+                    let has_peers = !connected_peers.is_empty();
+                    tracing::debug!(
+                        needs_sync = needs,
+                        catchup_pending,
+                        peers = connected_peers.len(),
+                        tip = sync_proto.tip_index(),
+                        synced = sync_proto.last_synced_index(),
+                        batch_index,
+                        "Catch-up ticker"
+                    );
+                    if needs
+                        && !catchup_pending
+                        && has_peers
+                        && let Some(req_msg) = sync_proto.next_request()
+                    {
+                        let peer_idx = (batch_index as usize) % connected_peers.len();
+                        let peer = connected_peers[peer_idx];
+                        if let Ok(encoded) = aztibase_network::block_sync::encode_request(&req_msg) {
+                            tracing::info!(
+                                peer = %peer,
+                                from = sync_proto.last_synced_index() + 1,
+                                behind = sync_proto.batches_behind(),
+                                "Sending catch-up request"
+                            );
+                            transport.send_block_sync_request(&peer, encoded);
+                            catchup_pending = true;
+                        }
                     }
                 }
             }

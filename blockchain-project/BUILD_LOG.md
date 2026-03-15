@@ -21,10 +21,19 @@ Entries are prepended (newest first).
 
 ## Entries
 
+### Full Node Catch-Up Fix — Validator-Only Batch Commits (2026-03-15)
+- **Date**: 2026-03-15
+- **Sprint**: Post-059 (Mainnet Prep)
+- **Commit**: (pending)
+- **Files changed**:
+  - `crates/aztibase-node/src/main.rs` — ConsensusOutput::BatchCommitted now gated by `node_is_validator` (full nodes no longer process DAG-committed batches or broadcast CommittedBatchAnnounce; they rely solely on gossip announces + block sync catch-up). Added catch-up ticker debug logging (needs_sync, peers, tip, synced, batch_index).
+- **Review Notes**: Fixed root cause of catch-up not triggering in previous build — full nodes were processing consensus-committed batches (creating 3× duplicate batches from all validators' DAG commits), which both inflated batch_index and interfered with block sync state tracking. Now full nodes get batches from two clean paths only: (1) historical catch-up via block sync request-response, (2) live following via gossipsub CommittedBatchAnnounce. Validated on live testnet: full node synced 0→434 batches in ~45s (50/request, ~3ms round-trip), then continued following live. Clippy clean, fmt clean.
+- **Security Flags**: None
+
 ### Persistent Batch Archive + Full Node Catch-Up (2026-03-15)
 - **Date**: 2026-03-15
 - **Sprint**: Post-059 (Mainnet Prep)
-- **Commit**: (pending — includes block sync protocol from 8b601a4)
+- **Commit**: 52fb84c (includes block sync protocol from 8b601a4)
 - **Files changed**:
   - `crates/aztibase-network/src/batch_archive.rs` — New: BatchArchive redb store (store/retrieve/range/load_recent/prune, 10 tests)
   - `crates/aztibase-network/src/lib.rs` — Added batch_archive module + BatchArchive re-export

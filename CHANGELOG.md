@@ -5,6 +5,16 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ---
 
+## Full Node Catch-Up Fix (2026-03-15)
+
+### Fixed
+- **Validator-only batch commits**: Non-validator nodes no longer process `ConsensusOutput::BatchCommitted` or broadcast `CommittedBatchAnnounce`. Previously, full nodes received 3× duplicate batches (one from each validator's independent DAG commits), inflating batch_index and preventing block sync catch-up from triggering.
+
+### Validated
+- **Live testnet catch-up**: Full node synced from 0 to 434 batches in ~45 seconds (50 batches/request, ~3ms round-trip, rotating across 3 validator peers), then seamlessly transitioned to live gossip following.
+
+---
+
 ## Block Sync: Persistent Archive + Full Node Catch-Up (2026-03-15)
 
 ### Added

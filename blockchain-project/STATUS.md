@@ -4,7 +4,7 @@
 **Updated By:** p2p-network-engineer + node-engineer
 **Current Phase:** M9 -- Mainnet Prep
 **Current Sprint:** Post-059 -- Testnet Expansion
-**Sprint Status:** Block sync complete with persistent archive + automatic catch-up. Full nodes auto-request missing batches on startup/gap detection. 738 unit tests pass. Next: live testnet validation of catch-up, then remaining mainnet blockers.
+**Sprint Status:** Block sync VALIDATED on live testnet. Full nodes catch up from validators via block sync protocol (50 batches/req, ~3ms RTT, 0→434 in ~45s) then follow live via gossip. Fixed: non-validator batch commit bypass (was causing 3× duplicates from DAG). 738 unit tests pass. Clippy clean, fmt clean.
 
 ---
 
@@ -87,6 +87,7 @@
 - Mainnet launch blocked on: Aztibase Systems coexistence agreement (legal), public testnet infrastructure deployment (VPS provisioning)
 
 ### Recently Completed
+- **Post-059 (2026-03-15)**: Full node catch-up fix — validator-only batch commits (non-validators no longer process DAG-committed batches), catch-up ticker debug logging. Validated on live testnet: 0→434 batches in ~45s, 50/req, ~3ms RTT
 - **Post-059 (2026-03-15)**: Persistent batch archive + full node catch-up — BatchArchive in redb (10K cap), auto catch-up on gap/startup, sync progress logging, nodeType RPC field, explorer 3-mode detection, 10 new tests (738 total unit tests)
 - **Post-059 (2026-03-15)**: Block sync protocol for full nodes — dual-mode sync (catch-up request-response + live gossipsub), 8th gossip topic, batch history buffer, 12 new tests, ADR-031
 - **Post-059 (2026-03-14)**: Generic validator release package (no bundled keys, auto-keygen), Explorer/Dashboard hostname-based split, dashboard in release packages, consensus round fast-forward (ADR-030), Chrome wallet extension with 2FA (TOTP + WebAuthn), WASM staking signing, wallet CLI staking commands, GitHub release v0.1.1 updated
@@ -267,11 +268,10 @@
 - Sprint 005 Phase 1: Consensus-to-execution wiring, TxKind routing, ExecutionPipeline
 
 ### Next Up
-1. Integration test: full node sync on live testnet (verify batch catch-up + live following)
-2. Full workspace test run (cargo test --workspace)
-3. Friends testnet invitations and validator onboarding
-4. Public testnet infrastructure deployment (3 seed nodes on VPS)
-5. Sprint 060 planning: mainnet checklist
+1. Friends testnet invitations and validator onboarding
+2. Public testnet infrastructure deployment (3 seed nodes on VPS)
+3. Sprint 060 planning: mainnet checklist
+4. Store raw transactions in SyncBatch for catch-up execution replay (currently empty for 0-tx batches)
 
 ### Deferred to M9+ (Locked in FUTURE_PLANNING.md)
 
