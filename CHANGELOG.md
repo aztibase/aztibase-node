@@ -5,6 +5,14 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ---
 
+## SyncBatch Real Transactions + Test Fixes (2026-03-15)
+
+### Fixed
+- **SyncBatch carries real transactions**: Block sync catch-up now delivers actual raw transaction data to full nodes, enabling proper transaction replay. Previously SyncBatch stored empty vecs.
+- **5 flaky integration tests**: Corrected PeerCountChanged values to match the n-1 peer requirement introduced in Sprint 058. Tests no longer hit the 30s peer-wait timeout.
+
+---
+
 ## Full Node Catch-Up Fix (2026-03-15)
 
 ### Fixed

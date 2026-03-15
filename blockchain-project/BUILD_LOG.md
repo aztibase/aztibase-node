@@ -21,10 +21,20 @@ Entries are prepended (newest first).
 
 ## Entries
 
+### SyncBatch Real Transactions + Flaky Test Fixes (2026-03-15)
+- **Date**: 2026-03-15
+- **Sprint**: Post-059 (Mainnet Prep)
+- **Commit**: e26a43e
+- **Files changed**:
+  - `crates/aztibase-node/src/main.rs` — SyncBatch now populated with real raw transactions from consensus commits (buffered via HashMap<anchor_hash, txs> between BatchCommitted and PipelineResult). Full nodes receiving catch-up batches will get actual transaction data for replay.
+  - `crates/aztibase-node/src/integration.rs` — Fixed 5 flaky integration tests: PeerCountChanged now sends correct n-1 peer count matching the consensus engine's peer-wait requirement (Sprint 058 change). Tests: byzantine_equivocation_detected (2→3), validator_crash_and_recovery (2→3, deadline 10s→15s), run_adversarial_testbed (2→dynamic n-1).
+- **Review Notes**: 974 tests pass, clippy clean. The pending_batch_txs HashMap is bounded by pipeline throughput (entries removed on PipelineResult). Flaky tests were consistently timing out because engines waited 30s for the required peer count that never arrived.
+- **Security Flags**: None
+
 ### Full Node Catch-Up Fix — Validator-Only Batch Commits (2026-03-15)
 - **Date**: 2026-03-15
 - **Sprint**: Post-059 (Mainnet Prep)
-- **Commit**: (pending)
+- **Commit**: b02bdb3
 - **Files changed**:
   - `crates/aztibase-node/src/main.rs` — ConsensusOutput::BatchCommitted now gated by `node_is_validator` (full nodes no longer process DAG-committed batches or broadcast CommittedBatchAnnounce; they rely solely on gossip announces + block sync catch-up). Added catch-up ticker debug logging (needs_sync, peers, tip, synced, batch_index).
 - **Review Notes**: Fixed root cause of catch-up not triggering in previous build — full nodes were processing consensus-committed batches (creating 3× duplicate batches from all validators' DAG commits), which both inflated batch_index and interfered with block sync state tracking. Now full nodes get batches from two clean paths only: (1) historical catch-up via block sync request-response, (2) live following via gossipsub CommittedBatchAnnounce. Validated on live testnet: full node synced 0→434 batches in ~45s (50/request, ~3ms round-trip), then continued following live. Clippy clean, fmt clean.
