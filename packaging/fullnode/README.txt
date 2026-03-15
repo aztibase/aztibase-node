@@ -1,22 +1,33 @@
-AZTIBASE NODE - Quick Start
-============================
+AZTIBASE FULL NODE
+==================
 
-1. Install Tailscale (tailscale.com) and join the network
-2. Open node.toml and replace SEED_NODE_IP with the seed node's Tailscale IP
-3. Run: bash start.sh
-4. Check: curl http://127.0.0.1:9944/health
+Run a full node that follows the Aztibase testnet.
+Full nodes sync from genesis via block sync catch-up, then follow
+live via gossipsub. No staking required.
+
+Quick Start:
+  1. Run: bash start.sh
+  2. Check: curl http://127.0.0.1:9947/health
+
+The node connects to public testnet boot nodes automatically
+and syncs to the chain tip within minutes.
 
 Files:
   aztibase.exe   - The node binary
-  genesis.toml   - Chain genesis config (same for all nodes)
-  node.toml      - Your node config (edit boot_nodes IP here)
+  genesis.toml   - Chain genesis config
+  node.toml      - Node config (boot nodes pre-configured)
   start.sh       - Start/stop script
+
+Endpoints:
+  RPC:     http://127.0.0.1:9947
+  Health:  http://127.0.0.1:9947/health
+  Metrics: http://127.0.0.1:9947/metrics/json
 
 To become a validator:
   1. Start your node (syncs as full node first)
   2. Get AZTB from faucet or another account
   3. Send a stake transaction (minimum 50M AZTB)
-  4. At the next epoch boundary, you become a validator and earn rewards
+  4. At the next epoch boundary, you join the active validator set
 
 Stop: bash start.sh stop
 Logs: node.log

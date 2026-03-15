@@ -1,0 +1,135 @@
+---
+title: Networking
+description: P2P networking architecture and block sync protocol
+---
+
+Aztibase uses rust-libp2p for all peer-to-peer communication. The network layer is fully decentralized with no relay servers in the critical path.
+
+## Transport Stack
+
+| Layer | Protocol |
+|-------|----------|
+| Transport | QUIC (primary), TCP (fallback) |
+| Security | TLS 1.3 (QUIC), Noise (TCP) |
+| Muxing | Native QUIC streams / yamux |
+| Discovery | Kademlia DHT + mDNS (local) |
+| Pubsub | Gossipsub v1.1 |
+| NAT Traversal | STUN + AutoNAT |
+
+Nodes prefer QUIC for its lower latency and built-in multiplexing. TCP with Noise encryption is used as a fallback when QUIC is unavailable (e.g., restrictive firewalls).
+
+## Peer Discovery
+
+Nodes discover peers through three mechanisms:
+
+1. **Boot nodes**: Hardcoded in the config file. Used for initial connection to the network
+2. **Kademlia DHT**: After connecting to boot nodes, the node joins the DHT and discovers additional peers through iterative lookups
+3. **mDNS**: For local network discovery (same LAN). Useful during development and testing
+
+## Gossipsub Topics
+
+All real-time data propagation uses gossipsub mesh networking:
+
+| Topic | Purpose | Publishers |
+|-------|---------|------------|
+| `/aztibase/blocks/1.0.0` | DAG vertex broadcast | Validators |
+| `/aztibase/transactions/1.0.0` | Transaction gossip | Any node with mempool |
+| `/aztibase/consensus/1.0.0` | Consensus protocol messages | Validators |
+| `/aztibase/state-sync/1.0.0` | State root announcements | Validators |
+| `/aztibase/committed-batches/1.0.0` | Committed batch announces | Validators |
+| `/aztibase/ai-proofs/1.0.0` | AI computation attestations | AI providers |
+| `/aztibase/validator-announce/1.0.0` | Validator set changes | Validators |
+| `/aztibase/checkpoint-announce/1.0.0` | Weak subjectivity checkpoints | Validators |
+
+### Mesh Parameters
+
+```
+target_mesh_size = 3
+mesh_low = 2
+mesh_high = 12
+outbound_min = 1
+heartbeat_interval = 500ms
+max_connections = 50
+```
+
+## Block Sync Protocol
+
+The block sync protocol enables full nodes to catch up to the network tip. It uses libp2p request-response over a dedicated stream protocol.
+
+### Wire Protocol
+
+Protocol ID: `/aztibase/block-sync/1`
+
+Messages are length-prefixed frames (4-byte big-endian length + payload), serialized with postcard. Maximum frame size: 4 MiB.
+
+```
+BlockSyncMessage:
+  RequestBatches { version, from_index, count }
+  ResponseBatches { version, batches, tip_index }
+
+SyncBatch:
+  index: u64
+  anchor_hash: [u8; 32]
+  state_root: [u8; 32]
+  transactions: Vec<Vec<u8>>
+```
+
+### Catch-Up Flow
+
+```
+Full Node                           Validator
+    |                                    |
+    |--- RequestBatches(from=1, n=50) -->|
+    |                                    |
+    |<-- ResponseBatches(batches, tip) --|
+    |                                    |
+    |  [apply batches 1..50]             |
+    |                                    |
+    |--- RequestBatches(from=51, n=50) ->|
+    |                                    |
+    |<-- ResponseBatches(batches, tip) --|
+    |                                    |
+    |  [apply batches 51..100]           |
+    |  ...until caught up...             |
+    |                                    |
+    |  [switch to live gossip following] |
+```
+
+### Live Following
+
+After catching up, full nodes follow the chain via gossipsub:
+
+1. Validators publish `CommittedBatchAnnounce` after each consensus commit
+2. Full nodes receive announces and apply them as new batches
+3. If the node falls behind, the catch-up ticker (every 5s) detects the gap and resumes request-response sync
+
+### Batch Archive
+
+Validators maintain a persistent batch archive in redb (up to 10,000 batches). This allows them to serve historical catch-up requests even after restart. The archive auto-prunes old batches when the cap is reached.
+
+## Peer Scoring
+
+Peers are scored based on behavior:
+
+| Behavior | Score Impact |
+|----------|-------------|
+| Valid message delivered | +1 |
+| Invalid message | -10 |
+| Mesh message deficit | -1 per missed heartbeat |
+| Peer graft/prune spam | -5 per excess |
+
+Peers with scores below the threshold are disconnected and temporarily banned.
+
+## Peer Store
+
+Connected peer information (addresses, last seen timestamps) is persisted in `peer_store.redb`. On restart, the node attempts to reconnect to previously known peers before falling back to boot nodes.
+
+## NAT Traversal
+
+For nodes behind NAT:
+
+1. **STUN**: Discovers the node's public IP and port mapping via Google STUN servers
+2. **AutoNAT**: Peers probe each other to verify external reachability
+3. **Relay**: Future — circuit relay for nodes that cannot be directly reached
+
+Nodes that are publicly reachable advertise their external addresses via Kademlia. Nodes behind NAT connect outbound to reachable peers.

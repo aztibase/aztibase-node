@@ -65,6 +65,7 @@ export default defineConfig({
 					items: [
 						{ label: 'Introduction', slug: 'guides/introduction' },
 						{ label: 'Quick Start', slug: 'guides/quickstart' },
+						{ label: 'Run a Full Node', slug: 'guides/run-fullnode' },
 						{ label: 'Run a Validator', slug: 'guides/run-validator' },
 					],
 				},
@@ -73,6 +74,7 @@ export default defineConfig({
 					items: [
 						{ label: 'Overview', slug: 'architecture/overview' },
 						{ label: 'Consensus', slug: 'architecture/consensus' },
+						{ label: 'Networking', slug: 'architecture/networking' },
 						{ label: 'Tokenomics', slug: 'architecture/tokenomics' },
 						{ label: 'AI Integration', slug: 'architecture/ai-integration' },
 					],

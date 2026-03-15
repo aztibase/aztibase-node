@@ -3,17 +3,22 @@ genesis_path = "./genesis.toml"
 
 [network]
 listen_addresses = [
-    "/ip4/0.0.0.0/tcp/30333",
-    "/ip4/0.0.0.0/udp/30333/quic-v1",
+    "/ip4/0.0.0.0/tcp/30336",
+    "/ip4/0.0.0.0/udp/30336/quic-v1",
 ]
 boot_nodes = [
-    "/ip4/SEED_NODE_IP/tcp/30333",
+    "/dns4/rpc.aztibase.com/tcp/30333",
+    "/dns4/rpc2.aztibase.com/tcp/30333",
+    "/dns4/rpc3.aztibase.com/tcp/30333",
 ]
 idle_timeout_secs = 60
-stun_servers = []
+stun_servers = [
+    "stun:stun.l.google.com:19302",
+    "stun:stun1.l.google.com:19302",
+]
 
 [rpc]
-listen_addr = "0.0.0.0:9944"
+listen_addr = "0.0.0.0:9947"
 enabled = true
 
 [log]
