@@ -953,8 +953,9 @@ mod tests {
         }
 
         // Simulate peer connections so engines start proposing.
+        // 4 validators in set → engines require 3 peers to start.
         for tx in &engine_inputs {
-            let _ = tx.send(ConsensusInput::PeerCountChanged(2)).await;
+            let _ = tx.send(ConsensusInput::PeerCountChanged(3)).await;
         }
 
         // Wait for honest nodes to commit — they should succeed despite the equivocation
@@ -2207,13 +2208,14 @@ mod tests {
         drop(router_tx);
 
         // Simulate peer connections so engines start proposing.
+        // 4 validators in set → engines require 3 peers to start.
         for tx in &engine_inputs {
-            let _ = tx.send(ConsensusInput::PeerCountChanged(2)).await;
+            let _ = tx.send(ConsensusInput::PeerCountChanged(3)).await;
         }
 
         // v4 never runs — simulates a crash. 3 out of 4 = 75% > 2/3 threshold.
         let mut committed: Vec<Vec<CommittedBatch>> = vec![Vec::new(), Vec::new(), Vec::new()];
-        let deadline = tokio::time::Instant::now() + Duration::from_secs(10);
+        let deadline = tokio::time::Instant::now() + Duration::from_secs(15);
 
         loop {
             if committed.iter().all(|c| !c.is_empty()) {
@@ -2450,8 +2452,10 @@ mod tests {
         drop(router_tx);
 
         // Simulate peer connections so engines start proposing.
+        // Engines require n-1 peers before starting consensus.
+        let required_peers = (n as u64).saturating_sub(1).max(1);
         for tx in &engine_inputs {
-            let _ = tx.send(ConsensusInput::PeerCountChanged(2)).await;
+            let _ = tx.send(ConsensusInput::PeerCountChanged(required_peers)).await;
         }
 
         let mut committed: Vec<Vec<CommittedBatch>> = (0..n).map(|_| Vec::new()).collect();

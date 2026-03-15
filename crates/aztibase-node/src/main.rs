@@ -1469,6 +1469,10 @@ async fn main() -> Result<()> {
         );
     }
 
+    // Buffer raw transactions between BatchCommitted and PipelineResult
+    let mut pending_batch_txs: std::collections::HashMap<[u8; 32], Vec<Vec<u8>>> =
+        std::collections::HashMap::new();
+
     // Block sync: catch-up protocol for full nodes
     let mut sync_proto = BlockSyncProtocol::new(batch_index);
     let mut connected_peers: Vec<PeerId> = Vec::new();
@@ -1847,6 +1851,7 @@ async fn main() -> Result<()> {
                             if let Ok(encoded) = aztibase_network::encode_batch_announce(&announce) {
                                 let _ = transport.publish(&topic_committed_batches, encoded);
                             }
+                            pending_batch_txs.insert(batch.anchor_hash, batch.transactions.clone());
                             if pipeline_tx.send(batch).await.is_err() {
                                 tracing::error!(
                                     "Execution pipeline channel closed — halting node"
@@ -1899,11 +1904,14 @@ async fn main() -> Result<()> {
                 }
 
                 // Store in batch history for block sync requests
+                let raw_txs = pending_batch_txs
+                    .remove(&result.batch_anchor)
+                    .unwrap_or_default();
                 let sync_batch = SyncBatch {
                     index: batch_index,
                     anchor_hash: result.batch_anchor,
                     state_root: result.state_root,
-                    transactions: result.receipts.iter().map(|_| Vec::new()).collect(),
+                    transactions: raw_txs,
                 };
                 if let Err(e) = batch_archive.store_batch(&sync_batch) {
                     tracing::warn!(error = %e, "Failed to persist batch to archive");
