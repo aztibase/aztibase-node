@@ -132,6 +132,7 @@ pub struct RpcState {
     pub permissive_cors: bool,
     pub cors_allowed_origins: Vec<String>,
     pub max_body_bytes: usize,
+    pub is_validator: bool,
 }
 
 impl Clone for RpcState {
@@ -166,6 +167,7 @@ impl Clone for RpcState {
             permissive_cors: self.permissive_cors,
             cors_allowed_origins: self.cors_allowed_origins.clone(),
             max_body_bytes: self.max_body_bytes,
+            is_validator: self.is_validator,
         }
     }
 }
@@ -352,8 +354,14 @@ impl RpcServer {
                 permissive_cors: false,
                 cors_allowed_origins: Vec::new(),
                 max_body_bytes: MAX_WS_FRAME_SIZE,
+                is_validator: false,
             },
         }
+    }
+
+    pub fn with_validator(mut self, is_validator: bool) -> Self {
+        self.state.is_validator = is_validator;
+        self
     }
 
     pub fn with_faucet_enabled(mut self, enabled: bool) -> Self {
@@ -1391,6 +1399,12 @@ async fn handle_faucet_drip(state: &RpcState, req: &JsonRpcRequest) -> JsonRpcRe
 async fn handle_node_info(state: &RpcState, req: &JsonRpcRequest) -> JsonRpcResponse {
     let block_height = state.batch_count.load(Ordering::Relaxed);
 
+    let node_type = if state.is_validator {
+        "validator"
+    } else {
+        "full"
+    };
+
     JsonRpcResponse::success(
         req.id.clone(),
         serde_json::json!({
@@ -1398,6 +1412,7 @@ async fn handle_node_info(state: &RpcState, req: &JsonRpcRequest) -> JsonRpcResp
             "chainId": format!("0x{:x}", state.chain_id),
             "blockHeight": block_height,
             "protocolVersion": "aztb/1",
+            "nodeType": node_type,
         }),
     )
 }
@@ -3625,6 +3640,7 @@ mod tests {
         );
         assert_eq!(resp["result"]["protocolVersion"], "aztb/1");
         assert!(resp["result"]["version"].as_str().is_some());
+        assert_eq!(resp["result"]["nodeType"], "full");
     }
 
     // ── Health endpoint tests ────────────────────────────────────────

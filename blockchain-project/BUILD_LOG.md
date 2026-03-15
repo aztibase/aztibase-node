@@ -21,6 +21,20 @@ Entries are prepended (newest first).
 
 ## Entries
 
+### Block Sync Protocol for Full Nodes (2026-03-15)
+- **Date**: 2026-03-15
+- **Sprint**: Post-059 (Mainnet Prep)
+- **Commit**: (pending)
+- **Files changed**:
+  - `crates/aztibase-network/src/block_sync.rs` — New: request-response codec, BlockSyncMessage (RequestBatches/ResponseBatches), SyncBatch wire type, BlockSyncProtocol state machine, CommittedBatchAnnounce gossip type, encode/decode functions, 12 unit tests
+  - `crates/aztibase-network/src/gossip.rs` — Added TOPIC_COMMITTED_BATCHES, 7→8 topics, topic weight 1.5
+  - `crates/aztibase-network/src/lib.rs` — Added block_sync module + re-exports, updated topic count assertions
+  - `crates/aztibase-network/src/behaviour.rs` — Added block_sync request_response behaviour to AztibaseBehaviour
+  - `crates/aztibase-network/src/transport.rs` — 3 new NetworkEvent variants (BlockSyncRequest/Response/OutboundFailure), behaviour init, event handling, send methods
+  - `crates/aztibase-node/src/main.rs` — Batch history buffer (VecDeque, 1000 cap), gossip broadcast of CommittedBatchAnnounce after commit, live sync consumer for non-validators, catch-up request server
+- **Review Notes**: Dual-mode sync: (1) catch-up via `/aztibase/block-sync/1` request-response for historical batches, (2) live via TOPIC_COMMITTED_BATCHES gossipsub for real-time following. 97 network tests pass (12 new). Clippy clean, fmt clean. ADR-031.
+- **Security Flags**: None
+
 ### TX Status Fix, Explorer Dedup, Wallet UX, Epoch Rewards (2026-03-14)
 - **Date**: 2026-03-14
 - **Sprint**: Post-059 (Testnet Expansion)

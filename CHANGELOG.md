@@ -5,6 +5,22 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ---
 
+## Block Sync Protocol for Full Nodes (2026-03-15)
+
+### Added
+- **Block sync request-response protocol**: `/aztibase/block-sync/1` — full nodes catch up by requesting historical batches by index range from validators (max 50 per request, 4 MiB frame limit)
+- **Live batch gossip**: `TOPIC_COMMITTED_BATCHES` gossipsub topic — validators broadcast committed batches, full nodes consume in real time
+- **Batch history buffer**: Validators retain last 1000 committed batches (with real state roots) to serve catch-up requests
+- **BlockSyncProtocol state machine**: Tracks sync progress, generates sequential batch requests, applies responses in order
+- **CommittedBatchAnnounce**: Gossip wire type for live batch distribution (index, anchor_hash, state_root, transactions)
+
+### Changed
+- **Gossip topics**: 7 → 8 (added committed-batches with topic weight 1.5)
+- **AztibaseBehaviour**: Added block_sync request_response behaviour
+- **NetworkEvent**: 3 new variants for block sync request/response/failure handling
+
+---
+
 ## TX Status Fix, Explorer Dedup, Wallet UX, Epoch Rewards (2026-03-14)
 
 ### Fixed

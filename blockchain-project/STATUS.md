@@ -1,10 +1,10 @@
 # PROJECT STATUS: Aztibase Network
 
-**Last Updated:** 2026-03-14
-**Updated By:** node-engineer + p2p-network-engineer
+**Last Updated:** 2026-03-15
+**Updated By:** p2p-network-engineer + node-engineer
 **Current Phase:** M9 -- Mainnet Prep
 **Current Sprint:** Post-059 -- Testnet Expansion
-**Sprint Status:** Generic validator release package on GitHub (v0.1.1). Explorer/Dashboard naming split. Round fast-forward for late-joining validators. Chrome wallet extension with 2FA. Next: test remote validator joining, Phase 2 block sync protocol.
+**Sprint Status:** Block sync protocol implemented (dual-mode: catch-up request-response + live gossipsub). Full nodes can now follow the chain. Next: integration test on live testnet, full workspace test run, then remaining mainnet blockers.
 
 ---
 
@@ -72,7 +72,7 @@
 | aztibase-core | COMPLETE | blockchain-architect | Types, crypto, hashing — feature-complete |
 | aztibase-consensus | FEATURE-COMPLETE | consensus-engineer | DAG-BFT, commit rule, finality certs, equivocation, checkpoints |
 | aztibase-storage | FEATURE-COMPLETE | node-engineer | redb tables, light store, Verkle placeholder, protocol store persistence |
-| aztibase-network | FEATURE-COMPLETE | p2p-network-engineer | Gossipsub, Kademlia, peer scoring, NAT, WebRTC scaffold |
+| aztibase-network | FEATURE-COMPLETE | p2p-network-engineer | Gossipsub, Kademlia, peer scoring, NAT, WebRTC scaffold, block sync protocol |
 | aztibase-execution | FEATURE-COMPLETE | smart-contract-engineer | 27 TxKinds, fee market, staking, governance, tokenomics, AI market, L2 bridge |
 | aztibase-runtime | PARTIAL | ai-integration-engineer | tract inference, anomaly scorer — stubs for advanced features |
 | aztibase-rpc | FEATURE-COMPLETE | node-engineer | 48 RPC methods, WebSocket subscriptions, Prometheus metrics |
@@ -87,6 +87,7 @@
 - Mainnet launch blocked on: Aztibase Systems coexistence agreement (legal), public testnet infrastructure deployment (VPS provisioning)
 
 ### Recently Completed
+- **Post-059 (2026-03-15)**: Block sync protocol for full nodes — dual-mode sync (catch-up request-response + live gossipsub), 8th gossip topic, batch history buffer, 12 new tests, ADR-031
 - **Post-059 (2026-03-14)**: Generic validator release package (no bundled keys, auto-keygen), Explorer/Dashboard hostname-based split, dashboard in release packages, consensus round fast-forward (ADR-030), Chrome wallet extension with 2FA (TOTP + WebAuthn), WASM staking signing, wallet CLI staking commands, GitHub release v0.1.1 updated
 - **Sprint 059 (2026-03-12)**: Friends testnet — genesis ceremony CLI (init, add-validator, add-account, validate, show), wallet --validator flag (Ed25519+BLS), --boot-node CLI flag, setup-validator.sh custom network support, friends testnet guide + coordinator script
 - **Pre-mainnet audit (2026-03-12)**: 7-agent parallel audit of all 9 crates. 15C/25H/31M findings. Code quality clean. 8 architecture gaps. Prioritized 4-phase fix plan.
@@ -265,9 +266,11 @@
 - Sprint 005 Phase 1: Consensus-to-execution wiring, TxKind routing, ExecutionPipeline
 
 ### Next Up
-1. Friends testnet invitations and validator onboarding
-2. Public testnet infrastructure deployment (3 seed nodes on VPS)
-3. Sprint 060 planning: public testnet launch or mainnet checklist
+1. Integration test: full node sync on live testnet (verify batch catch-up + live following)
+2. Full workspace test run (cargo test --workspace)
+3. Friends testnet invitations and validator onboarding
+4. Public testnet infrastructure deployment (3 seed nodes on VPS)
+5. Sprint 060 planning: mainnet checklist
 
 ### Deferred to M9+ (Locked in FUTURE_PLANNING.md)
 

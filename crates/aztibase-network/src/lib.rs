@@ -1,4 +1,5 @@
 pub mod behaviour;
+pub mod block_sync;
 pub mod connection_filter;
 pub mod dht_record;
 pub mod discovery;
@@ -10,13 +11,20 @@ pub mod transport;
 #[cfg(feature = "webrtc")]
 pub mod webrtc;
 
+pub use block_sync::{
+    BLOCK_SYNC_PROTOCOL, BlockSyncCodec, BlockSyncMessage, BlockSyncProtocol, BlockSyncRequest,
+    BlockSyncResponse, CommittedBatchAnnounce, SyncBatch, build_batch_request,
+    build_batch_response, decode_batch_announce, decode_block_sync, encode_batch_announce,
+    encode_block_sync,
+};
 pub use connection_filter::{ConnectionFilter, FilterReason};
 pub use dht_record::{
     DhtRecordKind, DhtRecordSignature, DhtValidationError, SignedDhtRecord, validate_dht_record,
 };
 pub use gossip::{
-    MessageAcceptance, TOPIC_CHECKPOINT_ANNOUNCE, TOPIC_CONSENSUS, TOPIC_STATE_SYNC,
-    TOPIC_TRANSACTIONS, chain_scoped_topics, genesis_hex_prefix, validate_gossip_message,
+    MessageAcceptance, TOPIC_CHECKPOINT_ANNOUNCE, TOPIC_COMMITTED_BATCHES, TOPIC_CONSENSUS,
+    TOPIC_STATE_SYNC, TOPIC_TRANSACTIONS, chain_scoped_topics, genesis_hex_prefix,
+    validate_gossip_message,
 };
 pub use libp2p::{Multiaddr, PeerId};
 pub use light_sync::{
@@ -68,7 +76,7 @@ mod tests {
     #[test]
     fn aztibase_topics_count() {
         let topics = gossip::aztibase_topics();
-        assert_eq!(topics.len(), 7);
+        assert_eq!(topics.len(), 8);
     }
 
     #[test]
@@ -143,7 +151,7 @@ mod tests {
     #[tokio::test]
     async fn transport_subscribes_all_topics() {
         let transport = Libp2pTransport::new(TransportConfig::default()).unwrap();
-        assert_eq!(transport.subscribed_topics().len(), 7);
+        assert_eq!(transport.subscribed_topics().len(), 8);
     }
 
     #[tokio::test]

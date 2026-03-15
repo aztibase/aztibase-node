@@ -13,6 +13,7 @@ use libp2p::{
 use tracing::{debug, info, warn};
 
 use crate::behaviour::{AztibaseBehaviour, AztibaseBehaviourEvent};
+use crate::block_sync::{BLOCK_SYNC_PROTOCOL, BlockSyncCodec, BlockSyncRequest, BlockSyncResponse};
 use crate::connection_filter::ConnectionFilter;
 use crate::light_sync::{LIGHT_SYNC_PROTOCOL, LightSyncCodec, LightSyncRequest, LightSyncResponse};
 use crate::peer_store::PeerStore;
@@ -115,6 +116,21 @@ pub enum NetworkEvent {
         request_id: OutboundRequestId,
         error: request_response::OutboundFailure,
     },
+    BlockSyncRequest {
+        peer: PeerId,
+        request: BlockSyncRequest,
+        channel: ResponseChannel<BlockSyncResponse>,
+    },
+    BlockSyncResponse {
+        peer: PeerId,
+        request_id: OutboundRequestId,
+        response: BlockSyncResponse,
+    },
+    BlockSyncOutboundFailure {
+        peer: PeerId,
+        request_id: OutboundRequestId,
+        error: request_response::OutboundFailure,
+    },
 }
 
 #[derive(Debug, Clone, Default)]
@@ -185,6 +201,12 @@ impl Libp2pTransport {
                     request_response::Config::default(),
                 );
 
+                let block_sync = request_response::Behaviour::with_codec(
+                    BlockSyncCodec,
+                    [(BLOCK_SYNC_PROTOCOL, ProtocolSupport::Full)],
+                    request_response::Config::default(),
+                );
+
                 let autonat_config = autonat::Config {
                     retry_interval: probe_interval,
                     ..Default::default()
@@ -202,6 +224,7 @@ impl Libp2pTransport {
                     mdns,
                     connection_limits: connection_limits::Behaviour::new(conn_limits),
                     light_sync,
+                    block_sync,
                     autonat,
                     relay_client,
                     dcutr: dcutr::Behaviour::new(peer_id),
@@ -489,6 +512,46 @@ impl Libp2pTransport {
                 SwarmEvent::Behaviour(AztibaseBehaviourEvent::LightSync(
                     request_response::Event::ResponseSent { .. },
                 )) => {}
+                SwarmEvent::Behaviour(AztibaseBehaviourEvent::BlockSync(
+                    request_response::Event::Message { peer, message, .. },
+                )) => match message {
+                    request_response::Message::Request {
+                        request, channel, ..
+                    } => {
+                        return NetworkEvent::BlockSyncRequest {
+                            peer,
+                            request,
+                            channel,
+                        };
+                    }
+                    request_response::Message::Response {
+                        request_id,
+                        response,
+                    } => {
+                        return NetworkEvent::BlockSyncResponse {
+                            peer,
+                            request_id,
+                            response,
+                        };
+                    }
+                },
+                SwarmEvent::Behaviour(AztibaseBehaviourEvent::BlockSync(
+                    request_response::Event::OutboundFailure {
+                        peer,
+                        request_id,
+                        error,
+                        ..
+                    },
+                )) => {
+                    return NetworkEvent::BlockSyncOutboundFailure {
+                        peer,
+                        request_id,
+                        error,
+                    };
+                }
+                SwarmEvent::Behaviour(AztibaseBehaviourEvent::BlockSync(
+                    request_response::Event::ResponseSent { .. },
+                )) => {}
                 SwarmEvent::Behaviour(AztibaseBehaviourEvent::Kademlia(
                     kad::Event::RoutingUpdated {
                         peer, addresses, ..
@@ -629,6 +692,29 @@ impl Libp2pTransport {
             .light_sync
             .send_response(channel, response)
             .map_err(|_| anyhow::anyhow!("failed to send light sync response"))
+    }
+
+    pub fn send_block_sync_request(
+        &mut self,
+        peer: &PeerId,
+        request: BlockSyncRequest,
+    ) -> OutboundRequestId {
+        self.swarm
+            .behaviour_mut()
+            .block_sync
+            .send_request(peer, request)
+    }
+
+    pub fn send_block_sync_response(
+        &mut self,
+        channel: ResponseChannel<BlockSyncResponse>,
+        response: BlockSyncResponse,
+    ) -> Result<()> {
+        self.swarm
+            .behaviour_mut()
+            .block_sync
+            .send_response(channel, response)
+            .map_err(|_| anyhow::anyhow!("failed to send block sync response"))
     }
 }
 

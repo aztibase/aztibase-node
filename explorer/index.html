@@ -616,10 +616,25 @@ let lastTxCount = null;
 let lastTxTime = null;
 let currentTps = 0;
 
-const APP_TITLE = isPublic ? 'Explorer' : 'Validator Dashboard';
+let APP_TITLE = isPublic ? 'Explorer' : 'Dashboard';
 document.title = 'Aztibase ' + APP_TITLE;
 document.querySelector('.logo span').textContent = APP_TITLE;
 if (!isPublic) document.getElementById('tab-wallet').style.display = '';
+
+async function detectNodeType() {
+  try {
+    const info = await rpc('aztb_nodeInfo');
+    if (info && info.nodeType) {
+      if (info.nodeType === 'validator') {
+        APP_TITLE = 'Validator Dashboard';
+      } else {
+        APP_TITLE = 'Full Node';
+      }
+      document.title = 'Aztibase ' + APP_TITLE;
+      document.querySelector('.logo span').textContent = APP_TITLE;
+    }
+  } catch (_) {}
+}
 
 async function rpc(method, rpcParams = []) {
   const controller = new AbortController();
@@ -1740,6 +1755,7 @@ async function tryConnect() {
     status.className = 'status-msg ok';
     connected = true;
     document.getElementById('hdr-chain').textContent = chainId || '--';
+    if (!isPublic) detectNodeType();
 
     setTimeout(() => {
       document.querySelector('header').style.display = '';
@@ -1759,6 +1775,7 @@ async function tryConnect() {
     const chainId = await rpc('aztb_chainId');
     document.getElementById('hdr-chain').textContent = chainId || '--';
     connected = true;
+    if (!isPublic) detectNodeType();
     navigate('dashboard');
   } catch (_) {
     showConnectGate('Could not connect to ' + RPC_URL);

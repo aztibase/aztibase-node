@@ -21,9 +21,10 @@ use aztibase_consensus::{
     StateRootAnnounce, ValidatorSet,
 };
 use aztibase_network::{
-    Libp2pTransport, NetworkEvent, PeerReputationStore, PeerStore, TOPIC_CONSENSUS,
-    TOPIC_STATE_SYNC, TOPIC_TRANSACTIONS, TransportConfig, build_header_response,
-    chain_scoped_topics, decode_request, encode_response, genesis_hex_prefix,
+    CommittedBatchAnnounce, Libp2pTransport, NetworkEvent, PeerReputationStore, PeerStore,
+    SyncBatch, TOPIC_COMMITTED_BATCHES, TOPIC_CONSENSUS, TOPIC_STATE_SYNC, TOPIC_TRANSACTIONS,
+    TransportConfig, build_batch_response, build_header_response, chain_scoped_topics,
+    decode_request, encode_response, genesis_hex_prefix,
 };
 use aztibase_rpc::{EventBus, NodeMetrics, RpcServer};
 use aztibase_runtime::TractRuntime;
@@ -971,7 +972,7 @@ async fn main() -> Result<()> {
 
     // Consensus: build validator set from genesis or fallback to hardcoded
     let dag = DagStore::new(store).context("Failed to initialize DAG store")?;
-    let (identity, validators) = if let Some(ref gen_cfg) = genesis_config {
+    let (identity, validators, node_is_validator) = if let Some(ref gen_cfg) = genesis_config {
         let mut vs = ValidatorSet::new();
         for entry in &gen_cfg.validators {
             if let Some(addr) = genesis::hex_decode(&entry.address)
@@ -994,19 +995,20 @@ async fn main() -> Result<()> {
                 }
             }
         }
-        let id = if let Some((_, key_addr)) = &validator_keypair {
+        let (id, node_is_validator) = if let Some((_, key_addr)) = &validator_keypair {
             if !vs.contains(key_addr) {
                 tracing::info!(
                     address = %genesis::hex_encode(key_addr),
                     "Key not in genesis validators — running as full node (can stake to become validator)"
                 );
+                (*key_addr, false)
             } else {
                 tracing::info!(
                     address = %genesis::hex_encode(key_addr),
                     "Validator identity from key file"
                 );
+                (*key_addr, true)
             }
-            *key_addr
         } else {
             let mut rng_bytes = [0u8; 32];
             rand::RngCore::fill_bytes(&mut rand::rngs::OsRng, &mut rng_bytes);
@@ -1014,16 +1016,16 @@ async fn main() -> Result<()> {
                 address = %genesis::hex_encode(&rng_bytes),
                 "No validator key — running as full node"
             );
-            rng_bytes
+            (rng_bytes, false)
         };
         tracing::info!(validators = vs.len(), "Validator set loaded from genesis");
-        (id, vs)
+        (id, vs, node_is_validator)
     } else {
         let mut vs = ValidatorSet::new();
         for i in 1..=cli.validator_count {
             vs.add([i; 32], 100);
         }
-        ([cli.validator_index; 32], vs)
+        ([cli.validator_index; 32], vs, true)
     };
 
     let consensus_config = ConsensusConfig {
@@ -1301,7 +1303,8 @@ async fn main() -> Result<()> {
     .with_l2_registry(exec_pipeline.shared_l2_registry())
     .with_l2_anchor_store(exec_pipeline.shared_l2_anchor_store())
     .with_bridge_escrow(exec_pipeline.shared_bridge_escrow())
-    .with_bridge_withdraw_proofs(exec_pipeline.shared_bridge_withdraw_proofs());
+    .with_bridge_withdraw_proofs(exec_pipeline.shared_bridge_withdraw_proofs())
+    .with_validator(node_is_validator);
 
     if let Some(ref gen_cfg) = genesis_config {
         rpc_server = rpc_server.with_genesis_hash(genesis::genesis_hash(gen_cfg)?);
@@ -1399,6 +1402,10 @@ async fn main() -> Result<()> {
         .get(1)
         .cloned()
         .unwrap_or(TOPIC_TRANSACTIONS.to_string());
+    let topic_committed_batches = scoped_topics
+        .get(7)
+        .cloned()
+        .unwrap_or(TOPIC_COMMITTED_BATCHES.to_string());
 
     tracing::info!("Node started — press Ctrl+C to shut down");
 
@@ -1441,6 +1448,11 @@ async fn main() -> Result<()> {
     let mut sync_assembler: Option<SnapshotAssembler> = None;
     let mut sync_bootstrapped = false;
     let mut peer_count: u64 = 0;
+
+    // Block sync: recent batch buffer for serving catch-up requests
+    let mut batch_history: std::collections::VecDeque<SyncBatch> =
+        std::collections::VecDeque::with_capacity(1024);
+    const MAX_BATCH_HISTORY: usize = 1000;
 
     // Request snapshot if state is empty (new node joining the network)
     {
@@ -1611,6 +1623,23 @@ async fn main() -> Result<()> {
                                     "Gossip tx rejected by mempool (dup/nonce/gas)"
                                 );
                             }
+                        } else if topic == topic_committed_batches
+                            && let Ok(announce) = aztibase_network::decode_batch_announce(&data)
+                        {
+                            tracing::info!(
+                                batch = announce.index,
+                                txs = announce.transactions.len(),
+                                "Received committed batch via gossip"
+                            );
+                            let batch = CommittedBatch {
+                                anchor_hash: announce.anchor_hash,
+                                vertex_order: vec![],
+                                transactions: announce.transactions,
+                            };
+                            if pipeline_tx.send(batch).await.is_err() {
+                                tracing::error!("Pipeline channel closed during block sync");
+                                break;
+                            }
                         }
                     }
                     NetworkEvent::LightSyncRequest { peer, request, channel } => {
@@ -1642,6 +1671,34 @@ async fn main() -> Result<()> {
                     }
                     NetworkEvent::LightSyncOutboundFailure { peer, error, .. } => {
                         tracing::warn!(peer = %peer, error = ?error, "Light sync: outbound failure");
+                    }
+                    NetworkEvent::BlockSyncRequest { peer, request, channel } => {
+                        match aztibase_network::block_sync::decode_request(&request) {
+                            Ok(aztibase_network::BlockSyncMessage::RequestBatches { from_index, count, .. }) => {
+                                tracing::info!(peer = %peer, from = from_index, count, "Block sync: batches requested");
+                                let batches: Vec<SyncBatch> = batch_history
+                                    .iter()
+                                    .filter(|b| b.index >= from_index && b.index < from_index + count)
+                                    .cloned()
+                                    .collect();
+                                let resp = build_batch_response(batches, batch_index);
+                                if let Ok(encoded) = aztibase_network::block_sync::encode_response(&resp) {
+                                    let _ = transport.send_block_sync_response(channel, encoded);
+                                }
+                            }
+                            Ok(_) => {
+                                tracing::warn!(peer = %peer, "Block sync: unexpected request type");
+                            }
+                            Err(e) => {
+                                tracing::warn!(peer = %peer, error = %e, "Block sync: failed to decode request");
+                            }
+                        }
+                    }
+                    NetworkEvent::BlockSyncResponse { peer, response, .. } => {
+                        tracing::debug!(peer = %peer, bytes = response.0.len(), "Block sync: response received");
+                    }
+                    NetworkEvent::BlockSyncOutboundFailure { peer, error, .. } => {
+                        tracing::warn!(peer = %peer, error = ?error, "Block sync: outbound failure");
                     }
                 }
             }
@@ -1699,6 +1756,17 @@ async fn main() -> Result<()> {
                             snap.equivocations,
                             snap.last_commit_latency_us,
                         );
+                        // Broadcast committed batch on gossip for full node sync
+                        let announce = CommittedBatchAnnounce {
+                            index: batch_index + 1,
+                            anchor_hash: batch.anchor_hash,
+                            state_root: [0u8; 32], // filled after execution
+                            transactions: batch.transactions.clone(),
+                        };
+                        if let Ok(encoded) = aztibase_network::encode_batch_announce(&announce) {
+                            let _ = transport.publish(&topic_committed_batches, encoded);
+                        }
+
                         if pipeline_tx.send(batch).await.is_err() {
                             tracing::error!(
                                 "Execution pipeline channel closed — halting node"
@@ -1747,6 +1815,18 @@ async fn main() -> Result<()> {
                     && let Err(e) = transport.publish(&topic_state_sync, data)
                 {
                     tracing::debug!(error = %e, "Failed to publish state root");
+                }
+
+                // Store in batch history for block sync requests
+                let sync_batch = SyncBatch {
+                    index: batch_index,
+                    anchor_hash: result.batch_anchor,
+                    state_root: result.state_root,
+                    transactions: result.receipts.iter().map(|_| Vec::new()).collect(),
+                };
+                batch_history.push_back(sync_batch);
+                if batch_history.len() > MAX_BATCH_HISTORY {
+                    batch_history.pop_front();
                 }
 
                 // Publish events for WebSocket subscribers
@@ -2046,6 +2126,14 @@ async fn run_light_node(config: &NodeConfig) -> Result<()> {
                             let _ = transport.send_light_sync_response(channel, encoded);
                         }
                     }
+                    NetworkEvent::BlockSyncRequest { channel, .. } => {
+                        let resp = build_batch_response(vec![], 0);
+                        if let Ok(encoded) = aztibase_network::block_sync::encode_response(&resp) {
+                            let _ = transport.send_block_sync_response(channel, encoded);
+                        }
+                    }
+                    NetworkEvent::BlockSyncResponse { .. }
+                    | NetworkEvent::BlockSyncOutboundFailure { .. } => {}
                     NetworkEvent::Message { .. } => {}
                 }
             }

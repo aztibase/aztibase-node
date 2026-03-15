@@ -38,6 +38,7 @@ Every non-obvious technical decision is recorded here. Each ADR is immutable onc
 | ADR-028 | nChain patent FTO preliminary analysis | 2026-03-12 | ACCEPTED | legal-ip-counsel + blockchain-architect |
 | ADR-029 | quinn-proto security patch (RUSTSEC-2026-0037) | 2026-03-12 | ACCEPTED | security-engineer |
 | ADR-030 | Consensus round fast-forward for late-joining validators | 2026-03-14 | ACCEPTED | consensus-engineer + blockchain-architect |
+| ADR-031 | Block sync protocol for full nodes (dual-mode) | 2026-03-15 | ACCEPTED | p2p-network-engineer + node-engineer |
 
 ---
 
@@ -939,3 +940,34 @@ Replace hard `FutureRound` rejection with a `RoundGap` detection + round fast-fo
 - Late-joining validators can now catch up to a running network within seconds
 - The joining validator skips historical commits (VRF seed, balances from skipped waves won't match); this is acceptable for testnet and will be addressed by Phase 2 (block sync protocol)
 - Phase 2 (Mysticeti-style block fetching) is tracked as future work for production readiness
+
+---
+
+## ADR-031: Block Sync Protocol for Full Nodes (Dual-Mode)
+
+**Date:** 2026-03-15
+**Status:** ACCEPTED
+**Decided by:** p2p-network-engineer + node-engineer
+
+### Context
+Non-validator full nodes could connect to the P2P network but stayed at height 0 permanently. They had no mechanism to receive committed batches — consensus gossip topics (TOPIC_CONSENSUS) are validator-only, and there was no dedicated batch distribution channel. This was the #1 mainnet blocker: without block sync, full nodes (RPC providers, explorers, exchanges) cannot follow the chain.
+
+### Decision
+Implement a dual-mode sync protocol:
+
+1. **Catch-up mode** (request-response): Protocol `/aztibase/block-sync/1` using libp2p request_response. Full nodes request batches by index range (from_index, count). Validators serve from an in-memory batch history buffer (VecDeque, capped at 1000 entries with real state roots from pipeline execution). Max 50 batches per request, 4 MiB max frame, postcard serialization.
+
+2. **Live mode** (gossipsub): New topic `TOPIC_COMMITTED_BATCHES` ("/aztibase/committed-batches/1.0.0"). Validators publish `CommittedBatchAnnounce` after each consensus commit. Non-validator nodes subscribe and feed received batches into the execution pipeline.
+
+3. **State machine**: `BlockSyncProtocol` tracks `last_synced_index` and `tip_index`, produces sequential batch requests, applies responses only if contiguous (skips out-of-order).
+
+### Alternatives Considered
+- **Reuse TOPIC_CONSENSUS**: Would expose consensus internals to non-validators and require them to run DAG commit logic
+- **State sync only (snapshot download)**: Doesn't provide real-time following after initial sync
+- **Separate sync service (gRPC)**: Adds external dependency; libp2p request-response keeps everything in the existing transport layer
+
+### Consequences
+- Full nodes can now catch up to chain tip and follow in real time
+- Batch history buffer adds ~32 MB memory overhead at 1000 batches (acceptable)
+- Gossip topic count increased from 7 to 8; peer scoring updated with weight 1.5 for committed-batches
+- Future work: persistent batch archive for nodes that restart after long downtime (currently limited to 1000 in-memory batches)
