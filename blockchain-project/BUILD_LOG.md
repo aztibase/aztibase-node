@@ -21,10 +21,22 @@ Entries are prepended (newest first).
 
 ## Entries
 
+### Persistent Batch Archive + Full Node Catch-Up (2026-03-15)
+- **Date**: 2026-03-15
+- **Sprint**: Post-059 (Mainnet Prep)
+- **Commit**: (pending — includes block sync protocol from 8b601a4)
+- **Files changed**:
+  - `crates/aztibase-network/src/batch_archive.rs` — New: BatchArchive redb store (store/retrieve/range/load_recent/prune, 10 tests)
+  - `crates/aztibase-network/src/lib.rs` — Added batch_archive module + BatchArchive re-export
+  - `crates/aztibase-node/src/main.rs` — Persistent batch archive (batch_archive.redb), load history on startup, persist each commit, catch-up request trigger (BlockSyncProtocol + periodic ticker), process BlockSyncResponse with pipeline feed, gap detection from gossip, connected peer tracking (Vec<PeerId>), sync progress logging with percentage
+  - `crates/aztibase-rpc/src/server.rs` — nodeType field (validator/full) in aztb_nodeInfo, is_validator in RpcState
+  - `explorer/index.html` — 3-mode node type detection (Explorer/Validator Dashboard/Full Node)
+- **Review Notes**: Batch history now survives node restarts via redb. Full nodes auto-detect gaps and request missing batches from validators every 5s. Progress logged with synced/tip/behind/percentage. 738 unit tests pass (10 new batch_archive). Clippy clean, fmt clean.
+
 ### Block Sync Protocol for Full Nodes (2026-03-15)
 - **Date**: 2026-03-15
 - **Sprint**: Post-059 (Mainnet Prep)
-- **Commit**: (pending)
+- **Commit**: 8b601a4
 - **Files changed**:
   - `crates/aztibase-network/src/block_sync.rs` — New: request-response codec, BlockSyncMessage (RequestBatches/ResponseBatches), SyncBatch wire type, BlockSyncProtocol state machine, CommittedBatchAnnounce gossip type, encode/decode functions, 12 unit tests
   - `crates/aztibase-network/src/gossip.rs` — Added TOPIC_COMMITTED_BATCHES, 7→8 topics, topic weight 1.5

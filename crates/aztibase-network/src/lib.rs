@@ -1,3 +1,4 @@
+pub mod batch_archive;
 pub mod behaviour;
 pub mod block_sync;
 pub mod connection_filter;
@@ -11,6 +12,7 @@ pub mod transport;
 #[cfg(feature = "webrtc")]
 pub mod webrtc;
 
+pub use batch_archive::BatchArchive;
 pub use block_sync::{
     BLOCK_SYNC_PROTOCOL, BlockSyncCodec, BlockSyncMessage, BlockSyncProtocol, BlockSyncRequest,
     BlockSyncResponse, CommittedBatchAnnounce, SyncBatch, build_batch_request,

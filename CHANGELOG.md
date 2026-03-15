@@ -5,6 +5,20 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ---
 
+## Block Sync: Persistent Archive + Full Node Catch-Up (2026-03-15)
+
+### Added
+- **Persistent batch archive**: `BatchArchive` in redb — committed batches survive node restarts (10K cap, auto-pruned)
+- **Full node catch-up**: Automatic gap detection + periodic catch-up requests to validators (every 5s ticker)
+- **Sync progress logging**: Logs synced/tip/behind/percentage during catch-up
+- **nodeType RPC field**: `aztb_nodeInfo` returns `"validator"` or `"full"` based on genesis validator set membership
+- **Explorer 3-mode detection**: Public hostname → Explorer, localhost + validator → Validator Dashboard, localhost + full → Full Node
+
+### Changed
+- **Batch history**: Loaded from archive on startup instead of starting empty
+- **Batch index**: Restored from archive on restart — nodes resume from last known height
+- **Catch-up requests**: Fall back to persistent archive when in-memory buffer doesn't cover requested range
+
 ## Block Sync Protocol for Full Nodes (2026-03-15)
 
 ### Added

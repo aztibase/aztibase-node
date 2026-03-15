@@ -2636,6 +2636,7 @@ mod tests {
             permissive_cors: true,
             cors_allowed_origins: Vec::new(),
             max_body_bytes: MAX_WS_FRAME_SIZE,
+            is_validator: false,
         };
         (state, rx)
     }
@@ -2678,6 +2679,7 @@ mod tests {
             permissive_cors: true,
             cors_allowed_origins: Vec::new(),
             max_body_bytes: MAX_WS_FRAME_SIZE,
+            is_validator: false,
         };
         (state, rx)
     }
@@ -2932,6 +2934,7 @@ mod tests {
             permissive_cors: true,
             cors_allowed_origins: Vec::new(),
             max_body_bytes: MAX_WS_FRAME_SIZE,
+            is_validator: false,
         };
         (state, rx, path)
     }
@@ -3325,6 +3328,7 @@ mod tests {
             permissive_cors: true,
             cors_allowed_origins: Vec::new(),
             max_body_bytes: MAX_WS_FRAME_SIZE,
+            is_validator: false,
         };
         (state, rx)
     }
@@ -3427,6 +3431,7 @@ mod tests {
             permissive_cors: true,
             cors_allowed_origins: vec![],
             max_body_bytes: 2 * 1024 * 1024,
+            is_validator: false,
         };
 
         let task_hex = hex::encode(task_id);

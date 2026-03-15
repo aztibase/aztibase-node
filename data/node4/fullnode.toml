@@ -1,0 +1,29 @@
+data_dir = "./data/node4"
+genesis_path = "./data/genesis/genesis.toml"
+
+[network]
+listen_addresses = [
+    "/ip4/0.0.0.0/tcp/30336",
+    "/ip4/0.0.0.0/udp/30336/quic-v1",
+]
+boot_nodes = [
+    "/ip4/127.0.0.1/tcp/30333",
+    "/ip4/127.0.0.1/tcp/30334",
+    "/ip4/127.0.0.1/tcp/30335",
+]
+idle_timeout_secs = 60
+stun_servers = []
+
+[rpc]
+listen_addr = "127.0.0.1:9947"
+enabled = true
+
+[log]
+level = "info"
+
+[ai]
+enabled = false
+models = []
+
+[metrics]
+enabled = true

@@ -4,7 +4,7 @@
 **Updated By:** p2p-network-engineer + node-engineer
 **Current Phase:** M9 -- Mainnet Prep
 **Current Sprint:** Post-059 -- Testnet Expansion
-**Sprint Status:** Block sync protocol implemented (dual-mode: catch-up request-response + live gossipsub). Full nodes can now follow the chain. Next: integration test on live testnet, full workspace test run, then remaining mainnet blockers.
+**Sprint Status:** Block sync complete with persistent archive + automatic catch-up. Full nodes auto-request missing batches on startup/gap detection. 738 unit tests pass. Next: live testnet validation of catch-up, then remaining mainnet blockers.
 
 ---
 
@@ -36,7 +36,7 @@
 - Reference repos cloned (MystiCeti, Sui, Lighthouse, rust-libp2p, redb)
 - Sprint 052 complete: L1 bridge primitives (RegisterL2, AnchorL2State, BridgeDeposit, BridgeWithdraw), 4 RPC endpoints
 - Sprint 053 complete: Protocol store persistence — 8 stores survive node restart via redb, 906 tests
-- cargo build + cargo test pass (791 tests: 786 pass, 5 known flaky integration tests)
+- cargo build + cargo test pass (738 unit tests pass + 5 known flaky integration tests)
 - Sprint 001 closed with retrospective
 - Sprint 002 closed: 24/24 tasks, 5 phases complete
 - Sprint 003 closed: 18/18 tasks, 4 phases complete
@@ -72,7 +72,7 @@
 | aztibase-core | COMPLETE | blockchain-architect | Types, crypto, hashing — feature-complete |
 | aztibase-consensus | FEATURE-COMPLETE | consensus-engineer | DAG-BFT, commit rule, finality certs, equivocation, checkpoints |
 | aztibase-storage | FEATURE-COMPLETE | node-engineer | redb tables, light store, Verkle placeholder, protocol store persistence |
-| aztibase-network | FEATURE-COMPLETE | p2p-network-engineer | Gossipsub, Kademlia, peer scoring, NAT, WebRTC scaffold, block sync protocol |
+| aztibase-network | FEATURE-COMPLETE | p2p-network-engineer | Gossipsub, Kademlia, peer scoring, NAT, WebRTC scaffold, block sync protocol, persistent batch archive |
 | aztibase-execution | FEATURE-COMPLETE | smart-contract-engineer | 27 TxKinds, fee market, staking, governance, tokenomics, AI market, L2 bridge |
 | aztibase-runtime | PARTIAL | ai-integration-engineer | tract inference, anomaly scorer — stubs for advanced features |
 | aztibase-rpc | FEATURE-COMPLETE | node-engineer | 48 RPC methods, WebSocket subscriptions, Prometheus metrics |
@@ -87,6 +87,7 @@
 - Mainnet launch blocked on: Aztibase Systems coexistence agreement (legal), public testnet infrastructure deployment (VPS provisioning)
 
 ### Recently Completed
+- **Post-059 (2026-03-15)**: Persistent batch archive + full node catch-up — BatchArchive in redb (10K cap), auto catch-up on gap/startup, sync progress logging, nodeType RPC field, explorer 3-mode detection, 10 new tests (738 total unit tests)
 - **Post-059 (2026-03-15)**: Block sync protocol for full nodes — dual-mode sync (catch-up request-response + live gossipsub), 8th gossip topic, batch history buffer, 12 new tests, ADR-031
 - **Post-059 (2026-03-14)**: Generic validator release package (no bundled keys, auto-keygen), Explorer/Dashboard hostname-based split, dashboard in release packages, consensus round fast-forward (ADR-030), Chrome wallet extension with 2FA (TOTP + WebAuthn), WASM staking signing, wallet CLI staking commands, GitHub release v0.1.1 updated
 - **Sprint 059 (2026-03-12)**: Friends testnet — genesis ceremony CLI (init, add-validator, add-account, validate, show), wallet --validator flag (Ed25519+BLS), --boot-node CLI flag, setup-validator.sh custom network support, friends testnet guide + coordinator script
