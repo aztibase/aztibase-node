@@ -24,7 +24,7 @@ Entries are prepended (newest first).
 ### Smart Contract Live Testnet Validation + TX Hash Fix (2026-03-16)
 - **Date**: 2026-03-16
 - **Sprint**: Post-059 (Mainnet Prep, Sprint D completion)
-- **Commit**: (pending)
+- **Commit**: `18c0dfb`
 - **Files Changed**:
   - `crates/aztibase-execution/src/routing.rs` — Moved `compute_tx_hash()` from pipeline.rs to routing module (shared across crates). Deterministic hash for each TxKind variant, used as receipt storage key.
   - `crates/aztibase-execution/src/lib.rs` — Re-exported `compute_tx_hash` from routing module.
