@@ -3,436 +3,492 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Aztibase Validator Dashboard</title>
+<title>Aztibase Explorer</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/tweetnacl@1.0.3/nacl-fast.min.js"></script>
 <style>
 :root {
-  --bg: #0d1117;
-  --surface: #161b22;
-  --border: #30363d;
-  --text: #e6edf3;
-  --muted: #8b949e;
-  --accent: #58a6ff;
-  --green: #3fb950;
-  --red: #f85149;
-  --yellow: #d29922;
-  --mono: 'SF Mono', 'Cascadia Code', 'Fira Code', monospace;
+  --bg-primary: #121016;
+  --bg-secondary: #0e0c12;
+  --bg-card: #1a1720;
+  --bg-card-hover: #22202a;
+  --bg-input: #22202a;
+  --border: #2e2a38;
+  --border-light: #38344a;
+  --text: #e8e4ec;
+  --text-secondary: rgba(232,228,236,0.72);
+  --text-muted: rgba(232,228,236,0.42);
+  --accent: #8878a6;
+  --accent-hover: #a494c0;
+  --accent-soft: rgba(136,120,166,0.12);
+  --accent-glow: rgba(136,120,166,0.30);
+  --gold: #b8a67e;
+  --gold-soft: rgba(184,166,126,0.12);
+  --green: #5db88a;
+  --green-soft: rgba(93,184,138,0.12);
+  --green-text: #88c0b6;
+  --red: #c9927e;
+  --red-soft: rgba(201,146,126,0.12);
+  --yellow: #b8a67e;
+  --yellow-soft: rgba(184,166,126,0.12);
+  --cyan: #6ba89e;
+  --cyan-soft: rgba(107,168,158,0.12);
+  --purple: #8878a6;
+  --purple-soft: rgba(136,120,166,0.12);
+  --orange: #deae9c;
+  --orange-soft: rgba(222,174,156,0.12);
+  --mono: 'JetBrains Mono', ui-monospace, monospace;
+  --sans: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  --shadow: 0 2px 8px rgba(0,0,0,0.4);
+  --shadow-md: 0 4px 16px rgba(0,0,0,0.5);
+  --shadow-lg: 0 8px 32px rgba(0,0,0,0.6);
+  --radius: 12px;
+  --radius-sm: 8px;
 }
-* { margin: 0; padding: 0; box-sizing: border-box; }
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
 body {
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
-  background: var(--bg);
+  font-family: var(--sans);
+  background: var(--bg-primary);
   color: var(--text);
   line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
 }
 a { color: var(--accent); text-decoration: none; cursor: pointer; }
-a:hover { text-decoration: underline; }
+a:hover { color: var(--accent-hover); }
+code, .mono { font-family: var(--mono); }
+::selection { background: var(--accent-glow); }
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: var(--bg-secondary); }
+::-webkit-scrollbar-thumb { background: var(--border-light); border-radius: 3px; }
 
+/* ── Header ─────────────────────────────────────── */
 header {
+  position: sticky; top: 0; z-index: 50;
+  display: flex; align-items: center;
+  padding: 0 24px; height: 56px;
+  background: rgba(14,12,18,0.88);
+  backdrop-filter: blur(16px);
   border-bottom: 1px solid var(--border);
-  padding: 12px 24px;
-  display: flex;
-  align-items: center;
   gap: 20px;
-  flex-wrap: wrap;
 }
-.logo { font-size: 20px; font-weight: 700; letter-spacing: -0.5px; }
-.logo span { color: var(--accent); }
+.logo {
+  font-size: 18px; font-weight: 800;
+  letter-spacing: -0.03em; color: var(--text);
+  white-space: nowrap; display: flex; align-items: center; gap: 8px;
+}
+.logo .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 12px var(--accent-glow); }
+.logo em { font-style: normal; color: var(--text-secondary); font-weight: 500; font-size: 13px; }
 
-nav.tabs {
-  display: flex;
-  gap: 4px;
-}
+nav.tabs { display: flex; gap: 2px; }
 nav.tabs button {
-  background: none;
-  border: 1px solid transparent;
-  color: var(--muted);
-  padding: 6px 14px;
-  border-radius: 6px;
-  font-size: 13px;
-  font-weight: 500;
-  cursor: pointer;
+  background: none; border: none;
+  padding: 7px 14px; font-size: 13px; font-weight: 600;
+  color: var(--text-muted); cursor: pointer;
+  border-radius: 8px; font-family: var(--sans);
   transition: all 0.15s;
 }
-nav.tabs button:hover { color: var(--text); background: var(--surface); }
-nav.tabs button.active { color: var(--text); background: var(--surface); border-color: var(--border); }
-
-.hdr-meta {
-  display: flex;
-  gap: 16px;
-  font-size: 12px;
-  color: var(--muted);
-  margin-left: auto;
-  align-items: center;
+nav.tabs button:hover { color: var(--text-secondary); background: rgba(255,255,255,0.04); }
+nav.tabs button.active {
+  color: #fff; background: var(--accent);
+  box-shadow: 0 2px 12px var(--accent-glow);
 }
-.hdr-meta .val { color: var(--text); font-family: var(--mono); }
 
+.hdr-right {
+  margin-left: auto; display: flex;
+  align-items: center; gap: 16px;
+  font-size: 12px; color: var(--text-muted); font-weight: 500;
+}
+.hdr-right code { font-family: var(--mono); color: var(--text-secondary); font-size: 11px; }
+.hdr-pill {
+  display: flex; align-items: center; gap: 6px;
+  background: var(--bg-card); padding: 4px 10px;
+  border-radius: 20px; border: 1px solid var(--border);
+  font-size: 11px; font-weight: 600;
+}
 .status-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  display: inline-block;
+  width: 7px; height: 7px; border-radius: 50%;
+  display: inline-block; flex-shrink: 0;
 }
-.status-dot.ok { background: var(--green); }
+.status-dot.ok { background: var(--green); box-shadow: 0 0 8px rgba(64,192,87,0.5); }
 .status-dot.err { background: var(--red); }
-.status-dot.pending { background: var(--muted); }
+.status-dot.pending { background: var(--text-muted); }
 
-.search-bar {
-  width: 100%;
-  display: flex;
-  gap: 8px;
-  padding: 0 24px 12px;
-  border-bottom: 1px solid var(--border);
+/* ── Search ─────────────────────────────────────── */
+.search-wrap {
+  padding: 20px 24px 0;
+  max-width: 1280px; margin: 0 auto;
 }
+.search-bar {
+  display: flex; gap: 0;
+  background: var(--bg-card);
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  box-shadow: var(--shadow);
+  transition: border-color 0.2s;
+}
+.search-bar:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft), var(--shadow); }
 .search-bar input {
   flex: 1;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  padding: 8px 12px;
-  color: var(--text);
-  font-size: 14px;
-  font-family: var(--mono);
-  outline: none;
+  padding: 12px 18px; font-size: 13px;
+  font-family: var(--mono); font-weight: 400;
+  color: var(--text); background: transparent;
+  border: none; outline: none;
 }
-.search-bar input:focus { border-color: var(--accent); }
+.search-bar input::placeholder { color: var(--text-muted); }
 .search-bar button {
-  background: var(--accent);
-  color: #000;
-  border: none;
-  border-radius: 6px;
-  padding: 8px 16px;
-  font-weight: 600;
-  cursor: pointer;
-  font-size: 14px;
+  padding: 0 24px; font-size: 13px; font-weight: 700;
+  font-family: var(--sans);
+  color: #fff; background: var(--accent);
+  border: none; cursor: pointer;
+  transition: background 0.15s;
 }
+.search-bar button:hover { background: var(--accent-hover); }
 
-main { max-width: 1200px; margin: 0 auto; padding: 24px; }
+/* ── Main ────────────────────────────────────────── */
+main { max-width: 1280px; margin: 0 auto; padding: 20px 24px 40px; }
 
-/* Stats row */
-.stats-row {
+/* ── Stat cards ──────────────────────────────────── */
+.stats-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
-  gap: 12px;
-  margin-bottom: 24px;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 12px; margin-bottom: 24px;
 }
-.stat {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 16px;
-  text-align: center;
+.stat-card {
+  background: var(--bg-card); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 16px;
+  box-shadow: var(--shadow);
+  transition: transform 0.15s, border-color 0.15s;
+  position: relative; overflow: hidden;
 }
-.stat .val {
-  font-size: 22px;
-  font-weight: 700;
-  font-family: var(--mono);
-  line-height: 1.2;
+.stat-card:hover { transform: translateY(-2px); border-color: var(--border-light); }
+.stat-card .icon {
+  width: 32px; height: 32px; border-radius: 8px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 16px; margin-bottom: 10px;
 }
-.stat .label {
-  font-size: 11px;
-  color: var(--muted);
-  margin-top: 4px;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
+.stat-card .icon.blue { background: var(--accent-soft); color: var(--accent); }
+.stat-card .icon.green { background: var(--green-soft); color: var(--green); }
+.stat-card .icon.purple { background: var(--purple-soft); color: var(--purple); }
+.stat-card .icon.cyan { background: var(--cyan-soft); color: var(--cyan); }
+.stat-card .icon.orange { background: var(--orange-soft); color: var(--orange); }
+.stat-card .icon.red { background: var(--red-soft); color: var(--red); }
+.stat-card .val {
+  font-size: 22px; font-weight: 800; color: var(--text);
+  line-height: 1.2; font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+}
+.stat-card .label {
+  font-size: 11px; color: var(--text-muted);
+  text-transform: uppercase; letter-spacing: 0.06em;
+  margin-top: 4px; font-weight: 600;
+}
+.stat-card .sub {
+  font-size: 11px; color: var(--text-muted);
+  margin-top: 2px; font-family: var(--mono);
 }
 
-.view-title {
-  font-size: 18px;
-  font-weight: 600;
-  margin-bottom: 16px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-.view-title .badge {
-  font-size: 12px;
-  background: var(--accent);
-  color: #000;
-  padding: 2px 8px;
-  border-radius: 12px;
-  font-weight: 600;
-}
-.view-title .badge.green { background: var(--green); }
-
-.card {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 8px;
+/* ── Section titles ──────────────────────────────── */
+.section-hdr {
+  display: flex; align-items: center; justify-content: space-between;
   margin-bottom: 12px;
-  overflow: hidden;
 }
-.card-row {
-  display: flex;
-  padding: 10px 16px;
-  border-bottom: 1px solid var(--border);
-  gap: 12px;
-  font-size: 14px;
+.section-title {
+  font-size: 15px; font-weight: 700;
+  display: flex; align-items: center; gap: 8px;
 }
-.card-row:last-child { border-bottom: none; }
-.card-label {
-  color: var(--muted);
-  min-width: 140px;
-  flex-shrink: 0;
-  font-size: 13px;
-}
-.card-value {
-  font-family: var(--mono);
-  font-size: 13px;
-  word-break: break-all;
-}
-
-.block-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
-  gap: 12px;
-}
-.block-card {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 16px;
-  cursor: pointer;
-  transition: border-color 0.15s;
-}
-.block-card:hover { border-color: var(--accent); }
-.block-num { font-size: 16px; font-weight: 600; margin-bottom: 8px; }
-.block-meta {
-  font-size: 12px;
-  color: var(--muted);
-  display: flex;
-  gap: 16px;
-}
-.block-hash {
-  font-family: var(--mono);
-  font-size: 11px;
-  color: var(--muted);
-  margin-top: 8px;
-  word-break: break-all;
-}
-
-/* Table */
-.data-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 13px;
-  margin-bottom: 16px;
-}
-.data-table th {
-  text-align: left;
-  padding: 10px 14px;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  color: var(--muted);
-  font-weight: 500;
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-}
-.data-table td {
-  padding: 10px 14px;
-  border: 1px solid var(--border);
-  font-family: var(--mono);
-  font-size: 12px;
-}
-.data-table tr:hover td { background: rgba(88,166,255,0.04); }
-
-.tx-row {
-  display: flex;
-  padding: 10px 16px;
-  border-bottom: 1px solid var(--border);
-  align-items: center;
-  gap: 12px;
-  font-size: 13px;
-}
-.tx-row:last-child { border-bottom: none; }
-.tx-hash {
-  font-family: var(--mono);
-  font-size: 12px;
-  flex: 1;
-  word-break: break-all;
-}
-
-.empty-state {
-  text-align: center;
-  padding: 48px;
-  color: var(--muted);
-  font-size: 14px;
-}
-
-.nav-link {
-  font-size: 13px;
-  margin-bottom: 16px;
+.live-dot {
+  width: 6px; height: 6px; border-radius: 50%;
+  background: var(--green); animation: pulse 2s infinite;
   display: inline-block;
 }
+@keyframes pulse { 0%,100% { opacity:1; } 50% { opacity:0.3; } }
 
-.two-col {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 24px;
+/* ── Cards ────────────────────────────────────────── */
+.card {
+  background: var(--bg-card); border: 1px solid var(--border);
+  border-radius: var(--radius); overflow: hidden;
+  box-shadow: var(--shadow);
+}
+.card-row {
+  display: flex; align-items: center;
+  padding: 12px 18px;
+  border-bottom: 1px solid var(--border);
+  gap: 12px; font-size: 13px;
+  transition: background 0.1s; cursor: pointer;
+}
+.card-row:last-child { border-bottom: none; }
+.card-row:hover { background: var(--bg-card-hover); }
+.card-label {
+  color: var(--text-muted); min-width: 140px;
+  flex-shrink: 0; font-size: 12px; font-weight: 600;
+}
+.card-value { font-size: 13px; word-break: break-all; font-variant-numeric: tabular-nums; color: var(--text); }
+
+/* ── Two-col layout ──────────────────────────────── */
+.two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+
+/* ── Chart containers ────────────────────────────── */
+.chart-card {
+  background: var(--bg-card); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 18px;
+  box-shadow: var(--shadow); margin-bottom: 24px;
+}
+.chart-card .chart-title {
+  font-size: 13px; font-weight: 700;
+  color: var(--text-secondary); margin-bottom: 12px;
+  display: flex; align-items: center; gap: 8px;
+}
+.chart-row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 24px; }
+.chart-row .chart-card { margin-bottom: 0; }
+
+/* ── Tables ───────────────────────────────────────── */
+.data-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.data-table th {
+  text-align: left; padding: 10px 16px;
+  background: var(--bg-secondary); border-bottom: 1px solid var(--border);
+  color: var(--text-muted); font-size: 11px;
+  font-weight: 700; text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.data-table td {
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--border);
+  font-size: 12.5px; font-variant-numeric: tabular-nums;
+  color: var(--text-secondary);
+}
+.data-table tr:hover td { background: var(--bg-card-hover); }
+.data-table tbody tr { cursor: pointer; }
+
+/* ── Badges ───────────────────────────────────────── */
+.badge {
+  display: inline-block; padding: 3px 8px;
+  border-radius: 6px; font-size: 10px;
+  font-weight: 700; text-transform: uppercase;
+  letter-spacing: 0.3px; font-family: var(--sans);
+  white-space: nowrap;
+}
+.badge.transfer { background: rgba(136,120,166,0.15); color: #a494c0; }
+.badge.contract { background: var(--purple-soft); color: #b197fc; }
+.badge.ai { background: var(--orange-soft); color: #ffa94d; }
+.badge.governance { background: var(--green-soft); color: var(--green-text); }
+.badge.staking { background: var(--cyan-soft); color: #66d9e8; }
+.badge.bridge { background: var(--yellow-soft); color: var(--yellow); }
+.badge.security { background: var(--red-soft); color: var(--red); }
+.badge.unknown { background: rgba(107,112,148,0.15); color: var(--text-muted); }
+
+/* ── Status ───────────────────────────────────────── */
+.status-ok { color: var(--green-text); font-weight: 600; font-size: 12px; display: inline-flex; align-items: center; gap: 4px; }
+.status-ok::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: var(--green); }
+.status-fail { color: var(--red); font-weight: 600; font-size: 12px; display: inline-flex; align-items: center; gap: 4px; }
+.status-fail::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: var(--red); }
+
+/* ── Direction badges ─────────────────────────────── */
+.dir-in { background: var(--green-soft); color: var(--green-text); padding: 2px 8px; border-radius: 4px; font-size: 10px; font-weight: 700; }
+.dir-out { background: var(--orange-soft); color: var(--orange); padding: 2px 8px; border-radius: 4px; font-size: 10px; font-weight: 700; }
+
+/* ── Copy button ──────────────────────────────────── */
+.copy-btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  cursor: pointer; color: var(--text-muted);
+  width: 22px; height: 22px; border-radius: 4px;
+  font-size: 12px; margin-left: 4px;
+  transition: all 0.12s; vertical-align: middle;
+  background: transparent; border: none;
+}
+.copy-btn:hover { color: var(--accent); background: var(--accent-soft); }
+.copy-btn.copied { color: var(--green); }
+
+/* ── Tooltips ─────────────────────────────────────── */
+[data-tooltip] { position: relative; cursor: help; border-bottom: 1px dotted var(--text-muted); }
+[data-tooltip]:hover::after {
+  content: attr(data-tooltip);
+  position: absolute; bottom: calc(100% + 6px); left: 50%;
+  transform: translateX(-50%);
+  background: var(--text); color: var(--bg-primary);
+  padding: 5px 10px; border-radius: 6px;
+  font-size: 11px; font-weight: 500;
+  white-space: nowrap; z-index: 100;
+  box-shadow: var(--shadow-md); pointer-events: none;
 }
 
-footer {
-  border-top: 1px solid var(--border);
-  padding: 16px 24px;
-  text-align: center;
-  font-size: 12px;
-  color: var(--muted);
+/* ── Progress bar ─────────────────────────────────── */
+.progress-bar {
+  height: 6px; background: var(--border);
+  border-radius: 3px; overflow: hidden;
+  display: inline-block; width: 100%;
+}
+.progress-bar .fill {
+  height: 100%; border-radius: 3px;
+  transition: width 0.3s;
 }
 
-/* Wallet */
-.wallet-section { margin-bottom: 24px; }
+/* ── Buttons ──────────────────────────────────────── */
+.btn {
+  padding: 8px 16px; border: none; border-radius: var(--radius-sm);
+  font-size: 13px; font-weight: 600;
+  cursor: pointer; font-family: var(--sans);
+  transition: all 0.15s;
+  display: inline-flex; align-items: center; gap: 6px;
+}
+.btn:hover { opacity: 0.88; }
+.btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.btn-primary { background: var(--accent); color: #fff; box-shadow: 0 2px 12px var(--accent-glow); }
+.btn-green { background: var(--green); color: #fff; }
+.btn-secondary { background: var(--border); color: var(--text); }
+.btn-red { background: var(--red); color: #fff; }
+.btn-sm { padding: 5px 10px; font-size: 11px; }
+.btn-ghost { background: transparent; color: var(--text-secondary); border: 1px solid var(--border); }
+.btn-ghost:hover { border-color: var(--accent); color: var(--accent); }
+
+/* ── Wallet ───────────────────────────────────────── */
+.wallet-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+.wallet-section { margin-bottom: 20px; }
 .wallet-section h3 {
-  font-size: 14px;
-  font-weight: 600;
-  margin-bottom: 12px;
-  color: var(--muted);
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
+  font-size: 11px; font-weight: 700;
+  margin-bottom: 10px; color: var(--text-muted);
+  text-transform: uppercase; letter-spacing: 0.06em;
 }
 .wallet-input {
   width: 100%;
-  background: var(--bg);
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  padding: 10px 12px;
-  color: var(--text);
-  font-family: var(--mono);
-  font-size: 13px;
-  outline: none;
-  margin-bottom: 8px;
+  background: var(--bg-input); border: 1.5px solid var(--border);
+  border-radius: var(--radius-sm); padding: 10px 14px;
+  color: var(--text); font-family: var(--mono);
+  font-size: 12.5px; outline: none; margin-bottom: 8px;
 }
-.wallet-input:focus { border-color: var(--accent); }
-.wallet-input::placeholder { color: #484f58; }
-.btn {
-  padding: 8px 16px;
-  border: none;
-  border-radius: 6px;
-  font-size: 13px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: opacity 0.15s;
-  margin-right: 8px;
-  margin-bottom: 8px;
-}
-.btn:hover { opacity: 0.85; }
-.btn:disabled { opacity: 0.4; cursor: not-allowed; }
-.btn-primary { background: var(--accent); color: #000; }
-.btn-green { background: var(--green); color: #000; }
-.btn-secondary { background: var(--border); color: var(--text); }
-.btn-red { background: var(--red); color: #fff; }
+.wallet-input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.wallet-input::placeholder { color: var(--text-muted); }
 .wallet-alert {
-  padding: 12px 16px;
-  border-radius: 8px;
-  font-size: 13px;
-  font-family: var(--mono);
-  word-break: break-all;
-  margin-top: 12px;
+  padding: 10px 14px; border-radius: var(--radius-sm);
+  font-size: 12px; font-family: var(--mono);
+  word-break: break-all; margin-top: 10px;
 }
-.wallet-alert.success { background: #0d2818; border: 1px solid #1a7f37; color: var(--green); }
-.wallet-alert.error { background: #2d1117; border: 1px solid #6e3630; color: var(--red); }
-.wallet-alert.info { background: #0d1d30; border: 1px solid #1f4a7a; color: var(--accent); }
-.wallet-alert.warn { background: #2b1d11; border: 1px solid #6e5a30; color: var(--yellow); }
-.secret-toggle {
-  font-size: 12px;
-  color: var(--accent);
-  cursor: pointer;
-  margin-left: 8px;
-}
-.wallet-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+.wallet-alert.success { background: var(--green-soft); border: 1px solid rgba(64,192,87,0.3); color: var(--green-text); }
+.wallet-alert.error { background: var(--red-soft); border: 1px solid rgba(255,107,107,0.3); color: var(--red); }
+.wallet-alert.info { background: var(--accent-soft); border: 1px solid rgba(92,124,250,0.3); color: var(--accent); }
+.wallet-alert.warn { background: var(--yellow-soft); border: 1px solid rgba(252,196,25,0.3); color: var(--yellow); }
+.secret-toggle { font-size: 11px; color: var(--accent); cursor: pointer; margin-left: 8px; font-weight: 600; }
 
-/* Connection gate */
+/* ── Connect gate ─────────────────────────────────── */
 .connect-gate {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  min-height: 60vh;
-  text-align: center;
-  gap: 20px;
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  min-height: 60vh; text-align: center; gap: 16px;
 }
-.connect-gate .logo-big { font-size: 32px; font-weight: 700; letter-spacing: -1px; }
-.connect-gate .logo-big span { color: var(--accent); }
-.connect-gate .subtitle { color: var(--muted); font-size: 14px; margin-bottom: 8px; }
-.connect-gate .rpc-form { display: flex; gap: 8px; width: 100%; max-width: 500px; }
+.connect-gate .logo-big { font-size: 32px; font-weight: 800; letter-spacing: -1px; display: flex; align-items: center; gap: 12px; }
+.connect-gate .logo-big .dot { width: 12px; height: 12px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 20px var(--accent-glow); }
+.connect-gate .logo-big em { font-style: normal; color: var(--text-secondary); font-weight: 500; font-size: 18px; }
+.connect-gate .subtitle { color: var(--text-muted); font-size: 14px; margin-bottom: 4px; }
+.connect-gate .rpc-form { display: flex; gap: 0; width: 100%; max-width: 460px; background: var(--bg-card); border: 1.5px solid var(--border); border-radius: var(--radius); overflow: hidden; }
 .connect-gate .rpc-form input {
-  flex: 1;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  padding: 10px 14px;
-  color: var(--text);
-  font-family: var(--mono);
-  font-size: 14px;
-  outline: none;
+  flex: 1; background: transparent;
+  border: none; padding: 12px 16px; color: var(--text);
+  font-family: var(--mono); font-size: 13px; outline: none;
 }
-.connect-gate .rpc-form input:focus { border-color: var(--accent); }
 .connect-gate .rpc-form button {
-  background: var(--accent);
-  color: #000;
-  border: none;
-  border-radius: 6px;
-  padding: 10px 20px;
-  font-weight: 600;
-  font-size: 14px;
-  cursor: pointer;
+  background: var(--accent); color: #fff; border: none;
+  padding: 12px 24px; font-weight: 700;
+  font-size: 13px; cursor: pointer; font-family: var(--sans);
 }
-.connect-gate .status-msg { font-size: 13px; min-height: 20px; }
+.connect-gate .status-msg { font-size: 13px; min-height: 20px; font-weight: 500; }
 .connect-gate .status-msg.err { color: var(--red); }
-.connect-gate .status-msg.ok { color: var(--green); }
+.connect-gate .status-msg.ok { color: var(--green-text); }
 .connect-gate .status-msg.trying { color: var(--yellow); }
 
-/* Tx type badges */
-.tx-badge {
-  display: inline-block;
-  padding: 2px 8px;
-  border-radius: 4px;
-  font-size: 11px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.3px;
-  white-space: nowrap;
+/* ── Nav link ─────────────────────────────────────── */
+.nav-link {
+  font-size: 12px; font-weight: 600;
+  margin-bottom: 14px; display: inline-flex;
+  align-items: center; gap: 4px;
 }
-.tx-badge.transfer { background: #0d3868; color: #58a6ff; }
-.tx-badge.contract { background: #2d1654; color: #bc8cff; }
-.tx-badge.ai { background: #3b2300; color: #f0a830; }
-.tx-badge.governance { background: #1a3a1a; color: #3fb950; }
-.tx-badge.staking { background: #0d3030; color: #39d0d0; }
-.tx-badge.bridge { background: #3b3000; color: #d29922; }
-.tx-badge.security { background: #2d1117; color: #f85149; }
-.tx-badge.unknown { background: #21262d; color: #8b949e; }
+.nav-link::before { content: '\2190'; }
 
-/* Copy button */
-.copy-btn {
-  display: inline-block;
-  cursor: pointer;
-  color: var(--muted);
-  font-size: 12px;
-  margin-left: 6px;
-  padding: 2px 4px;
-  border-radius: 3px;
-  vertical-align: middle;
-  transition: color 0.15s;
+/* ── Sentinel health ──────────────────────────────── */
+.health-bar { height: 8px; background: var(--border); border-radius: 4px; overflow: hidden; margin-top: 6px; }
+.health-bar .fill { height: 100%; border-radius: 4px; transition: width 0.6s ease; }
+.health-bar .fill.normal { background: var(--green); }
+.health-bar .fill.warning { background: var(--yellow); }
+.health-bar .fill.critical { background: var(--red); }
+
+/* ── Collapsible ──────────────────────────────────── */
+.collapsible-toggle {
+  font-size: 12px; font-weight: 600;
+  color: var(--accent); cursor: pointer;
+  padding: 12px 18px;
+  border-top: 1px solid var(--border);
+  display: flex; align-items: center; gap: 6px;
+  transition: background 0.1s;
 }
-.copy-btn:hover { color: var(--accent); }
-.copy-btn.copied { color: var(--green); }
+.collapsible-toggle:hover { background: var(--accent-soft); }
+.collapsible-toggle .arrow { transition: transform 0.2s; display: inline-block; }
+.collapsible-toggle.open .arrow { transform: rotate(90deg); }
+.collapsible-body { display: none; }
+.collapsible-body.open { display: block; }
 
+/* ── Block list ───────────────────────────────────── */
+.block-row {
+  display: flex; align-items: center; gap: 14px;
+  padding: 12px 18px;
+  border-bottom: 1px solid var(--border);
+  transition: background 0.1s; cursor: pointer;
+}
+.block-row:last-child { border-bottom: none; }
+.block-row:hover { background: var(--bg-card-hover); }
+.block-icon {
+  width: 36px; height: 36px; border-radius: 8px;
+  background: var(--accent-soft); color: var(--accent);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 14px; font-weight: 800; flex-shrink: 0;
+}
+.block-info { flex: 1; min-width: 0; }
+.block-num { font-size: 13px; font-weight: 700; color: var(--accent); font-family: var(--mono); }
+.block-hash { font-size: 11px; color: var(--text-muted); font-family: var(--mono); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.block-meta-right { text-align: right; flex-shrink: 0; }
+.block-txcount { font-size: 12px; font-weight: 600; color: var(--text-secondary); }
+.block-age { font-size: 11px; color: var(--text-muted); }
+
+/* ── Empty state ──────────────────────────────────── */
+.empty-state { text-align: center; padding: 40px; color: var(--text-muted); font-size: 13px; }
+
+/* ── Toast ────────────────────────────────────────── */
+.toast {
+  position: fixed; bottom: 24px; right: 24px;
+  background: var(--bg-card); color: var(--text); border: 1px solid var(--border);
+  padding: 12px 20px; border-radius: var(--radius);
+  font-size: 13px; font-weight: 600;
+  box-shadow: var(--shadow-lg); z-index: 9999;
+  opacity: 0; transition: opacity 0.3s;
+}
+
+/* ── Footer ───────────────────────────────────────── */
+footer {
+  border-top: 1px solid var(--border);
+  padding: 20px 28px; text-align: center;
+  font-size: 12px; color: var(--text-muted);
+  background: var(--bg-secondary); font-weight: 500;
+}
+footer a { color: var(--accent); font-weight: 600; }
+
+/* ── Responsive ───────────────────────────────────── */
 @media (max-width: 768px) {
-  header { padding: 12px 16px; }
-  main { padding: 16px; }
-  .block-grid { grid-template-columns: 1fr; }
-  .two-col { grid-template-columns: 1fr; }
+  header { padding: 0 16px; gap: 10px; }
+  .search-wrap { padding: 14px 16px 0; }
+  main { padding: 14px 16px 28px; }
+  .two-col, .chart-row { grid-template-columns: 1fr; }
   .wallet-grid { grid-template-columns: 1fr; }
   .card-row { flex-direction: column; gap: 4px; }
   .card-label { min-width: auto; }
-  .stats-row { grid-template-columns: repeat(2, 1fr); }
-  .hdr-meta { display: none; }
+  .stats-grid { grid-template-columns: repeat(2, 1fr); }
+  .hdr-right { display: none; }
 }
 </style>
 </head>
 <body>
 
 <header>
-  <div class="logo">Aztibase <span>Validator Dashboard</span></div>
+  <div class="logo"><span class="dot"></span>Aztibase <em id="app-title">Explorer</em></div>
   <nav class="tabs">
     <button id="tab-dashboard" class="active" onclick="navigate('dashboard')">Dashboard</button>
     <button id="tab-blocks" onclick="navigate('blocks')">Blocks</button>
@@ -440,16 +496,18 @@ footer {
     <button id="tab-validators" onclick="navigate('validators')">Validators</button>
     <button id="tab-wallet" onclick="navigate('wallet')" style="display:none">Wallet</button>
   </nav>
-  <div class="hdr-meta">
-    <div>Chain: <span class="val" id="hdr-chain">--</span></div>
-    <div>Height: <span class="val" id="hdr-height">--</span></div>
-    <div><span class="status-dot" id="hdr-status"></span></div>
+  <div class="hdr-right">
+    <div class="hdr-pill"><span>Chain</span> <code id="hdr-chain">--</code></div>
+    <div class="hdr-pill"><span>Height</span> <code id="hdr-height">--</code></div>
+    <div class="hdr-pill"><span class="status-dot" id="hdr-status"></span> <span id="hdr-conn-text">--</span></div>
   </div>
 </header>
 
-<div class="search-bar">
-  <input id="search-input" placeholder="Search by block number, tx hash, or address (0x...)" />
-  <button onclick="doSearch()">Search</button>
+<div class="search-wrap">
+  <div class="search-bar">
+    <input id="search-input" placeholder="Search by block number, tx hash, or address..." spellcheck="false" />
+    <button onclick="doSearch()">Search</button>
+  </div>
 </div>
 
 <main id="content">
@@ -460,35 +518,29 @@ footer {
   Aztibase Network &mdash; Chain ID 0xA27B &mdash; <a href="https://testnet.aztibase.com">Testnet</a> &mdash; <a href="https://faucet.aztibase.com">Faucet</a> &mdash; <a href="https://github.com/aztibase/aztibase-node">GitHub</a>
 </footer>
 
-<script src="https://cdn.jsdelivr.net/npm/tweetnacl@1.0.3/nacl-fast.min.js"></script>
 <script>
-// ── BLAKE3 (pure JS, single-chunk ≤1024 bytes) ────────────────────
+// ── BLAKE3 (pure JS, single-chunk) ─────────────────────────────────
 const BLAKE3 = (() => {
   const IV = [0x6A09E667,0xBB67AE85,0x3C6EF372,0xA54FF53A,0x510E527F,0x9B05688C,0x1F83D9AB,0x5BE0CD19];
   const PERM = [2,6,3,10,7,0,4,13,1,11,12,5,9,14,15,8];
   const CHUNK_START = 1, CHUNK_END = 2, ROOT = 8;
-
   function rotr(x, n) { return ((x >>> n) | (x << (32 - n))) >>> 0; }
-
   function g(s, a, b, c, d, mx, my) {
-    s[a] = (s[a] + s[b] + mx) >>> 0;  s[d] = rotr(s[d] ^ s[a], 16);
-    s[c] = (s[c] + s[d]) >>> 0;        s[b] = rotr(s[b] ^ s[c], 12);
-    s[a] = (s[a] + s[b] + my) >>> 0;  s[d] = rotr(s[d] ^ s[a], 8);
-    s[c] = (s[c] + s[d]) >>> 0;        s[b] = rotr(s[b] ^ s[c], 7);
+    s[a] = (s[a] + s[b] + mx) >>> 0; s[d] = rotr(s[d] ^ s[a], 16);
+    s[c] = (s[c] + s[d]) >>> 0;       s[b] = rotr(s[b] ^ s[c], 12);
+    s[a] = (s[a] + s[b] + my) >>> 0; s[d] = rotr(s[d] ^ s[a], 8);
+    s[c] = (s[c] + s[d]) >>> 0;       s[b] = rotr(s[b] ^ s[c], 7);
   }
-
   function compress(cv, block, counter, blockLen, flags) {
-    const s = [
-      cv[0],cv[1],cv[2],cv[3], cv[4],cv[5],cv[6],cv[7],
+    const s = [cv[0],cv[1],cv[2],cv[3],cv[4],cv[5],cv[6],cv[7],
       IV[0],IV[1],IV[2],IV[3],
-      counter & 0xFFFFFFFF, (counter / 0x100000000) >>> 0, blockLen, flags
-    ];
+      counter & 0xFFFFFFFF, (counter / 0x100000000) >>> 0, blockLen, flags];
     let m = block.slice();
     for (let r = 0; r < 7; r++) {
-      g(s,0,4,8,12,m[0],m[1]);   g(s,1,5,9,13,m[2],m[3]);
-      g(s,2,6,10,14,m[4],m[5]);  g(s,3,7,11,15,m[6],m[7]);
-      g(s,0,5,10,15,m[8],m[9]);  g(s,1,6,11,12,m[10],m[11]);
-      g(s,2,7,8,13,m[12],m[13]); g(s,3,4,9,14,m[14],m[15]);
+      g(s,0,4,8,12,m[0],m[1]);  g(s,1,5,9,13,m[2],m[3]);
+      g(s,2,6,10,14,m[4],m[5]); g(s,3,7,11,15,m[6],m[7]);
+      g(s,0,5,10,15,m[8],m[9]); g(s,1,6,11,12,m[10],m[11]);
+      g(s,2,7,8,13,m[12],m[13]);g(s,3,4,9,14,m[14],m[15]);
       const p = new Array(16);
       for (let i = 0; i < 16; i++) p[i] = m[PERM[i]];
       m = p;
@@ -496,7 +548,6 @@ const BLAKE3 = (() => {
     for (let i = 0; i < 8; i++) { s[i] ^= s[i+8]; s[i+8] ^= cv[i]; }
     return s;
   }
-
   function hash(input) {
     const data = input instanceof Uint8Array ? input : new TextEncoder().encode(input);
     let cv = IV.slice();
@@ -519,11 +570,10 @@ const BLAKE3 = (() => {
     for (let i = 0; i < 8; i++) odv.setUint32(i * 4, cv[i], true);
     return out;
   }
-
   return { hash };
 })();
 
-// ── Hex helpers ────────────────────────────────────────────────────
+// ── Hex helpers ─────────────────────────────────────────────────────
 function toHex(bytes) { return Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join(''); }
 function fromHex(hex) {
   const clean = hex.replace(/^0x/, '');
@@ -532,20 +582,15 @@ function fromHex(hex) {
   return out;
 }
 
-// ── Postcard varint encoding (unsigned LEB128) ─────────────────────
+// ── Postcard varint encoding ────────────────────────────────────────
 function encodeVarint(value) {
   const bytes = [];
   let v = BigInt(value);
-  do {
-    let byte = Number(v & 0x7Fn);
-    v >>= 7n;
-    if (v > 0n) byte |= 0x80;
-    bytes.push(byte);
-  } while (v > 0n);
+  do { let byte = Number(v & 0x7Fn); v >>= 7n; if (v > 0n) byte |= 0x80; bytes.push(byte); } while (v > 0n);
   return new Uint8Array(bytes);
 }
 
-// ── Transaction signing (matches aztibase-wasm/src/tx_signing.rs) ──
+// ── Transaction signing ─────────────────────────────────────────────
 const TX_DOMAIN = new TextEncoder().encode('AZTB_TX_V1');
 const ENVELOPE_MAGIC = 0xAA;
 const PREFIX_TRANSFER = 0x01;
@@ -587,21 +632,23 @@ function signPayload(payload, keypair) {
   return buf;
 }
 
-function deriveAddress(publicKey) {
-  return BLAKE3.hash(publicKey);
-}
+function deriveAddress(publicKey) { return BLAKE3.hash(publicKey); }
 
-// ── Wallet state ───────────────────────────────────────────────────
+// ── Wallet state ────────────────────────────────────────────────────
 let walletKeypair = null;
 let walletAddress = null;
 let walletSecretHex = null;
+let extensionConnected = false;
+const hasExtension = () => !!(window.aztibase && window.aztibase.isAztibase);
 
 function walletFromSeed(seedBytes) {
   walletKeypair = nacl.sign.keyPair.fromSeed(seedBytes);
   walletAddress = toHex(deriveAddress(walletKeypair.publicKey));
   walletSecretHex = toHex(seedBytes);
+  extensionConnected = false;
 }
 
+// ── Globals ─────────────────────────────────────────────────────────
 const params = new URLSearchParams(window.location.search);
 const isPublic = window.location.hostname === 'explorer.aztibase.com';
 const defaultRpc = isPublic ? 'https://rpc.aztibase.com' : 'http://127.0.0.1:9944';
@@ -612,12 +659,25 @@ let cachedMetrics = null;
 let lastTxCount = null;
 let lastTxTime = null;
 let currentTps = 0;
+let dashboardInitialized = false;
+let secretVisible = false;
+let connected = false;
+let txLog = [];
+let lastKnownEpoch = -1;
+let requestInFlight = false;
 
-const APP_TITLE = isPublic ? 'Explorer' : 'Validator Dashboard';
+// Chart history buffers
+let tpsHistory = [];
+let blockTimeHistory = [];
+let txVolumeHistory = [];
+let chartInstances = {};
+
+let APP_TITLE = isPublic ? 'Explorer' : 'Dashboard';
 document.title = 'Aztibase ' + APP_TITLE;
-document.querySelector('.logo span').textContent = APP_TITLE;
+document.getElementById('app-title').textContent = APP_TITLE;
 if (!isPublic) document.getElementById('tab-wallet').style.display = '';
 
+// ── RPC ─────────────────────────────────────────────────────────────
 async function rpc(method, rpcParams = []) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 4000);
@@ -631,9 +691,7 @@ async function rpc(method, rpcParams = []) {
     const json = await res.json();
     if (json.error) throw new Error(json.error.message || JSON.stringify(json.error));
     return json.result;
-  } finally {
-    clearTimeout(timeout);
-  }
+  } finally { clearTimeout(timeout); }
 }
 
 async function fetchMetrics() {
@@ -643,39 +701,52 @@ async function fetchMetrics() {
     const res = await fetch(RPC_URL.replace(/\/$/, '') + '/metrics/json', { signal: controller.signal });
     clearTimeout(timeout);
     cachedMetrics = await res.json();
-  } catch (_) {
-    // keep previous cachedMetrics on failure
-  }
+  } catch (_) {}
   return cachedMetrics;
 }
 
+async function detectNodeType() {
+  try {
+    const info = await rpc('aztb_nodeInfo');
+    if (info && info.nodeType) {
+      APP_TITLE = info.nodeType === 'validator' ? 'Validator Dashboard' : 'Full Node';
+      document.title = 'Aztibase ' + APP_TITLE;
+      document.getElementById('app-title').textContent = APP_TITLE;
+    }
+  } catch (_) {}
+}
+
+// ── Helpers ─────────────────────────────────────────────────────────
 function shortHash(h) {
   if (!h || h.length < 16) return h || '--';
-  return h.slice(0, 10) + '\u2026' + h.slice(-8);
+  return h.slice(0, 10) + '\u2026' + h.slice(-6);
 }
-
-function escapeHtml(s) {
-  const d = document.createElement('div');
-  d.textContent = s;
-  return d.innerHTML;
-}
-
+function escapeHtml(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
 function formatNumber(n) {
   if (n === undefined || n === null) return '--';
   return Number(n).toLocaleString();
 }
-
 function formatAZTB(raw) {
   const n = Number(raw || 0);
-  if (n >= 1_000_000) return (n / 1_000_000).toFixed(1) + 'M';
-  if (n >= 1_000) return (n / 1_000).toFixed(1) + 'K';
+  if (n >= 1_000_000_000) return (n / 1_000_000_000).toFixed(2) + 'B';
+  if (n >= 10_000_000) return (n / 1_000_000).toFixed(1) + 'M';
+  if (n >= 10_000) return (n / 1_000).toFixed(1) + 'K';
   return n.toLocaleString();
 }
-
-function isAddr(v) {
-  return typeof v === 'string' && /^(0x)?[0-9a-fA-F]{64}$/.test(v);
+function isAddr(v) { return typeof v === 'string' && /^(0x)?[0-9a-fA-F]{64}$/.test(v); }
+function timeAgo(ts) {
+  if (!ts) return '--';
+  const diff = Math.floor((Date.now() - ts * 1000) / 1000);
+  if (diff < 5) return 'just now';
+  if (diff < 60) return diff + 's ago';
+  if (diff < 3600) return Math.floor(diff / 60) + 'm ago';
+  if (diff < 86400) return Math.floor(diff / 3600) + 'h ago';
+  return Math.floor(diff / 86400) + 'd ago';
 }
-
+function absTime(ts) {
+  if (!ts) return '';
+  return new Date(ts * 1000).toISOString().replace('T', ' ').replace(/\.\d+Z/, ' UTC');
+}
 function copyToClipboard(text, btnEl) {
   navigator.clipboard.writeText(text).then(() => {
     if (btnEl) {
@@ -685,68 +756,165 @@ function copyToClipboard(text, btnEl) {
     }
   }).catch(() => {});
 }
-
 function copyable(text) {
   const short = shortHash(text);
   const id = 'cp-' + Math.random().toString(36).slice(2, 8);
-  return `${escapeHtml(short)}<span class="copy-btn" id="${id}" onclick="event.stopPropagation();copyToClipboard('${escapeHtml(text)}',document.getElementById('${id}'))">\u2398</span>`;
+  return `<span class="mono" style="font-size:12px">${escapeHtml(short)}</span><button class="copy-btn" id="${id}" onclick="event.stopPropagation();copyToClipboard('${escapeHtml(text)}',document.getElementById('${id}'))" title="Copy">\u2398</button>`;
 }
-
 function copyableFull(text) {
   const id = 'cp-' + Math.random().toString(36).slice(2, 8);
-  return `${escapeHtml(text)}<span class="copy-btn" id="${id}" onclick="event.stopPropagation();copyToClipboard('${escapeHtml(text)}',document.getElementById('${id}'))">\u2398</span>`;
+  return `<span class="mono" style="font-size:12px">${escapeHtml(text)}</span><button class="copy-btn" id="${id}" onclick="event.stopPropagation();copyToClipboard('${escapeHtml(text)}',document.getElementById('${id}'))" title="Copy">\u2398</button>`;
+}
+function showToast(msg) {
+  const t = document.createElement('div');
+  t.className = 'toast'; t.textContent = msg;
+  document.body.appendChild(t);
+  requestAnimationFrame(() => t.style.opacity = '1');
+  setTimeout(() => { t.style.opacity = '0'; setTimeout(() => t.remove(), 300); }, 4000);
 }
 
+// ── TX types ────────────────────────────────────────────────────────
 const TX_TYPE_MAP = {
-  0x01: ['Transfer', 'transfer'],
-  0x02: ['Contract Deploy', 'contract'],
-  0x03: ['Contract Call', 'contract'],
-  0x04: ['EVM Deploy', 'contract'],
-  0x05: ['EVM Call', 'contract'],
-  0x06: ['AI Infer', 'ai'],
-  0x07: ['Create Agent', 'ai'],
-  0x08: ['Register Model', 'ai'],
-  0x09: ['Post Task', 'ai'],
-  0x0A: ['Attestation', 'ai'],
-  0x0B: ['Commit Compute', 'ai'],
-  0x0C: ['Dereg Compute', 'ai'],
-  0x0D: ['Dereg Model', 'ai'],
-  0x0E: ['Proposal', 'governance'],
-  0x0F: ['Vote', 'governance'],
-  0x10: ['Stake', 'staking'],
-  0x11: ['Unstake', 'staking'],
-  0x12: ['Delegate', 'staking'],
-  0x13: ['Undelegate', 'staking'],
-  0x14: ['Agent Policy', 'ai'],
-  0x15: ['Agent Execute', 'ai'],
-  0x16: ['Anchor L2', 'bridge'],
-  0x17: ['Bridge Deposit', 'bridge'],
-  0x18: ['Bridge Withdraw', 'bridge'],
-  0x19: ['Register L2', 'bridge'],
-  0x1A: ['Rotate Key', 'security'],
+  0x01: ['Transfer', 'transfer'], 0x02: ['Deploy', 'contract'], 0x03: ['Call', 'contract'],
+  0x04: ['EVM Deploy', 'contract'], 0x05: ['EVM Call', 'contract'],
+  0x06: ['AI Infer', 'ai'], 0x07: ['Agent', 'ai'], 0x08: ['Model', 'ai'],
+  0x09: ['Task', 'ai'], 0x0A: ['Attest', 'ai'], 0x0B: ['Compute', 'ai'],
+  0x0C: ['Dereg', 'ai'], 0x0D: ['Dereg Model', 'ai'],
+  0x0E: ['Proposal', 'governance'], 0x0F: ['Vote', 'governance'],
+  0x10: ['Stake', 'staking'], 0x11: ['Unstake', 'staking'],
+  0x12: ['Delegate', 'staking'], 0x13: ['Undelegate', 'staking'],
+  0x14: ['Agent Policy', 'ai'], 0x15: ['Agent Exec', 'ai'],
+  0x16: ['Anchor L2', 'bridge'], 0x17: ['Bridge In', 'bridge'],
+  0x18: ['Bridge Out', 'bridge'], 0x19: ['Register L2', 'bridge'],
+  0x1A: ['Key Rotate', 'security'], 0x1B: ['Faucet', 'transfer'],
+};
+const TX_NAME_TO_CLASS = {
+  Transfer:'transfer', ContractDeploy:'contract', ContractCall:'contract',
+  EvmDeploy:'contract', EvmCall:'contract', AiInfer:'ai', CreateAgent:'ai',
+  RegisterModel:'ai', PostTask:'ai', SubmitAttestation:'ai', CommitCompute:'ai',
+  DeregisterCompute:'ai', DeregisterModel:'ai', CreateProposal:'governance',
+  CastVote:'governance', Stake:'staking', Unstake:'staking', Delegate:'staking',
+  Undelegate:'staking', SetAgentPolicy:'ai', AgentExecute:'ai', AnchorL2State:'bridge',
+  BridgeDeposit:'bridge', BridgeWithdraw:'bridge', RegisterL2:'bridge',
+  RotateValidatorKey:'security', FaucetDrip:'transfer',
 };
 
 function txBadge(typeCode) {
+  if (typeof typeCode === 'string' && TX_NAME_TO_CLASS[typeCode]) {
+    const cls = TX_NAME_TO_CLASS[typeCode];
+    const label = typeCode.replace(/([A-Z])/g, ' $1').trim();
+    return `<span class="badge ${cls}">${label}</span>`;
+  }
   const code = typeof typeCode === 'string' ? parseInt(typeCode, 16) : (typeCode || 0);
   const entry = TX_TYPE_MAP[code];
-  if (!entry) return '<span class="tx-badge unknown">Unknown</span>';
-  return `<span class="tx-badge ${entry[1]}">${entry[0]}</span>`;
+  if (!entry) return '<span class="badge unknown">Unknown</span>';
+  return `<span class="badge ${entry[1]}">${entry[0]}</span>`;
 }
 
 function txTypeName(typeCode) {
+  if (typeof typeCode === 'string' && TX_NAME_TO_CLASS[typeCode]) return typeCode.replace(/([A-Z])/g, ' $1').trim();
   const code = typeof typeCode === 'string' ? parseInt(typeCode, 16) : (typeCode || 0);
   const entry = TX_TYPE_MAP[code];
   return entry ? entry[0] : 'Unknown';
 }
 
-// --- Navigation ---
+// ── Chart.js helpers ────────────────────────────────────────────────
+const chartDefaults = {
+  responsive: true,
+  maintainAspectRatio: false,
+  animation: { duration: 400 },
+  plugins: { legend: { display: false }, tooltip: {
+    backgroundColor: '#1a1720', borderColor: '#2e2a38', borderWidth: 1,
+    titleColor: '#e8e4ec', bodyColor: 'rgba(232,228,236,0.72)', padding: 10,
+    cornerRadius: 8, titleFont: { family: 'Inter', weight: 600 },
+    bodyFont: { family: 'JetBrains Mono', size: 12 },
+  }},
+  scales: {
+    x: { grid: { color: 'rgba(46,42,56,0.5)', drawBorder: false }, ticks: { color: 'rgba(232,228,236,0.35)', font: { family: 'Inter', size: 10 }, maxTicksLimit: 8 } },
+    y: { grid: { color: 'rgba(46,42,56,0.5)', drawBorder: false }, ticks: { color: 'rgba(232,228,236,0.35)', font: { family: 'JetBrains Mono', size: 10 } }, beginAtZero: true },
+  },
+};
 
+function makeGradient(ctx, color) {
+  const g = ctx.createLinearGradient(0, 0, 0, ctx.canvas.height);
+  g.addColorStop(0, color + '40');
+  g.addColorStop(1, color + '05');
+  return g;
+}
+
+function createOrUpdateChart(id, labels, data, color, label) {
+  const canvas = document.getElementById(id);
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+
+  if (chartInstances[id]) {
+    chartInstances[id].data.labels = labels;
+    chartInstances[id].data.datasets[0].data = data;
+    chartInstances[id].update('none');
+    return;
+  }
+
+  chartInstances[id] = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [{
+        label,
+        data,
+        borderColor: color,
+        backgroundColor: makeGradient(ctx, color),
+        borderWidth: 2,
+        pointRadius: 0,
+        pointHoverRadius: 4,
+        pointHoverBackgroundColor: color,
+        fill: true,
+        tension: 0.35,
+      }],
+    },
+    options: { ...chartDefaults },
+  });
+}
+
+function createOrUpdateBarChart(id, labels, data, color, label) {
+  const canvas = document.getElementById(id);
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+
+  if (chartInstances[id]) {
+    chartInstances[id].data.labels = labels;
+    chartInstances[id].data.datasets[0].data = data;
+    chartInstances[id].update('none');
+    return;
+  }
+
+  chartInstances[id] = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [{
+        label,
+        data,
+        backgroundColor: color + '80',
+        borderColor: color,
+        borderWidth: 1,
+        borderRadius: 4,
+      }],
+    },
+    options: { ...chartDefaults, scales: {
+      ...chartDefaults.scales,
+      x: { ...chartDefaults.scales.x, grid: { display: false } },
+    }},
+  });
+}
+
+// ── Navigation ──────────────────────────────────────────────────────
 function navigate(tab) {
   currentTab = tab;
   document.querySelectorAll('nav.tabs button').forEach(b => b.classList.remove('active'));
   document.getElementById('tab-' + tab).classList.add('active');
   stopPolling();
   dashboardInitialized = false;
+  Object.keys(chartInstances).forEach(k => { chartInstances[k].destroy(); delete chartInstances[k]; });
 
   if (tab === 'dashboard') showDashboard();
   else if (tab === 'blocks') { showBlocks(); pollTimer = setInterval(showBlocks, 3000); }
@@ -755,59 +923,16 @@ function navigate(tab) {
   else if (tab === 'wallet') showWallet();
 }
 
-// --- Dashboard ---
-
-let dashboardInitialized = false;
-
-function buildDashboardShell() {
-  return `
-    <div class="stats-row">
-      <div class="stat"><div class="val" id="d-height">--</div><div class="label">Block Height</div></div>
-      <div class="stat"><div class="val" id="d-commits">--</div><div class="label">Commits</div></div>
-      <div class="stat"><div class="val" id="d-peers">--</div><div class="label">Peers</div></div>
-      <div class="stat"><div class="val" id="d-validators">--</div><div class="label">Validators</div></div>
-      <div class="stat"><div class="val" id="d-staked">--</div><div class="label">Total Staked</div></div>
-      <div class="stat"><div class="val" id="d-mempool">--</div><div class="label">Mempool</div></div>
-      <div class="stat"><div class="val" id="d-tps">--</div><div class="label">TPS</div></div>
-      <div class="stat"><div class="val" id="d-latency">--</div><div class="label">Commit Latency</div></div>
-      <div class="stat"><div class="val" id="d-basefee">--</div><div class="label">Base Fee</div></div>
-    </div>
-    <div id="sentinel-panel" class="card" style="margin-bottom:16px;display:none">
-      <div style="display:flex;align-items:center;gap:12px;padding:8px 0">
-        <div style="font-weight:600;font-size:14px">AI Sentinel</div>
-        <div id="sentinel-bar" style="flex:1;height:8px;background:var(--border);border-radius:4px;overflow:hidden">
-          <div id="sentinel-fill" style="height:100%;width:0%;border-radius:4px;transition:width 0.5s,background 0.5s"></div>
-        </div>
-        <div id="sentinel-score" style="font-family:var(--mono);font-size:13px;min-width:48px;text-align:right">--</div>
-        <div id="sentinel-badge" style="font-size:11px;padding:2px 8px;border-radius:4px;font-weight:600;text-transform:uppercase">--</div>
-      </div>
-    </div>
-    <div class="two-col">
-      <div>
-        <div class="view-title">Latest Blocks <span class="badge green">live</span></div>
-        <div id="dash-blocks"><div class="empty-state">Loading...</div></div>
-      </div>
-      <div>
-        <div class="view-title">Network Stats</div>
-        <div class="card">
-          <div class="card-row"><div class="card-label">Vertices Proposed</div><div class="card-value" id="d-vp">--</div></div>
-          <div class="card-row"><div class="card-label">Vertices Received</div><div class="card-value" id="d-vr">--</div></div>
-          <div class="card-row"><div class="card-label">Rounds Advanced</div><div class="card-value" id="d-rounds">--</div></div>
-          <div class="card-row"><div class="card-label">Equivocations</div><div class="card-value" id="d-equiv">--</div></div>
-          <div class="card-row"><div class="card-label">Txs Processed</div><div class="card-value" id="d-txs">--</div></div>
-          <div class="card-row"><div class="card-label">Slashes</div><div class="card-value" id="d-slashes">--</div></div>
-          <div class="card-row"><div class="card-label">Pending Tasks</div><div class="card-value" id="d-pending">--</div></div>
-        </div>
-      </div>
-    </div>
-  `;
+function stopPolling() { if (pollTimer) { clearInterval(pollTimer); pollTimer = null; } }
+function setActiveTab(tab) {
+  document.querySelectorAll('nav.tabs button').forEach(b => b.classList.remove('active'));
+  if (tab) document.getElementById('tab-' + tab).classList.add('active');
 }
 
 function setVal(id, value) {
   const el = document.getElementById(id);
   if (el && el.textContent !== String(value)) el.textContent = value;
 }
-
 function setValColor(id, value, color) {
   const el = document.getElementById(id);
   if (el) {
@@ -815,8 +940,59 @@ function setValColor(id, value, color) {
     el.style.color = color;
   }
 }
+function updateHeader(height, isConnected) {
+  if (height != null) document.getElementById('hdr-height').textContent = formatNumber(height);
+  const dot = document.getElementById('hdr-status');
+  const text = document.getElementById('hdr-conn-text');
+  dot.className = isConnected ? 'status-dot ok' : 'status-dot err';
+  text.textContent = isConnected ? 'Connected' : 'Disconnected';
+}
+
+// ══════════════════════════════════════════════════════════════════
+// DASHBOARD
+// ══════════════════════════════════════════════════════════════════
+
+function buildDashboardShell() {
+  return `
+    <div class="stats-grid">
+      <div class="stat-card"><div class="icon blue">&#9632;</div><div class="val" id="d-height">--</div><div class="label">Block Height</div></div>
+      <div class="stat-card"><div class="icon green">&#9650;</div><div class="val" id="d-tps">--</div><div class="label">TPS (live)</div></div>
+      <div class="stat-card"><div class="icon purple">&#9830;</div><div class="val" id="d-txs">--</div><div class="label">Total Transactions</div></div>
+      <div class="stat-card"><div class="icon cyan">&#9679;</div><div class="val" id="d-peers">--</div><div class="label">Peers</div></div>
+      <div class="stat-card"><div class="icon orange">&#9733;</div><div class="val" id="d-validators">--</div><div class="label">Validators</div></div>
+      <div class="stat-card"><div class="icon blue">&#8962;</div><div class="val" id="d-staked">--</div><div class="label">Total Staked</div></div>
+      <div class="stat-card"><div class="icon green">&#9889;</div><div class="val" id="d-latency">--</div><div class="label">Commit Latency</div></div>
+      <div class="stat-card"><div class="icon red">&#9881;</div><div class="val" id="d-basefee">--</div><div class="label">Gas Price</div></div>
+      <div class="stat-card"><div class="icon purple">&#9998;</div><div class="val" id="d-mempool">--</div><div class="label">Mempool</div></div>
+    </div>
+    <div id="sentinel-panel"></div>
+    <div class="chart-row">
+      <div class="chart-card"><div class="chart-title">Transaction Volume <span class="live-dot"></span></div><div style="height:180px"><canvas id="chart-txvol"></canvas></div></div>
+      <div class="chart-card"><div class="chart-title">TPS Over Time <span class="live-dot"></span></div><div style="height:180px"><canvas id="chart-tps"></canvas></div></div>
+    </div>
+    <div class="two-col">
+      <div>
+        <div class="section-hdr"><div class="section-title">Latest Blocks <span class="live-dot"></span></div><button class="btn btn-ghost btn-sm" onclick="navigate('blocks')">View all</button></div>
+        <div class="card" id="dash-blocks"><div class="empty-state">Loading...</div></div>
+      </div>
+      <div>
+        <div class="section-hdr"><div class="section-title">Network Stats</div></div>
+        <div class="card">
+          <div class="card-row" style="cursor:default"><div class="card-label" data-tooltip="DAG vertices proposed by this node">Vertices Proposed</div><div class="card-value" id="d-vp">--</div></div>
+          <div class="card-row" style="cursor:default"><div class="card-label" data-tooltip="DAG vertices received from peers">Vertices Received</div><div class="card-value" id="d-vr">--</div></div>
+          <div class="card-row" style="cursor:default"><div class="card-label" data-tooltip="Consensus rounds completed">Rounds Advanced</div><div class="card-value" id="d-rounds">--</div></div>
+          <div class="card-row" style="cursor:default"><div class="card-label" data-tooltip="Total committed batches">Commits</div><div class="card-value" id="d-commits">--</div></div>
+          <div class="card-row" style="cursor:default"><div class="card-label" data-tooltip="Conflicting blocks from same validator">Equivocations</div><div class="card-value" id="d-equiv">--</div></div>
+          <div class="card-row" style="cursor:default"><div class="card-label" data-tooltip="Validators penalized">Slashes</div><div class="card-value" id="d-slashes">--</div></div>
+          <div class="card-row" style="cursor:default"><div class="card-label">Pending Tasks</div><div class="card-value" id="d-pending">--</div></div>
+        </div>
+      </div>
+    </div>`;
+}
 
 async function showDashboard() {
+  if (requestInFlight) return;
+  requestInFlight = true;
   const el = document.getElementById('content');
 
   if (!dashboardInitialized) {
@@ -825,10 +1001,11 @@ async function showDashboard() {
   }
 
   try {
-    const [height, gasPrice, metrics] = await Promise.all([
+    const [height, gasPrice, metrics, healthData] = await Promise.all([
       rpc('aztb_blockNumber'),
       rpc('aztb_gasPrice').catch(() => null),
       fetchMetrics(),
+      rpc('aztb_getChainHealth').catch(() => null),
     ]);
 
     const h = typeof height === 'string' ? parseInt(height, 16) : (height || 0);
@@ -841,13 +1018,13 @@ async function showDashboard() {
     const staking = m.staking || {};
 
     setVal('d-height', formatNumber(h));
-    setVal('d-commits', formatNumber(consensus.commits));
     setVal('d-peers', formatNumber(network.peer_count));
     setVal('d-validators', formatNumber(staking.active_validators));
     setVal('d-staked', formatAZTB(staking.total_staked));
     setVal('d-mempool', formatNumber(execution.mempool_size));
     setVal('d-latency', consensus.last_commit_latency_us ? (consensus.last_commit_latency_us / 1000).toFixed(0) + 'ms' : '--');
     setVal('d-basefee', gasPrice != null ? gasPrice : (execution.base_fee || '--'));
+    setVal('d-commits', formatNumber(consensus.commits));
 
     const txNow = execution.txs_processed || 0;
     const now = Date.now();
@@ -858,53 +1035,75 @@ async function showDashboard() {
     lastTxCount = txNow;
     lastTxTime = now;
     setVal('d-tps', currentTps);
+    setVal('d-txs', formatNumber(txNow));
 
     setVal('d-vp', formatNumber(consensus.vertices_proposed));
     setVal('d-vr', formatNumber(consensus.vertices_received));
     setVal('d-rounds', formatNumber(consensus.rounds_advanced));
     setValColor('d-equiv', formatNumber(consensus.equivocations), consensus.equivocations > 0 ? 'var(--red)' : 'inherit');
-    setVal('d-txs', formatNumber(execution.txs_processed));
     setValColor('d-slashes', formatNumber(staking.slashes_applied), staking.slashes_applied > 0 ? 'var(--red)' : 'inherit');
     setVal('d-pending', formatNumber(execution.pending_tasks));
 
-    if (h > 0) {
-      const from = Math.max(0, h - 7);
-      const blocks = await rpc('aztb_getBlockRange', [from, h]);
-      const container = document.getElementById('dash-blocks');
-      if (blocks && blocks.length > 0) {
-        container.innerHTML = '<div class="card">' + blocks.reverse().map(b => {
-          const num = typeof b.number === 'string' ? parseInt(b.number, 16) : b.number;
-          const txCount = b.transactions ? b.transactions.length : (b.tx_count || 0);
-          return `<div class="card-row" style="cursor:pointer" onclick="showBlock(${num})">
-            <div class="card-label" style="color:var(--accent);font-weight:600">#${num}</div>
-            <div class="card-value" style="flex:1">${shortHash(b.hash)}</div>
-            <div style="color:var(--muted);font-size:12px">${txCount} tx</div>
-          </div>`;
-        }).join('') + '</div>';
+    // TPS history for chart
+    tpsHistory.push(parseFloat(currentTps) || 0);
+    if (tpsHistory.length > 30) tpsHistory.shift();
+    const tpsLabels = tpsHistory.map((_, i) => '');
+    createOrUpdateChart('chart-tps', tpsLabels, tpsHistory, '#6ba89e', 'TPS');
+
+    // Sentinel panel
+    if (healthData) {
+      const score = healthData.score ?? healthData.health_score ?? 0;
+      const level = healthData.level ?? healthData.health_level ?? 'normal';
+      const panel = document.getElementById('sentinel-panel');
+      if (panel) {
+        const levelColor = level === 'critical' ? 'var(--red)' : level === 'warning' ? 'var(--yellow)' : 'var(--green)';
+        const levelBg = level === 'critical' ? 'var(--red-soft)' : level === 'warning' ? 'var(--yellow-soft)' : 'var(--green-soft)';
+        panel.innerHTML = `<div class="card" style="margin-bottom:24px;padding:16px 18px">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+            <span style="font-size:13px;font-weight:700;color:var(--text-secondary)">AI Sentinel Health</span>
+            <span class="badge ${level === 'critical' ? 'security' : level === 'warning' ? 'bridge' : 'governance'}">${level}</span>
+          </div>
+          <div class="health-bar"><div class="fill ${level}" style="width:${score}%"></div></div>
+          <div style="display:flex;justify-content:space-between;margin-top:6px">
+            <span style="font-size:11px;color:var(--text-muted);font-family:var(--mono)">${score}/100</span>
+            <span style="font-size:11px;color:${levelColor};font-weight:600">${level === 'normal' ? 'All systems nominal' : level === 'warning' ? 'Anomalies detected' : 'Action required'}</span>
+          </div>
+        </div>`;
       }
     }
 
-    // AI Sentinel health panel
-    try {
-      const health = await rpc('aztb_getChainHealth');
-      if (health && health.score !== undefined) {
-        const panel = document.getElementById('sentinel-panel');
-        if (panel) panel.style.display = 'block';
-        const pct = Math.round(health.score * 100);
-        const fill = document.getElementById('sentinel-fill');
-        const badge = document.getElementById('sentinel-badge');
-        if (fill) {
-          fill.style.width = pct + '%';
-          fill.style.background = health.level === 'normal' ? 'var(--green)' : health.level === 'warning' ? 'var(--yellow)' : 'var(--red)';
-        }
-        setVal('sentinel-score', (health.score * 100).toFixed(1) + '%');
-        if (badge) {
-          badge.textContent = health.level;
-          badge.style.background = health.level === 'normal' ? 'rgba(63,185,80,0.15)' : health.level === 'warning' ? 'rgba(210,153,34,0.15)' : 'rgba(248,81,73,0.15)';
-          badge.style.color = health.level === 'normal' ? 'var(--green)' : health.level === 'warning' ? 'var(--yellow)' : 'var(--red)';
-        }
+    // Blocks + tx volume chart
+    if (h > 0) {
+      const from = Math.max(0, h - 19);
+      const blocks = await rpc('aztb_getBlockRange', [from, h]);
+      const container = document.getElementById('dash-blocks');
+      if (blocks && blocks.length > 0) {
+        const txCounts = blocks.map(b => b.transactions ? b.transactions.length : (b.tx_count || b.txCount || 0));
+        const blockLabels = blocks.map(b => {
+          const num = typeof b.number === 'string' ? parseInt(b.number, 16) : b.number;
+          return '#' + num;
+        });
+        createOrUpdateBarChart('chart-txvol', blockLabels, txCounts, '#8878a6', 'Transactions');
+
+        const displayBlocks = blocks.slice(-8).reverse();
+        container.innerHTML = displayBlocks.map(b => {
+          const num = typeof b.number === 'string' ? parseInt(b.number, 16) : b.number;
+          const txCount = b.transactions ? b.transactions.length : (b.tx_count || b.txCount || 0);
+          const ts = b.timestamp;
+          return `<div class="block-row" onclick="showBlock(${num})">
+            <div class="block-icon">B</div>
+            <div class="block-info">
+              <div class="block-num">#${num}</div>
+              <div class="block-hash">${b.hash || '--'}</div>
+            </div>
+            <div class="block-meta-right">
+              <div class="block-txcount">${txCount} tx${txCount !== 1 ? 's' : ''}</div>
+              <div class="block-age" ${ts ? `title="${absTime(ts)}"` : ''}>${ts ? timeAgo(ts) : '--'}</div>
+            </div>
+          </div>`;
+        }).join('');
       }
-    } catch (_) {}
+    }
 
     if (!pollTimer) pollTimer = setInterval(refreshDashboard, 5000);
 
@@ -913,9 +1112,9 @@ async function showDashboard() {
       el.innerHTML = `<div class="empty-state">Failed to connect to node at ${escapeHtml(RPC_URL)}<br><br>${escapeHtml(e.message)}<br><br>Use ?rpc=http://host:port to set endpoint</div>`;
       updateHeader(null, false);
     }
-    // if dashboard is already showing data, silently retry next cycle
     if (!pollTimer) pollTimer = setInterval(refreshDashboard, 5000);
   }
+  requestInFlight = false;
 }
 
 async function refreshDashboard() {
@@ -923,179 +1122,50 @@ async function refreshDashboard() {
   try { await showDashboard(); } catch (_) {}
 }
 
-// --- Blocks ---
+// ══════════════════════════════════════════════════════════════════
+// BLOCKS
+// ══════════════════════════════════════════════════════════════════
 
 async function showBlocks() {
   const el = document.getElementById('content');
-  if (!document.getElementById('block-grid')) {
-    el.innerHTML = '<div class="view-title">Latest Blocks <span class="badge green">live</span></div><div class="block-grid" id="block-grid"><div class="empty-state">Loading...</div></div>';
+  if (!document.getElementById('blocks-list')) {
+    el.innerHTML = `<div class="section-hdr"><div class="section-title">Blocks <span class="live-dot"></span></div></div><div class="card" id="blocks-list"><div class="empty-state">Loading...</div></div>`;
   }
-
   try {
     const height = await rpc('aztb_blockNumber');
     const h = typeof height === 'string' ? parseInt(height, 16) : (height || 0);
     updateHeader(h, true);
+    if (h === 0) { document.getElementById('blocks-list').innerHTML = '<div class="empty-state">No blocks yet</div>'; return; }
 
-    if (h === 0) {
-      document.getElementById('block-grid').innerHTML = '<div class="empty-state">No blocks yet</div>';
-      return;
-    }
+    const from = Math.max(0, h - 29);
+    const rangeBlocks = await rpc('aztb_getBlockRange', [from, h]);
+    const list = document.getElementById('blocks-list');
+    if (!rangeBlocks || rangeBlocks.length === 0) { list.innerHTML = '<div class="empty-state">No blocks</div>'; return; }
 
-    const from = Math.max(0, h - 23);
-    const blocks = await rpc('aztb_getBlockRange', [from, h]);
-    const grid = document.getElementById('block-grid');
-
-    if (!blocks || blocks.length === 0) {
-      grid.innerHTML = '<div class="empty-state">No blocks in range</div>';
-      return;
-    }
-
-    grid.innerHTML = blocks.reverse().map(b => {
-      const num = typeof b.number === 'string' ? parseInt(b.number, 16) : b.number;
-      const txCount = b.transactions ? b.transactions.length : (b.tx_count || 0);
-      const hash = b.hash || '--';
-      return `<div class="block-card" onclick="showBlock(${num})">
-        <div class="block-num">Block #${num}</div>
-        <div class="block-meta">
-          <span>${txCount} tx${txCount !== 1 ? 's' : ''}</span>
-        </div>
-        <div class="block-hash">${escapeHtml(hash)}</div>
-      </div>`;
-    }).join('');
-  } catch (e) {
-    document.getElementById('content').innerHTML = `<div class="empty-state">Failed to connect: ${escapeHtml(e.message)}</div>`;
-    updateHeader(null, false);
-  }
-}
-
-// --- Validators ---
-
-async function showValidators() {
-  const el = document.getElementById('content');
-  el.innerHTML = '<div class="empty-state">Loading validators...</div>';
-
-  try {
-    const [validators, metrics] = await Promise.all([
-      rpc('aztb_getActiveValidators').catch(() => []),
-      fetchMetrics(),
-    ]);
-
-    const staking = (metrics || {}).staking || {};
-
-    let tableRows = '';
-    if (Array.isArray(validators) && validators.length > 0) {
-      tableRows = validators.map((v, i) => {
-        const addr = v.validator_id || v.address || (typeof v === 'string' ? v : JSON.stringify(v));
-        const stake = v.effective_stake != null ? formatAZTB(v.effective_stake) : (v.stake != null ? formatAZTB(v.stake) : '--');
-        const status = v.active !== false ? '<span style="color:var(--green)">Active</span>' : '<span style="color:var(--red)">Inactive</span>';
-        return `<tr>
-          <td>${i + 1}</td>
-          <td><a onclick="showAccount('${escapeHtml(typeof addr === 'string' ? addr : '')}')">${shortHash(typeof addr === 'string' ? addr : JSON.stringify(addr))}</a></td>
-          <td>${stake} AZTB</td>
-          <td>${status}</td>
-        </tr>`;
-      }).join('');
-    } else {
-      tableRows = '<tr><td colspan="4" style="text-align:center;color:var(--muted)">No validator data available</td></tr>';
-    }
-
-    el.innerHTML = `
-      <div class="stats-row" style="margin-bottom:24px">
-        <div class="stat"><div class="val">${formatNumber(staking.active_validators || (Array.isArray(validators) ? validators.length : '--'))}</div><div class="label">Active Validators</div></div>
-        <div class="stat"><div class="val">${formatAZTB(staking.total_staked)}</div><div class="label">Total Staked</div></div>
-        <div class="stat"><div class="val">${formatNumber(staking.slashes_applied)}</div><div class="label">Slashes</div></div>
-      </div>
-      <div class="view-title">Validator Set</div>
-      <table class="data-table">
-        <thead><tr><th>#</th><th>Address</th><th>Stake</th><th>Status</th></tr></thead>
-        <tbody>${tableRows}</tbody>
-      </table>
-    `;
-  } catch (e) {
-    el.innerHTML = `<div class="empty-state">Error: ${escapeHtml(e.message)}</div>`;
-  }
-}
-
-// --- Transactions ---
-
-async function showTransactions() {
-  const el = document.getElementById('content');
-  if (!document.getElementById('tx-table')) {
-    el.innerHTML = '<div class="view-title">Recent Transactions <span class="badge green">live</span></div><div id="tx-table"><div class="empty-state">Loading...</div></div>';
-  }
-
-  try {
-    const height = await rpc('aztb_blockNumber');
-    const h = typeof height === 'string' ? parseInt(height, 16) : (height || 0);
-    updateHeader(h, true);
-
-    if (h === 0) {
-      document.getElementById('tx-table').innerHTML = '<div class="empty-state">No blocks yet</div>';
-      return;
-    }
-
-    const from = Math.max(0, h - 15);
-    const blocks = await rpc('aztb_getBlockRange', [from, h]);
-    if (!blocks || blocks.length === 0) {
-      document.getElementById('tx-table').innerHTML = '<div class="empty-state">No blocks in range</div>';
-      return;
-    }
-
-    const txRows = [];
-    for (const b of blocks.reverse()) {
-      const num = typeof b.number === 'string' ? parseInt(b.number, 16) : b.number;
-      const txs = b.transactions || [];
-      for (const txHash of txs) {
-        try {
-          const tx = await rpc('aztb_getTransactionByHash', [txHash]);
-          if (tx) {
-            txRows.push({
-              hash: txHash,
-              block: num,
-              type: tx.type || tx.tx_type || tx.kind || 0,
-              from: tx.from || tx.sender || '--',
-              to: tx.to || tx.recipient || '--',
-              value: tx.value || 0,
-              gas: tx.gas_used || tx.gas_limit || '--',
-              status: tx.status != null ? tx.status : (tx.success != null ? (tx.success ? 1 : 0) : null),
-            });
-          }
-        } catch (_) {}
-        if (txRows.length >= 50) break;
-      }
-      if (txRows.length >= 50) break;
-    }
-
-    const container = document.getElementById('tx-table');
-    if (txRows.length === 0) {
-      container.innerHTML = '<div class="empty-state">No transactions in recent blocks</div>';
-      return;
-    }
-
-    container.innerHTML = `<table class="data-table">
-      <thead><tr><th>Hash</th><th>Type</th><th>Block</th><th>From</th><th>To</th><th>Value</th><th>Status</th></tr></thead>
-      <tbody>${txRows.map(tx => {
-        const statusHtml = tx.status === 1 || tx.status === '1' ? '<span style="color:var(--green)">OK</span>'
-          : tx.status === 0 || tx.status === '0' ? '<span style="color:var(--red)">Fail</span>'
-          : '<span style="color:var(--muted)">--</span>';
-        return `<tr>
-          <td><a onclick="showTx('${escapeHtml(tx.hash)}')">${copyable(tx.hash)}</a></td>
-          <td>${txBadge(tx.type)}</td>
-          <td><a onclick="showBlock(${tx.block})">#${tx.block}</a></td>
-          <td>${isAddr(tx.from) ? `<a onclick="showAccount('${escapeHtml(tx.from)}')">${shortHash(tx.from)}</a>` : escapeHtml(String(tx.from))}</td>
-          <td>${isAddr(tx.to) ? `<a onclick="showAccount('${escapeHtml(tx.to)}')">${shortHash(tx.to)}</a>` : escapeHtml(String(tx.to))}</td>
-          <td>${formatNumber(tx.value)} AZTB</td>
-          <td>${statusHtml}</td>
+    list.innerHTML = `<table class="data-table">
+      <thead><tr><th>Block</th><th>Hash</th><th>Txns</th><th>Age</th></tr></thead>
+      <tbody>${rangeBlocks.reverse().map(b => {
+        const num = typeof b.number === 'string' ? parseInt(b.number, 16) : b.number;
+        const txCount = b.transactions ? new Set(b.transactions).size : (b.tx_count || b.txCount || 0);
+        const hash = b.hash || '--';
+        const ts = b.timestamp;
+        return `<tr onclick="showBlock(${num})">
+          <td><span style="color:var(--accent);font-weight:700;font-family:var(--mono)">#${num}</span></td>
+          <td><span class="mono" style="font-size:11px;color:var(--text-muted)">${shortHash(hash)}</span></td>
+          <td><span class="badge transfer">${txCount} tx${txCount !== 1 ? 's' : ''}</span></td>
+          <td style="color:var(--text-muted)" ${ts ? `title="${absTime(ts)}"` : ''}>${ts ? timeAgo(ts) : '--'}</td>
         </tr>`;
       }).join('')}</tbody>
     </table>`;
   } catch (e) {
-    document.getElementById('content').innerHTML = `<div class="empty-state">Failed to connect: ${escapeHtml(e.message)}</div>`;
+    document.getElementById('content').innerHTML = `<div class="empty-state">Failed: ${escapeHtml(e.message)}</div>`;
     updateHeader(null, false);
   }
 }
 
-// --- Detail Views ---
+// ══════════════════════════════════════════════════════════════════
+// BLOCK DETAIL
+// ══════════════════════════════════════════════════════════════════
 
 async function showBlock(num) {
   stopPolling();
@@ -1110,40 +1180,124 @@ async function showBlock(num) {
       return;
     }
 
-    const txs = block.transactions || [];
+    const txs = [...new Set(block.transactions || [])];
     const hash = block.hash || '--';
     const stateRoot = block.stateRoot || block.state_root || '--';
     const parentHash = block.parentHash || block.parent_hash || '--';
-    const timestamp = block.timestamp ? new Date(block.timestamp * 1000).toISOString() : '--';
+    const ts = block.timestamp;
 
-    const prevBtn = num > 0 ? `<a onclick="showBlock(${num - 1})" style="margin-right:12px">Block #${num-1}</a>` : '';
-    const nextBtn = `<a onclick="showBlock(${num + 1})">Block #${num+1}</a>`;
+    const prevBtn = num > 0 ? `<button class="btn btn-ghost btn-sm" onclick="showBlock(${num - 1})">\u2190 #${num-1}</button>` : '';
+    const nextBtn = `<button class="btn btn-ghost btn-sm" onclick="showBlock(${num + 1})">#${num+1} \u2192</button>`;
 
     el.innerHTML = `
       <a class="nav-link" onclick="navigate('blocks')">Back to blocks</a>
-      <div class="view-title">Block #${num}</div>
-      <div class="card">
-        <div class="card-row"><div class="card-label">Hash</div><div class="card-value">${copyableFull(hash)}</div></div>
-        <div class="card-row"><div class="card-label">Height</div><div class="card-value">${num}</div></div>
-        <div class="card-row"><div class="card-label">Parent Hash</div><div class="card-value">${copyableFull(parentHash)}</div></div>
-        <div class="card-row"><div class="card-label">State Root</div><div class="card-value">${copyableFull(stateRoot)}</div></div>
-        <div class="card-row"><div class="card-label">Timestamp</div><div class="card-value">${escapeHtml(timestamp)}</div></div>
-        <div class="card-row"><div class="card-label">Transactions</div><div class="card-value">${txs.length}</div></div>
-        <div class="card-row"><div class="card-label">Navigate</div><div class="card-value">${prevBtn}${nextBtn}</div></div>
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:20px">
+        <div style="font-size:20px;font-weight:800">Block #${num}</div>
+        <div style="display:flex;gap:6px">${prevBtn} ${nextBtn}</div>
+      </div>
+      <div class="card" style="margin-bottom:20px">
+        <div class="card-row" style="cursor:default"><div class="card-label" data-tooltip="Unique block identifier">Block Hash</div><div class="card-value">${copyableFull(hash)}</div></div>
+        <div class="card-row" style="cursor:default"><div class="card-label">Height</div><div class="card-value" style="font-weight:700">${formatNumber(num)}</div></div>
+        <div class="card-row" style="cursor:default"><div class="card-label" data-tooltip="Hash of the previous block">Parent Hash</div><div class="card-value">${copyableFull(parentHash)}</div></div>
+        <div class="card-row" style="cursor:default"><div class="card-label" data-tooltip="Root hash of Verkle state tree">State Root</div><div class="card-value">${copyableFull(stateRoot)}</div></div>
+        <div class="card-row" style="cursor:default"><div class="card-label">Timestamp</div><div class="card-value">${ts ? `<span title="${absTime(ts)}">${timeAgo(ts)}</span> <span style="color:var(--text-muted);font-size:11px">(${absTime(ts)})</span>` : '--'}</div></div>
+        <div class="card-row" style="cursor:default"><div class="card-label">Transactions</div><div class="card-value"><span class="badge transfer">${txs.length} transaction${txs.length !== 1 ? 's' : ''}</span></div></div>
       </div>
       ${txs.length > 0 ? `
-        <div class="view-title" style="margin-top:24px">Transactions</div>
-        <div class="card">
-          ${txs.map((tx, i) => `<div class="tx-row">
-            <span style="color:var(--muted);width:24px">${i}</span>
-            <a class="tx-hash" onclick="showTx('${escapeHtml(tx)}')">${copyable(tx)}</a>
-          </div>`).join('')}
-        </div>` : ''}
-    `;
+        <div class="section-hdr"><div class="section-title">Transactions in Block</div></div>
+        <div class="card"><table class="data-table">
+          <thead><tr><th>#</th><th>Transaction Hash</th></tr></thead>
+          <tbody>${txs.map((tx, i) => `<tr onclick="showTx('${escapeHtml(tx)}')">
+            <td style="color:var(--text-muted);font-family:var(--mono);width:40px">${i}</td>
+            <td>${copyable(tx)}</td>
+          </tr>`).join('')}</tbody>
+        </table></div>` : ''}`;
   } catch (e) {
     el.innerHTML = `<a class="nav-link" onclick="navigate('blocks')">Back to blocks</a><div class="empty-state">Error: ${escapeHtml(e.message)}</div>`;
   }
 }
+
+// ══════════════════════════════════════════════════════════════════
+// TRANSACTIONS
+// ══════════════════════════════════════════════════════════════════
+
+async function showTransactions() {
+  const el = document.getElementById('content');
+  if (!document.getElementById('tx-table')) {
+    el.innerHTML = `<div class="section-hdr"><div class="section-title">Recent Transactions <span class="live-dot"></span></div></div><div id="tx-table"><div class="empty-state">Loading...</div></div>`;
+  }
+
+  try {
+    const height = await rpc('aztb_blockNumber');
+    const h = typeof height === 'string' ? parseInt(height, 16) : (height || 0);
+    updateHeader(h, true);
+    if (h === 0) { document.getElementById('tx-table').innerHTML = '<div class="empty-state">No blocks yet</div>'; return; }
+
+    const from = Math.max(0, h - 50);
+    const blocks = await rpc('aztb_getBlockRange', [from, h]);
+    if (!blocks || blocks.length === 0) { document.getElementById('tx-table').innerHTML = '<div class="empty-state">No blocks</div>'; return; }
+
+    const txRows = [];
+    const seenHashes = new Set();
+    for (const b of blocks.reverse()) {
+      const num = typeof b.number === 'string' ? parseInt(b.number, 16) : b.number;
+      let txHashes = [];
+      try {
+        const full = await rpc('aztb_getBlockByNumber', [num]);
+        txHashes = [...new Set((full && full.transactions) || [])];
+      } catch (_) {}
+      for (const txHash of txHashes) {
+        if (seenHashes.has(txHash)) continue;
+        seenHashes.add(txHash);
+        try {
+          const tx = await rpc('aztb_getTransactionByHash', [txHash]);
+          if (tx) {
+            const receipt = tx.receipt || {};
+            txRows.push({ hash: txHash, block: num, type: tx.type || tx.tx_type || tx.kind || 0,
+              from: tx.from || tx.sender || '--', to: tx.to || tx.recipient || '--',
+              value: tx.value || 0, gas: receipt.gasUsed || tx.gas_used || tx.gas_limit || '--',
+              status: receipt.success != null ? (receipt.success ? 1 : 0) : (tx.status != null ? tx.status : null),
+              timestamp: b.timestamp,
+            });
+          }
+        } catch (_) {}
+        if (txRows.length >= 50) break;
+      }
+      if (txRows.length >= 50) break;
+    }
+
+    const container = document.getElementById('tx-table');
+    if (txRows.length === 0) { container.innerHTML = '<div class="empty-state">No transactions in recent blocks</div>'; return; }
+
+    container.innerHTML = `<div class="card"><table class="data-table">
+      <thead><tr><th>Hash</th><th>Type</th><th>Block</th><th>From</th><th>To</th><th>Value</th><th>Fee</th><th>Status</th></tr></thead>
+      <tbody>${txRows.map(tx => {
+        const statusHtml = tx.status === 1 || tx.status === '1' || tx.status === true
+          ? '<span class="status-ok">Success</span>'
+          : tx.status === 0 || tx.status === '0' || tx.status === false
+          ? '<span class="status-fail">Failed</span>'
+          : '<span style="color:var(--text-muted)">--</span>';
+        return `<tr onclick="showTx('${escapeHtml(tx.hash)}')">
+          <td>${copyable(tx.hash)}</td>
+          <td>${txBadge(tx.type)}</td>
+          <td><a onclick="event.stopPropagation();showBlock(${tx.block})" style="font-family:var(--mono)">#${tx.block}</a></td>
+          <td>${isAddr(tx.from) ? `<a onclick="event.stopPropagation();showAccount('${escapeHtml(tx.from)}')">${shortHash(tx.from)}</a>` : escapeHtml(String(tx.from))}</td>
+          <td>${isAddr(tx.to) ? `<a onclick="event.stopPropagation();showAccount('${escapeHtml(tx.to)}')">${shortHash(tx.to)}</a>` : escapeHtml(String(tx.to))}</td>
+          <td style="font-family:var(--mono)">${formatNumber(tx.value)}</td>
+          <td style="font-family:var(--mono);color:var(--text-muted)">${tx.gas !== '--' ? formatNumber(tx.gas) : '--'}</td>
+          <td>${statusHtml}</td>
+        </tr>`;
+      }).join('')}</tbody>
+    </table></div>`;
+  } catch (e) {
+    document.getElementById('content').innerHTML = `<div class="empty-state">Failed: ${escapeHtml(e.message)}</div>`;
+    updateHeader(null, false);
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════
+// TX DETAIL
+// ══════════════════════════════════════════════════════════════════
 
 async function showTx(hash) {
   stopPolling();
@@ -1154,28 +1308,161 @@ async function showTx(hash) {
   try {
     const tx = await rpc('aztb_getTransactionByHash', [hash]);
     if (!tx) {
-      el.innerHTML = `<a class="nav-link" onclick="navigate('dashboard')">Back to dashboard</a><div class="empty-state">Transaction not found</div>`;
+      el.innerHTML = `<a class="nav-link" onclick="navigate('dashboard')">Back</a><div class="empty-state">Transaction not found</div>`;
       return;
     }
 
     const txType = tx.type || tx.tx_type || tx.kind || 0;
-    const fields = Object.entries(tx).filter(([k]) => !['hash', 'type', 'tx_type', 'kind'].includes(k));
+    const receipt = tx.receipt || {};
+    const status = receipt.success != null ? receipt.success : (tx.status != null ? tx.status : null);
+    const statusHtml = status === true || status === 1 || status === '1'
+      ? '<span class="status-ok">Success</span>'
+      : status === false || status === 0 || status === '0'
+      ? '<span class="status-fail">Failed</span>'
+      : '<span style="color:var(--text-muted)">Pending</span>';
+
+    const mainFields = ['hash', 'type', 'tx_type', 'kind', 'receipt'];
+    const extraFields = Object.entries(tx).filter(([k]) => !mainFields.includes(k) && !['from', 'sender', 'to', 'recipient', 'value', 'nonce', 'gas_price', 'gas_limit', 'gas_used', 'block_number'].includes(k));
+    const sender = tx.from || tx.sender || '--';
+    const recipient = tx.to || tx.recipient || '--';
+
     el.innerHTML = `
-      <a class="nav-link" onclick="navigate('dashboard')">Back to dashboard</a>
-      <div class="view-title">Transaction ${txBadge(txType)}</div>
-      <div class="card">
-        <div class="card-row"><div class="card-label">Hash</div><div class="card-value">${copyableFull(hash)}</div></div>
-        <div class="card-row"><div class="card-label">Type</div><div class="card-value">${txBadge(txType)} ${escapeHtml(txTypeName(txType))}</div></div>
-        ${fields.map(([k, v]) => `<div class="card-row">
-          <div class="card-label">${escapeHtml(k)}</div>
-          <div class="card-value">${typeof v === 'object' ? escapeHtml(JSON.stringify(v)) : isAddr(v) ? `<a onclick="showAccount('${escapeHtml(String(v))}')">${copyableFull(String(v))}</a>` : escapeHtml(String(v))}</div>
-        </div>`).join('')}
+      <a class="nav-link" onclick="navigate('dashboard')">Back</a>
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:20px">
+        <div style="font-size:20px;font-weight:800">Transaction Details</div>
+        ${txBadge(txType)}
       </div>
-    `;
+      <div class="card">
+        <div class="card-row" style="cursor:default"><div class="card-label" data-tooltip="Unique transaction identifier">Transaction Hash</div><div class="card-value">${copyableFull(hash)}</div></div>
+        <div class="card-row" style="cursor:default"><div class="card-label">Status</div><div class="card-value">${statusHtml}</div></div>
+        <div class="card-row" style="cursor:default"><div class="card-label">Type</div><div class="card-value">${txBadge(txType)} <span style="color:var(--text-secondary);margin-left:6px">${escapeHtml(txTypeName(txType))}</span></div></div>
+        <div class="card-row" style="cursor:default"><div class="card-label" data-tooltip="Account that signed this transaction">From</div><div class="card-value">${isAddr(sender) ? `<a onclick="showAccount('${escapeHtml(sender)}')">${copyableFull(sender)}</a>` : escapeHtml(String(sender))}</div></div>
+        <div class="card-row" style="cursor:default"><div class="card-label" data-tooltip="Destination account or contract">To</div><div class="card-value">${isAddr(recipient) ? `<a onclick="showAccount('${escapeHtml(recipient)}')">${copyableFull(recipient)}</a>` : escapeHtml(String(recipient))}</div></div>
+        <div class="card-row" style="cursor:default"><div class="card-label">Value</div><div class="card-value" style="font-weight:700">${formatNumber(tx.value || 0)} AZTB</div></div>
+        ${tx.nonce != null ? `<div class="card-row" style="cursor:default"><div class="card-label" data-tooltip="Sequential number for sender">Nonce</div><div class="card-value">${tx.nonce}</div></div>` : ''}
+        ${tx.block_number != null ? `<div class="card-row" style="cursor:default"><div class="card-label">Block</div><div class="card-value"><a onclick="showBlock(${tx.block_number})" style="font-weight:600">#${tx.block_number}</a></div></div>` : ''}
+        ${receipt.gasUsed != null ? `<div class="card-row" style="cursor:default"><div class="card-label" data-tooltip="Gas consumed by execution">Gas Used</div><div class="card-value" style="font-family:var(--mono)">${formatNumber(receipt.gasUsed)}</div></div>` : ''}
+        ${tx.gas_price != null ? `<div class="card-row" style="cursor:default"><div class="card-label">Gas Price</div><div class="card-value" style="font-family:var(--mono)">${tx.gas_price}</div></div>` : ''}
+        ${extraFields.length > 0 ? `
+          <div class="collapsible-toggle" onclick="toggleCollapsible(this)"><span class="arrow">\u25B6</span> More Details (${extraFields.length} fields)</div>
+          <div class="collapsible-body">
+            ${extraFields.map(([k, v]) => `<div class="card-row" style="cursor:default">
+              <div class="card-label">${escapeHtml(k)}</div>
+              <div class="card-value">${typeof v === 'object' ? `<code style="font-size:11px;color:var(--text-muted)">${escapeHtml(JSON.stringify(v))}</code>` : isAddr(String(v)) ? `<a onclick="showAccount('${escapeHtml(String(v))}')">${copyableFull(String(v))}</a>` : escapeHtml(String(v))}</div>
+            </div>`).join('')}
+          </div>` : ''}
+      </div>`;
   } catch (e) {
-    el.innerHTML = `<a class="nav-link" onclick="navigate('dashboard')">Back to dashboard</a><div class="empty-state">Error: ${escapeHtml(e.message)}</div>`;
+    el.innerHTML = `<a class="nav-link" onclick="navigate('dashboard')">Back</a><div class="empty-state">Error: ${escapeHtml(e.message)}</div>`;
   }
 }
+
+function toggleCollapsible(el) {
+  el.classList.toggle('open');
+  const body = el.nextElementSibling;
+  if (body) body.classList.toggle('open');
+}
+
+// ══════════════════════════════════════════════════════════════════
+// VALIDATORS
+// ══════════════════════════════════════════════════════════════════
+
+async function showValidators() {
+  const el = document.getElementById('content');
+  el.innerHTML = '<div class="empty-state">Loading validators...</div>';
+
+  try {
+    const [validators, metrics, emissionInfo, epochRewards] = await Promise.all([
+      rpc('aztb_getActiveValidators').catch(() => []),
+      fetchMetrics(),
+      rpc('aztb_getEmissionInfo').catch(() => null),
+      rpc('aztb_getEpochRewards', [5]).catch(() => []),
+    ]);
+
+    const staking = (metrics || {}).staking || {};
+    const ei = emissionInfo || {};
+
+    if (lastKnownEpoch >= 0 && ei.current_epoch > lastKnownEpoch) {
+      showToast(`Epoch ${ei.current_epoch - 1} complete \u2014 rewards distributed`);
+    }
+    if (ei.current_epoch != null) lastKnownEpoch = ei.current_epoch;
+
+    const lastRewards = {};
+    let totalRewardsThisEpoch = 0;
+    if (Array.isArray(epochRewards) && epochRewards.length > 0) {
+      const latest = epochRewards[epochRewards.length - 1];
+      (latest.credits || []).forEach(c => {
+        lastRewards[c.validator] = Number(c.amount);
+        totalRewardsThisEpoch += Number(c.amount);
+      });
+    }
+
+    const balances = {};
+    if (Array.isArray(validators) && validators.length > 0) {
+      const balResults = await Promise.all(validators.map(v => {
+        const addr = v.validator_id || v.address || (typeof v === 'string' ? v : '');
+        const hexAddr = typeof addr === 'string' && addr.startsWith('0x') ? addr : '0x' + addr;
+        return rpc('aztb_getBalance', [hexAddr]).then(b => [addr, b]).catch(() => [addr, null]);
+      }));
+      for (const [addr, bal] of balResults) {
+        if (bal != null) balances[addr] = typeof bal === 'string' ? parseInt(bal, 16) : Number(bal);
+      }
+    }
+
+    let tableRows = '';
+    if (Array.isArray(validators) && validators.length > 0) {
+      tableRows = validators.map((v, i) => {
+        const addr = v.validator_id || v.address || (typeof v === 'string' ? v : JSON.stringify(v));
+        const addrStr = typeof addr === 'string' ? addr : '';
+        const addrLookup = addrStr.startsWith('0x') ? addrStr : '0x' + addrStr;
+        const stake = v.effective_stake != null ? formatAZTB(v.effective_stake) : (v.stake != null ? formatAZTB(v.stake) : '--');
+        const bal = balances[addr] != null ? formatAZTB(balances[addr]) : '--';
+        const reward = lastRewards[addrLookup] != null ? formatAZTB(lastRewards[addrLookup]) : (lastRewards[addrStr] != null ? formatAZTB(lastRewards[addrStr]) : '--');
+        const status = v.active !== false ? '<span class="status-ok">Active</span>' : '<span class="status-fail">Inactive</span>';
+        return `<tr onclick="showAccount('${escapeHtml(addrStr)}')">
+          <td style="font-weight:700;color:var(--text-muted)">${i + 1}</td>
+          <td><a onclick="event.stopPropagation();showAccount('${escapeHtml(addrStr)}')">${shortHash(addrStr || JSON.stringify(addr))}</a></td>
+          <td style="font-family:var(--mono)">${bal}</td>
+          <td style="font-family:var(--mono);font-weight:600">${stake}</td>
+          <td style="font-family:var(--mono);color:var(--green-text)">${reward}</td>
+          <td>${status}</td>
+        </tr>`;
+      }).join('');
+    } else {
+      tableRows = '<tr><td colspan="6" class="empty-state">No validator data</td></tr>';
+    }
+
+    const epochProgress = ei.epoch_length ? Math.round(((ei.rounds_in_current_epoch || 0) / ei.epoch_length) * 100) : 0;
+    const roundsLeft = ei.rounds_until_next_epoch != null ? formatNumber(ei.rounds_until_next_epoch) : '--';
+
+    el.innerHTML = `
+      <div class="stats-grid" style="margin-bottom:24px">
+        <div class="stat-card"><div class="icon orange">&#9733;</div><div class="val">${formatNumber(staking.active_validators || (Array.isArray(validators) ? validators.length : '--'))}</div><div class="label">Active Validators</div></div>
+        <div class="stat-card"><div class="icon blue">&#8962;</div><div class="val">${formatAZTB(staking.total_staked)}</div><div class="label">Total Staked</div></div>
+        <div class="stat-card"><div class="icon purple">&#9830;</div><div class="val">${formatNumber(ei.current_epoch != null ? ei.current_epoch : '--')}</div><div class="label">Current Epoch</div></div>
+        <div class="stat-card"><div class="icon cyan">&#9679;</div><div class="val">${roundsLeft}</div><div class="label">Next Epoch In</div></div>
+      </div>
+      <div class="card" style="margin-bottom:24px;padding:16px 18px">
+        <div style="display:flex;justify-content:space-between;margin-bottom:10px">
+          <span style="font-size:13px;font-weight:700;color:var(--text-secondary)">Epoch Progress</span>
+          <span style="font-size:12px;font-family:var(--mono);color:var(--text-muted)">${ei.rounds_in_current_epoch || 0} / ${ei.epoch_length || '--'} rounds</span>
+        </div>
+        <div class="progress-bar"><div class="fill" style="width:${epochProgress}%;background:var(--accent)"></div></div>
+        ${totalRewardsThisEpoch > 0 ? `<div style="color:var(--green-text);font-size:12px;margin-top:8px;font-weight:600">Last epoch distributed ${formatAZTB(totalRewardsThisEpoch)} AZTB</div>` : ''}
+      </div>
+      <div class="section-hdr"><div class="section-title">Validator Set</div></div>
+      <div class="card"><table class="data-table">
+        <thead><tr><th>#</th><th>Address</th><th>Balance</th><th>Stake</th><th>Last Reward</th><th>Status</th></tr></thead>
+        <tbody>${tableRows}</tbody>
+      </table></div>`;
+  } catch (e) {
+    el.innerHTML = `<div class="empty-state">Error: ${escapeHtml(e.message)}</div>`;
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════
+// ACCOUNT DETAIL
+// ══════════════════════════════════════════════════════════════════
 
 async function showAccount(addr) {
   stopPolling();
@@ -1193,31 +1480,37 @@ async function showAccount(addr) {
     ]);
 
     const bal = typeof balance === 'string' ? balance : String(balance || 0);
-
     let stakingHtml = '';
     if (stake != null && stake !== '0' && stake !== 0) {
-      stakingHtml = `<div class="card-row"><div class="card-label">Validator Stake</div><div class="card-value">${formatAZTB(stake)} AZTB</div></div>`;
+      stakingHtml = `<div class="card-row" style="cursor:default"><div class="card-label" data-tooltip="Amount staked as validator">Validator Stake</div><div class="card-value" style="font-weight:700;color:var(--cyan)">${formatAZTB(stake)} AZTB</div></div>`;
     }
     if (delegation != null && typeof delegation === 'object') {
-      stakingHtml += `<div class="card-row"><div class="card-label">Delegation</div><div class="card-value">${escapeHtml(JSON.stringify(delegation))}</div></div>`;
+      stakingHtml += `<div class="card-row" style="cursor:default"><div class="card-label">Delegation</div><div class="card-value"><code style="font-size:11px">${escapeHtml(JSON.stringify(delegation))}</code></div></div>`;
     }
 
+    const typeBadge = accType === 'validator' ? '<span class="badge staking">Validator</span>'
+      : accType === 'delegator' ? '<span class="badge staking">Delegator</span>'
+      : accType === 'contract' ? '<span class="badge contract">Contract</span>'
+      : '';
+
     el.innerHTML = `
-      <a class="nav-link" onclick="navigate('dashboard')">Back to dashboard</a>
-      <div class="view-title">Account</div>
-      <div class="card">
-        <div class="card-row"><div class="card-label">Address</div><div class="card-value">${copyableFull(addr)}</div></div>
-        <div class="card-row"><div class="card-label">Balance</div><div class="card-value">${formatNumber(bal)} AZTB</div></div>
-        <div class="card-row"><div class="card-label">Nonce</div><div class="card-value">${escapeHtml(String(nonce))}</div></div>
-        <div class="card-row"><div class="card-label">Type</div><div class="card-value">${escapeHtml(String(accType))}</div></div>
+      <a class="nav-link" onclick="navigate('dashboard')">Back</a>
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:20px">
+        <div style="font-size:20px;font-weight:800">Account</div>
+        ${typeBadge}
+      </div>
+      <div class="card" style="margin-bottom:24px">
+        <div class="card-row" style="cursor:default"><div class="card-label">Address</div><div class="card-value">${copyableFull(addr)}</div></div>
+        <div class="card-row" style="cursor:default"><div class="card-label" data-tooltip="Current AZTB balance">Balance</div><div class="card-value" style="font-weight:800;font-size:16px;color:var(--text)">${formatNumber(bal)} AZTB</div></div>
+        <div class="card-row" style="cursor:default"><div class="card-label" data-tooltip="Transactions sent from this account">Nonce</div><div class="card-value">${escapeHtml(String(nonce))}</div></div>
+        <div class="card-row" style="cursor:default"><div class="card-label">Type</div><div class="card-value">${escapeHtml(String(accType))} ${typeBadge}</div></div>
         ${stakingHtml}
       </div>
-      <div class="view-title" style="margin-top:24px">Recent Transactions</div>
-      <div id="account-txs"><div class="empty-state">Scanning recent blocks...</div></div>
-    `;
+      <div class="section-hdr"><div class="section-title">Recent Transactions</div></div>
+      <div id="account-txs"><div class="empty-state">Scanning recent blocks...</div></div>`;
     loadAccountTxs(addr);
   } catch (e) {
-    el.innerHTML = `<a class="nav-link" onclick="navigate('dashboard')">Back to dashboard</a><div class="empty-state">Error: ${escapeHtml(e.message)}</div>`;
+    el.innerHTML = `<a class="nav-link" onclick="navigate('dashboard')">Back</a><div class="empty-state">Error: ${escapeHtml(e.message)}</div>`;
   }
 }
 
@@ -1232,10 +1525,11 @@ async function loadAccountTxs(addr) {
     const from = Math.max(0, h - 50);
     const blocks = await rpc('aztb_getBlockRange', [from, h]);
     const found = [];
-
     for (const b of (blocks || []).reverse()) {
       const num = typeof b.number === 'string' ? parseInt(b.number, 16) : b.number;
-      for (const txHash of (b.transactions || [])) {
+      let txHashes = [];
+      try { const full = await rpc('aztb_getBlockByNumber', [num]); txHashes = (full && full.transactions) || []; } catch (_) {}
+      for (const txHash of txHashes) {
         try {
           const tx = await rpc('aztb_getTransactionByHash', [txHash]);
           if (!tx) continue;
@@ -1251,74 +1545,65 @@ async function loadAccountTxs(addr) {
       if (found.length >= 25) break;
     }
 
-    if (found.length === 0) {
-      container.innerHTML = '<div class="empty-state">No transactions found in recent blocks</div>';
-      return;
-    }
+    if (found.length === 0) { container.innerHTML = '<div class="empty-state">No transactions found in recent blocks</div>'; return; }
 
-    container.innerHTML = `<table class="data-table">
-      <thead><tr><th>Hash</th><th>Type</th><th>Block</th><th>Direction</th><th>Value</th></tr></thead>
+    container.innerHTML = `<div class="card"><table class="data-table">
+      <thead><tr><th>Hash</th><th>Type</th><th>Block</th><th>Direction</th><th>Counterparty</th><th>Value</th></tr></thead>
       <tbody>${found.map(tx => {
-        const dir = tx.from === addr ? '<span style="color:var(--red)">OUT</span>' : '<span style="color:var(--green)">IN</span>';
-        return `<tr>
-          <td><a onclick="showTx('${escapeHtml(tx.hash)}')">${copyable(tx.hash)}</a></td>
+        const isOut = tx.from === addr;
+        const dir = isOut ? '<span class="dir-out">OUT</span>' : '<span class="dir-in">IN</span>';
+        const other = isOut ? tx.to : tx.from;
+        return `<tr onclick="showTx('${escapeHtml(tx.hash)}')">
+          <td>${copyable(tx.hash)}</td>
           <td>${txBadge(tx.type)}</td>
-          <td><a onclick="showBlock(${tx.block})">#${tx.block}</a></td>
+          <td><a onclick="event.stopPropagation();showBlock(${tx.block})" style="font-family:var(--mono)">#${tx.block}</a></td>
           <td>${dir}</td>
-          <td>${formatNumber(tx.value)} AZTB</td>
+          <td>${isAddr(other) ? `<a onclick="event.stopPropagation();showAccount('${escapeHtml(other)}')">${shortHash(other)}</a>` : escapeHtml(String(other))}</td>
+          <td style="font-family:var(--mono)">${formatNumber(tx.value)}</td>
         </tr>`;
       }).join('')}</tbody>
-    </table>`;
+    </table></div>`;
   } catch (e) {
-    container.innerHTML = `<div class="empty-state">Error loading transactions: ${escapeHtml(e.message)}</div>`;
+    container.innerHTML = `<div class="empty-state">Error: ${escapeHtml(e.message)}</div>`;
   }
 }
 
-// --- Wallet ---
+// ══════════════════════════════════════════════════════════════════
+// WALLET
+// ══════════════════════════════════════════════════════════════════
 
 function showWallet() {
   const el = document.getElementById('content');
-  const connected = walletKeypair !== null;
+  const isConn = walletKeypair !== null || extensionConnected;
+  const isExt = extensionConnected;
+  const extAvailable = hasExtension();
 
   el.innerHTML = `
-    <div class="view-title">Wallet ${connected ? '<span class="badge green">connected</span>' : '<span class="badge">not connected</span>'}</div>
+    <div class="section-hdr"><div class="section-title">Wallet ${isConn ? (isExt ? '<span class="badge governance">Extension</span>' : '<span class="badge governance">Connected</span>') : '<span class="badge unknown">Not Connected</span>'}</div></div>
     <div class="wallet-grid">
       <div>
         <div class="wallet-section">
           <h3>Connect Wallet</h3>
-          ${connected ? `
-            <div class="card">
-              <div class="card-row">
-                <div class="card-label">Address</div>
-                <div class="card-value" style="color:var(--accent)">${walletAddress}</div>
-              </div>
-              <div class="card-row">
-                <div class="card-label">Secret Key</div>
-                <div class="card-value">
-                  <span id="secret-display">${'*'.repeat(64)}</span>
-                  <span class="secret-toggle" onclick="toggleSecret()">show</span>
-                </div>
-              </div>
-              <div class="card-row">
-                <div class="card-label">Public Key</div>
-                <div class="card-value">${toHex(walletKeypair.publicKey)}</div>
-              </div>
-              <div class="card-row">
-                <div class="card-label">Balance</div>
-                <div class="card-value" id="wallet-balance">loading...</div>
-              </div>
-              <div class="card-row">
-                <div class="card-label">Nonce</div>
-                <div class="card-value" id="wallet-nonce">--</div>
-              </div>
+          ${isConn ? `
+            <div class="card" style="margin-bottom:12px">
+              <div class="card-row" style="cursor:default"><div class="card-label">Address</div><div class="card-value" style="color:var(--accent);font-size:11px;font-family:var(--mono)">${walletAddress}</div></div>
+              ${isExt ? `<div class="card-row" style="cursor:default"><div class="card-label">Source</div><div class="card-value" style="color:var(--green-text);font-weight:600">Aztibase Extension</div></div>`
+              : `<div class="card-row" style="cursor:default"><div class="card-label">Secret Key</div><div class="card-value"><span id="secret-display" class="mono" style="font-size:11px">${'*'.repeat(64)}</span><span class="secret-toggle" onclick="toggleSecret()">show</span></div></div>
+              <div class="card-row" style="cursor:default"><div class="card-label">Public Key</div><div class="card-value mono" style="font-size:11px">${walletKeypair ? toHex(walletKeypair.publicKey) : '--'}</div></div>`}
+              <div class="card-row" style="cursor:default"><div class="card-label">Balance</div><div class="card-value" id="wallet-balance" style="font-weight:700;font-size:16px">loading...</div></div>
+              <div class="card-row" style="cursor:default"><div class="card-label">Nonce</div><div class="card-value" id="wallet-nonce">--</div></div>
             </div>
-            <button class="btn btn-secondary" onclick="refreshWalletBalance()">Refresh Balance</button>
-            <button class="btn btn-green" onclick="walletFaucetDrip()">Faucet Drip (1M AZTB)</button>
-            <button class="btn btn-red" onclick="disconnectWallet()">Disconnect</button>
+            <div style="display:flex;gap:8px;flex-wrap:wrap">
+              <button class="btn btn-ghost" onclick="refreshWalletBalance()">Refresh</button>
+              <button class="btn btn-green" onclick="walletFaucetDrip()">Faucet (1M AZTB)</button>
+              <button class="btn btn-red" onclick="disconnectWallet()">Disconnect</button>
+            </div>
           ` : `
-            <button class="btn btn-primary" onclick="generateNewWallet()">Generate New Keypair</button>
-            <div style="margin-top:16px">
-              <div class="field-label" style="color:var(--muted);font-size:12px;margin-bottom:6px">Or import secret key (64 hex chars):</div>
+            ${extAvailable ? `<button class="btn btn-green" onclick="connectExtension()" style="margin-bottom:12px;width:100%">Connect Aztibase Extension</button>
+            <div style="color:var(--text-muted);font-size:11px;margin-bottom:14px;text-align:center;font-weight:600">\u2014 or connect manually \u2014</div>` : ''}
+            <div style="display:flex;gap:8px;margin-bottom:14px"><button class="btn btn-primary" onclick="generateNewWallet()">Generate Keypair</button></div>
+            <div>
+              <div style="color:var(--text-muted);font-size:11px;margin-bottom:6px;font-weight:600">Import secret key (64 hex chars):</div>
               <input class="wallet-input" id="import-secret" placeholder="Enter 64-character hex secret key..." maxlength="66" spellcheck="false" autocomplete="off">
               <button class="btn btn-secondary" onclick="importWallet()">Import</button>
             </div>
@@ -1327,7 +1612,7 @@ function showWallet() {
         </div>
       </div>
       <div>
-        ${connected ? `
+        ${isConn ? `
         <div class="wallet-section">
           <h3>Send Transfer</h3>
           <input class="wallet-input" id="send-to" placeholder="Recipient address (64 hex chars)" maxlength="66" spellcheck="false">
@@ -1338,76 +1623,52 @@ function showWallet() {
         </div>
         <div class="wallet-section">
           <h3>Transaction Log</h3>
-          <div id="tx-log" class="card">
-            <div class="empty-state" style="padding:24px;font-size:13px">No transactions yet</div>
-          </div>
-        </div>
-        ` : `
+          <div id="tx-log" class="card"><div class="empty-state" style="padding:20px">No transactions yet</div></div>
+        </div>` : `
         <div class="wallet-section">
           <h3>Getting Started</h3>
           <div class="card">
-            <div class="card-row" style="flex-direction:column;gap:8px">
-              <div style="font-size:14px;font-weight:600">1. Generate or import a keypair</div>
-              <div style="color:var(--muted);font-size:13px">Click "Generate New Keypair" to create a fresh Ed25519 key, or paste an existing secret key.</div>
-            </div>
-            <div class="card-row" style="flex-direction:column;gap:8px">
-              <div style="font-size:14px;font-weight:600">2. Get testnet tokens</div>
-              <div style="color:var(--muted);font-size:13px">Use the Faucet button to receive 1,000,000 AZTB for testing.</div>
-            </div>
-            <div class="card-row" style="flex-direction:column;gap:8px">
-              <div style="font-size:14px;font-weight:600">3. Send a transfer</div>
-              <div style="color:var(--muted);font-size:13px">Enter a recipient address and amount, then sign and broadcast the transaction.</div>
-            </div>
+            ${extAvailable ? `<div class="card-row" style="flex-direction:column;gap:6px;cursor:default"><div style="font-weight:700">1. Connect extension</div><div style="color:var(--text-muted);font-size:12px">Click "Connect Aztibase Extension" above.</div></div>`
+            : `<div class="card-row" style="flex-direction:column;gap:6px;cursor:default"><div style="font-weight:700">1. Generate or import keypair</div><div style="color:var(--text-muted);font-size:12px">Create a fresh Ed25519 key or paste an existing secret key.</div></div>`}
+            <div class="card-row" style="flex-direction:column;gap:6px;cursor:default"><div style="font-weight:700">2. Get testnet tokens</div><div style="color:var(--text-muted);font-size:12px">Use Faucet to receive 1,000,000 AZTB.</div></div>
+            <div class="card-row" style="flex-direction:column;gap:6px;cursor:default"><div style="font-weight:700">3. Send a transfer</div><div style="color:var(--text-muted);font-size:12px">Enter recipient and amount, then sign & broadcast.</div></div>
           </div>
-        </div>
-        `}
+        </div>`}
       </div>
-    </div>
-  `;
-
-  if (connected) refreshWalletBalance();
+    </div>`;
+  if (isConn) refreshWalletBalance();
 }
 
-let txLog = [];
+function walletStatus(msg, cls) { const el = document.getElementById('wallet-status'); if (el) el.innerHTML = `<div class="wallet-alert ${cls}">${escapeHtml(msg)}</div>`; }
+function sendStatus(msg, cls) { const el = document.getElementById('send-status'); if (el) el.innerHTML = `<div class="wallet-alert ${cls}">${escapeHtml(msg)}</div>`; }
 
-function walletStatus(msg, cls) {
-  const el = document.getElementById('wallet-status');
-  if (el) el.innerHTML = `<div class="wallet-alert ${cls}">${escapeHtml(msg)}</div>`;
+async function connectExtension() {
+  if (!hasExtension()) { walletStatus('Extension not detected.', 'error'); return; }
+  try {
+    walletStatus('Connecting...', 'info');
+    const result = await window.aztibase.connect();
+    if (result?.address) {
+      walletAddress = result.address; walletKeypair = null; walletSecretHex = null; extensionConnected = true;
+      showWallet();
+      walletStatus(result.locked ? 'Extension locked. Unlock to sign.' : 'Connected via extension.', result.locked ? 'warn' : 'success');
+    } else { walletStatus('No wallet found.', 'error'); }
+  } catch (e) { walletStatus('Failed: ' + e.message, 'error'); }
 }
 
-function sendStatus(msg, cls) {
-  const el = document.getElementById('send-status');
-  if (el) el.innerHTML = `<div class="wallet-alert ${cls}">${escapeHtml(msg)}</div>`;
-}
-
-function generateNewWallet() {
-  const seed = nacl.randomBytes(32);
-  walletFromSeed(seed);
-  showWallet();
-  walletStatus('New keypair generated. Save your secret key!', 'success');
-}
+function generateNewWallet() { walletFromSeed(nacl.randomBytes(32)); showWallet(); walletStatus('New keypair generated. Save your secret key!', 'success'); }
 
 function importWallet() {
-  const input = document.getElementById('import-secret');
-  const hex = (input.value || '').trim().replace(/^0x/, '');
-  if (!/^[0-9a-fA-F]{64}$/.test(hex)) {
-    walletStatus('Invalid secret key. Must be 64 hex characters.', 'error');
-    return;
-  }
-  walletFromSeed(fromHex(hex));
-  showWallet();
-  walletStatus('Wallet imported successfully.', 'success');
+  const hex = (document.getElementById('import-secret').value || '').trim().replace(/^0x/, '');
+  if (!/^[0-9a-fA-F]{64}$/.test(hex)) { walletStatus('Invalid key. Must be 64 hex characters.', 'error'); return; }
+  walletFromSeed(fromHex(hex)); showWallet(); walletStatus('Wallet imported.', 'success');
 }
 
 function disconnectWallet() {
-  walletKeypair = null;
-  walletAddress = null;
-  walletSecretHex = null;
-  txLog = [];
+  walletKeypair = null; walletAddress = null; walletSecretHex = null; extensionConnected = false; txLog = [];
+  if (hasExtension()) window.aztibase.disconnect().catch(() => {});
   showWallet();
 }
 
-let secretVisible = false;
 function toggleSecret() {
   secretVisible = !secretVisible;
   const el = document.getElementById('secret-display');
@@ -1419,71 +1680,74 @@ function toggleSecret() {
 async function refreshWalletBalance() {
   if (!walletAddress) return;
   try {
-    const [balance, nonce] = await Promise.all([
-      rpc('aztb_getBalance', [walletAddress]),
-      rpc('aztb_getNonce', [walletAddress]),
-    ]);
-    const balEl = document.getElementById('wallet-balance');
-    const nonceEl = document.getElementById('wallet-nonce');
-    if (balEl) balEl.textContent = formatNumber(balance) + ' AZTB';
-    if (nonceEl) nonceEl.textContent = String(nonce);
-  } catch (e) {
-    const balEl = document.getElementById('wallet-balance');
-    if (balEl) balEl.textContent = 'error: ' + e.message;
-  }
+    if (extensionConnected && hasExtension()) {
+      const result = await window.aztibase.getBalance();
+      const balEl = document.getElementById('wallet-balance');
+      const nonceEl = document.getElementById('wallet-nonce');
+      if (balEl) balEl.textContent = formatNumber(result.balance) + ' AZTB';
+      if (nonceEl) nonceEl.textContent = String(result.nonce);
+    } else {
+      const [balance, nonce] = await Promise.all([rpc('aztb_getBalance', [walletAddress]), rpc('aztb_getNonce', [walletAddress])]);
+      const balEl = document.getElementById('wallet-balance');
+      const nonceEl = document.getElementById('wallet-nonce');
+      if (balEl) balEl.textContent = formatNumber(balance) + ' AZTB';
+      if (nonceEl) nonceEl.textContent = String(nonce);
+    }
+  } catch (e) { const balEl = document.getElementById('wallet-balance'); if (balEl) balEl.textContent = 'error'; }
 }
 
 async function walletFaucetDrip() {
   if (!walletAddress) return;
-  walletStatus('Requesting faucet drip...', 'info');
+  walletStatus('Requesting faucet...', 'info');
   try {
-    const result = await rpc('aztb_faucetDrip', [walletAddress]);
-    const txHash = typeof result === 'object' ? JSON.stringify(result) : (result || 'sent');
-    walletStatus('Faucet drip sent! Balance: ' + (result?.balance ?? txHash), 'success');
-    addTxLog('Faucet Drip', '1,000,000 AZTB', result?.address || txHash);
+    let result;
+    if (extensionConnected && hasExtension()) { result = await window.aztibase.faucetDrip(); }
+    else { result = await rpc('aztb_faucetDrip', [walletAddress]); }
+    walletStatus('Faucet drip sent!', 'success');
+    addTxLog('Faucet Drip', '1,000,000 AZTB', result?.address || result || 'sent');
     setTimeout(refreshWalletBalance, 2000);
-  } catch (e) {
-    walletStatus('Faucet error: ' + e.message, 'error');
-  }
+  } catch (e) { walletStatus('Faucet error: ' + e.message, 'error'); }
 }
 
 async function sendTransfer() {
-  if (!walletKeypair) return;
+  const isConn = walletKeypair !== null || extensionConnected;
+  if (!isConn) return;
   const toHexVal = (document.getElementById('send-to').value || '').trim().replace(/^0x/, '');
   const amountStr = (document.getElementById('send-amount').value || '').trim();
   const gasPriceStr = (document.getElementById('send-gas').value || '1').trim();
 
-  if (!/^[0-9a-fA-F]{64}$/.test(toHexVal)) {
-    sendStatus('Invalid recipient address.', 'error');
-    return;
-  }
+  if (!/^[0-9a-fA-F]{64}$/.test(toHexVal)) { sendStatus('Invalid recipient address.', 'error'); return; }
   const amount = parseInt(amountStr, 10);
-  if (!amount || amount <= 0) {
-    sendStatus('Invalid amount.', 'error');
+  if (!amount || amount <= 0) { sendStatus('Invalid amount.', 'error'); return; }
+  const gasPrice = parseInt(gasPriceStr, 10) || 1;
+
+  if (extensionConnected && hasExtension()) {
+    sendStatus('Signing via extension...', 'info');
+    try {
+      const result = await window.aztibase.signAndSendTransfer(toHexVal, amount, gasPrice);
+      const txHash = result?.txHash || result || 'submitted';
+      sendStatus('Sent! Hash: ' + txHash, 'success');
+      addTxLog('Transfer ' + amount + ' AZTB', 'to ' + toHexVal.slice(0, 12) + '...', txHash);
+      setTimeout(refreshWalletBalance, 3000);
+    } catch (e) { sendStatus('Error: ' + e.message, 'error'); }
     return;
   }
-  const gasPrice = parseInt(gasPriceStr, 10) || 1;
 
   sendStatus('Fetching nonce...', 'info');
   try {
     const nonce = await rpc('aztb_getNonce', [walletAddress]);
     const from32 = deriveAddress(walletKeypair.publicKey);
     const to32 = fromHex(toHexVal);
-
-    sendStatus('Signing transaction...', 'info');
+    sendStatus('Signing...', 'info');
     const payload = encodeTransferPayload(from32, to32, amount, nonce, gasPrice);
     const envelope = signPayload(payload, walletKeypair);
-    const txHex = toHex(envelope);
-
     sendStatus('Broadcasting...', 'info');
-    const result = await rpc('aztb_sendRawTransaction', [txHex]);
+    const result = await rpc('aztb_sendRawTransaction', [toHex(envelope)]);
     const txHash = result?.tx_hash || result || 'submitted';
-    sendStatus('Transaction sent! Hash: ' + txHash, 'success');
+    sendStatus('Sent! Hash: ' + txHash, 'success');
     addTxLog('Transfer ' + amount + ' AZTB', 'to ' + toHexVal.slice(0, 12) + '...', txHash);
     setTimeout(refreshWalletBalance, 3000);
-  } catch (e) {
-    sendStatus('Send error: ' + e.message, 'error');
-  }
+  } catch (e) { sendStatus('Error: ' + e.message, 'error'); }
 }
 
 function addTxLog(title, detail, hash) {
@@ -1496,81 +1760,53 @@ function renderTxLog() {
   const el = document.getElementById('tx-log');
   if (!el || txLog.length === 0) return;
   el.innerHTML = txLog.map(tx => `
-    <div class="card-row">
-      <div style="flex:1">
-        <div style="font-size:13px;font-weight:500">${escapeHtml(tx.title)}</div>
-        <div style="font-size:11px;color:var(--muted)">${escapeHtml(tx.detail)}</div>
-      </div>
-      <div style="font-size:11px;color:var(--muted);text-align:right">
-        <div>${escapeHtml(tx.time)}</div>
-        <div style="font-family:var(--mono)">${typeof tx.hash === 'string' ? escapeHtml(tx.hash.slice(0, 16)) + '...' : '--'}</div>
-      </div>
-    </div>
-  `).join('');
+    <div class="card-row" style="cursor:default">
+      <div style="flex:1"><div style="font-size:12px;font-weight:600">${escapeHtml(tx.title)}</div><div style="font-size:11px;color:var(--text-muted)">${escapeHtml(tx.detail)}</div></div>
+      <div style="text-align:right"><div style="font-size:11px;color:var(--text-muted)">${escapeHtml(tx.time)}</div><div style="font-family:var(--mono);font-size:10px;color:var(--text-muted)">${typeof tx.hash === 'string' ? escapeHtml(tx.hash.slice(0, 16)) + '...' : '--'}</div></div>
+    </div>`).join('');
 }
 
-// --- Helpers ---
-
-function updateHeader(height, connected) {
-  if (height != null) document.getElementById('hdr-height').textContent = height;
-  document.getElementById('hdr-status').className = connected ? 'status-dot ok' : 'status-dot err';
-}
-
-function setActiveTab(tab) {
-  document.querySelectorAll('nav.tabs button').forEach(b => b.classList.remove('active'));
-  if (tab) document.getElementById('tab-' + tab).classList.add('active');
-}
+// ══════════════════════════════════════════════════════════════════
+// SEARCH
+// ══════════════════════════════════════════════════════════════════
 
 function doSearch() {
   const q = document.getElementById('search-input').value.trim();
   if (!q) return;
-
-  if (/^\d+$/.test(q)) {
-    showBlock(parseInt(q, 10));
-  } else if (/^0x[0-9a-fA-F]+$/.test(q) || /^[0-9a-fA-F]{64}$/.test(q)) {
+  if (/^\d+$/.test(q)) { showBlock(parseInt(q, 10)); }
+  else if (/^0x[0-9a-fA-F]+$/.test(q) || /^[0-9a-fA-F]{64}$/.test(q)) {
     if (q.replace('0x', '').length === 64) {
       rpc('aztb_getTransactionByHash', [q]).then(tx => {
         if (tx) showTx(q); else showAccount(q.replace(/^0x/, ''));
       }).catch(() => showAccount(q.replace(/^0x/, '')));
-    } else {
-      showBlock(parseInt(q, 16));
-    }
-  } else {
-    showAccount(q);
-  }
+    } else { showBlock(parseInt(q, 16)); }
+  } else { showAccount(q); }
 }
 
-document.getElementById('search-input').addEventListener('keydown', e => {
-  if (e.key === 'Enter') doSearch();
-});
+document.getElementById('search-input').addEventListener('keydown', e => { if (e.key === 'Enter') doSearch(); });
 
-function stopPolling() {
-  if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
-}
-
-// --- Connection Gate ---
-
-let connected = false;
+// ══════════════════════════════════════════════════════════════════
+// CONNECTION GATE
+// ══════════════════════════════════════════════════════════════════
 
 function showConnectGate(errorMsg) {
   document.querySelector('header').style.display = 'none';
-  document.querySelector('.search-bar').style.display = 'none';
+  document.querySelector('.search-wrap').style.display = 'none';
   const el = document.getElementById('content');
   el.innerHTML = `
     <div class="connect-gate">
-      <div class="logo-big">Aztibase <span>${APP_TITLE}</span></div>
-      <div class="subtitle">${isPublic ? 'Explore the Aztibase Network' : 'Connect to an Aztibase node to monitor'}</div>
+      <div class="logo-big"><span class="dot"></span>Aztibase <em>${APP_TITLE}</em></div>
+      <div class="subtitle">${isPublic ? 'Explore the Aztibase Network' : 'Connect to an Aztibase node'}</div>
       <div class="rpc-form">
         <input id="gate-rpc" value="${escapeHtml(RPC_URL)}" placeholder="http://host:port" spellcheck="false">
         <button onclick="tryConnect()">Connect</button>
       </div>
       <div class="status-msg ${errorMsg ? 'err' : ''}" id="gate-status">${errorMsg ? escapeHtml(errorMsg) : ''}</div>
-      <div style="color:var(--muted);font-size:12px;max-width:400px">
+      <div style="color:var(--text-muted);font-size:12px;max-width:400px">
         Enter the RPC endpoint of any Aztibase node. Default is localhost:9944 for local testnet.
         You can also pass <code style="color:var(--accent)">?rpc=http://host:port</code> in the URL.
       </div>
-    </div>
-  `;
+    </div>`;
   document.getElementById('gate-rpc').addEventListener('keydown', e => { if (e.key === 'Enter') tryConnect(); });
 }
 
@@ -1579,36 +1815,37 @@ async function tryConnect() {
   const status = document.getElementById('gate-status');
   const url = (input.value || '').trim();
   if (!url) { status.textContent = 'Enter an RPC URL'; status.className = 'status-msg err'; return; }
-
   RPC_URL = url;
   status.textContent = 'Connecting...';
   status.className = 'status-msg trying';
-
   try {
     const chainId = await rpc('aztb_chainId');
     status.textContent = 'Connected! Chain ID: ' + (chainId || 'unknown');
     status.className = 'status-msg ok';
     connected = true;
     document.getElementById('hdr-chain').textContent = chainId || '--';
-
+    if (!isPublic) detectNodeType();
     setTimeout(() => {
       document.querySelector('header').style.display = '';
-      document.querySelector('.search-bar').style.display = '';
+      document.querySelector('.search-wrap').style.display = '';
       navigate('dashboard');
-    }, 500);
+    }, 400);
   } catch (e) {
     status.textContent = 'Failed: ' + e.message;
     status.className = 'status-msg err';
   }
 }
 
-// --- Init ---
+// ══════════════════════════════════════════════════════════════════
+// INIT
+// ══════════════════════════════════════════════════════════════════
 
 (async () => {
   try {
     const chainId = await rpc('aztb_chainId');
     document.getElementById('hdr-chain').textContent = chainId || '--';
     connected = true;
+    if (!isPublic) detectNodeType();
     navigate('dashboard');
   } catch (_) {
     showConnectGate('Could not connect to ' + RPC_URL);
