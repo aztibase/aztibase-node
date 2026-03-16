@@ -24,17 +24,17 @@ Entries are prepended (newest first).
 ### Sprint 060 — AI Sentinel Tier 1 + CI/CD (2026-03-16)
 - **Date**: 2026-03-16
 - **Sprint**: 060 (Sprint E)
-- **Commit**: (uncommitted — pending commit)
+- **Commit**: `86cb785` (Sentinel + CI/CD), plus follow-up (CSV export)
 - **Files Changed**:
-  - `crates/aztibase-node/src/sentinel.rs` — NEW. AI Sentinel service: ChainHealthScorer (15-feature heuristic), SentinelState (ring buffer, RPC bridge, WebSocket publishing), SentinelHandles (atomic metric handles), HealthPublisher trait, run_sentinel async loop. 8 unit tests.
-  - `crates/aztibase-node/src/main.rs` — Wire sentinel into node binary. `--sentinel` and `--sentinel-interval` CLI flags. Atomic handles for commit_latency, equivocations, txs_processed, peer_count, mempool_size, active_validators. EventBus HealthPublisher impl. Sentinel task spawn with RPC + WebSocket bridge.
+  - `crates/aztibase-node/src/sentinel.rs` — NEW. AI Sentinel service: ChainHealthScorer (15-feature heuristic), SentinelState (ring buffer, RPC bridge, WebSocket publishing), SentinelHandles (atomic metric handles), HealthPublisher trait, run_sentinel async loop, FeatureExporter (CSV training data). 10 unit tests.
+  - `crates/aztibase-node/src/main.rs` — Wire sentinel into node binary. `--sentinel`, `--sentinel-interval`, `--sentinel-export` CLI flags. Atomic handles for commit_latency, equivocations, txs_processed, peer_count, mempool_size, active_validators. EventBus HealthPublisher impl. Sentinel task spawn with RPC + WebSocket bridge.
   - `crates/aztibase-rpc/src/server.rs` — 2 new RPC endpoints: `aztb_getChainHealth` (latest snapshot), `aztb_getHealthHistory` (last N entries, max 100). `chainHealth` WebSocket subscription topic. Sentinel shared state fields in RpcState.
   - `packaging/validator/explorer/index.html` — Sentinel health panel: live bar (green/yellow/red), score display, level badge. Auto-hidden when sentinel inactive.
   - `.github/workflows/ci.yml` — Added `docs-site` job (Node 22, npm ci, npm run build, artifact upload on main).
   - `.github/workflows/release.yml` — NEW. Tag-triggered release workflow: Linux + Windows matrix build, tar.gz packaging, auto-generated release notes.
   - `Cargo.toml` — Version bump 0.1.0 → 0.1.3.
   - `blockchain-project/sprints/SPRINT-060.md` — NEW. Sprint plan for Sprint E.
-- **Test Count**: 983 (was 974, +9 sentinel tests)
+- **Test Count**: 985 (was 974, +11 sentinel tests including CSV export)
 - **New RPC Endpoints**: `aztb_getChainHealth`, `aztb_getHealthHistory` (total: 50)
 - **New WebSocket Topic**: `chainHealth` (total: 3)
 - **Security Review**: 0 ELEVATED, 0 MEDIUM, 1 LOW (acceptable: heuristic scorer advisory-only, never blocks execution)

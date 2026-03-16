@@ -133,6 +133,10 @@ struct Cli {
     /// Sentinel scoring interval in batches (default: 50)
     #[arg(long, default_value = "50")]
     sentinel_interval: u64,
+
+    /// Export sentinel feature vectors to CSV for Tier 2 training data collection
+    #[arg(long)]
+    sentinel_export: bool,
 }
 
 #[derive(clap::Subcommand, Debug)]
@@ -1653,16 +1657,16 @@ async fn main() -> Result<()> {
 
     // Spawn AI Sentinel (chain health monitoring)
     let sentinel_enabled = cli.sentinel.unwrap_or(node_is_validator);
-    let sentinel_state = Arc::new(
-        sentinel::SentinelState::new(sentinel_enabled)
-            .with_rpc(
-                Arc::clone(&rpc_sentinel_latest),
-                Arc::clone(&rpc_sentinel_history),
-            )
-            .with_event_bus(
-                Arc::clone(&event_bus) as Arc<dyn sentinel::HealthPublisher + Send + Sync>
-            ),
-    );
+    let mut sentinel_builder = sentinel::SentinelState::new(sentinel_enabled)
+        .with_rpc(
+            Arc::clone(&rpc_sentinel_latest),
+            Arc::clone(&rpc_sentinel_history),
+        )
+        .with_event_bus(Arc::clone(&event_bus) as Arc<dyn sentinel::HealthPublisher + Send + Sync>);
+    if cli.sentinel_export && sentinel_enabled {
+        sentinel_builder = sentinel_builder.with_export(config.data_dir.clone());
+    }
+    let sentinel_state = Arc::new(sentinel_builder);
     if sentinel_enabled {
         let s_state = Arc::clone(&sentinel_state);
         let s_handles = sentinel::SentinelHandles {
@@ -2568,6 +2572,7 @@ mod tests {
             snapshot: None,
             sentinel: None,
             sentinel_interval: 50,
+            sentinel_export: false,
         };
         let config = cli.apply_overrides(NodeConfig::default());
         assert_eq!(config.data_dir, PathBuf::from("/tmp/test"));
@@ -2598,6 +2603,7 @@ mod tests {
             snapshot: None,
             sentinel: None,
             sentinel_interval: 50,
+            sentinel_export: false,
         };
         let config = cli.apply_overrides(NodeConfig::default());
         assert_eq!(config.network.listen_addresses.len(), 1);
@@ -2694,6 +2700,7 @@ mod tests {
             snapshot: None,
             sentinel: None,
             sentinel_interval: 50,
+            sentinel_export: false,
         };
         let result = cli.apply_overrides(config);
 

@@ -17,6 +17,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 - **Release automation**: Tag-triggered (`v*`) GitHub Actions workflow packages Linux + Windows binaries.
 - **`--sentinel` CLI flag**: Enable/disable sentinel (default on for validators).
 - **`--sentinel-interval` CLI flag**: Configure scoring interval in batches (default 50).
+- **`--sentinel-export` CLI flag**: Export feature vectors to `{data_dir}/sentinel_features.csv` for Tier 2 ONNX training data collection.
 
 ### Changed
 - Workspace version bumped from 0.1.0 to 0.1.3.

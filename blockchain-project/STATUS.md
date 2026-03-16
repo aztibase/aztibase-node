@@ -4,7 +4,7 @@
 **Updated By:** node-engineer + tokenomics-engineer
 **Current Phase:** M9 -- Mainnet Prep
 **Current Sprint:** 060 (Sprint E) — AI Sentinel Tier 1 + CI/CD
-**Sprint Status:** AI Sentinel Tier 1 shipped (observer mode, 15-feature heuristic scorer, RPC + WebSocket + Explorer integration). CI/CD hardened (docs-site build job, tag-triggered release automation). Version 0.1.3. 983 tests pass. Clippy clean, fmt clean.
+**Sprint Status:** AI Sentinel Tier 1 shipped (observer mode, 15-feature heuristic scorer, RPC + WebSocket + Explorer integration). CI/CD hardened (docs-site build job, tag-triggered release automation). Version 0.1.3. 985 tests pass. Clippy clean, fmt clean.
 
 ---
 
@@ -87,7 +87,7 @@
 - Mainnet launch blocked on: Aztibase Systems coexistence agreement (legal), public testnet infrastructure deployment (VPS provisioning)
 
 ### Recently Completed
-- **Sprint 060 (2026-03-16)**: AI Sentinel Tier 1 — 15-feature heuristic scorer, SentinelState with RPC + WebSocket bridge, explorer health panel, CI/CD docs-site job + release automation, version 0.1.3, 983 tests (+9).
+- **Sprint 060 (2026-03-16)**: AI Sentinel Tier 1 — 15-feature heuristic scorer, SentinelState with RPC + WebSocket bridge, explorer health panel, CI/CD docs-site job + release automation, version 0.1.3, 985 tests (+11).
 - **Post-059 (2026-03-16)**: Full staking validated on live testnet — stake (+50K), unstake (20K, unbonding ~21d), delegate (10K validator2→validator1), epoch rewards (2 epochs, 1,521/epoch, 70/15/10/5 split, 266/validator). All via `wallet --rpc` CLI. Cross-node consistent.
 - **Post-059 (2026-03-15)**: GitHub release v0.1.2 — validator + fullnode + wallet packages. Fullnode package updated with public DNS boot nodes.
 - **Post-059 (2026-03-15)**: Friends testnet invitation templates (5 variants) + coordinator walkthrough. Docs site: fullnode guide + networking architecture page.

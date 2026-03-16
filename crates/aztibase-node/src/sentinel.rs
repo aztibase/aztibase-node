@@ -1,4 +1,6 @@
 use std::collections::VecDeque;
+use std::io::Write;
+use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 
@@ -242,6 +244,61 @@ impl ChainHealthScorer {
     }
 }
 
+/// Appends feature vectors to a CSV file for Tier 2 training data collection.
+struct FeatureExporter {
+    path: PathBuf,
+    header_written: bool,
+}
+
+impl FeatureExporter {
+    fn new(path: PathBuf) -> Self {
+        let header_written = path.exists();
+        Self {
+            path,
+            header_written,
+        }
+    }
+
+    fn append(&mut self, health: &ChainHealth) {
+        let file = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&self.path);
+
+        let mut file = match file {
+            Ok(f) => f,
+            Err(e) => {
+                tracing::warn!(path = %self.path.display(), error = %e, "Failed to open sentinel CSV");
+                return;
+            }
+        };
+
+        if !self.header_written {
+            let header = format!(
+                "timestamp_ms,batch_height,score,{}\n",
+                FEATURE_NAMES.join(",")
+            );
+            if file.write_all(header.as_bytes()).is_err() {
+                return;
+            }
+            self.header_written = true;
+        }
+
+        let features_csv: String = health
+            .features
+            .iter()
+            .map(|f| f.to_string())
+            .collect::<Vec<_>>()
+            .join(",");
+
+        let row = format!(
+            "{},{},{},{}\n",
+            health.timestamp_ms, health.batch_height, health.score, features_csv
+        );
+        let _ = file.write_all(row.as_bytes());
+    }
+}
+
 /// Shared Sentinel state accessible from RPC and WebSocket handlers.
 pub struct SentinelState {
     history: RwLock<VecDeque<ChainHealth>>,
@@ -250,6 +307,7 @@ pub struct SentinelState {
     rpc_latest: Option<Arc<RwLock<Option<serde_json::Value>>>>,
     rpc_history: Option<Arc<RwLock<Vec<serde_json::Value>>>>,
     event_bus: Option<Arc<dyn HealthPublisher + Send + Sync>>,
+    exporter: std::sync::Mutex<Option<FeatureExporter>>,
 }
 
 /// Trait for publishing health events (implemented by EventBus in aztibase-rpc).
@@ -266,6 +324,7 @@ impl SentinelState {
             rpc_latest: None,
             rpc_history: None,
             event_bus: None,
+            exporter: std::sync::Mutex::new(None),
         }
     }
 
@@ -284,6 +343,13 @@ impl SentinelState {
         self
     }
 
+    pub fn with_export(self, data_dir: PathBuf) -> Self {
+        let csv_path = data_dir.join("sentinel_features.csv");
+        tracing::info!(path = %csv_path.display(), "Sentinel CSV export enabled");
+        *self.exporter.lock().unwrap() = Some(FeatureExporter::new(csv_path));
+        self
+    }
+
     pub fn is_enabled(&self) -> bool {
         self.enabled
     }
@@ -298,7 +364,7 @@ impl SentinelState {
         }
         let mut latest = self.latest.write().await;
         *latest = Some(health.clone());
-        hist.push_back(health);
+        hist.push_back(health.clone());
 
         // Push to RPC shared state
         if let Some(ref rpc_latest) = self.rpc_latest {
@@ -315,6 +381,13 @@ impl SentinelState {
         // Publish to WebSocket subscribers
         if let Some(ref bus) = self.event_bus {
             bus.publish_chain_health(json);
+        }
+
+        // Append to CSV for Tier 2 training data
+        if let Ok(mut guard) = self.exporter.lock()
+            && let Some(ref mut exporter) = *guard
+        {
+            exporter.append(&health);
         }
     }
 
@@ -555,6 +628,83 @@ mod tests {
             let full = state.history.read().await;
             assert_eq!(full.len(), HISTORY_CAPACITY);
         });
+    }
+
+    #[test]
+    fn csv_export_writes_header_and_rows() {
+        let dir = std::env::temp_dir().join(format!("sentinel_test_{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let csv_path = dir.join("sentinel_features.csv");
+
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+        rt.block_on(async {
+            let state = SentinelState::new(true).with_export(dir.clone());
+            for i in 0..3 {
+                state
+                    .push(ChainHealth {
+                        score: 0.1 + i as f32 * 0.1,
+                        level: HealthLevel::Normal,
+                        features: vec![i as f32; 15],
+                        feature_names: feature_name_strings(),
+                        batch_height: i * 50,
+                        timestamp_ms: 1000 + i,
+                    })
+                    .await;
+            }
+        });
+
+        let content = std::fs::read_to_string(&csv_path).unwrap();
+        let lines: Vec<&str> = content.lines().collect();
+        assert_eq!(lines.len(), 4, "1 header + 3 data rows");
+        assert!(lines[0].starts_with("timestamp_ms,batch_height,score,"));
+        assert!(lines[0].contains("block_height_delta"));
+        assert!(lines[1].starts_with("1000,0,"));
+
+        // Cleanup
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn csv_export_appends_without_duplicate_header() {
+        let dir = std::env::temp_dir().join(format!("sentinel_append_{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let csv_path = dir.join("sentinel_features.csv");
+
+        // Pre-create the CSV with a header (simulates node restart)
+        std::fs::write(
+            &csv_path,
+            "timestamp_ms,batch_height,score,f1\n1,2,0.1,0.0\n",
+        )
+        .unwrap();
+
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+        rt.block_on(async {
+            let state = SentinelState::new(true).with_export(dir.clone());
+            state
+                .push(ChainHealth {
+                    score: 0.2,
+                    level: HealthLevel::Normal,
+                    features: vec![1.0; 15],
+                    feature_names: feature_name_strings(),
+                    batch_height: 100,
+                    timestamp_ms: 5000,
+                })
+                .await;
+        });
+
+        let content = std::fs::read_to_string(&csv_path).unwrap();
+        let lines: Vec<&str> = content.lines().collect();
+        // Should have original header + original row + new row (no duplicate header)
+        assert_eq!(lines.len(), 3, "original header + 1 old row + 1 new row");
+        assert!(lines[2].starts_with("5000,100,"));
+
+        std::fs::remove_dir_all(&dir).ok();
     }
 
     #[test]
