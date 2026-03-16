@@ -1,14 +1,11 @@
-pub mod agent;
 pub mod ai_oracle;
 pub mod anomaly;
-pub mod contracts;
 pub mod tract_runtime;
 
 pub use ai_oracle::{
     AIRuntime, AIRuntimeMode, InferenceRequest, InferenceResult, PassthroughRuntime,
 };
 pub use anomaly::{AnomalyScorer, TxFeatures};
-pub use contracts::ContractRuntime;
 pub use tract_runtime::{InferenceReceipt, TractRuntime, verify_inference};
 
 #[cfg(test)]
