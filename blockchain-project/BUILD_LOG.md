@@ -21,6 +21,21 @@ Entries are prepended (newest first).
 
 ## Entries
 
+### Staking + Epoch Rewards Validation (2026-03-16)
+- **Date**: 2026-03-16
+- **Sprint**: Post-059 (Mainnet Prep)
+- **Commit**: N/A (validation only, no code changes)
+- **Validation**:
+  - Live testnet: 3 validators, ran for 2+ epochs (2000+ batches)
+  - Epoch 0 @ round 1000: emission 1,521 AZTB, validator pool 1,065 (70%), treasury 152 (10%), insurance 76 (5%)
+  - Per-validator reward: 266 AZTB (equal stake → equal split), credited to balances
+  - Epoch 1 @ round 2000: identical emission, cumulative total 3,042, validator balance 1,000,532 (base + 2 × 266)
+  - Cross-node consistency: all 3 nodes show identical emission, treasury, insurance values
+  - Faucet drip: consensus-based tx pipeline validated (1M AZTB to test address)
+  - 33 staking unit tests + 4 pipeline staking tests pass
+- **Review Notes**: Epoch reward math is correct: 70/15/10/5 split matches constants. Equal-stake validators get equal rewards. Rewards auto-credit to balances with no claim step. Dynamic staking (register/unstake/delegate) validated at unit test level — live testnet stake tx submission deferred until CLI tooling exists.
+- **Security Flags**: None
+
 ### SyncBatch Real Transactions + Flaky Test Fixes (2026-03-15)
 - **Date**: 2026-03-15
 - **Sprint**: Post-059 (Mainnet Prep)

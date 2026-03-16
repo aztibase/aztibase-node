@@ -1,10 +1,10 @@
 # PROJECT STATUS: Aztibase Network
 
-**Last Updated:** 2026-03-15
-**Updated By:** p2p-network-engineer + node-engineer
+**Last Updated:** 2026-03-16
+**Updated By:** node-engineer + tokenomics-engineer
 **Current Phase:** M9 -- Mainnet Prep
 **Current Sprint:** Post-059 -- Testnet Expansion
-**Sprint Status:** Block sync VALIDATED on live testnet. Full nodes catch up from validators via block sync protocol (50 batches/req, ~3ms RTT, 0→434 in ~45s) then follow live via gossip. Fixed: non-validator batch commit bypass (was causing 3× duplicates from DAG). 738 unit tests pass. Clippy clean, fmt clean.
+**Sprint Status:** Epoch rewards VALIDATED on live testnet. 2 full epochs completed — emission math correct (70/15/10/5 split), per-validator rewards credited to balances, cross-node consistent. SyncBatch carries real txs. 5 flaky tests fixed. GitHub release v0.1.2 published. Friends testnet invitations + docs site pages added. 974 tests pass. Clippy clean, fmt clean.
 
 ---
 
@@ -36,7 +36,7 @@
 - Reference repos cloned (MystiCeti, Sui, Lighthouse, rust-libp2p, redb)
 - Sprint 052 complete: L1 bridge primitives (RegisterL2, AnchorL2State, BridgeDeposit, BridgeWithdraw), 4 RPC endpoints
 - Sprint 053 complete: Protocol store persistence — 8 stores survive node restart via redb, 906 tests
-- cargo build + cargo test pass (738 unit tests pass + 5 known flaky integration tests)
+- cargo build + cargo test pass (974 unit tests pass, 0 flaky)
 - Sprint 001 closed with retrospective
 - Sprint 002 closed: 24/24 tasks, 5 phases complete
 - Sprint 003 closed: 18/18 tasks, 4 phases complete
@@ -80,13 +80,18 @@
 | aztibase-wasm | PARTIAL | p2p-network-engineer | Tx signing, header verification — BLS verify incomplete (C-WASM-2) |
 
 ### In Progress
-- Validator go-to-market planning and friends testnet invitations
 - Mainnet launch preparation (M9)
+- Friends testnet rollout — invitations drafted, coordinator script ready
 
 ### Blocked
 - Mainnet launch blocked on: Aztibase Systems coexistence agreement (legal), public testnet infrastructure deployment (VPS provisioning)
+- Dynamic staking live-test blocked on: no CLI/RPC for constructing signed Stake transactions externally (unit tests pass, pipeline tests pass — need UX tooling)
 
 ### Recently Completed
+- **Post-059 (2026-03-16)**: Epoch rewards validated on live testnet — 2 full epochs, emission math correct (1,521/epoch, 70/15/10/5 split), per-validator 266 AZTB/epoch, balances credited, cross-node consistent. 33 staking + 4 pipeline staking tests pass.
+- **Post-059 (2026-03-15)**: GitHub release v0.1.2 — validator + fullnode + wallet packages. Fullnode package updated with public DNS boot nodes.
+- **Post-059 (2026-03-15)**: Friends testnet invitation templates (5 variants) + coordinator walkthrough. Docs site: fullnode guide + networking architecture page.
+- **Post-059 (2026-03-15)**: SyncBatch carries real raw transactions for catch-up replay. 5 flaky integration tests fixed (PeerCountChanged peer counts). 974 tests pass.
 - **Post-059 (2026-03-15)**: Full node catch-up fix — validator-only batch commits (non-validators no longer process DAG-committed batches), catch-up ticker debug logging. Validated on live testnet: 0→434 batches in ~45s, 50/req, ~3ms RTT
 - **Post-059 (2026-03-15)**: Persistent batch archive + full node catch-up — BatchArchive in redb (10K cap), auto catch-up on gap/startup, sync progress logging, nodeType RPC field, explorer 3-mode detection, 10 new tests (738 total unit tests)
 - **Post-059 (2026-03-15)**: Block sync protocol for full nodes — dual-mode sync (catch-up request-response + live gossipsub), 8th gossip topic, batch history buffer, 12 new tests, ADR-031
