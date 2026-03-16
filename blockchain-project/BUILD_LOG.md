@@ -21,19 +21,19 @@ Entries are prepended (newest first).
 
 ## Entries
 
-### Staking + Epoch Rewards Validation (2026-03-16)
+### Full Staking + Epoch Rewards Validation (2026-03-16)
 - **Date**: 2026-03-16
 - **Sprint**: Post-059 (Mainnet Prep)
 - **Commit**: N/A (validation only, no code changes)
 - **Validation**:
   - Live testnet: 3 validators, ran for 2+ epochs (2000+ batches)
-  - Epoch 0 @ round 1000: emission 1,521 AZTB, validator pool 1,065 (70%), treasury 152 (10%), insurance 76 (5%)
-  - Per-validator reward: 266 AZTB (equal stake → equal split), credited to balances
-  - Epoch 1 @ round 2000: identical emission, cumulative total 3,042, validator balance 1,000,532 (base + 2 × 266)
-  - Cross-node consistency: all 3 nodes show identical emission, treasury, insurance values
-  - Faucet drip: consensus-based tx pipeline validated (1M AZTB to test address)
-  - 33 staking unit tests + 4 pipeline staking tests pass
-- **Review Notes**: Epoch reward math is correct: 70/15/10/5 split matches constants. Equal-stake validators get equal rewards. Rewards auto-credit to balances with no claim step. Dynamic staking (register/unstake/delegate) validated at unit test level — live testnet stake tx submission deferred until CLI tooling exists.
+  - **Epoch rewards**: Epoch 0 @ round 1000: emission 1,521 AZTB, validator pool 1,065 (70%), treasury 152 (10%), insurance 76 (5%). Per-validator 266 AZTB. Epoch 1 identical. Balances credited (1,000,000 → 1,000,532).
+  - **Stake (add_stake)**: Validator1 staked +50,000 via `wallet stake --rpc`. self_stake 1M → 1.05M. Balance deducted 50K + 60K gas. Nonce incremented.
+  - **Unstake**: Validator1 unstaked 20,000. self_stake 1.05M → 1.03M. Unbonding entry: 20K available at round ~4.5M (~21 days).
+  - **Delegation**: Validator2 delegated 10,000 to validator1. effective_stake=1.04M, total_delegated=10K. getDelegation confirms.
+  - Cross-node consistency verified for all operations.
+  - 33 staking unit tests + 4 pipeline staking tests pass.
+- **Review Notes**: All staking ops work end-to-end on live testnet via `wallet stake/unstake/delegate --rpc`. No new RPC needed — CLI already signs and broadcasts. Epoch reward math matches tokenomics constants exactly.
 - **Security Flags**: None
 
 ### SyncBatch Real Transactions + Flaky Test Fixes (2026-03-15)

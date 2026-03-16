@@ -85,10 +85,9 @@
 
 ### Blocked
 - Mainnet launch blocked on: Aztibase Systems coexistence agreement (legal), public testnet infrastructure deployment (VPS provisioning)
-- Dynamic staking live-test blocked on: no CLI/RPC for constructing signed Stake transactions externally (unit tests pass, pipeline tests pass — need UX tooling)
 
 ### Recently Completed
-- **Post-059 (2026-03-16)**: Epoch rewards validated on live testnet — 2 full epochs, emission math correct (1,521/epoch, 70/15/10/5 split), per-validator 266 AZTB/epoch, balances credited, cross-node consistent. 33 staking + 4 pipeline staking tests pass.
+- **Post-059 (2026-03-16)**: Full staking validated on live testnet — stake (+50K), unstake (20K, unbonding ~21d), delegate (10K validator2→validator1), epoch rewards (2 epochs, 1,521/epoch, 70/15/10/5 split, 266/validator). All via `wallet --rpc` CLI. Cross-node consistent.
 - **Post-059 (2026-03-15)**: GitHub release v0.1.2 — validator + fullnode + wallet packages. Fullnode package updated with public DNS boot nodes.
 - **Post-059 (2026-03-15)**: Friends testnet invitation templates (5 variants) + coordinator walkthrough. Docs site: fullnode guide + networking architecture page.
 - **Post-059 (2026-03-15)**: SyncBatch carries real raw transactions for catch-up replay. 5 flaky integration tests fixed (PeerCountChanged peer counts). 974 tests pass.
