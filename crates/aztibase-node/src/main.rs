@@ -417,6 +417,68 @@ enum WalletAction {
         #[arg(long)]
         rpc: Option<String>,
     },
+    /// Deploy a WASM smart contract
+    Deploy {
+        /// Path to deployer key file
+        #[arg(long)]
+        key: PathBuf,
+        /// Path to compiled .wasm file
+        #[arg(long)]
+        wasm: PathBuf,
+        /// Account nonce
+        #[arg(long)]
+        nonce: u64,
+        /// Gas limit for deployment
+        #[arg(long, default_value = "10000000")]
+        gas_limit: u64,
+        /// Gas price
+        #[arg(long, default_value = "1")]
+        gas_price: u64,
+        /// Passphrase for encrypted keyfile
+        #[arg(long)]
+        passphrase: Option<String>,
+        /// RPC endpoint to broadcast to
+        #[arg(long)]
+        rpc: Option<String>,
+    },
+    /// Call a function on a deployed WASM contract
+    Call {
+        /// Path to caller key file
+        #[arg(long)]
+        key: PathBuf,
+        /// Contract address (hex)
+        #[arg(long)]
+        contract: String,
+        /// Function name to call
+        #[arg(long, alias = "func")]
+        function: String,
+        /// Hex-encoded arguments data (optional)
+        #[arg(long, default_value = "")]
+        args: String,
+        /// Account nonce
+        #[arg(long)]
+        nonce: u64,
+        /// Gas limit for execution
+        #[arg(long, default_value = "10000000")]
+        gas_limit: u64,
+        /// Gas price
+        #[arg(long, default_value = "1")]
+        gas_price: u64,
+        /// Passphrase for encrypted keyfile
+        #[arg(long)]
+        passphrase: Option<String>,
+        /// RPC endpoint to broadcast to
+        #[arg(long)]
+        rpc: Option<String>,
+    },
+    /// Compile a WAT (WebAssembly Text) file to WASM binary
+    CompileWat {
+        /// Input .wat file
+        input: PathBuf,
+        /// Output .wasm file (default: same name with .wasm extension)
+        #[arg(long)]
+        output: Option<PathBuf>,
+    },
     /// Query staking info for an address (validator stake, delegation, unbonding)
     StakingInfo {
         /// Account address (hex, 32 bytes)
@@ -891,6 +953,88 @@ async fn main() -> Result<()> {
                     } else {
                         println!("{hex}");
                     }
+                }
+                WalletAction::Deploy {
+                    key,
+                    wasm,
+                    nonce,
+                    gas_limit,
+                    gas_price,
+                    passphrase,
+                    rpc,
+                } => {
+                    let code = std::fs::read(&wasm)
+                        .with_context(|| format!("Failed to read {}", wasm.display()))?;
+                    println!("WASM bytecode: {} bytes", code.len());
+                    let envelope = if let Some(pass) = passphrase {
+                        wallet::sign_deploy_encrypted(
+                            &key, &pass, code, nonce, gas_limit, gas_price,
+                        )?
+                    } else {
+                        wallet::sign_deploy(&key, code, nonce, gas_limit, gas_price)?
+                    };
+                    let hex = genesis::hex_encode(&envelope);
+                    if let Some(rpc_url) = rpc {
+                        let tx_hash = wallet::broadcast_transaction(&rpc_url, &hex).await?;
+                        println!("Deploy TX broadcast OK. TX hash: {tx_hash}");
+                    } else {
+                        println!("{hex}");
+                    }
+                }
+                WalletAction::Call {
+                    key,
+                    contract,
+                    function,
+                    args,
+                    nonce,
+                    gas_limit,
+                    gas_price,
+                    passphrase,
+                    rpc,
+                } => {
+                    let args_data = if args.is_empty() {
+                        vec![]
+                    } else {
+                        genesis::hex_decode(args.strip_prefix("0x").unwrap_or(&args))
+                            .context("Invalid args hex")?
+                    };
+                    let envelope = if let Some(pass) = passphrase {
+                        wallet::sign_call_encrypted(
+                            &key, &pass, &contract, &function, args_data, nonce, gas_limit,
+                            gas_price,
+                        )?
+                    } else {
+                        wallet::sign_call(
+                            &key, &contract, &function, args_data, nonce, gas_limit, gas_price,
+                        )?
+                    };
+                    let hex = genesis::hex_encode(&envelope);
+                    if let Some(rpc_url) = rpc {
+                        let tx_hash = wallet::broadcast_transaction(&rpc_url, &hex).await?;
+                        println!("Call TX broadcast OK. TX hash: {tx_hash}");
+                    } else {
+                        println!("{hex}");
+                    }
+                }
+                WalletAction::CompileWat { input, output } => {
+                    let wat_source = std::fs::read_to_string(&input)
+                        .with_context(|| format!("Failed to read {}", input.display()))?;
+                    let out_path = output.unwrap_or_else(|| input.with_extension("wasm"));
+                    let in_display = input.display().to_string();
+                    let out_display = out_path.display().to_string();
+                    let wasm = std::thread::Builder::new()
+                        .stack_size(8 * 1024 * 1024)
+                        .spawn(move || aztibase_execution::compile_wat(&wat_source))
+                        .context("Failed to spawn compiler thread")?
+                        .join()
+                        .map_err(|_| anyhow::anyhow!("Compiler thread panicked"))?
+                        .map_err(|e| anyhow::anyhow!("WAT compilation failed: {e}"))?;
+                    std::fs::write(&out_path, &wasm)
+                        .with_context(|| format!("Failed to write {out_display}"))?;
+                    println!(
+                        "Compiled {in_display} → {out_display} ({} bytes)",
+                        wasm.len()
+                    );
                 }
                 WalletAction::StakingInfo { address, rpc } => {
                     let addr_hex = address.strip_prefix("0x").unwrap_or(&address);

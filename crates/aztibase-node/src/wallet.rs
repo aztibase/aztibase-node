@@ -479,6 +479,101 @@ fn parse_address(hex: &str) -> Result<[u8; 32]> {
         .map_err(|_| anyhow::anyhow!("Address must be 32 bytes"))
 }
 
+pub fn sign_deploy(
+    keyfile_path: &Path,
+    code: Vec<u8>,
+    nonce: u64,
+    gas_limit: u64,
+    gas_price: u64,
+) -> Result<Vec<u8>> {
+    let (kp, deployer) = load_keyfile(keyfile_path)?;
+    build_signed_tx(
+        &kp,
+        TxKind::ContractDeploy {
+            deployer,
+            code,
+            nonce,
+            gas_limit,
+            gas_price,
+        },
+    )
+}
+
+pub fn sign_deploy_encrypted(
+    keyfile_path: &Path,
+    passphrase: &str,
+    code: Vec<u8>,
+    nonce: u64,
+    gas_limit: u64,
+    gas_price: u64,
+) -> Result<Vec<u8>> {
+    let kp = load_encrypted_keyfile(keyfile_path, passphrase)?;
+    let deployer = address_from_pubkey(kp.public_key().as_bytes());
+    build_signed_tx(
+        &kp,
+        TxKind::ContractDeploy {
+            deployer,
+            code,
+            nonce,
+            gas_limit,
+            gas_price,
+        },
+    )
+}
+
+pub fn sign_call(
+    keyfile_path: &Path,
+    contract_hex: &str,
+    func_name: &str,
+    args_data: Vec<u8>,
+    nonce: u64,
+    gas_limit: u64,
+    gas_price: u64,
+) -> Result<Vec<u8>> {
+    let (kp, caller) = load_keyfile(keyfile_path)?;
+    let contract = parse_address(contract_hex)?;
+    build_signed_tx(
+        &kp,
+        TxKind::ContractCall {
+            caller,
+            contract,
+            func_name: func_name.to_string(),
+            args_data,
+            nonce,
+            gas_limit,
+            gas_price,
+        },
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+pub fn sign_call_encrypted(
+    keyfile_path: &Path,
+    passphrase: &str,
+    contract_hex: &str,
+    func_name: &str,
+    args_data: Vec<u8>,
+    nonce: u64,
+    gas_limit: u64,
+    gas_price: u64,
+) -> Result<Vec<u8>> {
+    let kp = load_encrypted_keyfile(keyfile_path, passphrase)?;
+    let caller = address_from_pubkey(kp.public_key().as_bytes());
+    let contract = parse_address(contract_hex)?;
+    build_signed_tx(
+        &kp,
+        TxKind::ContractCall {
+            caller,
+            contract,
+            func_name: func_name.to_string(),
+            args_data,
+            nonce,
+            gas_limit,
+            gas_price,
+        },
+    )
+}
+
 fn build_signed_tx(kp: &Keypair, tx: TxKind) -> Result<Vec<u8>> {
     let signed = SignedTx::new(tx.encode(), kp);
     Ok(signed.encode())

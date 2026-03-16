@@ -77,6 +77,11 @@ pub use tx::{
 pub use verkle::{VerkleCommitment, VerkleTree};
 pub use vm::{EngineConfig, ExecutionEngine, ExecutionResult};
 
+/// Compile WebAssembly Text (WAT) format to WASM binary.
+pub fn compile_wat(wat_source: &str) -> Result<Vec<u8>, String> {
+    wat::parse_str(wat_source).map_err(|e| e.to_string())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
