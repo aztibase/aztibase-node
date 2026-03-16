@@ -1283,7 +1283,7 @@ async fn main() -> Result<()> {
         exec_pipeline.shared_state(),
         mempool_tx,
         exec_pipeline.shared_batch_count(),
-        Some(exec_store),
+        Some(exec_store.clone()),
         exec_pipeline.shared_base_fee(),
     )
     .with_faucet_enabled(config.profile.faucet_enabled())
@@ -1442,6 +1442,14 @@ async fn main() -> Result<()> {
     let shared_state = exec_pipeline.shared_state();
     let shared_base_fee = exec_pipeline.shared_base_fee();
     let shared_staking = exec_pipeline.shared_staking_store();
+    let shared_governance = exec_pipeline.shared_governance();
+    let shared_emission = exec_pipeline.shared_emission_tracker();
+    let shared_chain_params = exec_pipeline.shared_chain_params();
+    let shared_agent_policies = exec_pipeline.shared_agent_policy_store();
+    let shared_l2_registry = exec_pipeline.shared_l2_registry();
+    let shared_l2_anchors = exec_pipeline.shared_l2_anchor_store();
+    let shared_bridge_escrow = exec_pipeline.shared_bridge_escrow();
+    let shared_bridge_proofs = exec_pipeline.shared_bridge_withdraw_proofs();
 
     // Spawn execution pipeline
     let pipeline_handle = tokio::spawn(async move {
@@ -1594,9 +1602,22 @@ async fn main() -> Result<()> {
                                                     match sync::bootstrap_from_snapshot(
                                                         &snapshot,
                                                         &shared_state,
-                                                        None,
+                                                        Some(&*exec_store),
                                                     ).await {
-                                                        Ok(()) => {
+                                                        Ok(bundle) => {
+                                                            if let Some(b) = bundle {
+                                                                *shared_staking.write().await = b.staking;
+                                                                *shared_governance.write().await = b.governance;
+                                                                *shared_emission.write().await = b.emission;
+                                                                *shared_chain_params.write().await = b.chain_params;
+                                                                *shared_agent_policies.write().await = b.agent_policies;
+                                                                *shared_l2_registry.write().await = b.l2_registry;
+                                                                *shared_l2_anchors.write().await = b.l2_anchors;
+                                                                *shared_bridge_escrow.write().await = b.bridge_escrow;
+                                                                *shared_bridge_proofs.write().await = b.bridge_proofs;
+                                                                shared_base_fee.store(b.base_fee, std::sync::atomic::Ordering::Relaxed);
+                                                                tracing::info!("Protocol stores restored from snapshot");
+                                                            }
                                                             tracing::info!(
                                                                 batch = snapshot.batch_index,
                                                                 "State bootstrapped from snapshot"

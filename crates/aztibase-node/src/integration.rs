@@ -2455,7 +2455,9 @@ mod tests {
         // Engines require n-1 peers before starting consensus.
         let required_peers = (n as u64).saturating_sub(1).max(1);
         for tx in &engine_inputs {
-            let _ = tx.send(ConsensusInput::PeerCountChanged(required_peers)).await;
+            let _ = tx
+                .send(ConsensusInput::PeerCountChanged(required_peers))
+                .await;
         }
 
         let mut committed: Vec<Vec<CommittedBatch>> = (0..n).map(|_| Vec::new()).collect();

@@ -5,8 +5,8 @@ use tokio::sync::RwLock;
 
 use aztibase_core::hash;
 use aztibase_execution::{
-    AccountState, StateSnapshot, apply_snapshot, create_snapshot, deserialize_snapshot,
-    flush_state, serialize_snapshot,
+    AccountState, ProtocolStoreBundle, StateSnapshot, apply_full_snapshot, create_snapshot,
+    deserialize_snapshot, flush_protocol_stores, flush_state, serialize_snapshot,
 };
 use aztibase_storage::StateStore;
 
@@ -157,27 +157,49 @@ impl SnapshotAssembler {
 }
 
 /// Bootstrap a node's state from a received snapshot. Applies to both
-/// in-memory AccountState and on-disk redb storage.
+/// in-memory AccountState and on-disk redb storage. Returns the protocol
+/// store bundle (if present) so the caller can restore in-memory stores.
 pub async fn bootstrap_from_snapshot(
     snapshot: &StateSnapshot,
     state: &Arc<RwLock<AccountState>>,
     store: Option<&StateStore>,
-) -> Result<(), String> {
-    let new_state = apply_snapshot(snapshot).map_err(|e| e.to_string())?;
+) -> Result<Option<ProtocolStoreBundle>, String> {
+    let (new_state, bundle) = apply_full_snapshot(snapshot).map_err(|e| e.to_string())?;
+    let has_protocol_stores = snapshot.protocol_stores.is_some();
 
     if let Some(store) = store {
         flush_state(store, &new_state).map_err(|e| format!("flush failed: {e}"))?;
+        if has_protocol_stores {
+            flush_protocol_stores(
+                store,
+                &bundle.staking,
+                &bundle.governance,
+                &bundle.emission,
+                &bundle.chain_params,
+                &bundle.agent_policies,
+                &bundle.l2_registry,
+                &bundle.l2_anchors,
+                &bundle.bridge_escrow,
+                &bundle.bridge_proofs,
+            )
+            .map_err(|e| format!("protocol store flush failed: {e}"))?;
+        }
     }
 
     let mut guard = state.write().await;
     *guard = new_state;
 
-    Ok(())
+    Ok(if has_protocol_stores {
+        Some(bundle)
+    } else {
+        None
+    })
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use aztibase_execution::apply_snapshot;
 
     fn sample_state() -> AccountState {
         let mut state = AccountState::new();
@@ -347,9 +369,10 @@ mod tests {
         let snapshot = create_snapshot(&source_state, 42);
 
         let target_state = Arc::new(RwLock::new(AccountState::new()));
-        bootstrap_from_snapshot(&snapshot, &target_state, None)
+        let bundle = bootstrap_from_snapshot(&snapshot, &target_state, None)
             .await
             .unwrap();
+        assert!(bundle.is_none());
 
         let guard = target_state.read().await;
         assert_eq!(guard.balance(&[1u8; 32]), 1000);
@@ -372,9 +395,10 @@ mod tests {
         let store = StateStore::open(path.to_str().unwrap()).unwrap();
         let target_state = Arc::new(RwLock::new(AccountState::new()));
 
-        bootstrap_from_snapshot(&snapshot, &target_state, Some(&store))
+        let bundle = bootstrap_from_snapshot(&snapshot, &target_state, Some(&store))
             .await
             .unwrap();
+        assert!(bundle.is_none());
 
         // Verify in-memory state
         let guard = target_state.read().await;
@@ -388,6 +412,26 @@ mod tests {
 
         let _ = std::fs::remove_file(&path);
         let _ = std::fs::remove_file(path.with_extension("lock"));
+    }
+
+    #[tokio::test]
+    async fn bootstrap_with_protocol_bundle() {
+        use aztibase_execution::{ProtocolStoreBundle, create_full_snapshot};
+        let source_state = sample_state();
+        let mut bundle = ProtocolStoreBundle::default();
+        bundle.base_fee = 42;
+        let snapshot = create_full_snapshot(&source_state, 100, 100, vec![], bundle);
+
+        let target_state = Arc::new(RwLock::new(AccountState::new()));
+        let result = bootstrap_from_snapshot(&snapshot, &target_state, None)
+            .await
+            .unwrap();
+        assert!(result.is_some());
+        let restored = result.unwrap();
+        assert_eq!(restored.base_fee, 42);
+
+        let guard = target_state.read().await;
+        assert_eq!(guard.state_root(), source_state.state_root());
     }
 
     #[tokio::test]

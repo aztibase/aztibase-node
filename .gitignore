@@ -37,6 +37,7 @@ wallet-extension/wasm/
 # Packaging binaries (release artifacts live on GitHub Releases / D: drive)
 packaging/**/*.exe
 packaging/**/*.tar.gz
+packaging/**/*.zip
 
 # Screenshots and personal notes
 *.png
