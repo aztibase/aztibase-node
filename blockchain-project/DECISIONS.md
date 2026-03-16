@@ -39,6 +39,7 @@ Every non-obvious technical decision is recorded here. Each ADR is immutable onc
 | ADR-029 | quinn-proto security patch (RUSTSEC-2026-0037) | 2026-03-12 | ACCEPTED | security-engineer |
 | ADR-030 | Consensus round fast-forward for late-joining validators | 2026-03-14 | ACCEPTED | consensus-engineer + blockchain-architect |
 | ADR-031 | Block sync protocol for full nodes (dual-mode) | 2026-03-15 | ACCEPTED | p2p-network-engineer + node-engineer |
+| ADR-032 | AI Sentinel Tier 1 — heuristic observer mode | 2026-03-16 | ACCEPTED | ai-integration-engineer + node-engineer |
 
 ---
 
@@ -971,3 +972,40 @@ Implement a dual-mode sync protocol:
 - Batch history buffer adds ~32 MB memory overhead at 1000 batches (acceptable)
 - Gossip topic count increased from 7 to 8; peer scoring updated with weight 1.5 for committed-batches
 - Future work: persistent batch archive for nodes that restart after long downtime (currently limited to 1000 in-memory batches)
+
+---
+
+## ADR-032: AI Sentinel Tier 1 — Heuristic Observer Mode
+
+**Date:** 2026-03-16
+**Status:** ACCEPTED
+**Decided By:** ai-integration-engineer + node-engineer
+
+### Context
+
+Aztibase claims to be AI-native. The AI runtime (tract/ONNX) handles inference tasks, but the chain itself has no self-monitoring capability. We need the chain to observe its own health — a prerequisite for future autonomous response (Tier 2+).
+
+### Decision
+
+Ship a Tier 1 "observer-only" sentinel service inside every validator node:
+
+1. **15-feature heuristic scorer** (no ML model required): 13 consensus-derived features (block height delta, commit latency, latency stddev, TPS, TPS acceleration, base fee, base fee delta, equivocations, validator count, gas used, block fullness, empty block ratio, finality gap) + 2 local-only features (peer count, mempool size).
+
+2. **HealthLevel classification**: Normal (<0.3), Warning (0.3–0.7), Critical (>0.7). Score clamped to [0.0, 1.0].
+
+3. **Observer-only**: Sentinel never modifies chain state or blocks execution. Outputs are advisory — displayed in dashboard, published via RPC/WebSocket.
+
+4. **Cross-crate decoupling**: Sentinel lives in aztibase-node. RPC state shared via `Arc<RwLock<Option<serde_json::Value>>>` — no shared sentinel types across crate boundaries. WebSocket publishing via `HealthPublisher` trait (impl'd for EventBus in main.rs).
+
+5. **Upgrade path**: Tier 2 replaces the heuristic with a trained ONNX autoencoder via TractRuntime. The feature vector and HealthLevel interface remain stable.
+
+### Alternatives Considered
+- **Prometheus alerting only**: External tooling, not self-contained. Doesn't support "chain monitors itself" narrative.
+- **On-chain health oracle**: Too risky for Tier 1. Observer mode proves the feature vector before any on-chain effects.
+- **Shared sentinel types across crates**: Would create circular dependencies (node↔rpc). serde_json::Value at the boundary is simpler.
+
+### Consequences
+- Every validator node runs a sentinel loop (2s poll, score every N batches)
+- 2 new RPC endpoints (aztb_getChainHealth, aztb_getHealthHistory), 1 new WebSocket topic (chainHealth)
+- Explorer dashboard shows live health bar when sentinel is active
+- Tier 2 (ONNX autoencoder) can drop in without changing the public API

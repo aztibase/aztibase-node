@@ -5,6 +5,25 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ---
 
+## Sprint 060 — AI Sentinel Tier 1 + CI/CD (2026-03-16)
+
+### Added
+- **AI Sentinel Tier 1 (observer mode)**: Chain self-monitoring service running inside every validator node. Scores chain health from 15 metrics (13 consensus-derived + 2 local-only) using a heuristic scorer. Publishes HealthLevel (Normal/Warning/Critical) to RPC and WebSocket.
+- **`aztb_getChainHealth` RPC**: Returns latest sentinel snapshot (score, level, feature vector, timestamp).
+- **`aztb_getHealthHistory` RPC**: Returns last N health snapshots (default 10, max 100).
+- **`chainHealth` WebSocket topic**: Real-time push of health snapshots to subscribers.
+- **Explorer health panel**: Live sentinel bar with color-coded health level (green/yellow/red), score display, and level badge.
+- **CI/CD docs-site job**: GitHub Actions job builds Astro docs site on push to main, uploads artifact.
+- **Release automation**: Tag-triggered (`v*`) GitHub Actions workflow packages Linux + Windows binaries.
+- **`--sentinel` CLI flag**: Enable/disable sentinel (default on for validators).
+- **`--sentinel-interval` CLI flag**: Configure scoring interval in batches (default 50).
+
+### Changed
+- Workspace version bumped from 0.1.0 to 0.1.3.
+- RPC endpoint count: 48 → 50. WebSocket topic count: 2 → 3.
+
+---
+
 ## Smart Contract Live Testnet Validation (2026-03-16)
 
 ### Added

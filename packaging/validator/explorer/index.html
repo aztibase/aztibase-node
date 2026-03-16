@@ -772,6 +772,16 @@ function buildDashboardShell() {
       <div class="stat"><div class="val" id="d-latency">--</div><div class="label">Commit Latency</div></div>
       <div class="stat"><div class="val" id="d-basefee">--</div><div class="label">Base Fee</div></div>
     </div>
+    <div id="sentinel-panel" class="card" style="margin-bottom:16px;display:none">
+      <div style="display:flex;align-items:center;gap:12px;padding:8px 0">
+        <div style="font-weight:600;font-size:14px">AI Sentinel</div>
+        <div id="sentinel-bar" style="flex:1;height:8px;background:var(--border);border-radius:4px;overflow:hidden">
+          <div id="sentinel-fill" style="height:100%;width:0%;border-radius:4px;transition:width 0.5s,background 0.5s"></div>
+        </div>
+        <div id="sentinel-score" style="font-family:var(--mono);font-size:13px;min-width:48px;text-align:right">--</div>
+        <div id="sentinel-badge" style="font-size:11px;padding:2px 8px;border-radius:4px;font-weight:600;text-transform:uppercase">--</div>
+      </div>
+    </div>
     <div class="two-col">
       <div>
         <div class="view-title">Latest Blocks <span class="badge green">live</span></div>
@@ -873,6 +883,28 @@ async function showDashboard() {
         }).join('') + '</div>';
       }
     }
+
+    // AI Sentinel health panel
+    try {
+      const health = await rpc('aztb_getChainHealth');
+      if (health && health.score !== undefined) {
+        const panel = document.getElementById('sentinel-panel');
+        if (panel) panel.style.display = 'block';
+        const pct = Math.round(health.score * 100);
+        const fill = document.getElementById('sentinel-fill');
+        const badge = document.getElementById('sentinel-badge');
+        if (fill) {
+          fill.style.width = pct + '%';
+          fill.style.background = health.level === 'normal' ? 'var(--green)' : health.level === 'warning' ? 'var(--yellow)' : 'var(--red)';
+        }
+        setVal('sentinel-score', (health.score * 100).toFixed(1) + '%');
+        if (badge) {
+          badge.textContent = health.level;
+          badge.style.background = health.level === 'normal' ? 'rgba(63,185,80,0.15)' : health.level === 'warning' ? 'rgba(210,153,34,0.15)' : 'rgba(248,81,73,0.15)';
+          badge.style.color = health.level === 'normal' ? 'var(--green)' : health.level === 'warning' ? 'var(--yellow)' : 'var(--red)';
+        }
+      }
+    } catch (_) {}
 
     if (!pollTimer) pollTimer = setInterval(refreshDashboard, 5000);
 

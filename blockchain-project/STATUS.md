@@ -3,8 +3,8 @@
 **Last Updated:** 2026-03-16
 **Updated By:** node-engineer + tokenomics-engineer
 **Current Phase:** M9 -- Mainnet Prep
-**Current Sprint:** Post-059 -- Testnet Expansion
-**Sprint Status:** Epoch rewards VALIDATED on live testnet. 2 full epochs completed — emission math correct (70/15/10/5 split), per-validator rewards credited to balances, cross-node consistent. SyncBatch carries real txs. 5 flaky tests fixed. GitHub release v0.1.2 published. Friends testnet invitations + docs site pages added. 974 tests pass. Clippy clean, fmt clean.
+**Current Sprint:** 060 (Sprint E) — AI Sentinel Tier 1 + CI/CD
+**Sprint Status:** AI Sentinel Tier 1 shipped (observer mode, 15-feature heuristic scorer, RPC + WebSocket + Explorer integration). CI/CD hardened (docs-site build job, tag-triggered release automation). Version 0.1.3. 983 tests pass. Clippy clean, fmt clean.
 
 ---
 
@@ -75,8 +75,8 @@
 | aztibase-network | FEATURE-COMPLETE | p2p-network-engineer | Gossipsub, Kademlia, peer scoring, NAT, WebRTC scaffold, block sync protocol, persistent batch archive |
 | aztibase-execution | FEATURE-COMPLETE | smart-contract-engineer | 27 TxKinds, fee market, staking, governance, tokenomics, AI market, L2 bridge |
 | aztibase-runtime | PARTIAL | ai-integration-engineer | tract inference, anomaly scorer — stubs for advanced features |
-| aztibase-rpc | FEATURE-COMPLETE | node-engineer | 48 RPC methods, WebSocket subscriptions, Prometheus metrics |
-| aztibase-node | FEATURE-COMPLETE | node-engineer | Pipeline, mempool, genesis, CLI, wallet, config, snapshots |
+| aztibase-rpc | FEATURE-COMPLETE | node-engineer | 50 RPC methods, 3 WebSocket topics, Prometheus metrics |
+| aztibase-node | FEATURE-COMPLETE | node-engineer | Pipeline, mempool, genesis, CLI, wallet, config, snapshots, AI Sentinel |
 | aztibase-wasm | PARTIAL | p2p-network-engineer | Tx signing, header verification — BLS verify incomplete (C-WASM-2) |
 
 ### In Progress
@@ -87,6 +87,7 @@
 - Mainnet launch blocked on: Aztibase Systems coexistence agreement (legal), public testnet infrastructure deployment (VPS provisioning)
 
 ### Recently Completed
+- **Sprint 060 (2026-03-16)**: AI Sentinel Tier 1 — 15-feature heuristic scorer, SentinelState with RPC + WebSocket bridge, explorer health panel, CI/CD docs-site job + release automation, version 0.1.3, 983 tests (+9).
 - **Post-059 (2026-03-16)**: Full staking validated on live testnet — stake (+50K), unstake (20K, unbonding ~21d), delegate (10K validator2→validator1), epoch rewards (2 epochs, 1,521/epoch, 70/15/10/5 split, 266/validator). All via `wallet --rpc` CLI. Cross-node consistent.
 - **Post-059 (2026-03-15)**: GitHub release v0.1.2 — validator + fullnode + wallet packages. Fullnode package updated with public DNS boot nodes.
 - **Post-059 (2026-03-15)**: Friends testnet invitation templates (5 variants) + coordinator walkthrough. Docs site: fullnode guide + networking architecture page.
@@ -291,7 +292,7 @@
 ### What CAN Be Claimed Today (Code-Backed)
 - 40,600+ lines of Rust across 9 crates, 88 source files
 - 791 tests (786 pass, 5 known flaky integration tests needing timeout tuning)
-- 30 ADRs documenting every non-obvious technical choice
+- 32 ADRs documenting every non-obvious technical choice
 - AI inference as native protocol operation (TxKind::AiInfer, TractRuntime, 13 e2e tests)
 - Multi-metric PoUW scoring (accuracy 40% + latency 30% + availability 30%)
 - Model royalties via on-chain registry (RegisterModel, 5% royalty on inference)

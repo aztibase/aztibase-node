@@ -4,6 +4,7 @@ mod genesis;
 mod integration;
 mod mempool;
 mod pipeline;
+pub mod sentinel;
 mod sync;
 mod task_pool;
 mod wallet;
@@ -28,6 +29,12 @@ use aztibase_network::{
     genesis_hex_prefix,
 };
 use aztibase_rpc::{EventBus, NodeMetrics, RpcServer};
+
+impl sentinel::HealthPublisher for EventBus {
+    fn publish_chain_health(&self, health: serde_json::Value) {
+        self.publish_chain_health(health);
+    }
+}
 use aztibase_runtime::TractRuntime;
 use aztibase_storage::StateStore;
 use config::NodeConfig;
@@ -118,6 +125,14 @@ struct Cli {
     /// Bootstrap from a snapshot file instead of replaying from genesis
     #[arg(long)]
     snapshot: Option<PathBuf>,
+
+    /// Enable AI Sentinel chain health monitoring (default: on for validators)
+    #[arg(long)]
+    sentinel: Option<bool>,
+
+    /// Sentinel scoring interval in batches (default: 50)
+    #[arg(long, default_value = "50")]
+    sentinel_interval: u64,
 }
 
 #[derive(clap::Subcommand, Debug)]
@@ -1430,6 +1445,12 @@ async fn main() -> Result<()> {
     // Event bus for WebSocket subscriptions
     let event_bus = Arc::new(EventBus::new());
 
+    // Sentinel shared state for RPC
+    let rpc_sentinel_latest: Arc<tokio::sync::RwLock<Option<serde_json::Value>>> =
+        Arc::new(tokio::sync::RwLock::new(None));
+    let rpc_sentinel_history: Arc<tokio::sync::RwLock<Vec<serde_json::Value>>> =
+        Arc::new(tokio::sync::RwLock::new(Vec::new()));
+
     // RPC server
     let (mempool_tx, mut mempool_rx) = tokio::sync::mpsc::channel::<Vec<u8>>(4096);
     let mut rpc_server = RpcServer::new(
@@ -1458,7 +1479,11 @@ async fn main() -> Result<()> {
     .with_l2_anchor_store(exec_pipeline.shared_l2_anchor_store())
     .with_bridge_escrow(exec_pipeline.shared_bridge_escrow())
     .with_bridge_withdraw_proofs(exec_pipeline.shared_bridge_withdraw_proofs())
-    .with_validator(node_is_validator);
+    .with_validator(node_is_validator)
+    .with_sentinel(
+        Arc::clone(&rpc_sentinel_latest),
+        Arc::clone(&rpc_sentinel_history),
+    );
 
     if let Some(ref gen_cfg) = genesis_config {
         rpc_server = rpc_server.with_genesis_hash(genesis::genesis_hash(gen_cfg)?);
@@ -1594,6 +1619,23 @@ async fn main() -> Result<()> {
     // Shared state for sync protocol + mempool gas price validation
     let shared_state = exec_pipeline.shared_state();
     let shared_base_fee = exec_pipeline.shared_base_fee();
+
+    // Sentinel shared atomics (updated alongside node_metrics in event loop)
+    let sentinel_batch_count = exec_pipeline.shared_batch_count();
+    let sentinel_base_fee = Arc::clone(&shared_base_fee);
+    let sentinel_commit_latency = Arc::new(std::sync::atomic::AtomicU64::new(0));
+    let sentinel_equivocations = Arc::new(std::sync::atomic::AtomicU64::new(0));
+    let sentinel_txs_processed = Arc::new(std::sync::atomic::AtomicU64::new(0));
+    let sentinel_peer_count = Arc::new(std::sync::atomic::AtomicU64::new(0));
+    let sentinel_mempool_size = Arc::new(std::sync::atomic::AtomicU64::new(0));
+    let sentinel_active_validators = Arc::new(std::sync::atomic::AtomicU64::new(0));
+
+    let s_commit_latency = Arc::clone(&sentinel_commit_latency);
+    let s_equivocations = Arc::clone(&sentinel_equivocations);
+    let s_txs_processed = Arc::clone(&sentinel_txs_processed);
+    let s_peer_count = Arc::clone(&sentinel_peer_count);
+    let s_mempool_size = Arc::clone(&sentinel_mempool_size);
+    let s_active_validators = Arc::clone(&sentinel_active_validators);
     let shared_staking = exec_pipeline.shared_staking_store();
     let shared_governance = exec_pipeline.shared_governance();
     let shared_emission = exec_pipeline.shared_emission_tracker();
@@ -1608,6 +1650,37 @@ async fn main() -> Result<()> {
     let pipeline_handle = tokio::spawn(async move {
         exec_pipeline.run().await;
     });
+
+    // Spawn AI Sentinel (chain health monitoring)
+    let sentinel_enabled = cli.sentinel.unwrap_or(node_is_validator);
+    let sentinel_state = Arc::new(
+        sentinel::SentinelState::new(sentinel_enabled)
+            .with_rpc(
+                Arc::clone(&rpc_sentinel_latest),
+                Arc::clone(&rpc_sentinel_history),
+            )
+            .with_event_bus(
+                Arc::clone(&event_bus) as Arc<dyn sentinel::HealthPublisher + Send + Sync>
+            ),
+    );
+    if sentinel_enabled {
+        let s_state = Arc::clone(&sentinel_state);
+        let s_handles = sentinel::SentinelHandles {
+            batch_count: Arc::clone(&sentinel_batch_count),
+            base_fee: Arc::clone(&sentinel_base_fee),
+            commit_latency_us: Arc::clone(&sentinel_commit_latency),
+            equivocations: Arc::clone(&sentinel_equivocations),
+            txs_processed: Arc::clone(&sentinel_txs_processed),
+            peer_count: Arc::clone(&sentinel_peer_count),
+            mempool_size: Arc::clone(&sentinel_mempool_size),
+            active_validators: Arc::clone(&sentinel_active_validators),
+        };
+        let interval = cli.sentinel_interval;
+        tokio::spawn(async move {
+            sentinel::run_sentinel(s_state, s_handles, interval).await;
+        });
+        tracing::info!(interval = cli.sentinel_interval, "AI Sentinel started");
+    }
 
     let mut sync_assembler: Option<SnapshotAssembler> = None;
     let mut sync_bootstrapped = false;
@@ -1660,6 +1733,7 @@ async fn main() -> Result<()> {
                     NetworkEvent::PeerConnected(peer) => {
                         peer_count += 1;
                         node_metrics.set_peer_count(peer_count);
+                        s_peer_count.store(peer_count, std::sync::atomic::Ordering::Relaxed);
                         if !connected_peers.contains(&peer) {
                             connected_peers.push(peer);
                         }
@@ -1669,6 +1743,7 @@ async fn main() -> Result<()> {
                     NetworkEvent::PeerDisconnected(peer) => {
                         peer_count = peer_count.saturating_sub(1);
                         node_metrics.set_peer_count(peer_count);
+                        s_peer_count.store(peer_count, std::sync::atomic::Ordering::Relaxed);
                         connected_peers.retain(|p| *p != peer);
                         tracing::debug!(peer = %peer, peers = peer_count, "Peer disconnected");
                         let _ = consensus_tx.send(ConsensusInput::PeerCountChanged(peer_count)).await;
@@ -1820,6 +1895,7 @@ async fn main() -> Result<()> {
                                 );
                                 let _ = consensus_tx.send(ConsensusInput::Transaction(data)).await;
                                 node_metrics.set_mempool_size(mempool.len() as u64);
+                                s_mempool_size.store(mempool.len() as u64, std::sync::atomic::Ordering::Relaxed);
                             } else {
                                 drop(state_guard);
                                 tracing::debug!(
@@ -2055,6 +2131,7 @@ async fn main() -> Result<()> {
                     }
                     let _ = consensus_tx.send(ConsensusInput::Transaction(raw_tx)).await;
                     node_metrics.set_mempool_size(mempool.len() as u64);
+                    s_mempool_size.store(mempool.len() as u64, std::sync::atomic::Ordering::Relaxed);
                 } else {
                     drop(state_guard);
                     tracing::warn!(
@@ -2121,7 +2198,13 @@ async fn main() -> Result<()> {
                     let validators = staking.active_validators();
                     let total: u128 = validators.iter().map(|v| v.effective_stake()).sum();
                     node_metrics.update_staking(validators.len() as u64, total);
+                    s_active_validators.store(validators.len() as u64, std::sync::atomic::Ordering::Relaxed);
                 }
+
+                // Update sentinel atomics
+                s_commit_latency.store(snap.last_commit_latency_us, std::sync::atomic::Ordering::Relaxed);
+                s_equivocations.store(snap.equivocations, std::sync::atomic::Ordering::Relaxed);
+                s_txs_processed.fetch_add(result.receipts.len() as u64, std::sync::atomic::Ordering::Relaxed);
             }
             _ = catchup_ticker.tick() => {
                 if !node_is_validator {
@@ -2483,6 +2566,8 @@ mod tests {
             mainnet: false,
             boot_node: vec![],
             snapshot: None,
+            sentinel: None,
+            sentinel_interval: 50,
         };
         let config = cli.apply_overrides(NodeConfig::default());
         assert_eq!(config.data_dir, PathBuf::from("/tmp/test"));
@@ -2511,6 +2596,8 @@ mod tests {
             mainnet: false,
             boot_node: vec![],
             snapshot: None,
+            sentinel: None,
+            sentinel_interval: 50,
         };
         let config = cli.apply_overrides(NodeConfig::default());
         assert_eq!(config.network.listen_addresses.len(), 1);
@@ -2605,6 +2692,8 @@ mod tests {
             mainnet: false,
             boot_node: vec![],
             snapshot: None,
+            sentinel: None,
+            sentinel_interval: 50,
         };
         let result = cli.apply_overrides(config);
 

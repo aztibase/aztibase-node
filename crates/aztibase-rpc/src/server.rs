@@ -133,6 +133,8 @@ pub struct RpcState {
     pub cors_allowed_origins: Vec<String>,
     pub max_body_bytes: usize,
     pub is_validator: bool,
+    pub sentinel_latest: Arc<RwLock<Option<serde_json::Value>>>,
+    pub sentinel_history: Arc<RwLock<Vec<serde_json::Value>>>,
 }
 
 impl Clone for RpcState {
@@ -168,6 +170,8 @@ impl Clone for RpcState {
             cors_allowed_origins: self.cors_allowed_origins.clone(),
             max_body_bytes: self.max_body_bytes,
             is_validator: self.is_validator,
+            sentinel_latest: Arc::clone(&self.sentinel_latest),
+            sentinel_history: Arc::clone(&self.sentinel_history),
         }
     }
 }
@@ -274,15 +278,18 @@ impl RpcRateLimiter {
 pub struct EventBus {
     new_heads: broadcast::Sender<serde_json::Value>,
     finality: broadcast::Sender<serde_json::Value>,
+    chain_health: broadcast::Sender<serde_json::Value>,
 }
 
 impl EventBus {
     pub fn new() -> Self {
         let (new_heads, _) = broadcast::channel(256);
         let (finality, _) = broadcast::channel(256);
+        let (chain_health, _) = broadcast::channel(256);
         Self {
             new_heads,
             finality,
+            chain_health,
         }
     }
 
@@ -294,10 +301,15 @@ impl EventBus {
         let _ = self.finality.send(cert);
     }
 
+    pub fn publish_chain_health(&self, health: serde_json::Value) {
+        let _ = self.chain_health.send(health);
+    }
+
     fn subscribe(&self, topic: &str) -> Option<broadcast::Receiver<serde_json::Value>> {
         match topic {
             "newHeads" => Some(self.new_heads.subscribe()),
             "finality" => Some(self.finality.subscribe()),
+            "chainHealth" => Some(self.chain_health.subscribe()),
             _ => None,
         }
     }
@@ -355,8 +367,20 @@ impl RpcServer {
                 cors_allowed_origins: Vec::new(),
                 max_body_bytes: MAX_WS_FRAME_SIZE,
                 is_validator: false,
+                sentinel_latest: Arc::new(RwLock::new(None)),
+                sentinel_history: Arc::new(RwLock::new(Vec::new())),
             },
         }
+    }
+
+    pub fn with_sentinel(
+        mut self,
+        latest: Arc<RwLock<Option<serde_json::Value>>>,
+        history: Arc<RwLock<Vec<serde_json::Value>>>,
+    ) -> Self {
+        self.state.sentinel_latest = latest;
+        self.state.sentinel_history = history;
+        self
     }
 
     pub fn with_validator(mut self, is_validator: bool) -> Self {
@@ -627,6 +651,8 @@ async fn dispatch(state: &RpcState, req: &JsonRpcRequest) -> JsonRpcResponse {
         "aztb_listL2s" => handle_list_l2s(state, req).await,
         "aztb_getBridgeBalance" => handle_get_bridge_balance(state, req).await,
         "aztb_getBridgeProofStatus" => handle_get_bridge_proof_status(state, req).await,
+        "aztb_getChainHealth" => handle_get_chain_health(state, req).await,
+        "aztb_getHealthHistory" => handle_get_health_history(state, req).await,
         _ => JsonRpcResponse::error(
             req.id.clone(),
             METHOD_NOT_FOUND,
@@ -2536,6 +2562,31 @@ async fn handle_get_bridge_proof_status(state: &RpcState, req: &JsonRpcRequest) 
     JsonRpcResponse::success(req.id.clone(), serde_json::json!({ "used": used }))
 }
 
+// ── AI Sentinel Endpoints ──────────────────────────────────────────
+
+async fn handle_get_chain_health(state: &RpcState, req: &JsonRpcRequest) -> JsonRpcResponse {
+    let latest = state.sentinel_latest.read().await;
+    match &*latest {
+        Some(health) => JsonRpcResponse::success(req.id.clone(), health.clone()),
+        None => JsonRpcResponse::success(
+            req.id.clone(),
+            serde_json::json!({ "status": "sentinel_not_active" }),
+        ),
+    }
+}
+
+async fn handle_get_health_history(state: &RpcState, req: &JsonRpcRequest) -> JsonRpcResponse {
+    let limit = req
+        .params
+        .get(0)
+        .and_then(|v| v.as_u64())
+        .unwrap_or(10)
+        .min(100) as usize;
+    let history = state.sentinel_history.read().await;
+    let entries: Vec<_> = history.iter().rev().take(limit).cloned().collect();
+    JsonRpcResponse::success(req.id.clone(), serde_json::json!(entries))
+}
+
 fn parse_u64_param(params: &serde_json::Value, index: usize) -> Result<u64, String> {
     let val = params
         .get(index)
@@ -2644,6 +2695,8 @@ mod tests {
             cors_allowed_origins: Vec::new(),
             max_body_bytes: MAX_WS_FRAME_SIZE,
             is_validator: false,
+            sentinel_latest: Arc::new(RwLock::new(None)),
+            sentinel_history: Arc::new(RwLock::new(Vec::new())),
         };
         (state, rx)
     }
@@ -2687,6 +2740,8 @@ mod tests {
             cors_allowed_origins: Vec::new(),
             max_body_bytes: MAX_WS_FRAME_SIZE,
             is_validator: false,
+            sentinel_latest: Arc::new(RwLock::new(None)),
+            sentinel_history: Arc::new(RwLock::new(Vec::new())),
         };
         (state, rx)
     }
@@ -2942,6 +2997,8 @@ mod tests {
             cors_allowed_origins: Vec::new(),
             max_body_bytes: MAX_WS_FRAME_SIZE,
             is_validator: false,
+            sentinel_latest: Arc::new(RwLock::new(None)),
+            sentinel_history: Arc::new(RwLock::new(Vec::new())),
         };
         (state, rx, path)
     }
@@ -3336,6 +3393,8 @@ mod tests {
             cors_allowed_origins: Vec::new(),
             max_body_bytes: MAX_WS_FRAME_SIZE,
             is_validator: false,
+            sentinel_latest: Arc::new(RwLock::new(None)),
+            sentinel_history: Arc::new(RwLock::new(Vec::new())),
         };
         (state, rx)
     }
@@ -3439,6 +3498,8 @@ mod tests {
             cors_allowed_origins: vec![],
             max_body_bytes: 2 * 1024 * 1024,
             is_validator: false,
+            sentinel_latest: Arc::new(RwLock::new(None)),
+            sentinel_history: Arc::new(RwLock::new(Vec::new())),
         };
 
         let task_hex = hex::encode(task_id);
