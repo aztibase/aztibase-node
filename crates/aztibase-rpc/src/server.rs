@@ -948,11 +948,18 @@ async fn handle_send_transaction(state: &RpcState, req: &JsonRpcRequest) -> Json
         }
     };
 
-    if let Err(e) = aztibase_execution::verify_and_route(&raw) {
-        return JsonRpcResponse::error(req.id.clone(), INVALID_PARAMS, format!("invalid tx: {e}"));
-    }
+    let routed = match aztibase_execution::verify_and_route(&raw) {
+        Ok(r) => r,
+        Err(e) => {
+            return JsonRpcResponse::error(
+                req.id.clone(),
+                INVALID_PARAMS,
+                format!("invalid tx: {e}"),
+            );
+        }
+    };
 
-    let tx_hash = aztibase_core::hash(&raw);
+    let tx_hash = aztibase_execution::compute_tx_hash(&routed);
 
     match state.tx_sender.try_send(raw) {
         Ok(()) => JsonRpcResponse::success(

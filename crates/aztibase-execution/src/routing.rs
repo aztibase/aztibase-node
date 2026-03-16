@@ -618,6 +618,280 @@ pub fn route_batch(raw_txs: &[Vec<u8>]) -> (Vec<TxKind>, Vec<(usize, RoutingErro
     (routed, errors)
 }
 
+/// Compute a deterministic hash for a routed transaction, used as the receipt key.
+pub fn compute_tx_hash(tx: &TxKind) -> [u8; 32] {
+    use aztibase_core::hash;
+    match tx {
+        TxKind::Transfer {
+            from,
+            to,
+            value,
+            nonce,
+            ..
+        } => {
+            let mut buf = Vec::new();
+            buf.extend_from_slice(from);
+            buf.extend_from_slice(to);
+            buf.extend_from_slice(&value.to_le_bytes());
+            buf.extend_from_slice(&nonce.to_le_bytes());
+            hash(&buf)
+        }
+        TxKind::ContractDeploy { code, .. } => hash(code),
+        TxKind::ContractCall { func_name, .. } => hash(func_name.as_bytes()),
+        TxKind::EvmDeploy { code, .. } => hash(code),
+        TxKind::EvmCall { calldata, .. } => hash(calldata),
+        TxKind::AiInfer {
+            requester,
+            model_id,
+            input,
+            ..
+        } => {
+            let mut buf = Vec::new();
+            buf.extend_from_slice(requester);
+            buf.extend_from_slice(model_id.as_bytes());
+            buf.extend_from_slice(input);
+            hash(&buf)
+        }
+        TxKind::CreateAgent {
+            creator,
+            model_id,
+            nonce,
+            ..
+        } => {
+            let mut buf = Vec::new();
+            buf.extend_from_slice(creator);
+            buf.extend_from_slice(model_id.as_bytes());
+            buf.extend_from_slice(&nonce.to_le_bytes());
+            hash(&buf)
+        }
+        TxKind::RegisterModel {
+            owner,
+            model_id,
+            fingerprint,
+            ..
+        } => {
+            let mut buf = Vec::new();
+            buf.extend_from_slice(owner);
+            buf.extend_from_slice(model_id.as_bytes());
+            buf.extend_from_slice(fingerprint);
+            hash(&buf)
+        }
+        TxKind::PostTask {
+            requester,
+            model_id,
+            input_hash,
+            ..
+        } => {
+            let mut buf = Vec::new();
+            buf.extend_from_slice(requester);
+            buf.extend_from_slice(model_id.as_bytes());
+            buf.extend_from_slice(input_hash);
+            hash(&buf)
+        }
+        TxKind::SubmitAttestation {
+            validator,
+            task_id,
+            result_hash,
+            ..
+        } => {
+            let mut buf = Vec::new();
+            buf.extend_from_slice(validator);
+            buf.extend_from_slice(task_id);
+            buf.extend_from_slice(result_hash);
+            hash(&buf)
+        }
+        TxKind::CommitCompute {
+            validator,
+            committed_stake,
+            ..
+        } => {
+            let mut buf = Vec::new();
+            buf.extend_from_slice(validator);
+            buf.extend_from_slice(&committed_stake.to_le_bytes());
+            hash(&buf)
+        }
+        TxKind::DeregisterCompute { validator, .. } => {
+            let mut buf = Vec::new();
+            buf.extend_from_slice(validator);
+            buf.extend_from_slice(b"deregister_compute");
+            hash(&buf)
+        }
+        TxKind::DeregisterModel {
+            owner, model_id, ..
+        } => {
+            let mut buf = Vec::new();
+            buf.extend_from_slice(owner);
+            buf.extend_from_slice(model_id.as_bytes());
+            buf.extend_from_slice(b"deregister");
+            hash(&buf)
+        }
+        TxKind::CreateProposal {
+            proposer,
+            param_key,
+            nonce,
+            ..
+        } => {
+            let mut buf = Vec::new();
+            buf.extend_from_slice(proposer);
+            buf.extend_from_slice(param_key.as_bytes());
+            buf.extend_from_slice(&nonce.to_le_bytes());
+            hash(&buf)
+        }
+        TxKind::CastVote {
+            voter, proposal_id, ..
+        } => {
+            let mut buf = Vec::new();
+            buf.extend_from_slice(voter);
+            buf.extend_from_slice(proposal_id);
+            hash(&buf)
+        }
+        TxKind::Stake {
+            staker,
+            amount,
+            nonce,
+            ..
+        } => {
+            let mut buf = Vec::new();
+            buf.extend_from_slice(staker);
+            buf.extend_from_slice(&amount.to_le_bytes());
+            buf.extend_from_slice(&nonce.to_le_bytes());
+            hash(&buf)
+        }
+        TxKind::Unstake {
+            staker,
+            amount,
+            nonce,
+            ..
+        } => {
+            let mut buf = Vec::new();
+            buf.extend_from_slice(staker);
+            buf.extend_from_slice(&amount.to_le_bytes());
+            buf.extend_from_slice(&nonce.to_le_bytes());
+            hash(&buf)
+        }
+        TxKind::Delegate {
+            delegator,
+            validator_id,
+            amount,
+            ..
+        } => {
+            let mut buf = Vec::new();
+            buf.extend_from_slice(delegator);
+            buf.extend_from_slice(validator_id);
+            buf.extend_from_slice(&amount.to_le_bytes());
+            hash(&buf)
+        }
+        TxKind::Undelegate {
+            delegator, nonce, ..
+        } => {
+            let mut buf = Vec::new();
+            buf.extend_from_slice(delegator);
+            buf.extend_from_slice(&nonce.to_le_bytes());
+            hash(&buf)
+        }
+        TxKind::SetAgentPolicy {
+            owner,
+            agent,
+            nonce,
+            ..
+        } => {
+            let mut buf = Vec::new();
+            buf.extend_from_slice(owner);
+            buf.extend_from_slice(agent);
+            buf.extend_from_slice(&nonce.to_le_bytes());
+            hash(&buf)
+        }
+        TxKind::AgentExecute {
+            agent,
+            to,
+            value,
+            nonce,
+            ..
+        } => {
+            let mut buf = Vec::new();
+            buf.extend_from_slice(agent);
+            buf.extend_from_slice(to);
+            buf.extend_from_slice(&value.to_le_bytes());
+            buf.extend_from_slice(&nonce.to_le_bytes());
+            hash(&buf)
+        }
+        TxKind::AnchorL2State {
+            sequencer,
+            l2_chain_id,
+            state_root,
+            nonce,
+            ..
+        } => {
+            let mut buf = Vec::new();
+            buf.extend_from_slice(sequencer);
+            buf.extend_from_slice(l2_chain_id);
+            buf.extend_from_slice(state_root);
+            buf.extend_from_slice(&nonce.to_le_bytes());
+            hash(&buf)
+        }
+        TxKind::BridgeDeposit {
+            depositor,
+            l2_chain_id,
+            amount,
+            nonce,
+            ..
+        } => {
+            let mut buf = Vec::new();
+            buf.extend_from_slice(depositor);
+            buf.extend_from_slice(l2_chain_id);
+            buf.extend_from_slice(&amount.to_le_bytes());
+            buf.extend_from_slice(&nonce.to_le_bytes());
+            hash(&buf)
+        }
+        TxKind::BridgeWithdraw {
+            withdrawer,
+            l2_chain_id,
+            amount,
+            nonce,
+            ..
+        } => {
+            let mut buf = Vec::new();
+            buf.extend_from_slice(withdrawer);
+            buf.extend_from_slice(l2_chain_id);
+            buf.extend_from_slice(&amount.to_le_bytes());
+            buf.extend_from_slice(&nonce.to_le_bytes());
+            hash(&buf)
+        }
+        TxKind::RegisterL2 {
+            owner,
+            l2_chain_id,
+            nonce,
+            ..
+        } => {
+            let mut buf = Vec::new();
+            buf.extend_from_slice(owner);
+            buf.extend_from_slice(l2_chain_id);
+            buf.extend_from_slice(&nonce.to_le_bytes());
+            hash(&buf)
+        }
+        TxKind::RotateValidatorKey {
+            validator,
+            new_pubkey,
+            nonce,
+            ..
+        } => {
+            let mut buf = Vec::new();
+            buf.extend_from_slice(validator);
+            buf.extend_from_slice(new_pubkey);
+            buf.extend_from_slice(&nonce.to_le_bytes());
+            hash(&buf)
+        }
+        TxKind::FaucetDrip {
+            recipient, amount, ..
+        } => {
+            let mut buf = Vec::new();
+            buf.extend_from_slice(recipient);
+            buf.extend_from_slice(&amount.to_le_bytes());
+            hash(&buf)
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

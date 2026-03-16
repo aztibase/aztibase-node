@@ -5,6 +5,29 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ---
 
+## Smart Contract Live Testnet Validation (2026-03-16)
+
+### Added
+- **Contract address in deploy output**: `wallet deploy` now prints the deterministic contract address (`BLAKE3(deployer || nonce_le)`) before broadcasting.
+- **`compute_tx_hash()` in aztibase-execution**: Moved from pipeline.rs to routing module. Shared across pipeline and RPC for consistent tx hashing.
+- **`address_from_keyfile()` helper**: Extracts deployer address from keyfile without signing.
+
+### Fixed
+- **TX hash mismatch**: RPC `aztb_sendTransaction` returned `hash(signed_envelope)` but receipts were stored under `compute_tx_hash(routed_tx)`. Receipt lookups always returned null for contract deploys. RPC now returns `compute_tx_hash(routed)`, matching the receipt key.
+- **Gas limit default too high**: Default gas_limit was 10M but faucet drip gives only 1M balance. Gas escrow silently failed, rejecting contract deploys. Lowered default to 500K.
+- **Testnet reset incomplete**: `batch_archive.redb` was not cleaned, causing stale 22K+ batch numbering on restart.
+
+### Validated
+- **End-to-end WASM contract lifecycle on 3-node testnet**:
+  - Deploy counter.wasm (373 bytes): gas=106,600
+  - init(): gas=11
+  - increment(): gas=22
+  - get_counter(): gas=13
+  - All receipts retrievable via `aztb_getTransactionReceipt`
+  - Cross-node state root consistency: 3/3 identical after all operations
+
+---
+
 ## SyncBatch Real Transactions + Test Fixes (2026-03-15)
 
 ### Fixed

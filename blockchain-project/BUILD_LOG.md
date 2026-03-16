@@ -21,6 +21,48 @@ Entries are prepended (newest first).
 
 ## Entries
 
+### Smart Contract Live Testnet Validation + TX Hash Fix (2026-03-16)
+- **Date**: 2026-03-16
+- **Sprint**: Post-059 (Mainnet Prep, Sprint D completion)
+- **Commit**: (pending)
+- **Files Changed**:
+  - `crates/aztibase-execution/src/routing.rs` — Moved `compute_tx_hash()` from pipeline.rs to routing module (shared across crates). Deterministic hash for each TxKind variant, used as receipt storage key.
+  - `crates/aztibase-execution/src/lib.rs` — Re-exported `compute_tx_hash` from routing module.
+  - `crates/aztibase-rpc/src/server.rs` — Fixed TX hash mismatch: `aztb_sendTransaction` now returns `compute_tx_hash(routed)` instead of `hash(envelope)`, matching receipt storage key. Receipt lookup by RPC-returned hash now works.
+  - `crates/aztibase-node/src/pipeline.rs` — Removed local `compute_tx_hash()` (270 lines), now imports from aztibase-execution. Removed temporary nonce debug logging.
+  - `crates/aztibase-node/src/main.rs` — Deploy command now prints computed contract address before broadcast. Lowered default gas_limit from 10M to 500K (faucet balance is 1M).
+  - `crates/aztibase-node/src/wallet.rs` — Added `address_from_keyfile()` helper for contract address computation.
+  - `start-testnet.sh` — Added `batch_archive.redb` to cleanup list (was causing stale batch numbers after reset).
+- **Testnet Validation Results**:
+  - Deploy counter.wasm: `contracts=1, fees_burned=106600, success=true`
+  - init(): `contracts=1, fees_burned=11, success=true`
+  - increment(): `contracts=1, fees_burned=22, success=true`
+  - get_counter(): `contracts=1, fees_burned=13, success=true`
+  - Transfer: `success=true, gas_used=21000`
+  - All receipts retrievable via `aztb_getTransactionReceipt` with RPC-returned hash
+  - Cross-node state root consistency verified (3/3 identical)
+- **Bugs Fixed**:
+  1. TX hash mismatch — RPC returned `hash(envelope)` but receipts stored under `compute_tx_hash(routed)`. Receipt lookups always returned null for contract txs.
+  2. Gas limit default too high (10M) — exceeded faucet balance (1M), causing gas escrow failure and silent contract rejection.
+  3. batch_archive.redb not cleaned on testnet reset — caused stale 22K+ batch numbering.
+- **Review Notes**: Sprint D complete. All contract operations validated end-to-end on live 3-node testnet.
+- **Security Flags**: None
+
+### Smart Contract CLI Tooling + Counter Contract (2026-03-16)
+- **Date**: 2026-03-16
+- **Sprint**: Post-059 (Mainnet Prep, Sprint D)
+- **Commit**: `166742e`
+- **Files Changed**:
+  - `crates/aztibase-node/src/main.rs` — Added `Deploy`, `Call`, `CompileWat` wallet commands. Deploy reads .wasm, signs via wallet, broadcasts. Call parses hex args. CompileWat spawns 8MB-stack thread for WAT→WASM compilation.
+  - `crates/aztibase-node/src/wallet.rs` — Added `sign_deploy()`, `sign_deploy_encrypted()`, `sign_call()`, `sign_call_encrypted()` functions for ContractDeploy (0x02) and ContractCall (0x03) transaction types.
+  - `crates/aztibase-execution/src/lib.rs` — Added public `compile_wat()` function.
+  - `crates/aztibase-execution/Cargo.toml` — Moved `wat` from dev-dependencies to regular dependencies.
+  - `.cargo/config.toml` — NEW: MSVC linker flag `/STACK:8388608` (8MB) to prevent Windows debug build stack overflow.
+  - `contracts/counter.wat` — NEW: Example WASM counter contract with init/increment/get_counter using host ABI (storage_set, storage_get, emit_event).
+  - `contracts/counter.wasm` — Compiled binary (373 bytes).
+- **Review Notes**: Full smart contract CLI pipeline: compile WAT→WASM, deploy contract, call contract functions. 39/39 node tests pass, clippy clean, fmt clean. Live testnet deployment pending (release binary locked by running testnet).
+- **Security Flags**: None
+
 ### State Snapshot Persistence + ProtocolStoreBundle Restoration (2026-03-16)
 - **Date**: 2026-03-16
 - **Sprint**: Post-059 (Mainnet Prep, Sprint C)

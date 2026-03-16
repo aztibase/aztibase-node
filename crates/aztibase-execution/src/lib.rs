@@ -51,7 +51,7 @@ pub use persist::{
     store_checkpoint_raw, store_equivocation_proof, store_transaction, write_sentinel,
 };
 pub use receipt::{ExecutionReceipt, evict_old_receipts, get_receipt, store_receipts};
-pub use routing::{RoutingError, TxKind, route_batch, route_tx};
+pub use routing::{RoutingError, TxKind, compute_tx_hash, route_batch, route_tx};
 pub use snapshot::{
     ProtocolStoreBundle, SnapshotError, StateSnapshot, apply_full_snapshot, apply_snapshot,
     create_full_snapshot, create_snapshot, create_snapshot_with_finality, deserialize_snapshot,

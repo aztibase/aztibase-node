@@ -479,6 +479,11 @@ fn parse_address(hex: &str) -> Result<[u8; 32]> {
         .map_err(|_| anyhow::anyhow!("Address must be 32 bytes"))
 }
 
+pub fn address_from_keyfile(keyfile_path: &Path) -> Result<[u8; 32]> {
+    let (_, addr) = load_keyfile(keyfile_path)?;
+    Ok(addr)
+}
+
 pub fn sign_deploy(
     keyfile_path: &Path,
     code: Vec<u8>,

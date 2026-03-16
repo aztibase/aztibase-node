@@ -19,7 +19,7 @@ taskkill //F //IM aztibase.exe 2>/dev/null
 
 # Reset old data
 for node in data/node1 data/node2 data/node3; do
-    rm -f "$node/db" "$node/execution_db" "$node/peer_store.redb" "$node/peer_reputation.redb" "$node/"*.log
+    rm -f "$node/db" "$node/execution_db" "$node/peer_store.redb" "$node/peer_reputation.redb" "$node/batch_archive.redb" "$node/"*.log
 done
 echo "[OK] Old data cleared"
 

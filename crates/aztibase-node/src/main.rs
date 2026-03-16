@@ -429,7 +429,7 @@ enum WalletAction {
         #[arg(long)]
         nonce: u64,
         /// Gas limit for deployment
-        #[arg(long, default_value = "10000000")]
+        #[arg(long, default_value = "500000")]
         gas_limit: u64,
         /// Gas price
         #[arg(long, default_value = "1")]
@@ -459,7 +459,7 @@ enum WalletAction {
         #[arg(long)]
         nonce: u64,
         /// Gas limit for execution
-        #[arg(long, default_value = "10000000")]
+        #[arg(long, default_value = "500000")]
         gas_limit: u64,
         /// Gas price
         #[arg(long, default_value = "1")]
@@ -966,6 +966,15 @@ async fn main() -> Result<()> {
                     let code = std::fs::read(&wasm)
                         .with_context(|| format!("Failed to read {}", wasm.display()))?;
                     println!("WASM bytecode: {} bytes", code.len());
+
+                    let deployer = wallet::address_from_keyfile(&key)?;
+                    let contract_addr =
+                        aztibase_execution::compute_contract_address(&deployer, nonce);
+                    println!(
+                        "Contract address: 0x{}",
+                        genesis::hex_encode(&contract_addr)
+                    );
+
                     let envelope = if let Some(pass) = passphrase {
                         wallet::sign_deploy_encrypted(
                             &key, &pass, code, nonce, gas_limit, gas_price,
