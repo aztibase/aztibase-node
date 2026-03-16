@@ -24,7 +24,7 @@ Entries are prepended (newest first).
 ### State Snapshot Persistence + ProtocolStoreBundle Restoration (2026-03-16)
 - **Date**: 2026-03-16
 - **Sprint**: Post-059 (Mainnet Prep, Sprint C)
-- **Commit**: (pending)
+- **Commit**: `5342eea`
 - **Files Changed**:
   - `crates/aztibase-node/src/sync.rs` — `bootstrap_from_snapshot()` now uses `apply_full_snapshot()`, flushes protocol stores to redb, returns `Option<ProtocolStoreBundle>`. New test `bootstrap_with_protocol_bundle`.
   - `crates/aztibase-node/src/main.rs` — Snapshot bootstrap handler restores all 9 protocol stores + base_fee into shared in-memory state. Cloned `exec_store` Arc before RPC move. Captured 8 shared protocol store handles.
