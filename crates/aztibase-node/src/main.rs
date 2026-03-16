@@ -1101,6 +1101,35 @@ async fn main() -> Result<()> {
     tracing::info!(validator = cli.validator_index, "Starting Aztibase node");
     tracing::info!(data_dir = %config.data_dir.display());
 
+    // Port conflict detection: warn if RPC port overlaps with any P2P listen port
+    let rpc_port = config
+        .rpc
+        .listen_addr
+        .split(':')
+        .next_back()
+        .and_then(|p| p.parse::<u16>().ok());
+    for addr in &config.network.listen_addresses {
+        if let Some(rpc_p) = rpc_port
+            && addr.contains(&format!("/{rpc_p}"))
+        {
+            tracing::error!(
+                rpc = %config.rpc.listen_addr,
+                p2p = %addr,
+                "RPC and P2P ports conflict — fix configuration"
+            );
+        }
+    }
+
+    // Warn if RPC is localhost-only (safe default but surprising on remote VPS)
+    if config.rpc.listen_addr.starts_with("127.0.0.1")
+        || config.rpc.listen_addr.starts_with("localhost")
+    {
+        tracing::info!(
+            addr = %config.rpc.listen_addr,
+            "RPC bound to localhost only — use 0.0.0.0 for external access"
+        );
+    }
+
     // Storage
     std::fs::create_dir_all(&config.data_dir)
         .with_context(|| format!("Failed to create data dir: {}", config.data_dir.display()))?;
@@ -1749,7 +1778,10 @@ async fn main() -> Result<()> {
                         node_metrics.set_peer_count(peer_count);
                         s_peer_count.store(peer_count, std::sync::atomic::Ordering::Relaxed);
                         connected_peers.retain(|p| *p != peer);
-                        tracing::debug!(peer = %peer, peers = peer_count, "Peer disconnected");
+                        tracing::warn!(peer = %peer, peers_remaining = peer_count, "Peer disconnected");
+                        if peer_count == 0 {
+                            tracing::error!("All peers lost — node is isolated");
+                        }
                         let _ = consensus_tx.send(ConsensusInput::PeerCountChanged(peer_count)).await;
                     }
                     NetworkEvent::Message { source, topic, data } => {
@@ -1892,14 +1924,19 @@ async fn main() -> Result<()> {
                             let min_gp = shared_base_fee.load(std::sync::atomic::Ordering::Relaxed);
                             if mempool.insert_checked(data.clone(), |addr| state_guard.nonce(addr), min_gp) {
                                 drop(state_guard);
+                                let mlen = mempool.len();
+                                let mcap = mempool.capacity();
                                 tracing::info!(
                                     tx_len = data.len(),
-                                    mempool_size = mempool.len(),
+                                    mempool_size = mlen,
                                     "Gossip tx accepted into mempool"
                                 );
+                                if mlen * 4 >= mcap * 3 {
+                                    tracing::warn!(size = mlen, capacity = mcap, "Mempool at ≥75% capacity");
+                                }
                                 let _ = consensus_tx.send(ConsensusInput::Transaction(data)).await;
-                                node_metrics.set_mempool_size(mempool.len() as u64);
-                                s_mempool_size.store(mempool.len() as u64, std::sync::atomic::Ordering::Relaxed);
+                                node_metrics.set_mempool_size(mlen as u64);
+                                s_mempool_size.store(mlen as u64, std::sync::atomic::Ordering::Relaxed);
                             } else {
                                 drop(state_guard);
                                 tracing::debug!(

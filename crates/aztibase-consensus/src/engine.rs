@@ -91,6 +91,7 @@ pub struct ConsensusMetrics {
     pub rounds_advanced: AtomicU64,
     pub equivocations: AtomicU64,
     pub last_commit_latency_us: AtomicU64,
+    pub liveness_timeouts: AtomicU64,
 }
 
 impl ConsensusMetrics {
@@ -102,6 +103,7 @@ impl ConsensusMetrics {
             rounds_advanced: self.rounds_advanced.load(AtomicOrdering::Relaxed),
             equivocations: self.equivocations.load(AtomicOrdering::Relaxed),
             last_commit_latency_us: self.last_commit_latency_us.load(AtomicOrdering::Relaxed),
+            liveness_timeouts: self.liveness_timeouts.load(AtomicOrdering::Relaxed),
         }
     }
 }
@@ -114,6 +116,7 @@ pub struct MetricsSnapshot {
     pub rounds_advanced: u64,
     pub equivocations: u64,
     pub last_commit_latency_us: u64,
+    pub liveness_timeouts: u64,
 }
 
 #[derive(Clone, Debug)]
@@ -407,6 +410,9 @@ impl ConsensusEngine {
                     if self.threshold_clock.get_round() > self.last_proposed_round {
                         self.try_advance()?;
                     } else if self.round_start.elapsed() > liveness_threshold {
+                        self.metrics
+                            .liveness_timeouts
+                            .fetch_add(1, AtomicOrdering::Relaxed);
                         info!(
                             clock = self.threshold_clock.get_round(),
                             proposed = self.last_proposed_round,

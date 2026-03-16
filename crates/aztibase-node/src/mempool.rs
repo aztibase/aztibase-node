@@ -212,6 +212,10 @@ impl Mempool {
     pub fn is_empty(&self) -> bool {
         self.ordered.is_empty()
     }
+
+    pub fn capacity(&self) -> usize {
+        self.max_size
+    }
 }
 
 /// Decode a signed envelope to extract (sender_address, nonce, gas_price).

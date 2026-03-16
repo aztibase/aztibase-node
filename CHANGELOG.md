@@ -5,6 +5,18 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ---
 
+## Testnet Hardening (2026-03-16)
+
+### Added
+- **RPC timeout protection**: All RPC dispatch calls wrapped with 10s deadline; timed-out requests return JSON-RPC error -32603.
+- **Port conflict detection**: Startup check warns if RPC port overlaps with any P2P listen address.
+- **Mempool backpressure warning**: Logs warning when mempool reaches ≥75% capacity.
+- **Consensus liveness timeout metric**: `liveness_timeouts` counter in ConsensusMetrics tracks round timeout events.
+- **Network isolation detection**: Peer disconnects upgraded to warn level; all-peers-lost triggers error log.
+- **RPC localhost advisory**: Startup info log when RPC is bound to 127.0.0.1 (common gotcha on remote VPS).
+
+---
+
 ## Sprint 060 — AI Sentinel Tier 1 + CI/CD (2026-03-16)
 
 ### Added

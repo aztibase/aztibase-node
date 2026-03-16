@@ -16,7 +16,7 @@ use futures::{SinkExt, StreamExt};
 use serde::{Deserialize, Serialize};
 use tokio::sync::{RwLock, broadcast, mpsc};
 use tower_http::cors::{AllowOrigin, Any, CorsLayer};
-use tracing::{debug, info};
+use tracing::{debug, info, warn};
 
 use aztibase_consensus::ComputeCommitmentStore;
 use aztibase_core::{Keypair, address_from_pubkey};
@@ -598,7 +598,18 @@ async fn handle_rpc(
         );
     }
 
-    let response = dispatch(&state, &request).await;
+    let response = match tokio::time::timeout(
+        std::time::Duration::from_secs(10),
+        dispatch(&state, &request),
+    )
+    .await
+    {
+        Ok(r) => r,
+        Err(_) => {
+            warn!(method = %request.method, "RPC request timed out after 10s");
+            JsonRpcResponse::error(request.id, -32603, "Request timed out".into())
+        }
+    };
     (StatusCode::OK, Json(response))
 }
 

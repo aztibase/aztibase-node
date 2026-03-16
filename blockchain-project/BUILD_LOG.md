@@ -21,6 +21,21 @@ Entries are prepended (newest first).
 
 ## Entries
 
+### Testnet Hardening (2026-03-16)
+- **Date**: 2026-03-16
+- **Sprint**: Post-060 hardening
+- **Commit**: (this commit)
+- **Files Changed**:
+  - `crates/aztibase-rpc/src/server.rs` — 10s timeout wrapper on all RPC dispatch calls, `warn!` import added
+  - `crates/aztibase-node/src/main.rs` — Port conflict detection (RPC vs P2P), mempool backpressure warning at ≥75%, peer disconnect upgraded to warn + isolated node error, RPC localhost-only startup info
+  - `crates/aztibase-node/src/mempool.rs` — `capacity()` accessor for backpressure check
+  - `crates/aztibase-consensus/src/engine.rs` — `liveness_timeouts` counter in ConsensusMetrics + MetricsSnapshot
+- **Tests**: 985 pass, 0 fail. Clippy clean, fmt clean.
+- **Review Notes**: Audit identified 7 hardening items; 6 implemented (attestation buffer cleanup deprioritized as low impact). All changes are observability/resilience — no consensus or execution logic changed.
+- **Security Flags**: None
+
+---
+
 ### Sprint 060 — AI Sentinel Tier 1 + CI/CD (2026-03-16)
 - **Date**: 2026-03-16
 - **Sprint**: 060 (Sprint E)
