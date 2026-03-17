@@ -610,6 +610,8 @@ impl ExecutionPipeline {
         let mut register_l2s: Vec<RegisterL2Entry> = Vec::new();
         let mut rotate_keys: Vec<([u8; 32], [u8; 32], u64)> = Vec::new();
         let mut faucet_drips: Vec<([u8; 32], [u8; 32], u128)> = Vec::new();
+        #[allow(clippy::type_complexity)]
+        let mut register_validators: Vec<([u8; 32], u128, u64, Option<[u8; 32]>)> = Vec::new();
 
         for tx in &executable {
             match tx {
@@ -986,6 +988,15 @@ impl ExecutionPipeline {
                     ..
                 } => {
                     faucet_drips.push((*validator, *recipient, *amount));
+                }
+                TxKind::RegisterValidator {
+                    registrant,
+                    amount,
+                    nonce,
+                    ..
+                } => {
+                    let pubkey = sender_pubkeys.get(registrant).copied();
+                    register_validators.push((*registrant, *amount, *nonce, pubkey));
                 }
             }
         }
@@ -1963,6 +1974,106 @@ impl ExecutionPipeline {
                             );
                         }
                     }
+                }
+            }
+        }
+
+        // Execute RegisterValidator transactions.
+        for (registrant, amount, nonce, ed25519_pubkey) in &register_validators {
+            let mut preimage = Vec::new();
+            preimage.extend_from_slice(registrant);
+            preimage.extend_from_slice(&amount.to_le_bytes());
+            preimage.extend_from_slice(&nonce.to_le_bytes());
+            let tx_hash = hash(&preimage);
+
+            let reg_nonce = state.nonce(registrant);
+            if *nonce != reg_nonce {
+                exec_receipts.push(ExecutionReceipt {
+                    tx_hash,
+                    success: false,
+                    gas_used: 21_000,
+                    contract_address: None,
+                    error: Some(format!("nonce mismatch: expected {reg_nonce}, got {nonce}")),
+                    inference_hash: None,
+                    anomaly_score: 0.0,
+                });
+                continue;
+            }
+
+            if *amount < MIN_VALIDATOR_STAKE {
+                state.increment_nonce(registrant);
+                exec_receipts.push(ExecutionReceipt {
+                    tx_hash,
+                    success: false,
+                    gas_used: 21_000,
+                    contract_address: None,
+                    error: Some(format!(
+                        "minimum stake is {MIN_VALIDATOR_STAKE}, got {amount}"
+                    )),
+                    inference_hash: None,
+                    anomaly_score: 0.0,
+                });
+                continue;
+            }
+
+            let balance = state.balance(registrant);
+            if balance < *amount {
+                state.increment_nonce(registrant);
+                exec_receipts.push(ExecutionReceipt {
+                    tx_hash,
+                    success: false,
+                    gas_used: 21_000,
+                    contract_address: None,
+                    error: Some("insufficient balance for validator registration".into()),
+                    inference_hash: None,
+                    anomaly_score: 0.0,
+                });
+                continue;
+            }
+
+            let mut staking = self.staking_store.write().await;
+            let result = staking.register_validator_with_keys(
+                *registrant,
+                *amount,
+                MIN_VALIDATOR_STAKE,
+                MAX_VALIDATOR_STAKE_CAP,
+                self.batch_count.load(std::sync::atomic::Ordering::Relaxed),
+                *ed25519_pubkey,
+                None,
+            );
+            drop(staking);
+
+            match result {
+                Ok(()) => {
+                    state.set_balance(registrant, balance - *amount);
+                    state.increment_nonce(registrant);
+                    self.consensus_addrs.insert(*registrant);
+                    exec_receipts.push(ExecutionReceipt {
+                        tx_hash,
+                        success: true,
+                        gas_used: 100_000,
+                        contract_address: None,
+                        error: None,
+                        inference_hash: None,
+                        anomaly_score: 0.0,
+                    });
+                    tracing::info!(
+                        validator = %short_hex(registrant),
+                        stake = amount,
+                        "New validator registered via RegisterValidator tx"
+                    );
+                }
+                Err(e) => {
+                    state.increment_nonce(registrant);
+                    exec_receipts.push(ExecutionReceipt {
+                        tx_hash,
+                        success: false,
+                        gas_used: 21_000,
+                        contract_address: None,
+                        error: Some(format!("registration failed: {e}")),
+                        inference_hash: None,
+                        anomaly_score: 0.0,
+                    });
                 }
             }
         }

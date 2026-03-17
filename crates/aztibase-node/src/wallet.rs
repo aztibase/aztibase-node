@@ -320,6 +320,44 @@ pub fn import_keyfile(json: &str, output_path: &Path) -> Result<String> {
     Ok(address)
 }
 
+pub fn sign_register_validator(
+    keyfile_path: &Path,
+    amount: u128,
+    nonce: u64,
+    gas_price: u64,
+) -> Result<Vec<u8>> {
+    let (kp, registrant) = load_keyfile(keyfile_path)?;
+    build_signed_tx(
+        &kp,
+        TxKind::RegisterValidator {
+            registrant,
+            amount,
+            nonce,
+            gas_price,
+        },
+    )
+}
+
+pub fn sign_register_validator_encrypted(
+    keyfile_path: &Path,
+    passphrase: &str,
+    amount: u128,
+    nonce: u64,
+    gas_price: u64,
+) -> Result<Vec<u8>> {
+    let kp = load_encrypted_keyfile(keyfile_path, passphrase)?;
+    let registrant = address_from_pubkey(kp.public_key().as_bytes());
+    build_signed_tx(
+        &kp,
+        TxKind::RegisterValidator {
+            registrant,
+            amount,
+            nonce,
+            gas_price,
+        },
+    )
+}
+
 pub fn sign_stake(
     keyfile_path: &Path,
     amount: u128,

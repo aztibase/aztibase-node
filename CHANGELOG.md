@@ -5,6 +5,18 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ---
 
+## RegisterValidator TxKind — Public Validator Onboarding (2026-03-17)
+
+### Added
+- **`TxKind::RegisterValidator` (0x1C)**: New transaction type that allows anyone to register as a validator by self-staking. Requires minimum 10,000 AZTB stake. Automatically adds the registrant to `consensus_addrs` so they join the active set at the next epoch boundary.
+- **CLI command `wallet register-validator`**: Signs and broadcasts a RegisterValidator transaction. Supports encrypted keyfiles (`--passphrase`) and direct RPC broadcast (`--rpc`).
+- **Wallet signing functions**: `sign_register_validator()` and `sign_register_validator_encrypted()` for programmatic use.
+
+### Fixed
+- **External validators could not join**: Previously only genesis validators could participate. Non-genesis addresses attempting to stake received "ValidatorNotFound". Now the flow is: faucet → register-validator → (epoch boundary) → active validator.
+
+---
+
 ## Phantom Parent Desync Fix (2026-03-17)
 
 ### Fixed

@@ -21,6 +21,21 @@ Entries are prepended (newest first).
 
 ## Entries
 
+### RegisterValidator TxKind — Public Validator Onboarding (2026-03-17)
+- **Date**: 2026-03-17
+- **Sprint**: Post-060
+- **Commit**: (this commit)
+- **Files Changed**:
+  - `crates/aztibase-execution/src/routing.rs` — New `TxKind::RegisterValidator` variant (prefix 0x1C) with registrant, amount, nonce, gas_price fields. Added to all match arms (encode, nonce, gas_price, estimate_gas, sender, tx_type_prefix, compute_tx_hash).
+  - `crates/aztibase-node/src/pipeline.rs` — RegisterValidator execution: validates nonce, minimum stake (10K), balance, registers in StakingStore with Ed25519 pubkey from signed envelope, inserts into `consensus_addrs` for epoch boundary inclusion, deducts stake from balance.
+  - `crates/aztibase-node/src/wallet.rs` — `sign_register_validator()` and `sign_register_validator_encrypted()` functions.
+  - `crates/aztibase-node/src/main.rs` — `WalletAction::RegisterValidator` CLI subcommand with --key, --amount, --nonce, --gas-price, --passphrase, --rpc flags.
+- **Tests**: All pass. Clippy clean, fmt clean.
+- **Review Notes**: This is the missing piece for public validator onboarding. Previously only genesis validators could participate. The flow for new validators is now: get AZTB from faucet → `wallet register-validator --key <key> --amount 10000 --nonce 0 --rpc <url>` → wait for epoch boundary → active validator. Gas cost: 100K.
+- **Security Flags**: 0 ELEVATED. RegisterValidator requires signed envelope (Ed25519 auth). Minimum stake prevents spam registration.
+
+---
+
 ### Phantom Parent Desync Fix (2026-03-17)
 - **Date**: 2026-03-17
 - **Sprint**: Post-060

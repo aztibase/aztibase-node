@@ -352,7 +352,28 @@ enum WalletAction {
         #[arg(long)]
         rpc: Option<String>,
     },
-    /// Stake tokens as a validator
+    /// Register as a validator (self-stake + join the network)
+    RegisterValidator {
+        /// Path to validator key file
+        #[arg(long)]
+        key: PathBuf,
+        /// Initial stake amount (minimum 10,000 AZTB)
+        #[arg(long)]
+        amount: u128,
+        /// Account nonce (query with `wallet balance`)
+        #[arg(long)]
+        nonce: u64,
+        /// Gas price
+        #[arg(long, default_value = "1")]
+        gas_price: u64,
+        /// Passphrase for encrypted keyfile
+        #[arg(long)]
+        passphrase: Option<String>,
+        /// RPC endpoint to broadcast to
+        #[arg(long)]
+        rpc: Option<String>,
+    },
+    /// Add more stake to an existing validator registration
     Stake {
         /// Path to validator key file
         #[arg(long)]
@@ -881,6 +902,32 @@ async fn main() -> Result<()> {
                     if let Some(rpc_url) = rpc {
                         let tx_hash = wallet::broadcast_transaction(&rpc_url, &hex).await?;
                         println!("Broadcast OK. TX hash: {tx_hash}");
+                    } else {
+                        println!("{hex}");
+                    }
+                }
+                WalletAction::RegisterValidator {
+                    key,
+                    amount,
+                    nonce,
+                    gas_price,
+                    passphrase,
+                    rpc,
+                } => {
+                    let envelope = if let Some(pass) = passphrase {
+                        wallet::sign_register_validator_encrypted(
+                            &key, &pass, amount, nonce, gas_price,
+                        )?
+                    } else {
+                        wallet::sign_register_validator(&key, amount, nonce, gas_price)?
+                    };
+                    let hex = genesis::hex_encode(&envelope);
+                    if let Some(rpc_url) = rpc {
+                        let tx_hash = wallet::broadcast_transaction(&rpc_url, &hex).await?;
+                        println!("RegisterValidator TX broadcast OK. TX hash: {tx_hash}");
+                        println!(
+                            "Your node will join the active validator set at the next epoch boundary."
+                        );
                     } else {
                         println!("{hex}");
                     }

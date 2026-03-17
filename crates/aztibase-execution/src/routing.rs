@@ -29,6 +29,7 @@ const PREFIX_BRIDGE_WITHDRAW: u8 = 0x18;
 const PREFIX_REGISTER_L2: u8 = 0x19;
 const PREFIX_ROTATE_VALIDATOR_KEY: u8 = 0x1A;
 const PREFIX_FAUCET_DRIP: u8 = 0x1B;
+const PREFIX_REGISTER_VALIDATOR: u8 = 0x1C;
 
 /// Maximum encoded transaction size (1 MB). Rejects oversized payloads before
 /// deserialization to prevent memory-bomb attacks via oversized payloads.
@@ -244,6 +245,12 @@ pub enum TxKind {
         nonce: u64,
         gas_price: u64,
     },
+    RegisterValidator {
+        registrant: Address,
+        amount: u128,
+        nonce: u64,
+        gas_price: u64,
+    },
 }
 
 impl TxKind {
@@ -277,6 +284,7 @@ impl TxKind {
             TxKind::RegisterL2 { .. } => PREFIX_REGISTER_L2,
             TxKind::RotateValidatorKey { .. } => PREFIX_ROTATE_VALIDATOR_KEY,
             TxKind::FaucetDrip { .. } => PREFIX_FAUCET_DRIP,
+            TxKind::RegisterValidator { .. } => PREFIX_REGISTER_VALIDATOR,
         };
         let payload = postcard::to_allocvec(self).expect("TxKind serialization cannot fail");
         let mut buf = Vec::with_capacity(1 + payload.len());
@@ -313,7 +321,8 @@ impl TxKind {
             | TxKind::BridgeWithdraw { nonce, .. }
             | TxKind::RegisterL2 { nonce, .. }
             | TxKind::RotateValidatorKey { nonce, .. }
-            | TxKind::FaucetDrip { nonce, .. } => *nonce,
+            | TxKind::FaucetDrip { nonce, .. }
+            | TxKind::RegisterValidator { nonce, .. } => *nonce,
         }
     }
 
@@ -345,7 +354,8 @@ impl TxKind {
             | TxKind::BridgeWithdraw { gas_price, .. }
             | TxKind::RegisterL2 { gas_price, .. }
             | TxKind::RotateValidatorKey { gas_price, .. }
-            | TxKind::FaucetDrip { gas_price, .. } => *gas_price,
+            | TxKind::FaucetDrip { gas_price, .. }
+            | TxKind::RegisterValidator { gas_price, .. } => *gas_price,
         }
     }
 
@@ -380,6 +390,7 @@ impl TxKind {
             TxKind::RegisterL2 { .. } => 100_000,
             TxKind::RotateValidatorKey { .. } => 60_000,
             TxKind::FaucetDrip { .. } => 0,
+            TxKind::RegisterValidator { .. } => 100_000,
         }
     }
 
@@ -412,6 +423,7 @@ impl TxKind {
             TxKind::RegisterL2 { owner, .. } => owner,
             TxKind::RotateValidatorKey { validator, .. } => validator,
             TxKind::FaucetDrip { validator, .. } => validator,
+            TxKind::RegisterValidator { registrant, .. } => registrant,
         }
     }
 
@@ -444,6 +456,7 @@ impl TxKind {
             TxKind::RegisterL2 { .. } => PREFIX_REGISTER_L2,
             TxKind::RotateValidatorKey { .. } => PREFIX_ROTATE_VALIDATOR_KEY,
             TxKind::FaucetDrip { .. } => PREFIX_FAUCET_DRIP,
+            TxKind::RegisterValidator { .. } => PREFIX_REGISTER_VALIDATOR,
         }
     }
 }
@@ -887,6 +900,18 @@ pub fn compute_tx_hash(tx: &TxKind) -> [u8; 32] {
             let mut buf = Vec::new();
             buf.extend_from_slice(recipient);
             buf.extend_from_slice(&amount.to_le_bytes());
+            hash(&buf)
+        }
+        TxKind::RegisterValidator {
+            registrant,
+            amount,
+            nonce,
+            ..
+        } => {
+            let mut buf = Vec::new();
+            buf.extend_from_slice(registrant);
+            buf.extend_from_slice(&amount.to_le_bytes());
+            buf.extend_from_slice(&nonce.to_le_bytes());
             hash(&buf)
         }
     }
