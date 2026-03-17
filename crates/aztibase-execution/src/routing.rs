@@ -541,7 +541,8 @@ pub fn route_tx(raw: &[u8]) -> Result<TxKind, RoutingError> {
         | PREFIX_BRIDGE_WITHDRAW
         | PREFIX_REGISTER_L2
         | PREFIX_ROTATE_VALIDATOR_KEY
-        | PREFIX_FAUCET_DRIP => {}
+        | PREFIX_FAUCET_DRIP
+        | PREFIX_REGISTER_VALIDATOR => {}
         other => return Err(RoutingError::UnknownPrefix(other)),
     }
     let (decoded, remaining): (TxKind, &[u8]) =
