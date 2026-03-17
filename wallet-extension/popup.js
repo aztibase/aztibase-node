@@ -690,16 +690,20 @@ async function refreshStaking() {
 
   try {
     const info = await rpcCall("aztb_getValidatorStake", [addressHex]);
+    const btn = document.getElementById("btn-become-validator");
     if (info && typeof info === "object") {
       const self_stake = info.self_stake || info.selfStake || 0;
       const delegated = info.total_delegated || info.totalDelegated || 0;
       if (selfEl) selfEl.textContent = fromBaseUnits(String(self_stake)) + " AZTB";
       if (delEl) delEl.textContent = fromBaseUnits(String(delegated)) + " AZTB";
+      if (btn) { btn.textContent = "Registered \u2713"; btn.disabled = true; }
     } else if (info && info !== "0") {
       if (selfEl) selfEl.textContent = fromBaseUnits(String(info)) + " AZTB";
+      if (btn) { btn.textContent = "Registered \u2713"; btn.disabled = true; }
     } else {
       if (selfEl) selfEl.textContent = "0 AZTB";
       if (delEl) delEl.textContent = "0 AZTB";
+      if (btn) { btn.textContent = "Become Validator"; btn.disabled = false; }
     }
   } catch {
     if (selfEl) selfEl.textContent = "0 AZTB";
@@ -883,6 +887,36 @@ async function sendTransfer() {
     showView("main");
   } catch (e) {
     toast(`Send failed: ${e.message}`, "error");
+  }
+}
+
+async function becomeValidator() {
+  if (!wasm || !secretHex) { toast("Wallet not ready", "error"); return; }
+  if (!rpcConnected) { toast("Not connected to network", "error"); return; }
+
+  const authed = await require2FA();
+  if (!authed) return;
+
+  try {
+    await refreshNonce();
+    const signedHex = wasm.signRegisterValidator(secretHex, "0", BigInt(currentNonce), 1n);
+    if (signedHex.startsWith("error:")) { toast(signedHex, "error"); return; }
+
+    const txHash = await rpcCall("aztb_sendRawTransaction", [signedHex]);
+    toast("Registering as validator...", "info");
+    const receipt = await pollReceipt(txHash);
+    if (receipt && receipt.success === false) {
+      toast(`Registration failed: ${receipt.error || "execution rejected"}`, "error");
+    } else {
+      toast("You are now a validator! Active at next epoch.", "success");
+      addTxToHistory("Become Validator", addressHex, "0", "stake");
+      const btn = document.getElementById("btn-become-validator");
+      if (btn) { btn.textContent = "Registered"; btn.disabled = true; }
+    }
+    refreshBalance();
+    refreshStaking();
+  } catch (e) {
+    toast(`Registration failed: ${e.message}`, "error");
   }
 }
 
@@ -1207,7 +1241,7 @@ async function walletFaucet() {
 
 const actions = {
   goBack, createWallet, confirmMnemonic, importWallet, unlockWallet,
-  lockWallet, resetWallet, clearHistory, copyAddress, sendTransfer, sendStake,
+  lockWallet, resetWallet, clearHistory, copyAddress, sendTransfer, becomeValidator, sendStake,
   sendUnstake, sendDelegate, sendUndelegate, saveSettings, exportKey,
   startTotpSetup, confirmTotpSetup, startWebAuthnSetup, disable2FA,
   verify2FAWebAuthn, verify2FATotp, cancel2FA,

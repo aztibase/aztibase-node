@@ -352,13 +352,13 @@ enum WalletAction {
         #[arg(long)]
         rpc: Option<String>,
     },
-    /// Register as a validator (self-stake + join the network)
+    /// Register as a validator and join the network
     RegisterValidator {
         /// Path to validator key file
         #[arg(long)]
         key: PathBuf,
-        /// Initial stake amount (minimum 10,000 AZTB)
-        #[arg(long)]
+        /// Initial stake amount (0 for free registration, stake later)
+        #[arg(long, default_value = "0")]
         amount: u128,
         /// Account nonce (query with `wallet balance`)
         #[arg(long)]

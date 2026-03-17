@@ -2000,24 +2000,8 @@ impl ExecutionPipeline {
                 continue;
             }
 
-            if *amount < MIN_VALIDATOR_STAKE {
-                state.increment_nonce(registrant);
-                exec_receipts.push(ExecutionReceipt {
-                    tx_hash,
-                    success: false,
-                    gas_used: 21_000,
-                    contract_address: None,
-                    error: Some(format!(
-                        "minimum stake is {MIN_VALIDATOR_STAKE}, got {amount}"
-                    )),
-                    inference_hash: None,
-                    anomaly_score: 0.0,
-                });
-                continue;
-            }
-
             let balance = state.balance(registrant);
-            if balance < *amount {
+            if *amount > 0 && balance < *amount {
                 state.increment_nonce(registrant);
                 exec_receipts.push(ExecutionReceipt {
                     tx_hash,
@@ -2035,7 +2019,7 @@ impl ExecutionPipeline {
             let result = staking.register_validator_with_keys(
                 *registrant,
                 *amount,
-                MIN_VALIDATOR_STAKE,
+                0,
                 MAX_VALIDATOR_STAKE_CAP,
                 self.batch_count.load(std::sync::atomic::Ordering::Relaxed),
                 *ed25519_pubkey,
@@ -2045,7 +2029,9 @@ impl ExecutionPipeline {
 
             match result {
                 Ok(()) => {
-                    state.set_balance(registrant, balance - *amount);
+                    if *amount > 0 {
+                        state.set_balance(registrant, balance - *amount);
+                    }
                     state.increment_nonce(registrant);
                     self.consensus_addrs.insert(*registrant);
                     exec_receipts.push(ExecutionReceipt {

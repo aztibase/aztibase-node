@@ -136,13 +136,10 @@ impl StakingStore {
         ed25519_pubkey: Option<[u8; 32]>,
         bls_pubkey: Option<Vec<u8>>,
     ) -> Result<(), StakingError> {
-        if self_stake == 0 {
-            return Err(StakingError::ZeroAmount);
-        }
         if self.validators.contains_key(&validator_id) {
             return Err(StakingError::ValidatorAlreadyRegistered);
         }
-        if self_stake < min_stake {
+        if min_stake > 0 && self_stake < min_stake {
             return Err(StakingError::BelowMinimumStake);
         }
         if self_stake > max_cap {
@@ -797,13 +794,23 @@ mod tests {
     }
 
     #[test]
-    fn zero_amount_rejected() {
+    fn zero_stake_registration_allowed_when_min_is_zero() {
+        let mut store = StakingStore::new();
+        store
+            .register_validator(addr(1), 0, 0, MAX_CAP, ROUND)
+            .unwrap();
+        assert!(store.get_validator(&addr(1)).is_some());
+        assert_eq!(store.get_validator(&addr(1)).unwrap().self_stake, 0);
+    }
+
+    #[test]
+    fn below_minimum_stake_rejected() {
         let mut store = StakingStore::new();
         assert_eq!(
             store
                 .register_validator(addr(1), 0, MIN_STAKE, MAX_CAP, ROUND)
                 .unwrap_err(),
-            StakingError::ZeroAmount
+            StakingError::BelowMinimumStake
         );
     }
 

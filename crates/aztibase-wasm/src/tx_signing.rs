@@ -11,12 +11,14 @@ const PREFIX_STAKE: u8 = 0x10;
 const PREFIX_UNSTAKE: u8 = 0x11;
 const PREFIX_DELEGATE: u8 = 0x12;
 const PREFIX_UNDELEGATE: u8 = 0x13;
+const PREFIX_REGISTER_VALIDATOR: u8 = 0x1C;
 
 const VARIANT_TRANSFER: u32 = 0;
 const VARIANT_STAKE: u32 = 15;
 const VARIANT_UNSTAKE: u32 = 16;
 const VARIANT_DELEGATE: u32 = 17;
 const VARIANT_UNDELEGATE: u32 = 18;
+const VARIANT_REGISTER_VALIDATOR: u32 = 27;
 
 type Address = [u8; 32];
 
@@ -115,6 +117,24 @@ fn encode_delegate(
         &DelegateFields {
             delegator,
             validator_id,
+            amount,
+            nonce,
+            gas_price,
+        },
+    )
+}
+
+fn encode_register_validator(
+    registrant: Address,
+    amount: u128,
+    nonce: u64,
+    gas_price: u64,
+) -> Vec<u8> {
+    encode_variant(
+        PREFIX_REGISTER_VALIDATOR,
+        VARIANT_REGISTER_VALIDATOR,
+        &StakeFields {
+            staker: registrant,
             amount,
             nonce,
             gas_price,
@@ -382,6 +402,31 @@ pub fn js_sign_undelegate(secret_hex: &str, nonce: u64, gas_price: u64) -> Strin
     let pk = sk.verifying_key();
     let delegator = address_from_pubkey(pk.as_bytes());
     let payload = encode_undelegate(delegator, nonce, gas_price);
+    let envelope = sign_payload(&payload, &sk);
+    drop(sk);
+    hex_encode(&envelope)
+}
+
+/// Sign a RegisterValidator transaction and return the raw signed envelope as hex.
+/// Amount of 0 registers without initial stake (free registration).
+#[wasm_bindgen(js_name = "signRegisterValidator")]
+pub fn js_sign_register_validator(
+    secret_hex: &str,
+    amount_str: &str,
+    nonce: u64,
+    gas_price: u64,
+) -> String {
+    let sk = match parse_secret_key(secret_hex) {
+        Ok(sk) => sk,
+        Err(e) => return format!("error: {e}"),
+    };
+    let amount: u128 = match amount_str.parse() {
+        Ok(v) => v,
+        Err(_) => return "error: invalid amount (expected decimal u128)".to_string(),
+    };
+    let pk = sk.verifying_key();
+    let registrant = address_from_pubkey(pk.as_bytes());
+    let payload = encode_register_validator(registrant, amount, nonce, gas_price);
     let envelope = sign_payload(&payload, &sk);
     drop(sk);
     hex_encode(&envelope)
