@@ -21,6 +21,17 @@ Entries are prepended (newest first).
 
 ## Entries
 
+### Web3 Positioning Brief + PDF (2026-03-16)
+- **Date**: 2026-03-16
+- **Sprint**: Post-060
+- **Commit**: (pending)
+- **Files Changed**:
+  - `docs/WEB3_POSITIONING.md` — New file. Mixed-audience positioning brief covering Web3 landscape, three-pillar thesis (AI-native, server-independent, privacy-native), technical foundation, competitive landscape, proof-of-work-done metrics, and roadmap.
+  - `docs/WEB3_POSITIONING.pdf` — Professional branded PDF (5 pages). Uses Pearlescent Signal design system: Deep Violet headers, Blue→Violet→Pink gradient bar, hexagon-A logo, Gold hairlines, branded tables. Generated via reportlab.
+  - `docs/generate_positioning_pdf.py` — PDF generator script. Embeds full brand system (colors, logo flowable, gradient bar, section dividers, page templates).
+- **Review Notes**: Content sourced from AZTIBASE_MASTER_PLAN.md S1/S16, MASTER_DESIGN.md, website introduction, NAMING_REPORT.md. All metrics verified against current testnet state (983 tests, 32 ADRs, 44,900+ LOC). Brand colors pulled from docs/brand/DESIGN_PHILOSOPHY.md and website/src/styles/custom.css.
+- **Security Flags**: None
+
 ### Testnet Hardening (2026-03-16)
 - **Date**: 2026-03-16
 - **Sprint**: Post-060 hardening

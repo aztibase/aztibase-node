@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 140" fill="none">
+  <defs>
+    <linearGradient id="hex-s" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0052FF"/>
+      <stop offset="40%" stop-color="#9B7DFF"/>
+      <stop offset="100%" stop-color="#FF6B9D"/>
+    </linearGradient>
+    <linearGradient id="hex-f" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0052FF" stop-opacity="0.12"/>
+      <stop offset="50%" stop-color="#9B7DFF" stop-opacity="0.08"/>
+      <stop offset="100%" stop-color="#FF6B9D" stop-opacity="0.05"/>
+    </linearGradient>
+    <linearGradient id="text-g" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#0052FF"/>
+      <stop offset="50%" stop-color="#9B7DFF"/>
+      <stop offset="100%" stop-color="#FF6B9D"/>
+    </linearGradient>
+  </defs>
+  <polygon points="80,8 116.6,29.5 116.6,72.5 80,94 43.4,72.5 43.4,29.5" fill="url(#hex-f)" stroke="url(#hex-s)" stroke-width="2.5"/>
+  <path d="M65 72 L80 32 L95 72" fill="none" stroke="url(#hex-s)" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+  <line x1="70" y1="59" x2="90" y2="59" stroke="url(#hex-s)" stroke-width="3" stroke-linecap="round"/>
+  <text x="80" y="122" text-anchor="middle" font-family="'Space Grotesk', system-ui, sans-serif" font-weight="700" font-size="22" fill="white">azti<tspan fill="url(#text-g)">Base</tspan></text>
+</svg>

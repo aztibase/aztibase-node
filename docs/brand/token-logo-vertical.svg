@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" fill="none">
+  <defs>
+    <linearGradient id="tg1" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0052FF"/>
+      <stop offset="100%" stop-color="#00BFFF"/>
+    </linearGradient>
+  </defs>
+  <circle cx="60" cy="44" r="36" fill="url(#tg1)"/>
+  <path d="M49 60 L60 26 L71 60" fill="none" stroke="white" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/>
+  <line x1="52.5" y1="49" x2="67.5" y2="49" stroke="white" stroke-width="2.5" stroke-linecap="round"/>
+  <text x="60" y="105" text-anchor="middle" font-family="system-ui, -apple-system, sans-serif" font-weight="800" font-size="16" fill="white">AZTI</text>
+</svg>
