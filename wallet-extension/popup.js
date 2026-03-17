@@ -8,20 +8,151 @@ let currentNonce = 0;
 const twofa = new TwoFactorAuth();
 let pending2FAResolve = null;
 let socialAuthData = null;
+let rpcConnected = false;
+let reconnectTimer = null;
 
 const DECIMALS = 0;
 const BASE = 1n;
 
 const LOCAL_RPC = "http://127.0.0.1:9944";
 const PUBLIC_RPC = "https://rpc.aztibase.com";
+const RPC_TIMEOUT = 5000;
+const RECONNECT_INTERVAL = 15000;
 
-async function detectRpc() {
-  try {
-    const resp = await fetch(LOCAL_RPC + "/health", { signal: AbortSignal.timeout(1500) });
-    if (resp.ok) return { rpc: LOCAL_RPC, name: "Local Testnet" };
-  } catch {}
-  return { rpc: PUBLIC_RPC, name: "Testnet" };
+// ── Connection management ────────────────────────────────────────
+
+function setConnectionStatus(status, label) {
+  const dot = document.getElementById("conn-dot");
+  const banner = document.getElementById("conn-banner");
+  const bannerText = document.getElementById("conn-banner-text");
+  if (dot) {
+    dot.className = "conn-status " + status;
+    dot.title = label || status;
+  }
+  if (status === "disconnected") {
+    if (banner) { banner.classList.add("show"); }
+    if (bannerText) bannerText.textContent = label || "Cannot connect to network";
+    const balEl = document.getElementById("main-balance");
+    if (balEl && balEl.textContent === "0") {
+      balEl.textContent = "Offline";
+      balEl.classList.add("offline");
+    }
+  } else {
+    if (banner) banner.classList.remove("show");
+    const balEl = document.getElementById("main-balance");
+    if (balEl) balEl.classList.remove("offline");
+  }
+  rpcConnected = status === "connected";
 }
+
+async function probeRpc(url, timeout) {
+  try {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), timeout || RPC_TIMEOUT);
+    const resp = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ jsonrpc: "2.0", method: "aztb_blockNumber", params: [], id: 1 }),
+      signal: ctrl.signal,
+    });
+    clearTimeout(timer);
+    const json = await resp.json();
+    return json.result !== undefined;
+  } catch {
+    return false;
+  }
+}
+
+async function detectAndConnect() {
+  setConnectionStatus("connecting", "Connecting...");
+
+  const stored = await storageGet(["network"]);
+  const savedUrl = stored.network?.rpc;
+
+  // Try saved URL first
+  if (savedUrl) {
+    if (await probeRpc(savedUrl)) {
+      rpcUrl = savedUrl;
+      const name = getNetworkName(rpcUrl);
+      setConnectionStatus("connected", name);
+      updateNetworkUI(name);
+      return;
+    }
+  }
+
+  // Fallback: try local
+  if (await probeRpc(LOCAL_RPC, 2000)) {
+    rpcUrl = LOCAL_RPC;
+    setConnectionStatus("connected", "Local Testnet");
+    updateNetworkUI("Local Testnet");
+    toast("Connected to local node", "info");
+    return;
+  }
+
+  // Fallback: try public (if not already tried)
+  if (savedUrl !== PUBLIC_RPC) {
+    if (await probeRpc(PUBLIC_RPC)) {
+      rpcUrl = PUBLIC_RPC;
+      setConnectionStatus("connected", "Testnet");
+      updateNetworkUI("Testnet");
+      return;
+    }
+  }
+
+  // All failed
+  rpcUrl = savedUrl || PUBLIC_RPC;
+  setConnectionStatus("disconnected", "Cannot connect — check RPC settings");
+  startReconnect();
+}
+
+function startReconnect() {
+  if (reconnectTimer) return;
+  reconnectTimer = setInterval(async () => {
+    if (rpcConnected) { clearInterval(reconnectTimer); reconnectTimer = null; return; }
+    const ok = await probeRpc(rpcUrl, 3000);
+    if (ok) {
+      clearInterval(reconnectTimer);
+      reconnectTimer = null;
+      setConnectionStatus("connected", getNetworkName(rpcUrl));
+      toast("Reconnected", "success");
+      if (secretHex) { refreshBalance(); refreshStaking(); }
+    }
+  }, RECONNECT_INTERVAL);
+}
+
+async function retryConnection() {
+  if (reconnectTimer) { clearInterval(reconnectTimer); reconnectTimer = null; }
+  await detectAndConnect();
+  if (rpcConnected && secretHex) {
+    refreshBalance();
+    refreshStaking();
+  }
+}
+
+function getNetworkName(url) {
+  if (url.includes("127.0.0.1") || url.includes("localhost")) return "Local Testnet";
+  if (url.includes("rpc.aztibase.com")) return "Testnet";
+  return "Custom";
+}
+
+function updateNetworkUI(name) {
+  const netEl = document.getElementById("network-name");
+  if (netEl) netEl.textContent = name;
+  const rpcInput = document.getElementById("settings-rpc");
+  if (rpcInput) rpcInput.value = rpcUrl;
+  updateNetPresetButtons();
+}
+
+function updateNetPresetButtons() {
+  document.querySelectorAll(".net-preset").forEach(btn => btn.classList.remove("active"));
+  const action = rpcUrl.includes("127.0.0.1") || rpcUrl.includes("localhost")
+    ? "netLocal"
+    : rpcUrl.includes("rpc.aztibase.com") ? "netPublic" : "netCustom";
+  const activeBtn = document.querySelector(`[data-action="${action}"]`);
+  if (activeBtn) activeBtn.classList.add("active");
+}
+
+// ── Init ─────────────────────────────────────────────────────────
 
 async function init() {
   try {
@@ -34,19 +165,9 @@ async function init() {
 
   await twofa.load();
 
-  const stored = await storageGet(["network", "encryptedKey"]);
-  if (stored.network?.rpc) {
-    rpcUrl = stored.network.rpc;
-  } else {
-    const detected = await detectRpc();
-    rpcUrl = detected.rpc;
-  }
-  const rpcInput = document.getElementById("settings-rpc");
-  if (rpcInput) rpcInput.value = rpcUrl;
-  const netLabel = rpcUrl.includes("127.0.0.1") ? "Local Testnet" : (stored.network?.name || "Testnet");
-  const netEl = document.getElementById("network-name");
-  if (netEl) netEl.textContent = netLabel;
+  await detectAndConnect();
 
+  const stored = await storageGet(["encryptedKey"]);
   if (stored.encryptedKey) {
     const session = await sessionGet(["sessionSecret", "sessionAddress"]);
     if (session.sessionSecret && session.sessionAddress) {
@@ -229,8 +350,10 @@ function showView(name) {
       addressHex ? "0x" + addressHex : "No wallet";
   } else if (name === "settings") {
     update2FAStatusText();
+    updateNetPresetButtons();
+    const rpcInput = document.getElementById("settings-rpc");
+    if (rpcInput) rpcInput.value = rpcUrl;
   } else if (name === "2fa-setup") {
-    // Reflect current state
     if (twofa.totpSecret && twofa.enabled) {
       document.getElementById("totp-enabled-badge").style.display = "block";
       document.getElementById("totp-setup-btn").style.display = "none";
@@ -247,8 +370,6 @@ function showView(name) {
 
 
 function goBack() {
-  const stored = localStorage.getItem("encryptedKey") ||
-    (chrome?.storage?.local ? "check" : null);
   if (secretHex) {
     showView("main");
   } else {
@@ -262,7 +383,7 @@ function switchTab(tabId, clickedEl) {
   document.querySelectorAll(".tx-list").forEach(l => l.style.display = "none");
   const el = document.getElementById(`tab-${tabId}`);
   if (el) el.style.display = "block";
-  if (tabId === "staking") refreshStaking();
+  if (tabId === "staking-tab") refreshStaking();
 }
 
 // --- Wallet operations ---
@@ -444,49 +565,109 @@ async function lockWallet() {
 
 async function resetWallet() {
   if (!confirm("This will remove your wallet. Make sure you have backed up your key.")) return;
+  const oldAddr = addressHex;
   secretHex = null;
   addressHex = null;
-  await storageRemove(["encryptedKey", "address"]);
+  const keysToRemove = ["encryptedKey", "address", "lastGenesisHash", "socialAuth"];
+  if (oldAddr) keysToRemove.push("txHistory_" + oldAddr);
+  await storageRemove(keysToRemove);
   await sessionRemove(["sessionSecret", "sessionAddress"]);
   showView("onboard");
   toast("Wallet reset", "info");
 }
 
-function updateMainView() {
+async function updateMainView() {
   if (addressHex) {
     document.getElementById("main-address").textContent = shortenAddress(addressHex);
+    await detectChainReset();
     refreshBalance();
     refreshStaking();
+  }
+}
+
+async function detectChainReset() {
+  if (!addressHex || !rpcConnected) return;
+  try {
+    const block0 = await rpcCall("aztb_getBlockByNumber", [0]);
+    const genesisHash = block0?.hash || block0?.block_hash || null;
+    if (!genesisHash) return;
+
+    const stored = await storageGet(["lastGenesisHash"]);
+    if (stored.lastGenesisHash && stored.lastGenesisHash !== genesisHash) {
+      const key = "txHistory_" + addressHex;
+      await storageRemove([key]);
+      const list = document.getElementById("tab-activity");
+      if (list) list.innerHTML = '<div class="empty-state">No transactions yet</div>';
+      toast("Chain reset detected — activity cleared", "info");
+    }
+    await storageSet({ lastGenesisHash: genesisHash });
+  } catch {
+    // non-critical
   }
 }
 
 // --- RPC calls ---
 
 async function rpcCall(method, params) {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), RPC_TIMEOUT);
   const body = JSON.stringify({
     jsonrpc: "2.0",
     method,
     params,
     id: Date.now(),
   });
-  const resp = await fetch(rpcUrl, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body,
-  });
-  const json = await resp.json();
-  if (json.error) throw new Error(json.error.message || JSON.stringify(json.error));
-  return json.result;
+  try {
+    const resp = await fetch(rpcUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body,
+      signal: ctrl.signal,
+    });
+    clearTimeout(timer);
+    const text = await resp.text();
+    let json;
+    try {
+      json = JSON.parse(text);
+    } catch {
+      throw new Error("RPC returned invalid response (is the endpoint correct?)");
+    }
+    if (json.error) throw new Error(json.error.message || JSON.stringify(json.error));
+
+    if (!rpcConnected) {
+      setConnectionStatus("connected", getNetworkName(rpcUrl));
+    }
+    return json.result;
+  } catch (e) {
+    clearTimeout(timer);
+    if (e.name === "AbortError") {
+      setConnectionStatus("disconnected", "RPC timeout");
+      startReconnect();
+      throw new Error("RPC request timed out");
+    }
+    if (e.message.includes("Failed to fetch") || e.message.includes("NetworkError") || e.message.includes("invalid response")) {
+      setConnectionStatus("disconnected", "Cannot connect to " + getNetworkName(rpcUrl));
+      startReconnect();
+    }
+    throw e;
+  }
 }
 
 async function refreshBalance() {
   if (!addressHex) return;
+  const balEl = document.getElementById("main-balance");
   try {
     const balance = await rpcCall("aztb_getBalance", [addressHex]);
     const display = fromBaseUnits(balance || "0");
-    document.getElementById("main-balance").textContent = display;
-  } catch (e) {
-    console.warn("Balance fetch failed:", e);
+    if (balEl) {
+      balEl.textContent = display;
+      balEl.classList.remove("offline");
+    }
+  } catch {
+    if (balEl && !rpcConnected) {
+      balEl.textContent = "Offline";
+      balEl.classList.add("offline");
+    }
   }
 }
 
@@ -495,31 +676,38 @@ async function refreshNonce() {
   try {
     const nonce = await rpcCall("aztb_getNonce", [addressHex]);
     currentNonce = parseInt(nonce, 10) || 0;
-  } catch (e) {
-    console.warn("Nonce fetch failed:", e);
+  } catch {
+    // nonce fetch failed — will retry on next tx
   }
 }
 
 async function refreshStaking() {
   if (!addressHex) return;
+
+  const selfEl = document.getElementById("staking-self");
+  const delEl = document.getElementById("staking-delegated");
+  const rewardsEl = document.getElementById("staking-rewards");
+
   try {
     const info = await rpcCall("aztb_getValidatorStake", [addressHex]);
     if (info && typeof info === "object") {
       const self_stake = info.self_stake || info.selfStake || 0;
       const delegated = info.total_delegated || info.totalDelegated || 0;
-      document.getElementById("staking-self").textContent = fromBaseUnits(String(self_stake)) + " AZTB";
-      const delEl = document.getElementById("staking-delegated");
+      if (selfEl) selfEl.textContent = fromBaseUnits(String(self_stake)) + " AZTB";
       if (delEl) delEl.textContent = fromBaseUnits(String(delegated)) + " AZTB";
     } else if (info && info !== "0") {
-      document.getElementById("staking-self").textContent = fromBaseUnits(String(info)) + " AZTB";
+      if (selfEl) selfEl.textContent = fromBaseUnits(String(info)) + " AZTB";
+    } else {
+      if (selfEl) selfEl.textContent = "0 AZTB";
+      if (delEl) delEl.textContent = "0 AZTB";
     }
   } catch {
-    // staking info may not be available
+    if (selfEl) selfEl.textContent = "0 AZTB";
+    if (delEl) delEl.textContent = "0 AZTB";
   }
 
   try {
     const rewards = await rpcCall("aztb_getEpochRewards", [10]);
-    const rewardsEl = document.getElementById("staking-rewards");
     if (rewardsEl && Array.isArray(rewards)) {
       const addrClean = addressHex.replace(/^0x/, '').toLowerCase();
       let total = 0n;
@@ -529,14 +717,10 @@ async function refreshStaking() {
           if (cAddr === addrClean) total += BigInt(c.amount);
         }
       }
-      if (total > 0n) {
-        rewardsEl.textContent = fromBaseUnits(total.toString()) + " AZTB";
-      } else {
-        rewardsEl.textContent = "0 AZTB";
-      }
+      rewardsEl.textContent = (total > 0n ? fromBaseUnits(total.toString()) : "0") + " AZTB";
     }
   } catch {
-    // rewards may not be available yet
+    if (rewardsEl && !rpcConnected) rewardsEl.textContent = "-- AZTB";
   }
 }
 
@@ -676,6 +860,7 @@ function update2FAStatusText() {
 
 async function sendTransfer() {
   if (!wasm || !secretHex) { toast("Wallet not ready", "error"); return; }
+  if (!rpcConnected) { toast("Not connected to network", "error"); return; }
 
   const to = document.getElementById("send-to").value.trim();
   const amount = document.getElementById("send-amount").value.trim();
@@ -703,6 +888,7 @@ async function sendTransfer() {
 
 async function sendStake() {
   if (!wasm || !secretHex) { toast("Wallet not ready", "error"); return; }
+  if (!rpcConnected) { toast("Not connected to network", "error"); return; }
 
   const amount = document.getElementById("stake-amount").value.trim();
   const gasPrice = parseInt(document.getElementById("stake-gas").value || "1", 10);
@@ -730,6 +916,7 @@ async function sendStake() {
 
 async function sendUnstake() {
   if (!wasm || !secretHex) { toast("Wallet not ready", "error"); return; }
+  if (!rpcConnected) { toast("Not connected to network", "error"); return; }
 
   const amount = document.getElementById("unstake-amount").value.trim();
   if (!amount) { toast("Enter unstake amount", "error"); return; }
@@ -754,6 +941,7 @@ async function sendUnstake() {
 
 async function sendDelegate() {
   if (!wasm || !secretHex) { toast("Wallet not ready", "error"); return; }
+  if (!rpcConnected) { toast("Not connected to network", "error"); return; }
 
   const validator = document.getElementById("delegate-validator").value.trim();
   const amount = document.getElementById("delegate-amount").value.trim();
@@ -779,6 +967,7 @@ async function sendDelegate() {
 
 async function sendUndelegate() {
   if (!wasm || !secretHex) { toast("Wallet not ready", "error"); return; }
+  if (!rpcConnected) { toast("Not connected to network", "error"); return; }
 
   const authed = await require2FA();
   if (!authed) return;
@@ -851,19 +1040,48 @@ async function addTxToHistory(label, addr, amount, type) {
 
 // --- Settings ---
 
+function netLocal() {
+  document.getElementById("settings-rpc").value = LOCAL_RPC;
+  document.querySelectorAll(".net-preset").forEach(b => b.classList.remove("active"));
+  document.querySelector('[data-action="netLocal"]')?.classList.add("active");
+}
+
+function netPublic() {
+  document.getElementById("settings-rpc").value = PUBLIC_RPC;
+  document.querySelectorAll(".net-preset").forEach(b => b.classList.remove("active"));
+  document.querySelector('[data-action="netPublic"]')?.classList.add("active");
+}
+
+function netCustom() {
+  document.querySelectorAll(".net-preset").forEach(b => b.classList.remove("active"));
+  document.querySelector('[data-action="netCustom"]')?.classList.add("active");
+  document.getElementById("settings-rpc").focus();
+}
+
 async function saveSettings() {
-  rpcUrl = document.getElementById("settings-rpc").value.trim();
+  const newUrl = document.getElementById("settings-rpc").value.trim();
+  if (!newUrl) { toast("Enter an RPC URL", "error"); return; }
+
+  const name = getNetworkName(newUrl);
+  rpcUrl = newUrl;
   await storageSet({
-    network: {
-      name: rpcUrl.includes("rpc.aztibase.com") ? "Testnet" : "Custom",
-      rpc: rpcUrl,
-      chainId: "0xA27B",
-    },
+    network: { name, rpc: rpcUrl, chainId: "0xA27B" },
   });
-  document.getElementById("network-name").textContent =
-    rpcUrl.includes("rpc.aztibase.com") ? "Testnet" : "Custom";
+  document.getElementById("network-name").textContent = name;
   chrome.runtime?.sendMessage?.({ type: "network_changed", rpc: rpcUrl }).catch(() => {});
-  toast("Settings saved", "success");
+
+  // Test the new connection
+  setConnectionStatus("connecting", "Testing...");
+  const ok = await probeRpc(rpcUrl, 4000);
+  if (ok) {
+    setConnectionStatus("connected", name);
+    toast("Connected to " + name, "success");
+    if (secretHex) { refreshBalance(); refreshStaking(); }
+  } else {
+    setConnectionStatus("disconnected", "Cannot connect to " + name);
+    toast("Cannot reach " + newUrl, "error");
+    startReconnect();
+  }
 }
 
 async function exportKey() {
@@ -906,6 +1124,10 @@ function toast(msg, type) {
 // --- Delegated click handler (MV3 CSP forbids inline onclick) ---
 
 async function refreshAll() {
+  if (!rpcConnected) {
+    await retryConnection();
+    return;
+  }
   const btn = document.querySelector('.refresh-btn');
   if (btn) btn.classList.add('spinning');
   await Promise.all([refreshBalance(), refreshStaking(), refreshNonce()]);
@@ -919,6 +1141,7 @@ async function refreshAll() {
 
 async function walletFaucet() {
   if (!addressHex) return;
+  if (!rpcConnected) { toast("Not connected to network", "error"); return; }
   toast("Requesting faucet drip...", "info");
   try {
     const result = await rpcCall("aztb_faucetDrip", [addressHex]);
@@ -941,6 +1164,7 @@ const actions = {
   startTotpSetup, confirmTotpSetup, startWebAuthnSetup, disable2FA,
   verify2FAWebAuthn, verify2FATotp, cancel2FA,
   signInGoogle, signInGitHub, completeSocialAuth, refreshAll, walletFaucet,
+  retryConnection, netLocal, netPublic, netCustom,
 };
 
 document.addEventListener("click", (e) => {

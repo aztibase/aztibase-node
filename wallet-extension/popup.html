@@ -3,6 +3,9 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&family=Jura:wght@400;500;600;700&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="styles.css" />
   <title>Aztibase Wallet</title>
 </head>
@@ -10,16 +13,61 @@
   <!-- Header -->
   <div class="header">
     <div class="header-left">
-      <div class="logo">A</div>
+      <div class="logo">
+        <svg viewBox="0 0 64 64" fill="none">
+          <defs>
+            <linearGradient id="hs" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stop-color="#0052FF"/>
+              <stop offset="40%" stop-color="#9B7DFF"/>
+              <stop offset="100%" stop-color="#FF6B9D"/>
+            </linearGradient>
+            <linearGradient id="hf" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stop-color="#0052FF" stop-opacity="0.12"/>
+              <stop offset="50%" stop-color="#9B7DFF" stop-opacity="0.08"/>
+              <stop offset="100%" stop-color="#FF6B9D" stop-opacity="0.05"/>
+            </linearGradient>
+          </defs>
+          <polygon points="32,3 58.85,17.5 58.85,46.5 32,61 5.15,46.5 5.15,17.5" fill="url(#hf)" stroke="url(#hs)" stroke-width="2.5"/>
+          <path d="M22 44 L32 16 L42 44" fill="none" stroke="url(#hs)" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/>
+          <line x1="25.5" y1="35" x2="38.5" y2="35" stroke="url(#hs)" stroke-width="2.5" stroke-linecap="round"/>
+        </svg>
+      </div>
       <h1>Aztibase</h1>
     </div>
-    <span class="network-badge" id="network-name" data-view="settings">Testnet</span>
+    <div class="header-right">
+      <div class="conn-status connecting" id="conn-dot" title="Connecting..."></div>
+      <span class="network-badge" id="network-name" data-view="settings">Testnet</span>
+    </div>
+  </div>
+
+  <!-- Connection error banner -->
+  <div class="conn-banner" id="conn-banner">
+    <span id="conn-banner-text">Cannot connect to network</span>
+    <button class="retry-btn" data-action="retryConnection">Retry</button>
   </div>
 
   <!-- Onboarding view -->
   <div class="view active" id="view-onboard">
     <div style="text-align:center; padding:40px 0 20px">
-      <div class="logo" style="width:64px;height:64px;font-size:28px;margin:0 auto 16px">A</div>
+      <div class="logo-onboard">
+        <svg viewBox="0 0 64 64" fill="none">
+          <defs>
+            <linearGradient id="hs2" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stop-color="#0052FF"/>
+              <stop offset="40%" stop-color="#9B7DFF"/>
+              <stop offset="100%" stop-color="#FF6B9D"/>
+            </linearGradient>
+            <linearGradient id="hf2" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stop-color="#0052FF" stop-opacity="0.12"/>
+              <stop offset="50%" stop-color="#9B7DFF" stop-opacity="0.08"/>
+              <stop offset="100%" stop-color="#FF6B9D" stop-opacity="0.05"/>
+            </linearGradient>
+          </defs>
+          <polygon points="32,3 58.85,17.5 58.85,46.5 32,61 5.15,46.5 5.15,17.5" fill="url(#hf2)" stroke="url(#hs2)" stroke-width="2.5"/>
+          <path d="M22 44 L32 16 L42 44" fill="none" stroke="url(#hs2)" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/>
+          <line x1="25.5" y1="35" x2="38.5" y2="35" stroke="url(#hs2)" stroke-width="2.5" stroke-linecap="round"/>
+        </svg>
+      </div>
       <h2 style="margin-bottom:8px">Welcome to Aztibase</h2>
       <p style="color:var(--text-muted);font-size:13px;margin-bottom:32px">
         Create or import a wallet to get started.
@@ -110,7 +158,25 @@
   <!-- Unlock view -->
   <div class="view" id="view-unlock">
     <div style="text-align:center;padding:60px 0 20px">
-      <div class="logo" style="width:56px;height:56px;font-size:24px;margin:0 auto 16px">A</div>
+      <div class="logo-unlock">
+        <svg viewBox="0 0 64 64" fill="none">
+          <defs>
+            <linearGradient id="hs3" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stop-color="#0052FF"/>
+              <stop offset="40%" stop-color="#9B7DFF"/>
+              <stop offset="100%" stop-color="#FF6B9D"/>
+            </linearGradient>
+            <linearGradient id="hf3" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stop-color="#0052FF" stop-opacity="0.12"/>
+              <stop offset="50%" stop-color="#9B7DFF" stop-opacity="0.08"/>
+              <stop offset="100%" stop-color="#FF6B9D" stop-opacity="0.05"/>
+            </linearGradient>
+          </defs>
+          <polygon points="32,3 58.85,17.5 58.85,46.5 32,61 5.15,46.5 5.15,17.5" fill="url(#hf3)" stroke="url(#hs3)" stroke-width="2.5"/>
+          <path d="M22 44 L32 16 L42 44" fill="none" stroke="url(#hs3)" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/>
+          <line x1="25.5" y1="35" x2="38.5" y2="35" stroke="url(#hs3)" stroke-width="2.5" stroke-linecap="round"/>
+        </svg>
+      </div>
       <h2 style="margin-bottom:20px">Unlock Wallet</h2>
       <div class="form-group">
         <input type="password" id="unlock-pass" placeholder="Enter password" />
@@ -168,15 +234,15 @@
       <div class="staking-overview">
         <div class="staking-row">
           <span class="staking-label">Your Stake</span>
-          <span class="staking-value" id="staking-self">0 AZTB</span>
+          <span class="staking-value" id="staking-self">-- AZTB</span>
         </div>
         <div class="staking-row">
           <span class="staking-label">Delegated</span>
-          <span class="staking-value" id="staking-delegated">0 AZTB</span>
+          <span class="staking-value" id="staking-delegated">-- AZTB</span>
         </div>
         <div class="staking-row">
           <span class="staking-label">Unbonding</span>
-          <span class="staking-value" id="staking-unbonding">0 AZTB</span>
+          <span class="staking-value" id="staking-unbonding">-- AZTB</span>
         </div>
         <div class="staking-row">
           <span class="staking-label">Epoch Rewards</span>
@@ -371,6 +437,17 @@
       <button class="back-btn" data-view="main">&larr;</button>
       <h2>Settings</h2>
     </div>
+
+    <!-- Network presets -->
+    <div class="form-group">
+      <label>Network</label>
+      <div class="network-presets">
+        <button class="net-preset" data-action="netLocal">Local</button>
+        <button class="net-preset active" data-action="netPublic">Public Testnet</button>
+        <button class="net-preset" data-action="netCustom">Custom</button>
+      </div>
+    </div>
+
     <div class="form-group">
       <label>RPC endpoint</label>
       <input type="text" id="settings-rpc" placeholder="https://rpc.aztibase.com" />

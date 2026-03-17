@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
+  <defs>
+    <linearGradient id="hex-stroke" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0052FF"/>
+      <stop offset="40%" stop-color="#9B7DFF"/>
+      <stop offset="100%" stop-color="#FF6B9D"/>
+    </linearGradient>
+    <linearGradient id="hex-fill" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0052FF" stop-opacity="0.12"/>
+      <stop offset="50%" stop-color="#9B7DFF" stop-opacity="0.08"/>
+      <stop offset="100%" stop-color="#FF6B9D" stop-opacity="0.05"/>
+    </linearGradient>
+  </defs>
+  <polygon points="32,3 58.85,17.5 58.85,46.5 32,61 5.15,46.5 5.15,17.5" fill="url(#hex-fill)" stroke="url(#hex-stroke)" stroke-width="2.5"/>
+  <path d="M22 44 L32 16 L42 44" fill="none" stroke="url(#hex-stroke)" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/>
+  <line x1="25.5" y1="35" x2="38.5" y2="35" stroke="url(#hex-stroke)" stroke-width="2.5" stroke-linecap="round"/>
+</svg>

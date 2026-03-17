@@ -245,14 +245,28 @@ async function signPayload(payload) {
 // ── RPC ──────────────────────────────────────────────────────────
 
 async function rpc(method, params) {
-  const resp = await fetch(rpcUrl, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ jsonrpc: "2.0", method, params, id: Date.now() }),
-  });
-  const json = await resp.json();
-  if (json.error) throw new Error(json.error.message || JSON.stringify(json.error));
-  return json.result;
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 8000);
+  try {
+    const resp = await fetch(rpcUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ jsonrpc: "2.0", method, params, id: Date.now() }),
+      signal: ctrl.signal,
+    });
+    clearTimeout(timer);
+    const text = await resp.text();
+    let json;
+    try { json = JSON.parse(text); } catch {
+      throw new Error("RPC returned non-JSON response — check endpoint URL");
+    }
+    if (json.error) throw new Error(json.error.message || JSON.stringify(json.error));
+    return json.result;
+  } catch (e) {
+    clearTimeout(timer);
+    if (e.name === "AbortError") throw new Error("RPC request timed out — node may be offline");
+    throw e;
+  }
 }
 
 // ── Message handler ──────────────────────────────────────────────

@@ -5,13 +5,15 @@
   --border: #30363d;
   --text: #c9d1d9;
   --text-muted: #8b949e;
-  --accent: #58a6ff;
-  --accent-hover: #79b8ff;
+  --accent: #7B6BFF;
+  --accent-hover: #9B8DFF;
+  --accent-soft: rgba(123, 107, 255, 0.15);
   --green: #3fb950;
   --red: #f85149;
   --orange: #d29922;
   --mono: "Fira Code", "JetBrains Mono", monospace;
-  --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --sans: "Instrument Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --accent-font: "Jura", var(--sans);
 }
 
 * {
@@ -34,7 +36,7 @@ body {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 14px 16px 10px;
+  padding: 12px 16px 10px;
   border-bottom: 1px solid var(--border);
 }
 
@@ -47,28 +49,125 @@ body {
 .logo {
   width: 28px;
   height: 28px;
-  border-radius: 50%;
-  background: linear-gradient(135deg, #58a6ff 0%, #1f6feb 100%);
   display: flex;
   align-items: center;
   justify-content: center;
-  font-weight: 700;
-  font-size: 14px;
-  color: #fff;
+  flex-shrink: 0;
+}
+
+.logo svg {
+  width: 28px;
+  height: 28px;
+}
+
+.logo-onboard {
+  width: 64px;
+  height: 64px;
+  margin: 0 auto 16px;
+}
+
+.logo-onboard svg {
+  width: 64px;
+  height: 64px;
+}
+
+.logo-unlock {
+  width: 56px;
+  height: 56px;
+  margin: 0 auto 16px;
+}
+
+.logo-unlock svg {
+  width: 56px;
+  height: 56px;
 }
 
 .header h1 {
   font-size: 15px;
   font-weight: 600;
+  letter-spacing: -0.02em;
+}
+
+.header-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Connection status dot */
+.conn-status {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  transition: background 0.3s;
+}
+
+.conn-status.connected {
+  background: var(--green);
+  box-shadow: 0 0 6px rgba(63, 185, 80, 0.5);
+}
+
+.conn-status.disconnected {
+  background: var(--red);
+  box-shadow: 0 0 6px rgba(248, 81, 73, 0.5);
+}
+
+.conn-status.connecting {
+  background: var(--orange);
+  box-shadow: 0 0 6px rgba(210, 153, 34, 0.5);
+  animation: pulse-dot 1.5s ease-in-out infinite;
+}
+
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
 }
 
 .network-badge {
   font-size: 11px;
+  font-family: var(--accent-font);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
   padding: 2px 8px;
   border-radius: 10px;
-  background: rgba(88, 166, 255, 0.15);
+  background: var(--accent-soft);
   color: var(--accent);
   cursor: pointer;
+}
+
+/* Connection banner */
+.conn-banner {
+  display: none;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  font-size: 12px;
+  font-weight: 500;
+  background: rgba(248, 81, 73, 0.1);
+  border-bottom: 1px solid rgba(248, 81, 73, 0.2);
+  color: var(--red);
+}
+
+.conn-banner.show {
+  display: flex;
+}
+
+.conn-banner .retry-btn {
+  margin-left: auto;
+  background: none;
+  border: 1px solid var(--red);
+  color: var(--red);
+  font-size: 11px;
+  padding: 2px 10px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-family: var(--sans);
+}
+
+.conn-banner .retry-btn:hover {
+  background: rgba(248, 81, 73, 0.15);
 }
 
 /* Views */
@@ -109,7 +208,13 @@ body {
 .balance-amount {
   font-size: 32px;
   font-weight: 700;
-  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+}
+
+.balance-amount.offline {
+  color: var(--text-muted);
+  font-size: 16px;
+  font-weight: 500;
 }
 
 .balance-symbol {
@@ -132,8 +237,8 @@ body {
 }
 
 .refresh-btn:hover {
-  color: var(--primary);
-  border-color: var(--primary);
+  color: var(--accent);
+  border-color: var(--accent);
 }
 
 .refresh-btn.spinning {
@@ -179,7 +284,7 @@ body {
   width: 40px;
   height: 40px;
   border-radius: 50%;
-  background: rgba(88, 166, 255, 0.2);
+  background: var(--accent-soft);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -275,9 +380,9 @@ body {
 
 .tx-amount {
   text-align: right;
-  font-family: var(--mono);
   font-size: 13px;
   font-weight: 500;
+  font-variant-numeric: tabular-nums;
 }
 
 .tx-amount.negative {
@@ -316,8 +421,8 @@ body {
 }
 
 .staking-value {
-  font-family: var(--mono);
   font-weight: 500;
+  font-variant-numeric: tabular-nums;
 }
 
 /* Forms */
@@ -436,6 +541,39 @@ body {
   font-weight: 600;
 }
 
+/* Network selector in settings */
+.network-presets {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
+.net-preset {
+  flex: 1;
+  padding: 8px 4px;
+  font-size: 11px;
+  font-family: var(--sans);
+  font-weight: 500;
+  text-align: center;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.net-preset:hover {
+  border-color: var(--accent);
+  color: var(--text);
+}
+
+.net-preset.active {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
 /* Toast */
 .toast {
   position: fixed;
@@ -469,7 +607,7 @@ body {
 }
 
 .toast.info {
-  background: rgba(88, 166, 255, 0.9);
+  background: rgba(123, 107, 255, 0.9);
   color: #fff;
 }
 
@@ -498,9 +636,9 @@ body {
 }
 
 .validator-stake {
-  font-family: var(--mono);
   font-size: 13px;
   font-weight: 500;
+  font-variant-numeric: tabular-nums;
 }
 
 /* Settings */
@@ -526,10 +664,6 @@ body {
   border-top-color: var(--accent);
   border-radius: 50%;
   animation: spin 0.6s linear infinite;
-}
-
-@keyframes spin {
-  to { transform: rotate(360deg); }
 }
 
 /* Scrollbar */
