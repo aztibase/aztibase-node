@@ -5,6 +5,24 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ---
 
+## Epoch Stall Fix + Wallet Hardening + Sentinel Tier 2 Prep (2026-03-17)
+
+### Fixed
+- **Epoch boundary consensus stall**: Chain stalled at height 1000 (epoch boundary) because UpdateValidatorSet included staked-but-offline validators. Consensus engine then expected blocks from non-existent nodes, causing permanent phantom parent desync. Fix: only update stakes for validators already in the consensus set.
+- **Stake auto-registration bug**: Any wallet sending a Stake transaction was automatically registered as a validator. Now requires prior validator registration (genesis or future RegisterValidator tx). Non-validators receive "ValidatorNotFound" error.
+- **Wallet extension RPC resilience**: Auto-fallback (saved URL → localhost → public), 5s timeout, JSON parse protection, auto-reconnect every 15s, chain reset detection via genesis hash comparison.
+- **Stale activity after chain reset**: Wallet extension now clears address-specific tx history when genesis hash changes.
+
+### Added
+- **Wallet extension branding**: Hexagon SVG logo, connection status indicator (green/red/yellow dot), network preset buttons (Local/Public/Custom).
+- **Sentinel CSV export**: `--sentinel-export` CLI flag writes 15-feature CSV per scoring tick. Enabled in both testnet scripts.
+- **Tier 2 training script**: `tools/train_sentinel.py` — PyTorch autoencoder (15→8→4→8→15), exports ONNX model + normalization params.
+
+### Known Issues
+- **Phantom parent desync**: Consensus accumulates phantom parents over ~30 min of operation, eventually stalling. Separate from epoch fix. Needs focused debugging of VRF seed / round synchronization.
+
+---
+
 ## Testnet Hardening (2026-03-16)
 
 ### Added

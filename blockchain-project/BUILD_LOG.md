@@ -21,6 +21,23 @@ Entries are prepended (newest first).
 
 ## Entries
 
+### Epoch Stall Fix + Staking Guard + Sentinel Tier 2 Prep (2026-03-17)
+- **Date**: 2026-03-17
+- **Sprint**: Post-060
+- **Commit**: (this commit)
+- **Files Changed**:
+  - `crates/aztibase-node/src/pipeline.rs` — (1) Added `consensus_addrs` field to track validators known to consensus engine. Epoch boundary UpdateValidatorSet now only includes validators already in consensus set, preventing staked-but-offline validators from breaking consensus. (2) Fixed participation tracking: removed broken auto-add of all staking validators. (3) Stake transactions from non-validators now return ValidatorNotFound instead of auto-registering as validator. (4) `bootstrap_genesis_validators` changed to `&mut self` to seed consensus_addrs.
+  - `data/genesis/genesis.toml` — Removed validator-4 (only 3 nodes run locally).
+  - `start-testnet.sh` — Added `--sentinel-export` flag to all 3 nodes for CSV data collection.
+  - `start-testnet-public.sh` — Added `--sentinel-export` flag + `batch_archive.redb` to cleanup list.
+  - `tools/train_sentinel.py` — New file. PyTorch autoencoder training script for Tier 2 ONNX model (15→8→4→8→15 architecture, MSE loss, 99th percentile anomaly threshold). Exports `sentinel_v1.onnx` + normalization params.
+  - `wallet-extension/popup.html` — Brand hexagon SVG logo, connection status dot, network preset buttons, Google Fonts.
+  - `wallet-extension/popup.js` — RPC auto-fallback (saved→localhost→public), 5s timeout, auto-reconnect, chain reset detection, JSON parse protection.
+  - `wallet-extension/styles.css` — Brand purple accent, connection status indicators, network preset styling.
+  - `wallet-extension/background.js` — 8s RPC timeout, JSON parse protection.
+- **Review Notes**: Chain stalled at epoch boundary (height 1000) due to 4→5 validator set expansion including offline validators. Fix: consensus_addrs gate prevents adding ghost validators. Separate bug: Stake tx auto-registered wallets as validators — now requires prior registration. Phantom parent desync still occurs independently after ~4000 blocks — needs focused debugging (see KNOWN ISSUES). 68 pipeline tests pass. 246 total node tests pass.
+- **Security Flags**: 0 ELEVATED. Staking auto-registration was a privilege escalation vector (any wallet could become validator by staking) — now fixed.
+
 ### Web3 Positioning Brief + PDF (2026-03-16)
 - **Date**: 2026-03-16
 - **Sprint**: Post-060

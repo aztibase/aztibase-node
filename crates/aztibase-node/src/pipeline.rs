@@ -92,6 +92,7 @@ pub struct ExecutionPipeline {
     slash_tx: mpsc::Sender<SlashEvent>,
     consensus_tx: Option<mpsc::Sender<aztibase_consensus::ConsensusInput>>,
     epoch_participation: HashSet<[u8; 32]>,
+    consensus_addrs: HashSet<[u8; 32]>,
     agent_policy_store: Arc<RwLock<AgentPolicyStore>>,
     l2_registry: Arc<RwLock<L2Registry>>,
     l2_anchor_store: Arc<RwLock<L2AnchorStore>>,
@@ -205,6 +206,7 @@ impl ExecutionPipeline {
             slash_tx: slash_tx_init,
             consensus_tx: None,
             epoch_participation: HashSet::new(),
+            consensus_addrs: HashSet::new(),
             agent_policy_store: Arc::new(RwLock::new(agent_policies)),
             l2_registry: Arc::new(RwLock::new(l2_registry)),
             l2_anchor_store: Arc::new(RwLock::new(l2_anchors)),
@@ -294,9 +296,12 @@ impl ExecutionPipeline {
     /// data from round 0. Call after `apply_genesis()`.
     #[allow(clippy::type_complexity)]
     pub async fn bootstrap_genesis_validators(
-        &self,
+        &mut self,
         validators: &[([u8; 32], u128, Option<[u8; 32]>)],
     ) {
+        for &(vid, _, _) in validators {
+            self.consensus_addrs.insert(vid);
+        }
         let mut staking = self.staking_store.write().await;
         for &(vid, stake, ed25519_pubkey) in validators {
             if staking
@@ -456,11 +461,8 @@ impl ExecutionPipeline {
         for tx in &routed {
             self.epoch_participation.insert(*tx.sender());
         }
-        {
-            let staking = self.staking_store.read().await;
-            for (vid, _) in staking.active_set_snapshot(MIN_VALIDATOR_STAKE) {
-                self.epoch_participation.insert(vid);
-            }
+        for vid in &self.consensus_addrs {
+            self.epoch_participation.insert(*vid);
         }
 
         let mut state = self.state.write().await;
@@ -1966,7 +1968,7 @@ impl ExecutionPipeline {
         }
 
         // Execute Stake transactions.
-        for (staker, amount, nonce, ed25519_pubkey) in &stakes {
+        for (staker, amount, nonce, _ed25519_pubkey) in &stakes {
             let mut preimage = Vec::new();
             preimage.extend_from_slice(staker);
             preimage.extend_from_slice(&amount.to_le_bytes());
@@ -2009,15 +2011,7 @@ impl ExecutionPipeline {
             let result = if staking.get_validator(staker).is_some() {
                 staking.add_stake(*staker, *amount, MAX_VALIDATOR_STAKE_CAP)
             } else {
-                staking.register_validator_with_keys(
-                    *staker,
-                    *amount,
-                    MIN_VALIDATOR_STAKE,
-                    MAX_VALIDATOR_STAKE_CAP,
-                    self.current_round,
-                    *ed25519_pubkey,
-                    None,
-                )
+                Err(aztibase_execution::StakingError::ValidatorNotFound)
             };
             drop(staking);
 
@@ -3110,10 +3104,20 @@ impl ExecutionPipeline {
                     self.epoch_participation.clear();
 
                     // Propagate updated validator set to consensus engine.
+                    // Only include validators already known to consensus — prevents
+                    // adding staked-but-offline validators that would cause phantom
+                    // parent desync (see epoch-boundary stall bug).
                     if let Some(ref ctx) = self.consensus_tx {
                         let mut new_vs = aztibase_consensus::ValidatorSet::new();
                         let staking_read = self.staking_store.read().await;
                         for (vid, stake) in &active_set {
+                            if !self.consensus_addrs.contains(vid) {
+                                tracing::debug!(
+                                    validator = %short_hex(vid),
+                                    "Skipping validator not in consensus set"
+                                );
+                                continue;
+                            }
                             new_vs.add(*vid, *stake);
                             if let Some(vs) = staking_read.get_validator(vid)
                                 && let Some(pk) = vs.ed25519_pubkey
@@ -3255,6 +3259,7 @@ mod tests {
             slash_tx: slash_tx_init,
             consensus_tx: None,
             epoch_participation: HashSet::new(),
+            consensus_addrs: HashSet::new(),
             agent_policy_store: Arc::new(RwLock::new(AgentPolicyStore::new())),
             l2_registry: Arc::new(RwLock::new(L2Registry::new())),
             l2_anchor_store: Arc::new(RwLock::new(L2AnchorStore::new())),
@@ -3795,6 +3800,7 @@ mod tests {
             slash_tx: slash_tx_init,
             consensus_tx: None,
             epoch_participation: HashSet::new(),
+            consensus_addrs: HashSet::new(),
             agent_policy_store: Arc::new(RwLock::new(AgentPolicyStore::new())),
             l2_registry: Arc::new(RwLock::new(L2Registry::new())),
             l2_anchor_store: Arc::new(RwLock::new(L2AnchorStore::new())),
@@ -5689,7 +5695,7 @@ mod tests {
     #[tokio::test]
     async fn genesis_bootstrap_registers_validators() {
         let (_tx, rx) = mpsc::channel(1);
-        let pipeline = make_pipeline(rx);
+        let mut pipeline = make_pipeline(rx);
         let validators = vec![
             ([1u8; 32], 100_000u128, None),
             ([2u8; 32], 200_000u128, None),
@@ -6075,6 +6081,8 @@ mod tests {
                 )
                 .unwrap();
         }
+        pipeline.consensus_addrs.insert(alice);
+        pipeline.consensus_addrs.insert(validator_b);
 
         let stake_before = {
             let staking = pipeline.staking_store.read().await;
@@ -6153,6 +6161,8 @@ mod tests {
                 )
                 .unwrap();
         }
+
+        pipeline.consensus_addrs.insert(alice);
 
         // Wire a consensus_tx to capture the UpdateValidatorSet message.
         let (ctx, mut crx) = mpsc::channel(16);

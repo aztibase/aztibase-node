@@ -1,10 +1,10 @@
 # PROJECT STATUS: Aztibase Network
 
-**Last Updated:** 2026-03-16
-**Updated By:** node-engineer + tokenomics-engineer
+**Last Updated:** 2026-03-17
+**Updated By:** consensus-engineer + node-engineer
 **Current Phase:** M9 -- Mainnet Prep
-**Current Sprint:** 060 (Sprint E) — AI Sentinel Tier 1 + CI/CD
-**Sprint Status:** AI Sentinel Tier 1 shipped (observer mode, 15-feature heuristic scorer, RPC + WebSocket + Explorer integration). CI/CD hardened (docs-site build job, tag-triggered release automation). Version 0.1.3. 985 tests pass. Clippy clean, fmt clean.
+**Current Sprint:** Post-060 — Stability fixes + Sentinel Tier 2 prep
+**Sprint Status:** Epoch boundary stall fixed (consensus_addrs gate). Staking auto-registration bug fixed. Wallet extension hardened (RPC resilience, branding). Sentinel CSV export + Tier 2 training script ready. **BLOCKER: phantom parent desync stalls chain after ~4000 blocks — must be resolved before any deployment.** Version 0.1.3. 246 node tests pass. Clippy clean, fmt clean.
 
 ---
 
@@ -82,11 +82,14 @@
 ### In Progress
 - Mainnet launch preparation (M9)
 - Friends testnet rollout — invitations drafted, coordinator script ready
+- Phantom parent desync debugging — consensus stalls after ~4000 blocks
 
 ### Blocked
 - Mainnet launch blocked on: Aztibase Systems coexistence agreement (legal), public testnet infrastructure deployment (VPS provisioning)
+- **Testnet deployment blocked on**: phantom parent desync bug — chain stalls after ~30 min of operation. Must fix before any persistent testnet.
 
 ### Recently Completed
+- **Post-060 (2026-03-17)**: Epoch stall fix (consensus_addrs gate prevents ghost validators at epoch boundary), staking auto-registration bug fixed (wallets no longer become validators by staking), wallet extension hardened (RPC auto-fallback, branding, chain reset detection), Sentinel CSV export + Tier 2 ONNX training script.
 - **Sprint 060 (2026-03-16)**: AI Sentinel Tier 1 — 15-feature heuristic scorer, SentinelState with RPC + WebSocket bridge, explorer health panel, CI/CD docs-site job + release automation, version 0.1.3, 985 tests (+11).
 - **Post-059 (2026-03-16)**: Full staking validated on live testnet — stake (+50K), unstake (20K, unbonding ~21d), delegate (10K validator2→validator1), epoch rewards (2 epochs, 1,521/epoch, 70/15/10/5 split, 266/validator). All via `wallet --rpc` CLI. Cross-node consistent.
 - **Post-059 (2026-03-15)**: GitHub release v0.1.2 — validator + fullnode + wallet packages. Fullnode package updated with public DNS boot nodes.
