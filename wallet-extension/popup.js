@@ -1060,6 +1060,15 @@ async function loadTxHistory() {
   }
 }
 
+async function clearHistory() {
+  if (!addressHex) return;
+  const key = "txHistory_" + addressHex;
+  await storageSet({ [key]: [] });
+  const list = document.getElementById("tab-activity");
+  if (list) list.innerHTML = '<div class="empty-state">No transactions yet</div>';
+  toast("Activity history cleared", "success");
+}
+
 async function addTxToHistory(label, addr, amount, type) {
   const list = document.getElementById("tab-activity");
   const empty = list.querySelector(".empty-state");
@@ -1198,7 +1207,7 @@ async function walletFaucet() {
 
 const actions = {
   goBack, createWallet, confirmMnemonic, importWallet, unlockWallet,
-  lockWallet, resetWallet, copyAddress, sendTransfer, sendStake,
+  lockWallet, resetWallet, clearHistory, copyAddress, sendTransfer, sendStake,
   sendUnstake, sendDelegate, sendUndelegate, saveSettings, exportKey,
   startTotpSetup, confirmTotpSetup, startWebAuthnSetup, disable2FA,
   verify2FAWebAuthn, verify2FATotp, cancel2FA,
