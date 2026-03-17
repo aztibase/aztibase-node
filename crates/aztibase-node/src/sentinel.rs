@@ -425,11 +425,55 @@ pub async fn run_sentinel(
 ) {
     let mut scorer = ChainHealthScorer::new();
     let mut last_scored_batch: u64 = 0;
+    let mut last_seen_batch: u64 = 0;
+    let mut last_progress_time = std::time::Instant::now();
+    let mut stall_reported = false;
+    const STALL_THRESHOLD: std::time::Duration = std::time::Duration::from_secs(30);
 
     loop {
         tokio::time::sleep(std::time::Duration::from_secs(2)).await;
 
         let current_batch = handles.batch_count.load(Ordering::Relaxed);
+
+        // Track progress against the last *seen* batch, not last scored
+        if current_batch > last_seen_batch {
+            last_seen_batch = current_batch;
+            last_progress_time = std::time::Instant::now();
+            stall_reported = false;
+        }
+
+        // Detect chain stall — no new batches for 30+ seconds
+        let stalled = last_progress_time.elapsed() > STALL_THRESHOLD && current_batch > 0;
+        if stalled && !stall_reported {
+            stall_reported = true;
+            let stall_secs = last_progress_time.elapsed().as_secs();
+            let stall_input = SentinelInput {
+                batch_height: current_batch,
+                commit_latency_us: 0,
+                txs_processed: 0,
+                base_fee: handles.base_fee.load(Ordering::Relaxed),
+                equivocations: 0,
+                active_validators: handles.active_validators.load(Ordering::Relaxed),
+                total_gas_used: 0,
+                gas_limit: 0,
+                empty_batches: 0,
+                total_batches_window: 0,
+                ms_since_last_finality: (stall_secs * 1000) as u64,
+                peer_count: handles.peer_count.load(Ordering::Relaxed),
+                mempool_size: handles.mempool_size.load(Ordering::Relaxed),
+            };
+            let health = scorer.score(&stall_input);
+            tracing::warn!(
+                score = health.score,
+                level = ?health.level,
+                stall_secs = stall_secs,
+                batch = current_batch,
+                "Chain stall detected — no new batches"
+            );
+            state.push(health).await;
+            continue;
+        }
+
         if current_batch < last_scored_batch + interval_batches {
             continue;
         }
