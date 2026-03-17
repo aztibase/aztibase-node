@@ -904,8 +904,15 @@ async function sendStake() {
     if (signedHex.startsWith("error:")) { toast(signedHex, "error"); return; }
 
     const txHash = await rpcCall("aztb_sendRawTransaction", [signedHex]);
-    toast(`Staked! TX: ${txHash.slice(0, 16)}...`, "success");
-    addTxToHistory("Stake", addressHex, amount, "stake");
+    toast(`Stake TX broadcast: ${txHash.slice(0, 16)}...`, "info");
+    const receipt = await pollReceipt(txHash);
+    if (receipt && receipt.success === false) {
+      toast(`Stake failed: ${receipt.error || "execution rejected"}`, "error");
+      addTxToHistory("Stake (failed)", addressHex, amount, "stake");
+    } else {
+      toast("Staked successfully!", "success");
+      addTxToHistory("Stake", addressHex, amount, "stake");
+    }
     refreshBalance();
     refreshStaking();
     showView("main");
@@ -931,8 +938,15 @@ async function sendUnstake() {
     if (signedHex.startsWith("error:")) { toast(signedHex, "error"); return; }
 
     const txHash = await rpcCall("aztb_sendRawTransaction", [signedHex]);
-    toast(`Unstaked! TX: ${txHash.slice(0, 16)}...`, "success");
-    addTxToHistory("Unstake", addressHex, amount, "stake");
+    toast(`Unstake TX broadcast: ${txHash.slice(0, 16)}...`, "info");
+    const receipt = await pollReceipt(txHash);
+    if (receipt && receipt.success === false) {
+      toast(`Unstake failed: ${receipt.error || "execution rejected"}`, "error");
+      addTxToHistory("Unstake (failed)", addressHex, amount, "stake");
+    } else {
+      toast("Unstaked successfully!", "success");
+      addTxToHistory("Unstake", addressHex, amount, "stake");
+    }
     showView("main");
   } catch (e) {
     toast(`Unstake failed: ${e.message}`, "error");
@@ -957,8 +971,15 @@ async function sendDelegate() {
     if (signedHex.startsWith("error:")) { toast(signedHex, "error"); return; }
 
     const txHash = await rpcCall("aztb_sendRawTransaction", [signedHex]);
-    toast(`Delegated! TX: ${txHash.slice(0, 16)}...`, "success");
-    addTxToHistory("Delegate", validator, amount, "stake");
+    toast(`Delegate TX broadcast: ${txHash.slice(0, 16)}...`, "info");
+    const receipt = await pollReceipt(txHash);
+    if (receipt && receipt.success === false) {
+      toast(`Delegate failed: ${receipt.error || "execution rejected"}`, "error");
+      addTxToHistory("Delegate (failed)", validator, amount, "stake");
+    } else {
+      toast("Delegated successfully!", "success");
+      addTxToHistory("Delegate", validator, amount, "stake");
+    }
     showView("main");
   } catch (e) {
     toast(`Delegate failed: ${e.message}`, "error");
@@ -978,12 +999,30 @@ async function sendUndelegate() {
     if (signedHex.startsWith("error:")) { toast(signedHex, "error"); return; }
 
     const txHash = await rpcCall("aztb_sendRawTransaction", [signedHex]);
-    toast(`Undelegated! TX: ${txHash.slice(0, 16)}...`, "success");
-    addTxToHistory("Undelegate", addressHex, "--", "stake");
+    toast(`Undelegate TX broadcast: ${txHash.slice(0, 16)}...`, "info");
+    const receipt = await pollReceipt(txHash);
+    if (receipt && receipt.success === false) {
+      toast(`Undelegate failed: ${receipt.error || "execution rejected"}`, "error");
+      addTxToHistory("Undelegate (failed)", addressHex, "--", "stake");
+    } else {
+      toast("Undelegated successfully!", "success");
+      addTxToHistory("Undelegate", addressHex, "--", "stake");
+    }
     showView("main");
   } catch (e) {
     toast(`Undelegate failed: ${e.message}`, "error");
   }
+}
+
+async function pollReceipt(txHash, retries = 5) {
+  for (let i = 0; i < retries; i++) {
+    await new Promise(r => setTimeout(r, 2000));
+    try {
+      const receipt = await rpcCall("aztb_getTransactionReceipt", [txHash]);
+      if (receipt) return receipt;
+    } catch { /* not yet available */ }
+  }
+  return null;
 }
 
 // --- Activity list ---
@@ -1147,7 +1186,7 @@ async function walletFaucet() {
     const result = await rpcCall("aztb_faucetDrip", [addressHex]);
     if (result && result.amount) {
       toast("Received " + fromBaseUnits(String(result.amount)) + " AZTB", "success");
-      addTxToHistory("Faucet Drip", "faucet", fromBaseUnits(String(result.amount)) + " AZTB");
+      addTxToHistory("Faucet Drip", "faucet", fromBaseUnits(String(result.amount)));
     } else {
       toast("Faucet drip sent", "success");
     }
