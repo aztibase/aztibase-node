@@ -20,5 +20,8 @@ rand = { workspace = true }
 zeroize = { workspace = true }
 getrandom = { version = "0.2", features = ["js"] }
 
+[package.metadata.wasm-pack.profile.release]
+wasm-opt = false
+
 [dev-dependencies]
 wasm-bindgen-test = "0.3"

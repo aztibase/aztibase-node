@@ -1,0 +1,33 @@
+/* tslint:disable */
+/* eslint-disable */
+export const memory: WebAssembly.Memory;
+export const addressFromSecret: (a: number, b: number, c: number) => void;
+export const buildEstimateGasRequest: (a: number, b: number, c: number, d: number) => void;
+export const buildGetActiveValidatorsRequest: (a: number, b: number) => void;
+export const buildGetBalanceRequest: (a: number, b: number, c: number, d: number) => void;
+export const buildGetNonceRequest: (a: number, b: number, c: number, d: number) => void;
+export const buildGetValidatorStakeRequest: (a: number, b: number, c: number, d: number) => void;
+export const buildSendTxRequest: (a: number, b: number, c: number, d: number) => void;
+export const generateKeypair: (a: number) => void;
+export const signDelegate: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: bigint, i: bigint) => void;
+export const signRegisterValidator: (a: number, b: number, c: number, d: number, e: number, f: bigint, g: bigint) => void;
+export const signStake: (a: number, b: number, c: number, d: number, e: number, f: bigint, g: bigint) => void;
+export const signTransfer: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: bigint, i: bigint) => void;
+export const signUndelegate: (a: number, b: number, c: number, d: bigint, e: bigint) => void;
+export const signUnstake: (a: number, b: number, c: number, d: number, e: number, f: bigint, g: bigint) => void;
+export const blake3Hash: (a: number, b: number, c: number) => void;
+export const buildHeaderRequest: (a: number, b: bigint, c: bigint) => void;
+export const latestSyncedRound: (a: number, b: number) => number;
+export const verifyHeaderChain: (a: number, b: number, c: number, d: number, e: bigint) => number;
+export const verifyLightClientProof: (a: number, b: number, c: number, d: number) => number;
+export const verifyMerkleProof: (a: number, b: number, c: number, d: number, e: number, f: number) => number;
+export const verifyVerkleProof: (a: number, b: number, c: number, d: number) => number;
+export const browserPerTxLimit: (a: number) => void;
+export const browserSpendingLimit: (a: number) => void;
+export const checkBrowserBalance: (a: number, b: number) => number;
+export const checkBrowserTx: (a: number, b: number) => number;
+export const __wbindgen_export: (a: number) => void;
+export const __wbindgen_add_to_stack_pointer: (a: number) => number;
+export const __wbindgen_export2: (a: number, b: number) => number;
+export const __wbindgen_export3: (a: number, b: number, c: number, d: number) => number;
+export const __wbindgen_export4: (a: number, b: number, c: number) => void;
