@@ -12,13 +12,15 @@ Quick Start:
   1. Run: bash start.sh
      (This auto-generates your validator keys on first run)
 
-  2. Get testnet tokens:
-     Use the Faucet button in the wallet extension, or from the dashboard.
+  2. Install the Aztibase Wallet extension (Chrome)
+     Connect to http://127.0.0.1:9944
 
-  3. Stake to become a validator:
-     ./aztibase.exe wallet stake --amount 10000 --validator-key keys/validator.json
+  3. Hit the Faucet button to get testnet AZTB
 
-  4. Open the dashboard:
+  4. Go to Staking tab → hit "Become Validator"
+     That's it — you're a validator at the next epoch.
+
+  5. Open the dashboard:
      http://127.0.0.1:8080
 
 How It Works:
