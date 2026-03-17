@@ -4,7 +4,7 @@
 **Updated By:** consensus-engineer + node-engineer
 **Current Phase:** M9 -- Mainnet Prep
 **Current Sprint:** Post-060 — Stability fixes + Sentinel Tier 2 prep
-**Sprint Status:** Epoch boundary stall fixed. Staking auto-registration fixed. Wallet extension hardened. Sentinel CSV export + Tier 2 training script ready. **Phantom parent desync FIXED** (root cause: missing child back-patch in `insert_relaxed()`). Version 0.1.3. 988 tests pass (+3 new). Clippy clean, fmt clean. No blockers.
+**Sprint Status:** All consensus bugs fixed: phantom parent desync (12,674 blocks validated), epoch boundary stall, staking auto-registration. RegisterValidator TxKind (0x1C) implemented — zero-stake registration enabled. Wallet extension: Become Validator button, receipt verification, WASM rebuilt. Testnet running for ONNX data collection (need 2 days / 500+ sentinel rows). Version 0.1.3. 610+ tests pass. Clippy clean, fmt clean. **No blockers. Next: train Tier 2 ONNX, Tailscale friend onboarding, GitHub release v0.1.4.**
 
 ---
 
