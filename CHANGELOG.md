@@ -5,6 +5,15 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ---
 
+## Phantom Parent Desync Fix (2026-03-17)
+
+### Fixed
+- **Consensus stall after ~4000 blocks (phantom parent desync)**: Root cause was missing child back-patch in `insert_relaxed()`. When gossip delivered blocks out of order (child before parent), the parent's `children` set was never updated. This caused `causal_order()` to produce different topological sort orders on different nodes, diverging VRF seeds and permanently stalling consensus. Fix: back-patch children when an orphaned parent resolves.
+- **RoundState prune too aggressive**: `prune_before()` kept only 2 rounds below committed round, but `select_parents()` looks back 16 rounds. This limited parent selection to ~2 rounds of data, weakening DAG connectivity. Fixed by aligning the buffer to 16 rounds (matching `DAG_RETENTION_BUFFER`).
+- **Orphan parents never cleaned up**: `orphan_parents` set grew indefinitely. Now evicted during DAG pruning when no retained block references them.
+
+---
+
 ## Epoch Stall Fix + Wallet Hardening + Sentinel Tier 2 Prep (2026-03-17)
 
 ### Fixed
@@ -18,8 +27,6 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 - **Sentinel CSV export**: `--sentinel-export` CLI flag writes 15-feature CSV per scoring tick. Enabled in both testnet scripts.
 - **Tier 2 training script**: `tools/train_sentinel.py` — PyTorch autoencoder (15→8→4→8→15), exports ONNX model + normalization params.
 
-### Known Issues
-- **Phantom parent desync**: Consensus accumulates phantom parents over ~30 min of operation, eventually stalling. Separate from epoch fix. Needs focused debugging of VRF seed / round synchronization.
 
 ---
 

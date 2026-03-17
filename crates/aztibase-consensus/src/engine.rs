@@ -207,9 +207,10 @@ impl RoundState {
     }
 
     /// Remove round entries older than `committed_round` to bound memory usage.
-    /// Keeps a 2-round buffer below the committed round for parent lookups.
+    /// Keeps a 16-round buffer (matching DAG_RETENTION_BUFFER) so that
+    /// `select_parents()` can scan its full 16-round lookback window.
     pub fn prune_before(&mut self, committed_round: u64) {
-        let safe = committed_round.saturating_sub(2);
+        let safe = committed_round.saturating_sub(16);
         if safe <= self.prune_horizon {
             return;
         }
@@ -1191,16 +1192,16 @@ mod tests {
     #[test]
     fn round_pruning_removes_old_rounds() {
         let mut state = RoundState::new();
-        for round in 0..20u64 {
+        for round in 0..40u64 {
             state.record_vertex(round, [round as u8; 32]);
         }
-        assert_eq!(state.tracked_rounds(), 20);
+        assert_eq!(state.tracked_rounds(), 40);
 
-        state.prune_before(10);
-        // Rounds 0..8 pruned (10 - 2 buffer = 8), rounds 8..19 remain
-        assert_eq!(state.vertices_at_round(7).len(), 0);
-        assert_eq!(state.vertices_at_round(8).len(), 1);
-        assert_eq!(state.vertices_at_round(10).len(), 1);
+        state.prune_before(30);
+        // Rounds 0..14 pruned (30 - 16 buffer = 14), rounds 14..39 remain
+        assert_eq!(state.vertices_at_round(13).len(), 0);
+        assert_eq!(state.vertices_at_round(14).len(), 1);
+        assert_eq!(state.vertices_at_round(30).len(), 1);
     }
 
     #[test]

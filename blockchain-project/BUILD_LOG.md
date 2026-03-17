@@ -21,6 +21,20 @@ Entries are prepended (newest first).
 
 ## Entries
 
+### Phantom Parent Desync Fix (2026-03-17)
+- **Date**: 2026-03-17
+- **Sprint**: Post-060
+- **Commit**: (this commit)
+- **Files Changed**:
+  - `crates/aztibase-consensus/src/dag_store.rs` — (1) **Root cause fix**: `insert_relaxed()` now back-patches the `children` set when a previously-orphaned parent block arrives. Before this fix, out-of-order gossip delivery (child inserted before parent) left the parent's `children` set empty, causing `causal_order()` to produce different topological sort orders on different nodes → VRF seed divergence → consensus stall after ~4000 blocks. (2) `prune_before()` now evicts stale `orphan_parents` entries that no retained block references. (3) Three new unit tests: `out_of_order_insert_backpatches_children`, `causal_order_deterministic_regardless_of_insertion_order`, `prune_evicts_stale_orphan_parents`.
+  - `crates/aztibase-consensus/src/engine.rs` — `RoundState::prune_before()` buffer changed from 2 rounds to 16 rounds, aligning with `DAG_RETENTION_BUFFER`. This ensures `select_parents()` can scan its full 16-round lookback window, improving DAG connectivity and reducing orphaned blocks. Updated existing `round_pruning_removes_old_rounds` test.
+  - `crates/aztibase-node/src/sentinel.rs` — Removed unnecessary `as u64` cast (clippy fix).
+- **Tests**: 988 pass (+3 new), 0 fail. Clippy 0 warnings, fmt clean.
+- **Review Notes**: The phantom parent desync was caused by a missing child back-patch in `insert_relaxed()`. When gossip delivered blocks out of order (child before parent), the parent's `children` set was never updated. This caused `causal_order()` to compute different in-degrees for same-round blocks, producing different topological sort orders on different nodes. The VRF seed (which depends on `vertex_order`) diverged, causing leader election divergence and permanent consensus stall. The bug manifested after ~30 min because out-of-order delivery probability increased with DAG size. The secondary fix (RoundState prune alignment) prevents parent selection from being limited to only 2 rounds of data.
+- **Security Flags**: 0 ELEVATED. The phantom parent desync was a consensus-safety issue (nodes could diverge and stall). Now fixed with deterministic `causal_order()` regardless of block arrival order.
+
+---
+
 ### Epoch Stall Fix + Staking Guard + Sentinel Tier 2 Prep (2026-03-17)
 - **Date**: 2026-03-17
 - **Sprint**: Post-060

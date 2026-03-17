@@ -458,7 +458,7 @@ pub async fn run_sentinel(
                 gas_limit: 0,
                 empty_batches: 0,
                 total_batches_window: 0,
-                ms_since_last_finality: (stall_secs * 1000) as u64,
+                ms_since_last_finality: stall_secs * 1000,
                 peer_count: handles.peer_count.load(Ordering::Relaxed),
                 mempool_size: handles.mempool_size.load(Ordering::Relaxed),
             };

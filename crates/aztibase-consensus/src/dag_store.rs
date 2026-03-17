@@ -147,8 +147,18 @@ impl DagStore {
             }
         }
 
+        let mut resolved_children = HashSet::new();
         if self.orphan_parents.remove(&hash) {
-            debug!(block = ?hash, "resolved orphan parent");
+            for (child_hash, entry) in &self.index {
+                if entry.parents.contains(&hash) {
+                    resolved_children.insert(*child_hash);
+                }
+            }
+            debug!(
+                block = ?hash,
+                children = resolved_children.len(),
+                "resolved orphan parent, back-patched children"
+            );
         }
 
         self.rounds.entry(block.round).or_default().push(hash);
@@ -158,7 +168,7 @@ impl DagStore {
             DagEntry {
                 round: block.round,
                 parents: block.parents,
-                children: HashSet::new(),
+                children: resolved_children,
             },
         );
 
@@ -336,6 +346,22 @@ impl DagStore {
         } else {
             0
         };
+
+        // Evict orphan parents that will never resolve (their blocks would
+        // be at rounds below the prune cutoff — too old to ever arrive).
+        if !self.orphan_parents.is_empty() {
+            let before = self.orphan_parents.len();
+            self.orphan_parents
+                .retain(|h| self.index.values().any(|e| e.parents.contains(h)));
+            let evicted = before - self.orphan_parents.len();
+            if evicted > 0 {
+                debug!(
+                    evicted,
+                    remaining = self.orphan_parents.len(),
+                    "stale orphan parents evicted"
+                );
+            }
+        }
 
         debug!(
             old_horizon = self.pruned_through,
@@ -579,6 +605,128 @@ mod tests {
         assert!(first > 0);
         assert_eq!(second, 0);
         assert_eq!(dag.len(), count_after);
+
+        cleanup(&path);
+    }
+
+    #[test]
+    fn out_of_order_insert_backpatches_children() {
+        let path = test_db_path();
+        let store = StateStore::open(path.to_str().unwrap()).unwrap();
+        let mut dag = DagStore::new(store).unwrap();
+
+        let v1 = [1u8; 32];
+        let v2 = [2u8; 32];
+
+        // Insert genesis for v1
+        let g1 = DagBlock::genesis(v1, 1000);
+        let g1h = g1.hash;
+        dag.insert(g1).unwrap();
+
+        // Create parent (round 1) and child (round 2) blocks
+        let parent = DagBlock::new(1, v1, vec![g1h], vec![], 2000, None).unwrap();
+        let parent_hash = parent.hash;
+        let child = DagBlock::new(2, v2, vec![parent_hash], vec![], 3000, None).unwrap();
+        let child_hash = child.hash;
+
+        // Insert CHILD first (out of order) — parent is phantom
+        dag.insert_relaxed(child).unwrap();
+        assert!(dag.orphan_parents.contains(&parent_hash));
+
+        // Insert PARENT second — should back-patch children
+        dag.insert_relaxed(parent).unwrap();
+        assert!(!dag.orphan_parents.contains(&parent_hash));
+
+        // Verify: parent's children set includes the child
+        let parent_children = dag.children(&parent_hash).unwrap();
+        assert!(
+            parent_children.contains(&child_hash),
+            "back-patch failed: parent should have child in children set"
+        );
+    }
+
+    #[test]
+    fn causal_order_deterministic_regardless_of_insertion_order() {
+        // This test proves the root cause of the phantom parent desync:
+        // causal_order() must produce the same output regardless of whether
+        // blocks arrived in order or out of order.
+        let v1 = [1u8; 32];
+        let v2 = [2u8; 32];
+        let v3 = [3u8; 32];
+
+        // Build reference DAG (in-order insertion)
+        let path_a = test_db_path();
+        let store_a = StateStore::open(path_a.to_str().unwrap()).unwrap();
+        let mut dag_a = DagStore::new(store_a).unwrap();
+
+        let g1 = DagBlock::genesis(v1, 1000);
+        let g2 = DagBlock::genesis(v2, 1000);
+        let g1h = g1.hash;
+        let g2h = g2.hash;
+        dag_a.insert(g1.clone()).unwrap();
+        dag_a.insert(g2.clone()).unwrap();
+
+        let b1 = DagBlock::new(1, v1, vec![g1h, g2h], vec![], 2000, None).unwrap();
+        let b2 = DagBlock::new(1, v2, vec![g1h, g2h], vec![], 2001, None).unwrap();
+        let b1h = b1.hash;
+        let b2h = b2.hash;
+        dag_a.insert(b1.clone()).unwrap();
+        dag_a.insert(b2.clone()).unwrap();
+
+        let tip = DagBlock::new(2, v3, vec![b1h, b2h], vec![], 3000, None).unwrap();
+        let tiph = tip.hash;
+        dag_a.insert(tip.clone()).unwrap();
+
+        let order_a = dag_a.causal_order(&[tiph]).unwrap();
+
+        // Build same DAG with OUT-OF-ORDER insertion (child before parents)
+        let path_b = test_db_path();
+        let store_b = StateStore::open(path_b.to_str().unwrap()).unwrap();
+        let mut dag_b = DagStore::new(store_b).unwrap();
+
+        // Insert tip first (parents b1, b2 are phantom)
+        dag_b.insert_relaxed(tip).unwrap();
+        // Insert round-1 blocks (parents g1, g2 are phantom, but tip is back-patched)
+        dag_b.insert_relaxed(b1).unwrap();
+        dag_b.insert_relaxed(b2).unwrap();
+        // Insert genesis blocks (resolve remaining orphans)
+        dag_b.insert_relaxed(g1).unwrap();
+        dag_b.insert_relaxed(g2).unwrap();
+
+        let order_b = dag_b.causal_order(&[tiph]).unwrap();
+
+        assert_eq!(
+            order_a,
+            order_b,
+            "causal_order must be identical regardless of insertion order\n  in-order:  {:?}\n  out-of-order: {:?}",
+            order_a.iter().map(|h| &h[..4]).collect::<Vec<_>>(),
+            order_b.iter().map(|h| &h[..4]).collect::<Vec<_>>(),
+        );
+
+        cleanup(&path_a);
+        cleanup(&path_b);
+    }
+
+    #[test]
+    fn prune_evicts_stale_orphan_parents() {
+        let path = test_db_path();
+        let store = StateStore::open(path.to_str().unwrap()).unwrap();
+        let mut dag = DagStore::new(store).unwrap();
+
+        let v1 = [1u8; 32];
+        build_dag(&mut dag, 30, &[v1]);
+
+        // Manually inject a phantom parent reference
+        let phantom = aztibase_core::hash(b"phantom_block_never_arriving");
+        dag.orphan_parents.insert(phantom);
+        assert_eq!(dag.orphan_parents.len(), 1);
+
+        // Prune — phantom is not referenced by any retained block → evicted
+        dag.prune_before(30).unwrap();
+        assert!(
+            dag.orphan_parents.is_empty(),
+            "stale orphan parent should be evicted after prune"
+        );
 
         cleanup(&path);
     }
