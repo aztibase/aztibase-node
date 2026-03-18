@@ -2033,7 +2033,9 @@ impl ExecutionPipeline {
                         state.set_balance(registrant, balance - *amount);
                     }
                     state.increment_nonce(registrant);
-                    self.consensus_addrs.insert(*registrant);
+                    if *amount >= MIN_VALIDATOR_STAKE {
+                        self.consensus_addrs.insert(*registrant);
+                    }
                     exec_receipts.push(ExecutionReceipt {
                         tx_hash,
                         success: true,
@@ -2116,6 +2118,19 @@ impl ExecutionPipeline {
                 Ok(()) => {
                     state.set_balance(staker, balance - *amount);
                     state.increment_nonce(staker);
+                    let staking_read = self.staking_store.read().await;
+                    if let Some(vs) = staking_read.get_validator(staker)
+                        && vs.effective_stake() >= MIN_VALIDATOR_STAKE
+                        && !self.consensus_addrs.contains(staker)
+                    {
+                        self.consensus_addrs.insert(*staker);
+                        tracing::info!(
+                            validator = %short_hex(staker),
+                            stake = vs.effective_stake(),
+                            "Validator reached minimum stake — added to consensus set"
+                        );
+                    }
+                    drop(staking_read);
                     exec_receipts.push(ExecutionReceipt {
                         tx_hash,
                         success: true,
