@@ -1756,8 +1756,15 @@ async fn main() -> Result<()> {
             active_validators: Arc::clone(&sentinel_active_validators),
         };
         let interval = cli.sentinel_interval;
+        let model_dir = {
+            let candidates = [
+                PathBuf::from("models"),
+                config.data_dir.join("models"),
+            ];
+            candidates.into_iter().find(|d| d.join("sentinel_v1.onnx").exists())
+        };
         tokio::spawn(async move {
-            sentinel::run_sentinel(s_state, s_handles, interval).await;
+            sentinel::run_sentinel(s_state, s_handles, interval, model_dir).await;
         });
         tracing::info!(interval = cli.sentinel_interval, "AI Sentinel started");
     }

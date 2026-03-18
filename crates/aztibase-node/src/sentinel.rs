@@ -1,11 +1,12 @@
 use std::collections::VecDeque;
 use std::io::Write;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use serde::{Deserialize, Serialize};
 use tokio::sync::RwLock;
+use tract_onnx::prelude::*;
 
 /// How healthy the chain appears at a given point in time.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -57,7 +58,9 @@ pub struct SentinelInput {
     pub mempool_size: u64,
 }
 
-const FEATURE_NAMES: [&str; 15] = [
+const NUM_FEATURES: usize = 15;
+
+const FEATURE_NAMES: [&str; NUM_FEATURES] = [
     "block_height_delta",
     "commit_latency_ms",
     "commit_latency_stddev",
@@ -81,16 +84,143 @@ fn feature_name_strings() -> Vec<String> {
 
 const HISTORY_CAPACITY: usize = 1000;
 
+/// Normalization parameters exported from the training script.
+#[derive(Deserialize)]
+struct NormParams {
+    mins: Vec<f32>,
+    ranges: Vec<f32>,
+    threshold: f32,
+}
+
+/// Tier 2 ONNX autoencoder scorer.
+/// Normalizes input features, runs inference, computes reconstruction error.
+struct OnnxScorer {
+    model: TypedModel,
+    params: NormParams,
+}
+
+impl OnnxScorer {
+    fn load(model_dir: &Path) -> Option<Self> {
+        let onnx_path = model_dir.join("sentinel_v1.onnx");
+        let params_path = model_dir.join("sentinel_v1_params.json");
+
+        tracing::info!(
+            onnx = %onnx_path.display(),
+            params = %params_path.display(),
+            onnx_exists = onnx_path.exists(),
+            params_exists = params_path.exists(),
+            "Sentinel ONNX: checking model files"
+        );
+
+        if !onnx_path.exists() || !params_path.exists() {
+            return None;
+        }
+
+        let params_json = match std::fs::read_to_string(&params_path) {
+            Ok(s) => s,
+            Err(e) => {
+                tracing::warn!(error = %e, "Failed to read sentinel params");
+                return None;
+            }
+        };
+        let params: NormParams = match serde_json::from_str(&params_json) {
+            Ok(p) => p,
+            Err(e) => {
+                tracing::warn!(error = %e, "Failed to parse sentinel params");
+                return None;
+            }
+        };
+
+        if params.mins.len() != NUM_FEATURES || params.ranges.len() != NUM_FEATURES {
+            tracing::warn!("Sentinel ONNX params dimension mismatch");
+            return None;
+        }
+
+        let inference_model = match tract_onnx::onnx().model_for_path(&onnx_path) {
+            Ok(m) => m,
+            Err(e) => {
+                tracing::warn!(error = %e, "Failed to load ONNX model");
+                return None;
+            }
+        };
+
+        let typed = match inference_model
+            .with_input_fact(
+                0,
+                InferenceFact::dt_shape(f32::datum_type(), [1, NUM_FEATURES as i64]),
+            )
+            .and_then(|m| m.into_optimized())
+        {
+            Ok(m) => m,
+            Err(e) => {
+                tracing::warn!(error = %e, "Failed to optimize ONNX model");
+                return None;
+            }
+        };
+
+        tracing::info!(
+            threshold = params.threshold,
+            "Sentinel Tier 2 ONNX model loaded"
+        );
+        Some(Self { model: typed, params })
+    }
+
+    fn score(&self, features: &[f32]) -> f32 {
+        let normalized: Vec<f32> = features
+            .iter()
+            .zip(self.params.mins.iter().zip(self.params.ranges.iter()))
+            .map(|(f, (min, range))| (f - min) / range)
+            .collect();
+
+        let input = match tract_ndarray::Array2::from_shape_vec(
+            (1, NUM_FEATURES),
+            normalized.clone(),
+        ) {
+            Ok(a) => a,
+            Err(_) => return 0.0,
+        };
+
+        let plan = match self.model.clone().into_runnable() {
+            Ok(p) => p,
+            Err(_) => return 0.0,
+        };
+
+        let output = match plan.run(tvec!(TValue::from_const(input.into_arc_tensor()))) {
+            Ok(r) => r,
+            Err(_) => return 0.0,
+        };
+
+        let view = match output[0].to_array_view::<f32>() {
+            Ok(v) => v,
+            Err(_) => return 0.0,
+        };
+        let reconstructed: Vec<f32> = view.iter().copied().collect();
+        if reconstructed.len() < NUM_FEATURES {
+            return 0.0;
+        }
+
+        let mse: f32 = normalized
+            .iter()
+            .zip(reconstructed.iter())
+            .map(|(a, b)| (a - b).powi(2))
+            .sum::<f32>()
+            / NUM_FEATURES as f32;
+
+        // Map reconstruction error to [0, 1] score using threshold
+        // Below threshold = healthy (0..0.3), above = warning/critical
+        let ratio = mse / self.params.threshold;
+        (ratio * 0.3).clamp(0.0, 1.0)
+    }
+}
+
 /// Scores chain health from a 15-feature vector.
-///
-/// Uses a deterministic heuristic; upgrading to an ONNX autoencoder
-/// via `TractRuntime` is planned for Tier 2 once baseline testnet data
-/// is collected.
+/// Uses ONNX autoencoder (Tier 2) if model is available, falls back to heuristic (Tier 1).
 pub struct ChainHealthScorer {
     prev_batch_height: u64,
     prev_tps: f32,
     prev_base_fee: f32,
     latency_samples: VecDeque<f32>,
+    onnx: Option<OnnxScorer>,
 }
 
 impl Default for ChainHealthScorer {
@@ -106,7 +236,17 @@ impl ChainHealthScorer {
             prev_tps: 0.0,
             prev_base_fee: 0.0,
             latency_samples: VecDeque::with_capacity(64),
+            onnx: None,
         }
+    }
+
+    pub fn with_model_dir(mut self, model_dir: &Path) -> Self {
+        self.onnx = OnnxScorer::load(model_dir);
+        self
+    }
+
+    pub fn is_tier2(&self) -> bool {
+        self.onnx.is_some()
     }
 
     /// Extract 15 features from raw input and return a health snapshot.
@@ -169,7 +309,11 @@ impl ChainHealthScorer {
             mempool_size,
         ];
 
-        let score = self.heuristic_score(&features);
+        let score = if let Some(ref onnx) = self.onnx {
+            onnx.score(&features)
+        } else {
+            self.heuristic_score(&features)
+        };
 
         let now = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
@@ -422,8 +566,20 @@ pub async fn run_sentinel(
     state: Arc<SentinelState>,
     handles: SentinelHandles,
     interval_batches: u64,
+    model_dir: Option<PathBuf>,
 ) {
-    let mut scorer = ChainHealthScorer::new();
+    let mut scorer = if let Some(ref dir) = model_dir {
+        let s = ChainHealthScorer::new().with_model_dir(dir);
+        if s.is_tier2() {
+            tracing::info!("Sentinel running in Tier 2 (ONNX) mode");
+        } else {
+            tracing::info!("Sentinel running in Tier 1 (heuristic) mode — no ONNX model found");
+        }
+        s
+    } else {
+        tracing::info!("Sentinel running in Tier 1 (heuristic) mode");
+        ChainHealthScorer::new()
+    };
     let mut last_scored_batch: u64 = 0;
     let mut last_seen_batch: u64 = 0;
     let mut last_progress_time = std::time::Instant::now();

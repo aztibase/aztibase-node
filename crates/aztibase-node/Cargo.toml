@@ -36,9 +36,9 @@ chacha20poly1305 = { workspace = true }
 zeroize = { workspace = true }
 rand = { workspace = true }
 reqwest = { workspace = true }
+tract-onnx = { workspace = true }
 
 [dev-dependencies]
 wat = "1"
-tract-onnx = { workspace = true }
 prost = "0.11"
 axum = { workspace = true }

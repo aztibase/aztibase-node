@@ -147,12 +147,12 @@ def export_onnx(model: nn.Module, output_path: str):
     dummy = torch.randn(1, NUM_FEATURES)
     torch.onnx.export(
         model,
-        dummy,
+        (dummy,),
         output_path,
         input_names=["features"],
         output_names=["reconstructed"],
-        dynamic_axes={"features": {0: "batch"}, "reconstructed": {0: "batch"}},
         opset_version=13,
+        dynamo=False,
     )
     size_kb = Path(output_path).stat().st_size / 1024
     print(f"  Exported: {output_path} ({size_kb:.1f} KB)")
@@ -205,7 +205,7 @@ def main():
     normalized, mins, ranges = normalize(healthy)
 
     # Train
-    print(f"\nTraining autoencoder ({NUM_FEATURES}→8→4→8→{NUM_FEATURES})...")
+    print(f"\nTraining autoencoder ({NUM_FEATURES}->8->4->8->{NUM_FEATURES})...")
     model = train_model(normalized, epochs=args.epochs)
 
     # Compute threshold
