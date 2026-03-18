@@ -416,6 +416,56 @@ async function createWallet() {
 }
 
 
+async function importKeyFile() {
+  if (!wasm) { toast("WASM module not loaded", "error"); return; }
+
+  const input = document.createElement("input");
+  input.type = "file";
+  input.accept = ".json";
+  input.onchange = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    try {
+      const text = await file.text();
+      const data = JSON.parse(text);
+      const sk = data.secret_key || data.secretKey || data.secret;
+      if (!sk || sk.length !== 64) {
+        toast("Invalid key file — no secret_key found", "error");
+        return;
+      }
+      const addr = data.address;
+      if (!addr) {
+        toast("Invalid key file — no address found", "error");
+        return;
+      }
+
+      const pass = prompt("Set a password to protect this key (min 8 chars):");
+      if (!pass || pass.length < 8) {
+        toast("Password must be at least 8 characters", "error");
+        return;
+      }
+
+      secretHex = sk;
+      addressHex = addr;
+
+      const encrypted = await encryptSecret(secretHex, pass);
+      await storageSet({ encryptedKey: encrypted, address: addressHex });
+      await sessionSet({ sessionSecret: secretHex, sessionAddress: addressHex });
+
+      chrome.runtime?.sendMessage?.({
+        type: "wallet_unlocked", secret: secretHex, address: addressHex,
+      }).catch(() => {});
+
+      toast("Key file imported: " + shortenAddress(addressHex), "success");
+      showView("main");
+      refreshAll();
+    } catch (err) {
+      toast("Failed to read key file: " + err.message, "error");
+    }
+  };
+  input.click();
+}
+
 function confirmMnemonic() {
   showView("main");
   updateMainView();
@@ -1241,7 +1291,7 @@ async function walletFaucet() {
 
 const actions = {
   goBack, createWallet, confirmMnemonic, importWallet, unlockWallet,
-  lockWallet, resetWallet, clearHistory, copyAddress, sendTransfer, becomeValidator, sendStake,
+  lockWallet, resetWallet, clearHistory, copyAddress, importKeyFile, sendTransfer, becomeValidator, sendStake,
   sendUnstake, sendDelegate, sendUndelegate, saveSettings, exportKey,
   startTotpSetup, confirmTotpSetup, startWebAuthnSetup, disable2FA,
   verify2FAWebAuthn, verify2FATotp, cancel2FA,
