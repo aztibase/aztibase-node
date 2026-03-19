@@ -5,6 +5,24 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ---
 
+## Sprint 062 — Sentinel Tier 3: Autonomous Action Engine (2026-03-19)
+
+### Added
+- **Sentinel Tier 3 action engine**: Autonomous safety system that evaluates chain health scores and takes confidence-tiered actions. Four tiers: LOW (0.3-0.5) → alert/log, MEDIUM (0.5-0.8) → adjust base fee via EmergencyAction (requires emergency key), HIGH (0.8+) → submit governance proposal, CRITICAL (0.95+) → emergency chain pause (requires emergency key + `--sentinel-auto-pause`).
+- **Sustained anomaly detection**: Actions only trigger after N consecutive ticks above the tier's threshold (2 for LOW, 3 for MEDIUM/HIGH, 2 for CRITICAL). Prevents false positive triggers from transient spikes.
+- **Cooldown enforcement**: Minimum 100 batches between alerts, 1000 batches between on-chain actions. Prevents oscillation and rapid-fire actions.
+- **Dry-run mode (default)**: `--sentinel-dry-run=true` logs what actions would be taken without executing. Opt-in to live actions for safety.
+- **`--sentinel-auto-pause` CLI flag**: Enables autonomous emergency pause on sustained CRITICAL anomaly. Disabled by default — requires explicit opt-in.
+- **`aztb_getSentinelActions` RPC**: Returns recent sentinel actions (type, tier, score, batch, timestamp, dry_run flag). Max 100 entries.
+- **Action event broadcasting**: Sentinel actions published on `chainHealth` WebSocket topic alongside health snapshots.
+- **Graceful degradation**: Nodes without emergency key emit alerts/recommendations only — no on-chain actions attempted.
+
+### Changed
+- **`run_sentinel` signature**: Now accepts `SentinelConfig` parameter for Tier 3 configuration.
+- **Sentinel startup log**: Reports Tier 3 status (dry_run, auto_pause, has_emergency_key).
+
+---
+
 ## Sprint 061 — Progressive Decentralization + EmergencyAction (2026-03-19)
 
 ### Added

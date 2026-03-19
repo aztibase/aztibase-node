@@ -3,8 +3,8 @@
 **Last Updated:** 2026-03-19
 **Updated By:** blockchain-architect + security-engineer
 **Current Phase:** M9 -- Mainnet Prep
-**Current Sprint:** Sprint 061 — Progressive Decentralization + EmergencyAction
-**Sprint Status:** Sprint 061 COMPLETE. ValidatorRegistrationMode (Permissioned/StakeGated/Open) with governance transitions. EmergencyAction TxKind (0x1D) with 1-year sunset. Chain pause mechanism. 1 new RPC (aztb_getEmergencyKeyStatus). ADR-033. 998 tests pass (+9 new). Clippy clean, fmt clean. **Next: Sprint 062 (Sentinel Tier 3), then release + mainnet.**
+**Current Sprint:** Sprint 062 — Sentinel Tier 3: Autonomous Action Engine
+**Sprint Status:** Sprint 062 COMPLETE. Confidence-tiered action engine (Low/Medium/High/Critical) with sustained anomaly detection, cooldown enforcement, dry-run default. 4 action types: Alert, AdjustBaseFee, ProposeGovernance, EmergencyPause. 1 new RPC (aztb_getSentinelActions). ADR-034. 1,011 tests pass (+13 new). Clippy clean, fmt clean. **Next: Sprint 062b (ONNX tx anomaly), 063 (release + stability) → MAINNET.**
 
 ---
 
@@ -87,6 +87,8 @@
 - Mainnet launch blocked on: Aztibase Systems coexistence agreement (legal), public testnet infrastructure deployment (VPS provisioning)
 
 ### Recently Completed
+- **Sprint 062 (2026-03-19)**: Sentinel Tier 3 — Autonomous action engine. Confidence-tiered actions (Low→Alert, Medium→AdjustBaseFee, High→ProposeGovernance, Critical→EmergencyPause). Sustained anomaly detection (2-3 consecutive ticks required). Cooldown enforcement (100/1000 batches). Dry-run default. `--sentinel-auto-pause` CLI flag. `aztb_getSentinelActions` RPC. Action events on WebSocket. 1,011 tests (+13). ADR-034.
+- **Sprint 061 (2026-03-19)**: Progressive decentralization — ValidatorRegistrationMode (Permissioned/StakeGated/Open), EmergencyAction TxKind (0x1D) with 1-year sunset, chain pause, aztb_getEmergencyKeyStatus RPC. ADR-033. 998 tests (+9).
 - **Post-060 (2026-03-17)**: Phantom parent desync FIXED — root cause was missing child back-patch in `insert_relaxed()`. Out-of-order gossip delivery left parent `children` sets empty, causing `causal_order()` to produce different topological sort orders on different nodes → VRF seed divergence → consensus stall after ~4000 blocks. Also: RoundState prune aligned to 16-round buffer, stale orphan parent eviction added. 988 tests (+3 new).
 - **Post-060 (2026-03-17)**: Epoch stall fix (consensus_addrs gate prevents ghost validators at epoch boundary), staking auto-registration bug fixed (wallets no longer become validators by staking), wallet extension hardened (RPC auto-fallback, branding, chain reset detection), Sentinel CSV export + Tier 2 ONNX training script.
 - **Sprint 060 (2026-03-16)**: AI Sentinel Tier 1 — 15-feature heuristic scorer, SentinelState with RPC + WebSocket bridge, explorer health panel, CI/CD docs-site job + release automation, version 0.1.3, 985 tests (+11).

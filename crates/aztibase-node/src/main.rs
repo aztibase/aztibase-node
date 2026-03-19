@@ -137,6 +137,14 @@ struct Cli {
     /// Export sentinel feature vectors to CSV for Tier 2 training data collection
     #[arg(long)]
     sentinel_export: bool,
+
+    /// Run Sentinel Tier 3 in dry-run mode — log actions without executing (default: true)
+    #[arg(long, default_value = "true")]
+    sentinel_dry_run: bool,
+
+    /// Enable autonomous emergency pause when CRITICAL anomaly is sustained (requires emergency key)
+    #[arg(long)]
+    sentinel_auto_pause: bool,
 }
 
 #[derive(clap::Subcommand, Debug)]
@@ -1558,6 +1566,8 @@ async fn main() -> Result<()> {
         Arc::new(tokio::sync::RwLock::new(None));
     let rpc_sentinel_history: Arc<tokio::sync::RwLock<Vec<serde_json::Value>>> =
         Arc::new(tokio::sync::RwLock::new(Vec::new()));
+    let rpc_sentinel_actions: Arc<tokio::sync::RwLock<Vec<serde_json::Value>>> =
+        Arc::new(tokio::sync::RwLock::new(Vec::new()));
 
     // RPC server
     let (mempool_tx, mut mempool_rx) = tokio::sync::mpsc::channel::<Vec<u8>>(4096);
@@ -1591,7 +1601,8 @@ async fn main() -> Result<()> {
     .with_sentinel(
         Arc::clone(&rpc_sentinel_latest),
         Arc::clone(&rpc_sentinel_history),
-    );
+    )
+    .with_sentinel_actions(Arc::clone(&rpc_sentinel_actions));
 
     if let Some(ref gen_cfg) = genesis_config {
         rpc_server = rpc_server.with_genesis_hash(genesis::genesis_hash(gen_cfg)?);
@@ -1759,13 +1770,14 @@ async fn main() -> Result<()> {
         exec_pipeline.run().await;
     });
 
-    // Spawn AI Sentinel (chain health monitoring)
+    // Spawn AI Sentinel (chain health monitoring + Tier 3 action engine)
     let sentinel_enabled = cli.sentinel.unwrap_or(node_is_validator);
     let mut sentinel_builder = sentinel::SentinelState::new(sentinel_enabled)
         .with_rpc(
             Arc::clone(&rpc_sentinel_latest),
             Arc::clone(&rpc_sentinel_history),
         )
+        .with_rpc_actions(Arc::clone(&rpc_sentinel_actions))
         .with_event_bus(Arc::clone(&event_bus) as Arc<dyn sentinel::HealthPublisher + Send + Sync>);
     if cli.sentinel_export && sentinel_enabled {
         sentinel_builder = sentinel_builder.with_export(config.data_dir.clone());
@@ -1790,10 +1802,27 @@ async fn main() -> Result<()> {
                 .into_iter()
                 .find(|d| d.join("sentinel_v1.onnx").exists())
         };
+
+        // Tier 3 action engine config
+        let has_emergency_key =
+            shared_chain_params.read().await.emergency_key.is_some() && node_is_validator;
+        let action_config = sentinel::SentinelConfig {
+            dry_run: cli.sentinel_dry_run,
+            auto_pause: cli.sentinel_auto_pause,
+            has_emergency_key,
+            current_epoch: Arc::new(std::sync::atomic::AtomicU64::new(0)),
+            tx_sender: None,
+        };
+
         tokio::spawn(async move {
-            sentinel::run_sentinel(s_state, s_handles, interval, model_dir).await;
+            sentinel::run_sentinel(s_state, s_handles, interval, model_dir, action_config).await;
         });
-        tracing::info!(interval = cli.sentinel_interval, "AI Sentinel started");
+        tracing::info!(
+            interval = cli.sentinel_interval,
+            dry_run = cli.sentinel_dry_run,
+            auto_pause = cli.sentinel_auto_pause,
+            "AI Sentinel started (Tier 3 action engine)"
+        );
     }
 
     let mut sync_assembler: Option<SnapshotAssembler> = None;
@@ -2732,6 +2761,8 @@ mod tests {
             sentinel: None,
             sentinel_interval: 50,
             sentinel_export: false,
+            sentinel_dry_run: true,
+            sentinel_auto_pause: false,
         };
         let config = cli.apply_overrides(NodeConfig::default());
         assert_eq!(config.data_dir, PathBuf::from("/tmp/test"));
@@ -2763,6 +2794,8 @@ mod tests {
             sentinel: None,
             sentinel_interval: 50,
             sentinel_export: false,
+            sentinel_dry_run: true,
+            sentinel_auto_pause: false,
         };
         let config = cli.apply_overrides(NodeConfig::default());
         assert_eq!(config.network.listen_addresses.len(), 1);
@@ -2860,6 +2893,8 @@ mod tests {
             sentinel: None,
             sentinel_interval: 50,
             sentinel_export: false,
+            sentinel_dry_run: true,
+            sentinel_auto_pause: false,
         };
         let result = cli.apply_overrides(config);
 

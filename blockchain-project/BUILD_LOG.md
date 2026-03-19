@@ -21,6 +21,23 @@ Entries are prepended (newest first).
 
 ## Entries
 
+### Sprint 062 — Sentinel Tier 3: Autonomous Action Engine (2026-03-19)
+- **Date**: 2026-03-19
+- **Sprint**: 062
+- **Commit**: (this commit)
+- **Files Changed**:
+  - `crates/aztibase-node/src/sentinel.rs` — Tier 3 action engine: `ConfidenceTier` enum (None/Low/Medium/High/Critical), `SentinelAction` + `ActionKind` types (Alert/AdjustBaseFee/ProposeGovernance/EmergencyPause), `ActionEngine` struct with confidence evaluation, sustained anomaly detection (configurable consecutive ticks), cooldown enforcement (100-batch alert, 1000-batch on-chain), dry-run mode, action log ring buffer. `SentinelState` extended with `push_action()`, `recent_actions()`, and RPC actions bridge. `SentinelConfig` for Tier 3 configuration. `run_sentinel()` updated to evaluate actions on each scoring tick and stall detection. 12 new unit tests.
+  - `crates/aztibase-node/src/main.rs` — CLI flags `--sentinel-dry-run` (default true), `--sentinel-auto-pause` (default false). `SentinelConfig` wired with emergency key detection from ChainParams. `rpc_sentinel_actions` shared state. RPC server wired with `.with_sentinel_actions()`.
+  - `crates/aztibase-rpc/src/server.rs` — `aztb_getSentinelActions` RPC endpoint (returns recent Tier 3 actions, max 100). `sentinel_actions` field on `RpcState` + Clone impl. `with_sentinel_actions()` builder method.
+  - `blockchain-project/sprints/SPRINT-062.md` — Sprint plan.
+- **Tests**: 1,011 pass (+13 new), 0 fail. Clippy 0 warnings, fmt clean.
+- **ADR**: ADR-034 (Sentinel Tier 3 Autonomous Action Engine)
+- **New RPC Endpoints**: `aztb_getSentinelActions` (total: 51)
+- **Review Notes**: Security review pass: dry-run default prevents accidental live actions, sustained anomaly requirement prevents false positive triggers, cooldown prevents oscillation, emergency key sunset honored, no new privilege escalation beyond existing EmergencyAction path. Action engine is deterministic and locally scoped — different nodes may take different actions based on their key status.
+- **Security Flags**: 0 ELEVATED, 0 MEDIUM.
+
+---
+
 ### Sprint 061 — Progressive Decentralization + EmergencyAction (2026-03-19)
 - **Date**: 2026-03-19
 - **Sprint**: 061

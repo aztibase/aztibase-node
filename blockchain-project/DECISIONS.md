@@ -41,6 +41,7 @@ Every non-obvious technical decision is recorded here. Each ADR is immutable onc
 | ADR-031 | Block sync protocol for full nodes (dual-mode) | 2026-03-15 | ACCEPTED | p2p-network-engineer + node-engineer |
 | ADR-032 | AI Sentinel Tier 1 — heuristic observer mode | 2026-03-16 | ACCEPTED | ai-integration-engineer + node-engineer |
 | ADR-033 | Progressive decentralization — permissioned validators + emergency key | 2026-03-19 | ACCEPTED | blockchain-architect + security-engineer |
+| ADR-034 | Sentinel Tier 3 — autonomous action engine with confidence tiers | 2026-03-19 | ACCEPTED | ai-integration-engineer + security-engineer |
 
 ---
 
@@ -1054,3 +1055,39 @@ Two mechanisms:
 - 1 new TxKind (EmergencyAction, 0x1D), 1 new RPC (aztb_getEmergencyKeyStatus)
 - Emergency key address is public and transparent via genesis config + RPC
 - After sunset epoch, the emergency key code path is permanently unreachable
+
+---
+
+## ADR-034: Sentinel Tier 3 — Autonomous Action Engine
+
+**Date:** 2026-03-19
+**Status:** ACCEPTED
+**Decided By:** ai-integration-engineer + security-engineer
+
+### Context
+The AI Sentinel Tiers 1 (heuristic) and 2 (ONNX autoencoder) are observer-only — they score chain health but take no action. For mainnet (solo developer), anomalies that occur outside operating hours need autonomous response.
+
+### Decision
+Add a confidence-tiered action engine to the Sentinel that maps health scores to escalating autonomous actions:
+
+| Tier | Score | Action | Requirement |
+|------|-------|--------|-------------|
+| LOW | 0.3-0.5 | Alert (log + WebSocket) | None |
+| MEDIUM | 0.5-0.8 | Adjust base fee ±5% via ForceParam | Emergency key |
+| HIGH | 0.8+ | Submit governance proposal | Validator key |
+| CRITICAL | 0.95+ | Emergency chain pause | Emergency key + `--sentinel-auto-pause` |
+
+Safety guardrails: sustained anomaly requirement (N consecutive ticks), cooldown between actions (100 batches alert, 1000 batches on-chain), dry-run default, graceful degradation without keys.
+
+### Rationale
+- Solo developer launching mainnet — automated safety net needed for off-hours protection
+- Confidence tiers prevent overreaction: transient spikes don't trigger actions
+- Dry-run default ensures opt-in safety — no accidental live actions
+- Reuses existing EmergencyAction + Governance infrastructure from Sprint 061
+- Emergency key sunset is honored — CRITICAL actions become alerts after epoch 78,840
+
+### Consequences
+- 1 new RPC endpoint (aztb_getSentinelActions), total 51
+- Default behavior unchanged (dry-run mode) — requires explicit `--sentinel-dry-run=false` for live actions
+- Nodes without emergency key can only emit alerts — no privilege escalation
+- Action engine is node-local: different nodes may take different actions based on key availability

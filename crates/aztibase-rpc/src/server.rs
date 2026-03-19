@@ -135,6 +135,7 @@ pub struct RpcState {
     pub is_validator: bool,
     pub sentinel_latest: Arc<RwLock<Option<serde_json::Value>>>,
     pub sentinel_history: Arc<RwLock<Vec<serde_json::Value>>>,
+    pub sentinel_actions: Arc<RwLock<Vec<serde_json::Value>>>,
 }
 
 impl Clone for RpcState {
@@ -172,6 +173,7 @@ impl Clone for RpcState {
             is_validator: self.is_validator,
             sentinel_latest: Arc::clone(&self.sentinel_latest),
             sentinel_history: Arc::clone(&self.sentinel_history),
+            sentinel_actions: Arc::clone(&self.sentinel_actions),
         }
     }
 }
@@ -369,6 +371,7 @@ impl RpcServer {
                 is_validator: false,
                 sentinel_latest: Arc::new(RwLock::new(None)),
                 sentinel_history: Arc::new(RwLock::new(Vec::new())),
+                sentinel_actions: Arc::new(RwLock::new(Vec::new())),
             },
         }
     }
@@ -380,6 +383,11 @@ impl RpcServer {
     ) -> Self {
         self.state.sentinel_latest = latest;
         self.state.sentinel_history = history;
+        self
+    }
+
+    pub fn with_sentinel_actions(mut self, actions: Arc<RwLock<Vec<serde_json::Value>>>) -> Self {
+        self.state.sentinel_actions = actions;
         self
     }
 
@@ -664,6 +672,7 @@ async fn dispatch(state: &RpcState, req: &JsonRpcRequest) -> JsonRpcResponse {
         "aztb_getBridgeProofStatus" => handle_get_bridge_proof_status(state, req).await,
         "aztb_getChainHealth" => handle_get_chain_health(state, req).await,
         "aztb_getHealthHistory" => handle_get_health_history(state, req).await,
+        "aztb_getSentinelActions" => handle_get_sentinel_actions(state, req).await,
         "aztb_getEmergencyKeyStatus" => handle_get_emergency_key_status(state, req).await,
         _ => JsonRpcResponse::error(
             req.id.clone(),
@@ -2605,6 +2614,18 @@ async fn handle_get_health_history(state: &RpcState, req: &JsonRpcRequest) -> Js
     JsonRpcResponse::success(req.id.clone(), serde_json::json!(entries))
 }
 
+async fn handle_get_sentinel_actions(state: &RpcState, req: &JsonRpcRequest) -> JsonRpcResponse {
+    let limit = req
+        .params
+        .get(0)
+        .and_then(|v| v.as_u64())
+        .unwrap_or(10)
+        .min(100) as usize;
+    let actions = state.sentinel_actions.read().await;
+    let entries: Vec<_> = actions.iter().rev().take(limit).cloned().collect();
+    JsonRpcResponse::success(req.id.clone(), serde_json::json!(entries))
+}
+
 async fn handle_get_emergency_key_status(
     state: &RpcState,
     req: &JsonRpcRequest,
@@ -2746,6 +2767,7 @@ mod tests {
             is_validator: false,
             sentinel_latest: Arc::new(RwLock::new(None)),
             sentinel_history: Arc::new(RwLock::new(Vec::new())),
+            sentinel_actions: Arc::new(RwLock::new(Vec::new())),
         };
         (state, rx)
     }
@@ -2791,6 +2813,7 @@ mod tests {
             is_validator: false,
             sentinel_latest: Arc::new(RwLock::new(None)),
             sentinel_history: Arc::new(RwLock::new(Vec::new())),
+            sentinel_actions: Arc::new(RwLock::new(Vec::new())),
         };
         (state, rx)
     }
@@ -3048,6 +3071,7 @@ mod tests {
             is_validator: false,
             sentinel_latest: Arc::new(RwLock::new(None)),
             sentinel_history: Arc::new(RwLock::new(Vec::new())),
+            sentinel_actions: Arc::new(RwLock::new(Vec::new())),
         };
         (state, rx, path)
     }
@@ -3444,6 +3468,7 @@ mod tests {
             is_validator: false,
             sentinel_latest: Arc::new(RwLock::new(None)),
             sentinel_history: Arc::new(RwLock::new(Vec::new())),
+            sentinel_actions: Arc::new(RwLock::new(Vec::new())),
         };
         (state, rx)
     }
@@ -3549,6 +3574,7 @@ mod tests {
             is_validator: false,
             sentinel_latest: Arc::new(RwLock::new(None)),
             sentinel_history: Arc::new(RwLock::new(Vec::new())),
+            sentinel_actions: Arc::new(RwLock::new(Vec::new())),
         };
 
         let task_hex = hex::encode(task_id);
