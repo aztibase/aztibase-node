@@ -507,8 +507,6 @@ impl StakingStore {
             let validator_reward = self_share + commission;
             let delegator_pool = delegation_share - commission;
 
-            credits.push((vid.to_owned(), validator_reward));
-
             let delegators: Vec<(Address, u128)> = self
                 .delegations
                 .values()
@@ -516,12 +514,17 @@ impl StakingStore {
                 .map(|d| (d.delegator, d.amount))
                 .collect();
 
+            let mut distributed_to_delegators = 0u128;
             for (delegator, amount) in &delegators {
                 let d_reward = delegator_pool * *amount / *total_delegated;
                 if d_reward > 0 {
                     credits.push((*delegator, d_reward));
+                    distributed_to_delegators += d_reward;
                 }
             }
+
+            let remainder = delegator_pool - distributed_to_delegators;
+            credits.push((vid.to_owned(), validator_reward + remainder));
         }
 
         credits

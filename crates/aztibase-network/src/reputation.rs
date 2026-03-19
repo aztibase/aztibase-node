@@ -14,7 +14,7 @@ const BAN_TIER_1_SECS: u64 = 3600;
 const BAN_TIER_2_SECS: u64 = 86400;
 const BAN_TIER_3_SECS: u64 = 604800;
 
-const SCORE_DECAY_PER_HOUR: f64 = 1.0;
+const SCORE_DECAY_PER_HOUR: f64 = 5.0;
 const MAX_REPUTATION_ENTRIES: u64 = 10_000;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -308,7 +308,7 @@ mod tests {
 
         let mut loaded = store.get(peer).unwrap().unwrap();
         loaded.apply_decay(1000 + 7200);
-        assert!((loaded.score - (-48.0)).abs() < f64::EPSILON);
+        assert!((loaded.score - (-40.0)).abs() < f64::EPSILON);
 
         let mut neutral = PeerReputation::new(1000);
         neutral.score = -1.0;

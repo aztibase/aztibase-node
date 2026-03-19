@@ -87,10 +87,6 @@ pub fn decode_vertex(
     if !block.is_genesis() {
         let pubkey_bytes = validators
             .ed25519_key(&block.author)
-            .or_else(|| {
-                // Fallback: if no stored Ed25519 key, try interpreting author as raw pubkey
-                PublicKey::from_bytes(&block.author).map(|_| block.author)
-            })
             .ok_or(WireError::InvalidSignature)?;
         let pubkey = PublicKey::from_bytes(&pubkey_bytes).ok_or(WireError::InvalidSignature)?;
         if !block.verify_signature(&pubkey) {

@@ -615,13 +615,21 @@ pub fn route_tx(raw: &[u8]) -> Result<TxKind, RoutingError> {
         return Err(RoutingError::InvalidFuncName(model_id.clone()));
     }
     if let TxKind::CreateProposal {
-        ref description, ..
+        ref description,
+        ref param_value,
+        ..
     } = decoded
-        && description.is_empty()
     {
-        return Err(RoutingError::DecodeFailed(
-            "empty proposal description".into(),
-        ));
+        if description.is_empty() {
+            return Err(RoutingError::DecodeFailed(
+                "empty proposal description".into(),
+            ));
+        }
+        if param_value.len() > 1024 {
+            return Err(RoutingError::DecodeFailed(
+                "param_value exceeds 1024 byte limit".into(),
+            ));
+        }
     }
     if let TxKind::RegisterL2 {
         ref name,
@@ -639,6 +647,16 @@ pub fn route_tx(raw: &[u8]) -> Result<TxKind, RoutingError> {
                 "sequencer set must not be empty".into(),
             ));
         }
+    }
+    if let TxKind::EmergencyAction {
+        action: EmergencyActionKind::ForceParam { ref value, .. },
+        ..
+    } = decoded
+        && value.len() > 1024
+    {
+        return Err(RoutingError::DecodeFailed(
+            "ForceParam value exceeds 1024 byte limit".into(),
+        ));
     }
     Ok(decoded)
 }
@@ -811,12 +829,14 @@ pub fn compute_tx_hash(tx: &TxKind) -> [u8; 32] {
             delegator,
             validator_id,
             amount,
+            nonce,
             ..
         } => {
             let mut buf = Vec::new();
             buf.extend_from_slice(delegator);
             buf.extend_from_slice(validator_id);
             buf.extend_from_slice(&amount.to_le_bytes());
+            buf.extend_from_slice(&nonce.to_le_bytes());
             hash(&buf)
         }
         TxKind::Undelegate {

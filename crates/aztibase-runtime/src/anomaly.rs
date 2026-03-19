@@ -109,7 +109,7 @@ impl OnnxTxScorer {
             .zip(self.params.mins.iter().zip(self.params.ranges.iter()))
             .map(|(f, (min, range))| {
                 if *range == 0.0 {
-                    0.0
+                    0.5
                 } else {
                     (f - min) / range
                 }

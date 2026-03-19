@@ -409,12 +409,17 @@ fn load_serializable<T: serde::de::DeserializeOwned + Default>(
     match store.get(STATE_TABLE, key)? {
         Some(data) => match postcard::from_bytes(&data) {
             Ok(val) => Ok(val),
-            Err(_) => {
-                tracing::warn!(
+            Err(e) => {
+                tracing::error!(
                     key = %String::from_utf8_lossy(key),
-                    "Failed to deserialize, using default"
+                    error = %e,
+                    len = data.len(),
+                    "Corrupted protocol store data — refusing to silently replace with default"
                 );
-                Ok(T::default())
+                Err(aztibase_storage::StorageError::Serialization(format!(
+                    "corrupted data for key '{}': {e}",
+                    String::from_utf8_lossy(key)
+                )))
             }
         },
         None => Ok(T::default()),

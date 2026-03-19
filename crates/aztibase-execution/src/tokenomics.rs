@@ -145,19 +145,25 @@ pub fn distribute_emission(total: u128) -> EpochDistribution {
 // ---------------------------------------------------------------------------
 
 /// Calculate the target APY in basis points given the staking ratio in basis points.
-/// Formula: base_apy = max(300, min(1200, 1800 - staking_ratio_bps / 50))
 ///
 /// staking_ratio_bps: e.g. 5000 = 50%
 ///
-/// The piecewise linear formula from the master design:
-///   if ratio < 20% (2000 bps): APY = 12% (1200 bps)
-///   if ratio = 50% (5000 bps): APY = 6%  (600 bps)
-///   if ratio > 70% (7000 bps): APY = 3%  (300 bps, floor)
+/// Piecewise linear from the master design:
+///   ratio <= 20% (2000 bps): APY = 12% (1200 bps) — cap
+///   ratio  = 50% (5000 bps): APY = 6%  (600 bps)
+///   ratio >= 70% (7000 bps): APY = 3%  (300 bps) — floor
 ///
-/// Linear: apy_bps = 1800 - ratio_bps / 50
+/// Linear segment: apy = 1200 - (ratio - 2000) * 900 / 5000
 pub fn calculate_apy_bps(staking_ratio_bps: u32) -> u32 {
-    let raw = 1800u32.saturating_sub(staking_ratio_bps / 50);
-    raw.clamp(MIN_APY_BPS, MAX_APY_BPS)
+    if staking_ratio_bps <= 2000 {
+        return MAX_APY_BPS;
+    }
+    if staking_ratio_bps >= 7000 {
+        return MIN_APY_BPS;
+    }
+    let excess = staking_ratio_bps - 2000;
+    let reduction = (excess as u64 * 900 / 5000) as u32;
+    MAX_APY_BPS.saturating_sub(reduction)
 }
 
 // ---------------------------------------------------------------------------
@@ -589,32 +595,38 @@ mod tests {
 
     #[test]
     fn apy_at_20_percent_staking() {
-        assert_eq!(calculate_apy_bps(2000), MAX_APY_BPS);
+        assert_eq!(calculate_apy_bps(2000), 1200); // 12%
     }
 
     #[test]
     fn apy_at_50_percent_staking() {
-        assert_eq!(calculate_apy_bps(5000), MAX_APY_BPS);
+        assert_eq!(calculate_apy_bps(5000), 660); // ~6%
     }
 
     #[test]
     fn apy_at_70_percent() {
-        assert_eq!(calculate_apy_bps(7000), MAX_APY_BPS);
+        assert_eq!(calculate_apy_bps(7000), MIN_APY_BPS); // 3%
     }
 
     #[test]
-    fn apy_at_80_percent_is_max() {
-        assert_eq!(calculate_apy_bps(8000), MAX_APY_BPS);
+    fn apy_at_80_percent_hits_floor() {
+        assert_eq!(calculate_apy_bps(8000), MIN_APY_BPS); // 3% floor
     }
 
     #[test]
     fn apy_at_zero_staking_caps_at_max() {
-        assert_eq!(calculate_apy_bps(0), MAX_APY_BPS);
+        assert_eq!(calculate_apy_bps(0), MAX_APY_BPS); // 12% cap
     }
 
     #[test]
-    fn apy_at_100_percent_is_max() {
-        assert_eq!(calculate_apy_bps(10_000), MAX_APY_BPS);
+    fn apy_at_35_percent_interpolates() {
+        // (3500 - 2000) * 900 / 5000 = 270 → 1200 - 270 = 930 (9.3%)
+        assert_eq!(calculate_apy_bps(3500), 930);
+    }
+
+    #[test]
+    fn apy_at_100_percent_hits_floor() {
+        assert_eq!(calculate_apy_bps(10_000), MIN_APY_BPS);
     }
 
     #[test]

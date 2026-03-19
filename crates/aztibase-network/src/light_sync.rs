@@ -74,9 +74,14 @@ impl request_response::Codec for LightSyncCodec {
     }
 }
 
+const READ_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(30);
+
 async fn read_frame<T: AsyncRead + Unpin + Send>(io: &mut T) -> io::Result<Vec<u8>> {
     let mut len_buf = [0u8; 4];
-    io.read_exact(&mut len_buf).await?;
+    tokio::time::timeout(READ_TIMEOUT, io.read_exact(&mut len_buf))
+        .await
+        .map_err(|_| io::Error::new(io::ErrorKind::TimedOut, "frame header read timeout"))?
+        .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
     let len = u32::from_be_bytes(len_buf) as usize;
     if len > MAX_FRAME_SIZE {
         return Err(io::Error::new(
@@ -85,7 +90,10 @@ async fn read_frame<T: AsyncRead + Unpin + Send>(io: &mut T) -> io::Result<Vec<u
         ));
     }
     let mut buf = vec![0u8; len];
-    io.read_exact(&mut buf).await?;
+    tokio::time::timeout(READ_TIMEOUT, io.read_exact(&mut buf))
+        .await
+        .map_err(|_| io::Error::new(io::ErrorKind::TimedOut, "frame body read timeout"))?
+        .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
     Ok(buf)
 }
 

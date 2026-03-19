@@ -534,7 +534,8 @@ impl ConsensusEngine {
         anchor_hash: &BlockHash,
         batch_vertices: &[BlockHash],
     ) -> [u8; 32] {
-        let mut buf = Vec::with_capacity(64 + 32 * batch_vertices.len());
+        let mut buf = Vec::with_capacity(80 + 32 * batch_vertices.len());
+        buf.extend_from_slice(b"AZTB_VRF_SEED_V1\0");
         buf.extend_from_slice(prev_seed);
         buf.extend_from_slice(anchor_hash);
 

@@ -172,7 +172,13 @@ impl OnnxScorer {
         let normalized: Vec<f32> = features
             .iter()
             .zip(self.params.mins.iter().zip(self.params.ranges.iter()))
-            .map(|(f, (min, range))| (f - min) / range)
+            .map(|(f, (min, range))| {
+                if *range == 0.0 {
+                    0.5
+                } else {
+                    (f - min) / range
+                }
+            })
             .collect();
 
         let input =

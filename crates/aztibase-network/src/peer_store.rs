@@ -95,7 +95,15 @@ impl PeerStore {
             entries.push((k.value().to_vec(), stored));
         }
 
-        entries.sort_by(|a, b| b.1.last_seen.cmp(&a.1.last_seen));
+        // Sort by last_seen descending, hash-based tie-breaking to resist
+        // eclipse attacks where an attacker fills the pool with same-timestamp peers
+        entries.sort_by(|a, b| {
+            b.1.last_seen.cmp(&a.1.last_seen).then_with(|| {
+                let ha = aztibase_core::hash(&a.0);
+                let hb = aztibase_core::hash(&b.0);
+                ha.cmp(&hb)
+            })
+        });
         entries.truncate(limit);
         Ok(entries)
     }

@@ -34,7 +34,7 @@ const TOPIC_BASE_NAMES: &[&str] = &[
 ];
 
 pub const MAX_TRANSMIT_SIZE: usize = 2 * 1024 * 1024; // 2 MiB
-pub const MAX_MESSAGES_PER_RPC: usize = 100;
+pub const MAX_MESSAGES_PER_RPC: usize = 20;
 pub const HEARTBEAT_MS: u64 = 500;
 pub const DUPLICATE_CACHE_SECS: u64 = 120; // 2 minutes
 

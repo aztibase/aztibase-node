@@ -742,7 +742,9 @@ async fn handle_ws_connection(socket: WebSocket, state: RpcState, client_ip: IpA
                 PARSE_ERROR,
                 "Message too large".into(),
             );
-            let _ = response_tx.send(serde_json::to_string(&err).unwrap()).await;
+            let _ = response_tx
+                .send(serde_json::to_string(&err).unwrap_or_default())
+                .await;
             continue;
         }
 
@@ -756,7 +758,7 @@ async fn handle_ws_connection(socket: WebSocket, state: RpcState, client_ip: IpA
                 {
                     let resp = handle_light_sync_ws(&state, msg_type, &light_msg).await;
                     let _ = response_tx
-                        .send(serde_json::to_string(&resp).unwrap())
+                        .send(serde_json::to_string(&resp).unwrap_or_default())
                         .await;
                     continue;
                 }
@@ -765,7 +767,9 @@ async fn handle_ws_connection(socket: WebSocket, state: RpcState, client_ip: IpA
                     PARSE_ERROR,
                     "Parse error".into(),
                 );
-                let _ = response_tx.send(serde_json::to_string(&err).unwrap()).await;
+                let _ = response_tx
+                    .send(serde_json::to_string(&err).unwrap_or_default())
+                    .await;
                 continue;
             }
         };
@@ -776,7 +780,9 @@ async fn handle_ws_connection(socket: WebSocket, state: RpcState, client_ip: IpA
                 INVALID_REQUEST,
                 "Invalid JSON-RPC version".into(),
             );
-            let _ = response_tx.send(serde_json::to_string(&err).unwrap()).await;
+            let _ = response_tx
+                .send(serde_json::to_string(&err).unwrap_or_default())
+                .await;
             continue;
         }
 
@@ -787,7 +793,9 @@ async fn handle_ws_connection(socket: WebSocket, state: RpcState, client_ip: IpA
                 if sub_handles.len() >= MAX_SUBSCRIPTIONS_PER_CLIENT {
                     let err =
                         JsonRpcResponse::error(request.id, -32000, "Too many subscriptions".into());
-                    let _ = response_tx.send(serde_json::to_string(&err).unwrap()).await;
+                    let _ = response_tx
+                        .send(serde_json::to_string(&err).unwrap_or_default())
+                        .await;
                     continue;
                 }
 
@@ -808,7 +816,7 @@ async fn handle_ws_connection(socket: WebSocket, state: RpcState, client_ip: IpA
                                 }
                             });
                             if resp_tx
-                                .send(serde_json::to_string(&notification).unwrap())
+                                .send(serde_json::to_string(&notification).unwrap_or_default())
                                 .await
                                 .is_err()
                             {
@@ -821,7 +829,7 @@ async fn handle_ws_connection(socket: WebSocket, state: RpcState, client_ip: IpA
                     let resp =
                         JsonRpcResponse::success(request.id, serde_json::Value::String(sub_id));
                     let _ = response_tx
-                        .send(serde_json::to_string(&resp).unwrap())
+                        .send(serde_json::to_string(&resp).unwrap_or_default())
                         .await;
                 } else {
                     let err = JsonRpcResponse::error(
@@ -829,7 +837,9 @@ async fn handle_ws_connection(socket: WebSocket, state: RpcState, client_ip: IpA
                         INVALID_PARAMS,
                         format!("Unknown subscription topic: {topic}"),
                     );
-                    let _ = response_tx.send(serde_json::to_string(&err).unwrap()).await;
+                    let _ = response_tx
+                        .send(serde_json::to_string(&err).unwrap_or_default())
+                        .await;
                 }
             }
             "aztb_unsubscribe" => {
@@ -848,13 +858,13 @@ async fn handle_ws_connection(socket: WebSocket, state: RpcState, client_ip: IpA
                 };
                 let resp = JsonRpcResponse::success(request.id, serde_json::Value::Bool(removed));
                 let _ = response_tx
-                    .send(serde_json::to_string(&resp).unwrap())
+                    .send(serde_json::to_string(&resp).unwrap_or_default())
                     .await;
             }
             _ => {
                 let resp = dispatch(&state, &request).await;
                 let _ = response_tx
-                    .send(serde_json::to_string(&resp).unwrap())
+                    .send(serde_json::to_string(&resp).unwrap_or_default())
                     .await;
             }
         }

@@ -337,6 +337,13 @@ impl Libp2pTransport {
                         ..
                     },
                 )) => {
+                    if let Some(ref rep_store) = self.reputation {
+                        let peer_bytes = propagation_source.to_bytes();
+                        if rep_store.is_banned(&peer_bytes).unwrap_or(false) {
+                            let _ = self.swarm.disconnect_peer_id(propagation_source);
+                            continue;
+                        }
+                    }
                     let topic_str = message.topic.to_string();
                     match gossip::validate_gossip_message(&topic_str, &message.data) {
                         gossip::MessageAcceptance::Accept => {
@@ -438,6 +445,7 @@ impl Libp2pTransport {
                             continue;
                         }
                         let _ = rep_store.record_seen(&peer_bytes);
+                        let _ = rep_store.evict_excess();
                     }
 
                     let remote_addr = endpoint.get_remote_address().clone();

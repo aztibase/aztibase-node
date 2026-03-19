@@ -201,7 +201,7 @@ impl ValidatorSet {
     /// to a stake-weighted position. The seed should be derived from the
     /// previous anchor hash to prevent pre-computation beyond one wave.
     pub fn vrf_leader_for_round(&self, round: u64, seed: &[u8; 32]) -> Option<ValidatorId> {
-        if self.validators.is_empty() {
+        if self.validators.is_empty() || self.total_stake == 0 {
             return None;
         }
 

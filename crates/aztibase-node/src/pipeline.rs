@@ -2139,6 +2139,22 @@ impl ExecutionPipeline {
                 continue;
             }
 
+            if *amount < MIN_VALIDATOR_STAKE {
+                state.increment_nonce(registrant);
+                exec_receipts.push(ExecutionReceipt {
+                    tx_hash,
+                    success: false,
+                    gas_used: 21_000,
+                    contract_address: None,
+                    error: Some(format!(
+                        "minimum stake {MIN_VALIDATOR_STAKE} AZTB required, got {amount}"
+                    )),
+                    inference_hash: None,
+                    anomaly_score: 0.0,
+                });
+                continue;
+            }
+
             // Check registration mode before proceeding
             {
                 let params = self.chain_params.read().await;
