@@ -5,6 +5,23 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ---
 
+## Sprint 061 — Progressive Decentralization + EmergencyAction (2026-03-19)
+
+### Added
+- **`ValidatorRegistrationMode`**: Three-stage validator onboarding control. `Permissioned` (only approved addresses), `StakeGated` (500K+ AZTB minimum), `Open` (standard 10K). Mode changeable via governance proposal.
+- **`EmergencyAction` TxKind (0x1D)**: Foundation emergency key with 4 actions — `Pause`, `Unpause`, `ForceParam`, `RemoveValidator`. Hard-coded 1-year sunset at epoch 78,840. No code path can extend it.
+- **`aztb_getEmergencyKeyStatus` RPC**: Returns key active/expired status, key address, sunset epoch, and chain paused state.
+- **`chain_paused` flag**: When paused, only EmergencyAction transactions execute. Empty blocks continue for liveness.
+- **`approved_validators` genesis config**: Foundation-approved pubkeys for permissioned mode. Genesis validators are auto-approved.
+- **`stake_gated_minimum` ChainParam**: Configurable minimum stake for StakeGated mode (default 500K, bounds 50K-10M).
+- **`deregister_validator()`**: Emergency removal of compromised validators from StakingStore.
+
+### Changed
+- **`aztb_listChainParams`**: Now includes `validator_registration_mode` in response.
+- **Governance proposal execution**: Special handling for `validator_registration_mode` parameter — changes the mode enum directly rather than the generic param map.
+
+---
+
 ## RegisterValidator TxKind — Public Validator Onboarding (2026-03-17)
 
 ### Added

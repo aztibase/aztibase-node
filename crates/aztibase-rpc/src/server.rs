@@ -664,6 +664,7 @@ async fn dispatch(state: &RpcState, req: &JsonRpcRequest) -> JsonRpcResponse {
         "aztb_getBridgeProofStatus" => handle_get_bridge_proof_status(state, req).await,
         "aztb_getChainHealth" => handle_get_chain_health(state, req).await,
         "aztb_getHealthHistory" => handle_get_health_history(state, req).await,
+        "aztb_getEmergencyKeyStatus" => handle_get_emergency_key_status(state, req).await,
         _ => JsonRpcResponse::error(
             req.id.clone(),
             METHOD_NOT_FOUND,
@@ -2043,7 +2044,7 @@ async fn handle_list_chain_params(state: &RpcState, req: &JsonRpcRequest) -> Jso
     };
 
     let cp = params_store.read().await;
-    let result: Vec<serde_json::Value> = cp
+    let mut result: Vec<serde_json::Value> = cp
         .list()
         .iter()
         .map(|(key, val)| {
@@ -2056,6 +2057,12 @@ async fn handle_list_chain_params(state: &RpcState, req: &JsonRpcRequest) -> Jso
             })
         })
         .collect();
+    result.push(serde_json::json!({
+        "key": "validator_registration_mode",
+        "value": cp.validator_registration_mode.to_string(),
+        "type": "Str",
+        "description": "Validator registration mode: permissioned, stake_gated, or open",
+    }));
 
     JsonRpcResponse::success(req.id.clone(), serde_json::json!(result))
 }
@@ -2596,6 +2603,37 @@ async fn handle_get_health_history(state: &RpcState, req: &JsonRpcRequest) -> Js
     let history = state.sentinel_history.read().await;
     let entries: Vec<_> = history.iter().rev().take(limit).cloned().collect();
     JsonRpcResponse::success(req.id.clone(), serde_json::json!(entries))
+}
+
+async fn handle_get_emergency_key_status(
+    state: &RpcState,
+    req: &JsonRpcRequest,
+) -> JsonRpcResponse {
+    let params_store = match &state.chain_params {
+        Some(p) => p,
+        None => {
+            return JsonRpcResponse::error(
+                req.id.clone(),
+                -32000,
+                "chain params not available".into(),
+            );
+        }
+    };
+    let cp = params_store.read().await;
+    let key_hex = cp.emergency_key.map(hex::encode);
+    let sunset = aztibase_execution::EMERGENCY_KEY_SUNSET_EPOCH;
+    let active = cp.emergency_key.is_some();
+    let paused = cp.chain_paused;
+
+    JsonRpcResponse::success(
+        req.id.clone(),
+        serde_json::json!({
+            "active": active,
+            "keyAddress": key_hex,
+            "sunsetEpoch": sunset,
+            "chainPaused": paused,
+        }),
+    )
 }
 
 fn parse_u64_param(params: &serde_json::Value, index: usize) -> Result<u64, String> {

@@ -1513,6 +1513,34 @@ async fn main() -> Result<()> {
             exec_pipeline
                 .bootstrap_genesis_validators(&genesis_validators)
                 .await;
+
+            // Seed approved validators: genesis validators + explicit approved_validators list.
+            let mut approved: std::collections::HashSet<[u8; 32]> = genesis_validators
+                .iter()
+                .map(|(addr, _, _)| *addr)
+                .collect();
+            for hex_addr in &gen_cfg.approved_validators {
+                if let Some(addr) = genesis::hex_decode(hex_addr)
+                    .and_then(|b| <[u8; 32]>::try_from(b.as_slice()).ok())
+                {
+                    approved.insert(addr);
+                }
+            }
+            exec_pipeline.set_approved_validators(approved).await;
+
+            // Set emergency key from genesis if present
+            if let Some(key) = gen_cfg
+                .emergency_key
+                .as_ref()
+                .and_then(|hex| genesis::hex_decode(hex))
+                .and_then(|b| <[u8; 32]>::try_from(b.as_slice()).ok())
+            {
+                exec_pipeline.set_emergency_key(key).await;
+                tracing::info!(
+                    "Emergency key configured from genesis (sunset: epoch {})",
+                    aztibase_execution::EMERGENCY_KEY_SUNSET_EPOCH
+                );
+            }
         } else {
             tracing::info!("State already populated, skipping genesis");
             drop(state_guard);
@@ -1757,11 +1785,10 @@ async fn main() -> Result<()> {
         };
         let interval = cli.sentinel_interval;
         let model_dir = {
-            let candidates = [
-                PathBuf::from("models"),
-                config.data_dir.join("models"),
-            ];
-            candidates.into_iter().find(|d| d.join("sentinel_v1.onnx").exists())
+            let candidates = [PathBuf::from("models"), config.data_dir.join("models")];
+            candidates
+                .into_iter()
+                .find(|d| d.join("sentinel_v1.onnx").exists())
         };
         tokio::spawn(async move {
             sentinel::run_sentinel(s_state, s_handles, interval, model_dir).await;

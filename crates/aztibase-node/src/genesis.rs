@@ -38,6 +38,12 @@ pub struct GenesisConfig {
     pub timestamp: u64,
     pub validators: Vec<ValidatorEntry>,
     pub accounts: BTreeMap<String, AccountEntry>,
+    /// Foundation-approved validator addresses (hex). Only used in Permissioned mode.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub approved_validators: Vec<String>,
+    /// Emergency key pubkey (hex, Ed25519). Dead after sunset epoch.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub emergency_key: Option<String>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -194,6 +200,8 @@ pub fn generate_genesis(n_validators: usize, n_funded: usize, timestamp: u64) ->
         timestamp,
         validators,
         accounts,
+        approved_validators: Vec::new(),
+        emergency_key: None,
     };
 
     GeneratedGenesis {
@@ -545,6 +553,8 @@ pub fn testnet_genesis() -> GenesisConfig {
         timestamp: 1_710_000_000_000,
         validators,
         accounts,
+        approved_validators: Vec::new(),
+        emergency_key: None,
     }
 }
 
@@ -610,6 +620,8 @@ pub fn mainnet_genesis(n_validators: usize) -> GeneratedGenesis {
         timestamp: 0, // Set at ceremony
         validators,
         accounts,
+        approved_validators: Vec::new(),
+        emergency_key: None,
     };
 
     GeneratedGenesis {
@@ -656,6 +668,8 @@ pub fn init_genesis(output_dir: &Path) -> Result<()> {
         timestamp,
         validators: Vec::new(),
         accounts: BTreeMap::new(),
+        approved_validators: Vec::new(),
+        emergency_key: None,
     };
 
     let genesis_path = output_dir.join("genesis.toml");
@@ -779,6 +793,8 @@ mod tests {
                 bls_public_key: Some(hex_encode(&[0xAA; 48])),
             }],
             accounts: BTreeMap::from([(hex_encode(&[0x02; 32]), AccountEntry { balance: 50_000 })]),
+            approved_validators: Vec::new(),
+            emergency_key: None,
         }
     }
 
@@ -906,6 +922,8 @@ mod tests {
             timestamp: 1000,
             validators: vec![],
             accounts: BTreeMap::from([("bad_hex".into(), AccountEntry { balance: 100 })]),
+            approved_validators: Vec::new(),
+            emergency_key: None,
         };
         let errs = validate_genesis(&cfg).unwrap_err();
         assert!(errs.len() >= 2); // NoValidators + InvalidAccountAddress
@@ -924,6 +942,8 @@ mod tests {
             timestamp: 1000,
             validators: vec![],
             accounts: BTreeMap::new(),
+            approved_validators: Vec::new(),
+            emergency_key: None,
         };
         let addr = [0xAA; 32];
         config
@@ -950,6 +970,8 @@ mod tests {
                 bls_public_key: None,
             }],
             accounts: BTreeMap::new(),
+            approved_validators: Vec::new(),
+            emergency_key: None,
         };
 
         let mut state = AccountState::new();

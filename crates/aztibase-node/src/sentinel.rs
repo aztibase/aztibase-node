@@ -162,7 +162,10 @@ impl OnnxScorer {
             threshold = params.threshold,
             "Sentinel Tier 2 ONNX model loaded"
         );
-        Some(Self { model: typed, params })
+        Some(Self {
+            model: typed,
+            params,
+        })
     }
 
     fn score(&self, features: &[f32]) -> f32 {
@@ -172,13 +175,11 @@ impl OnnxScorer {
             .map(|(f, (min, range))| (f - min) / range)
             .collect();
 
-        let input = match tract_ndarray::Array2::from_shape_vec(
-            (1, NUM_FEATURES),
-            normalized.clone(),
-        ) {
-            Ok(a) => a,
-            Err(_) => return 0.0,
-        };
+        let input =
+            match tract_ndarray::Array2::from_shape_vec((1, NUM_FEATURES), normalized.clone()) {
+                Ok(a) => a,
+                Err(_) => return 0.0,
+            };
 
         let plan = match self.model.clone().into_runnable() {
             Ok(p) => p,

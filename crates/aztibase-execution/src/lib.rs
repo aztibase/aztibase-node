@@ -24,7 +24,8 @@ pub mod vm;
 
 pub use agent::{AgentError, AgentPolicy, AgentPolicyStore, AgentSpendRecord};
 pub use chain_params::{
-    ChainParamError, ChainParams, ParamDef, ParamType, ParamValue, all_param_defs, param_def,
+    ChainParamError, ChainParams, EMERGENCY_KEY_SUNSET_EPOCH, ParamDef, ParamType, ParamValue,
+    ValidatorRegistrationMode, all_param_defs, param_def,
 };
 pub use contract::{ContractReceipt, ContractTx, compute_contract_address, execute_contract_txs};
 pub use cross_vm::{CrossVmCall, CrossVmResult, ReentrancyGuard, evm_to_wasm, wasm_to_evm};
@@ -51,7 +52,9 @@ pub use persist::{
     store_checkpoint_raw, store_equivocation_proof, store_transaction, write_sentinel,
 };
 pub use receipt::{ExecutionReceipt, evict_old_receipts, get_receipt, store_receipts};
-pub use routing::{RoutingError, TxKind, compute_tx_hash, route_batch, route_tx};
+pub use routing::{
+    EmergencyActionKind, RoutingError, TxKind, compute_tx_hash, route_batch, route_tx,
+};
 pub use snapshot::{
     ProtocolStoreBundle, SnapshotError, StateSnapshot, apply_full_snapshot, apply_snapshot,
     create_full_snapshot, create_snapshot, create_snapshot_with_finality, deserialize_snapshot,

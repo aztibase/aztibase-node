@@ -160,6 +160,12 @@ impl StakingStore {
         Ok(())
     }
 
+    pub fn deregister_validator(&mut self, validator_id: &Address) {
+        if let Some(v) = self.validators.get_mut(validator_id) {
+            v.active = false;
+        }
+    }
+
     pub fn set_validator_keys(
         &mut self,
         validator_id: &Address,

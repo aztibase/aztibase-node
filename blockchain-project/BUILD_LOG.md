@@ -21,6 +21,26 @@ Entries are prepended (newest first).
 
 ## Entries
 
+### Sprint 061 — Progressive Decentralization + EmergencyAction (2026-03-19)
+- **Date**: 2026-03-19
+- **Sprint**: 061
+- **Commit**: (this commit)
+- **Files Changed**:
+  - `crates/aztibase-execution/src/chain_params.rs` — `ValidatorRegistrationMode` enum (Permissioned/StakeGated/Open), `can_register_validator()` gate, `chain_paused` flag, `emergency_key` field, `approved_validators` set, `EMERGENCY_KEY_SUNSET_EPOCH` constant (78,840 epochs ~365d), `stake_gated_minimum` ChainParam (500K default). 9 new unit tests.
+  - `crates/aztibase-execution/src/routing.rs` — `EmergencyAction` TxKind (prefix 0x1D) with `EmergencyActionKind` enum (Pause/Unpause/ForceParam/RemoveValidator). All match arms added (encode, nonce, gas_price, gas_limit, sender, expected_prefix, compute_tx_hash, route_tx).
+  - `crates/aztibase-execution/src/staking.rs` — `deregister_validator()` method (sets active=false).
+  - `crates/aztibase-execution/src/lib.rs` — Exports: `ValidatorRegistrationMode`, `EMERGENCY_KEY_SUNSET_EPOCH`, `EmergencyActionKind`.
+  - `crates/aztibase-node/src/pipeline.rs` — Registration mode gate on RegisterValidator execution. EmergencyAction execution: sender==emergency_key + epoch<sunset verification, Pause/Unpause/ForceParam/RemoveValidator handlers. Chain pause filter (only EmergencyAction txs execute when paused). `set_approved_validators()`, `set_emergency_key()` methods.
+  - `crates/aztibase-node/src/genesis.rs` — `approved_validators` and `emergency_key` fields on GenesisConfig.
+  - `crates/aztibase-node/src/main.rs` — Genesis bootstrap seeds approved_validators (genesis validators + explicit list) and emergency_key into ChainParams.
+  - `crates/aztibase-rpc/src/server.rs` — `aztb_getEmergencyKeyStatus` RPC (active/keyAddress/sunsetEpoch/chainPaused). `aztb_listChainParams` includes validator_registration_mode. Governance proposal handler for validator_registration_mode changes.
+- **Tests**: 998 pass (+9 new), 0 fail. Clippy 0 warnings, fmt clean.
+- **ADR**: ADR-033 (Progressive Decentralization)
+- **Review Notes**: Security review pass: sunset is hardcoded constant (ungovernable), emergency key is dead code after epoch 78,840, only 4 action variants with no extensibility, pause preserves liveness (empty blocks), registration mode changeable only via governance vote.
+- **Security Flags**: 0 ELEVATED, 0 MEDIUM.
+
+---
+
 ### RegisterValidator TxKind — Public Validator Onboarding (2026-03-17)
 - **Date**: 2026-03-17
 - **Sprint**: Post-060

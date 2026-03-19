@@ -938,9 +938,7 @@ impl ConsensusEngine {
             missing = batch.len(),
             "Requesting missing DAG parents from peers"
         );
-        let _ = self
-            .outbox
-            .try_send(ConsensusOutput::MissingParents(batch));
+        let _ = self.outbox.try_send(ConsensusOutput::MissingParents(batch));
     }
 
     fn prune_equivocation_tracker(&mut self) {

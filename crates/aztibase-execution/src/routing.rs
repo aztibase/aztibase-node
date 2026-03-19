@@ -30,6 +30,7 @@ const PREFIX_REGISTER_L2: u8 = 0x19;
 const PREFIX_ROTATE_VALIDATOR_KEY: u8 = 0x1A;
 const PREFIX_FAUCET_DRIP: u8 = 0x1B;
 const PREFIX_REGISTER_VALIDATOR: u8 = 0x1C;
+const PREFIX_EMERGENCY_ACTION: u8 = 0x1D;
 
 /// Maximum encoded transaction size (1 MB). Rejects oversized payloads before
 /// deserialization to prevent memory-bomb attacks via oversized payloads.
@@ -251,6 +252,22 @@ pub enum TxKind {
         nonce: u64,
         gas_price: u64,
     },
+    EmergencyAction {
+        sender: Address,
+        action: EmergencyActionKind,
+        nonce: u64,
+        gas_price: u64,
+    },
+}
+
+/// Emergency action variants. Only executable by the genesis emergency key
+/// before the sunset epoch.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum EmergencyActionKind {
+    Pause,
+    Unpause,
+    ForceParam { key: String, value: String },
+    RemoveValidator { target: Address },
 }
 
 impl TxKind {
@@ -285,6 +302,7 @@ impl TxKind {
             TxKind::RotateValidatorKey { .. } => PREFIX_ROTATE_VALIDATOR_KEY,
             TxKind::FaucetDrip { .. } => PREFIX_FAUCET_DRIP,
             TxKind::RegisterValidator { .. } => PREFIX_REGISTER_VALIDATOR,
+            TxKind::EmergencyAction { .. } => PREFIX_EMERGENCY_ACTION,
         };
         let payload = postcard::to_allocvec(self).expect("TxKind serialization cannot fail");
         let mut buf = Vec::with_capacity(1 + payload.len());
@@ -322,7 +340,8 @@ impl TxKind {
             | TxKind::RegisterL2 { nonce, .. }
             | TxKind::RotateValidatorKey { nonce, .. }
             | TxKind::FaucetDrip { nonce, .. }
-            | TxKind::RegisterValidator { nonce, .. } => *nonce,
+            | TxKind::RegisterValidator { nonce, .. }
+            | TxKind::EmergencyAction { nonce, .. } => *nonce,
         }
     }
 
@@ -355,7 +374,8 @@ impl TxKind {
             | TxKind::RegisterL2 { gas_price, .. }
             | TxKind::RotateValidatorKey { gas_price, .. }
             | TxKind::FaucetDrip { gas_price, .. }
-            | TxKind::RegisterValidator { gas_price, .. } => *gas_price,
+            | TxKind::RegisterValidator { gas_price, .. }
+            | TxKind::EmergencyAction { gas_price, .. } => *gas_price,
         }
     }
 
@@ -391,6 +411,7 @@ impl TxKind {
             TxKind::RotateValidatorKey { .. } => 60_000,
             TxKind::FaucetDrip { .. } => 0,
             TxKind::RegisterValidator { .. } => 100_000,
+            TxKind::EmergencyAction { .. } => 0,
         }
     }
 
@@ -424,6 +445,7 @@ impl TxKind {
             TxKind::RotateValidatorKey { validator, .. } => validator,
             TxKind::FaucetDrip { validator, .. } => validator,
             TxKind::RegisterValidator { registrant, .. } => registrant,
+            TxKind::EmergencyAction { sender, .. } => sender,
         }
     }
 
@@ -457,6 +479,7 @@ impl TxKind {
             TxKind::RotateValidatorKey { .. } => PREFIX_ROTATE_VALIDATOR_KEY,
             TxKind::FaucetDrip { .. } => PREFIX_FAUCET_DRIP,
             TxKind::RegisterValidator { .. } => PREFIX_REGISTER_VALIDATOR,
+            TxKind::EmergencyAction { .. } => PREFIX_EMERGENCY_ACTION,
         }
     }
 }
@@ -542,7 +565,8 @@ pub fn route_tx(raw: &[u8]) -> Result<TxKind, RoutingError> {
         | PREFIX_REGISTER_L2
         | PREFIX_ROTATE_VALIDATOR_KEY
         | PREFIX_FAUCET_DRIP
-        | PREFIX_REGISTER_VALIDATOR => {}
+        | PREFIX_REGISTER_VALIDATOR
+        | PREFIX_EMERGENCY_ACTION => {}
         other => return Err(RoutingError::UnknownPrefix(other)),
     }
     let (decoded, remaining): (TxKind, &[u8]) =
@@ -912,6 +936,13 @@ pub fn compute_tx_hash(tx: &TxKind) -> [u8; 32] {
             let mut buf = Vec::new();
             buf.extend_from_slice(registrant);
             buf.extend_from_slice(&amount.to_le_bytes());
+            buf.extend_from_slice(&nonce.to_le_bytes());
+            hash(&buf)
+        }
+        TxKind::EmergencyAction { sender, nonce, .. } => {
+            let mut buf = Vec::new();
+            buf.extend_from_slice(sender);
+            buf.push(PREFIX_EMERGENCY_ACTION);
             buf.extend_from_slice(&nonce.to_le_bytes());
             hash(&buf)
         }

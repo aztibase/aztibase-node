@@ -40,6 +40,7 @@ Every non-obvious technical decision is recorded here. Each ADR is immutable onc
 | ADR-030 | Consensus round fast-forward for late-joining validators | 2026-03-14 | ACCEPTED | consensus-engineer + blockchain-architect |
 | ADR-031 | Block sync protocol for full nodes (dual-mode) | 2026-03-15 | ACCEPTED | p2p-network-engineer + node-engineer |
 | ADR-032 | AI Sentinel Tier 1 — heuristic observer mode | 2026-03-16 | ACCEPTED | ai-integration-engineer + node-engineer |
+| ADR-033 | Progressive decentralization — permissioned validators + emergency key | 2026-03-19 | ACCEPTED | blockchain-architect + security-engineer |
 
 ---
 
@@ -1009,3 +1010,47 @@ Ship a Tier 1 "observer-only" sentinel service inside every validator node:
 - 2 new RPC endpoints (aztb_getChainHealth, aztb_getHealthHistory), 1 new WebSocket topic (chainHealth)
 - Explorer dashboard shows live health bar when sentinel is active
 - Tier 2 (ONNX autoencoder) can drop in without changing the public API
+
+---
+
+## ADR-033: Progressive Decentralization — Permissioned Validators + Emergency Key
+
+**Date:** 2026-03-19
+**Status:** ACCEPTED
+**Decided By:** blockchain-architect + security-engineer
+**Git Ref:** Sprint 061
+
+### Context
+Mainnet launch with a small validator set (3-10) is vulnerable to coordinated attacks, bugs, or a single compromised validator disrupting consensus. The chain needs temporary training wheels that provably self-destruct.
+
+### Decision
+Two mechanisms:
+
+1. **ValidatorRegistrationMode** — a ChainParams field with three modes:
+   - `Permissioned`: Only genesis-approved addresses can register as validators
+   - `StakeGated`: Anyone can register with 500K+ AZTB minimum stake (10x normal)
+   - `Open`: Standard 10K AZTB minimum (existing behavior)
+   - Mode transitions via governance proposal (stake-weighted vote required)
+
+2. **EmergencyAction TxKind (0x1D)** — a foundation emergency key with 4 actions:
+   - `Pause` / `Unpause`: Halt transaction execution (empty blocks preserve liveness)
+   - `ForceParam`: Override a ChainParam without governance vote
+   - `RemoveValidator`: Deregister a compromised validator immediately
+   - Hard-coded sunset at epoch 78,840 (~365 days). No code path can extend it.
+
+### Rationale
+- Every production L1 has had a bootstrap phase with centralized safeguards (Ethereum PoW miners, Solana restart committees, Sui foundation validators)
+- The key differentiator is the hard-coded sunset — the emergency key becomes dead code after 1 year, provably and ungovernable
+- Permissioned validator registration prevents Sybil attacks during low-market-cap bootstrap
+- Governance-controlled mode transitions mean the community decides when to open up
+
+### Alternatives Considered
+- **No training wheels**: Maximally decentralized from day 1, but a single bug could kill the chain before it has community momentum
+- **Multisig emergency key**: More decentralized but adds key-management complexity and signing coordination latency during emergencies
+- **Governance-only emergency actions**: Too slow — a compromised validator can cause damage in seconds
+
+### Consequences
+- Mainnet launches in `Permissioned` mode with foundation-approved validators
+- 1 new TxKind (EmergencyAction, 0x1D), 1 new RPC (aztb_getEmergencyKeyStatus)
+- Emergency key address is public and transparent via genesis config + RPC
+- After sunset epoch, the emergency key code path is permanently unreachable

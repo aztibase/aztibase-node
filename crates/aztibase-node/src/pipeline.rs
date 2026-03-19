@@ -326,6 +326,17 @@ impl ExecutionPipeline {
         }
     }
 
+    /// Seed the approved validator list and emergency key from genesis config.
+    pub async fn set_approved_validators(&self, approved: std::collections::HashSet<[u8; 32]>) {
+        let mut params = self.chain_params.write().await;
+        params.approved_validators = approved;
+    }
+
+    pub async fn set_emergency_key(&self, key: [u8; 32]) {
+        let mut params = self.chain_params.write().await;
+        params.emergency_key = Some(key);
+    }
+
     /// Restore all protocol stores from a snapshot bundle.
     pub async fn apply_protocol_bundle(&self, bundle: aztibase_execution::ProtocolStoreBundle) {
         *self.staking_store.write().await = bundle.staking;
@@ -581,7 +592,17 @@ impl ExecutionPipeline {
         }
 
         // Filter routed txs to only those that passed escrow.
-        let executable: Vec<&TxKind> = escrowed_indices.iter().map(|&i| &routed[i]).collect();
+        // When chain is paused, only EmergencyAction txs are executed.
+        let chain_paused = self.chain_params.read().await.chain_paused;
+        let executable: Vec<&TxKind> = if chain_paused {
+            escrowed_indices
+                .iter()
+                .map(|&i| &routed[i])
+                .filter(|tx| matches!(tx, TxKind::EmergencyAction { .. }))
+                .collect()
+        } else {
+            escrowed_indices.iter().map(|&i| &routed[i]).collect()
+        };
 
         let mut transfers = Vec::new();
         let mut contracts = Vec::new();
@@ -612,6 +633,8 @@ impl ExecutionPipeline {
         let mut faucet_drips: Vec<([u8; 32], [u8; 32], u128)> = Vec::new();
         #[allow(clippy::type_complexity)]
         let mut register_validators: Vec<([u8; 32], u128, u64, Option<[u8; 32]>)> = Vec::new();
+        let mut emergency_actions: Vec<([u8; 32], aztibase_execution::EmergencyActionKind, u64)> =
+            Vec::new();
 
         for tx in &executable {
             match tx {
@@ -998,6 +1021,14 @@ impl ExecutionPipeline {
                     let pubkey = sender_pubkeys.get(registrant).copied();
                     register_validators.push((*registrant, *amount, *nonce, pubkey));
                 }
+                TxKind::EmergencyAction {
+                    sender,
+                    action,
+                    nonce,
+                    ..
+                } => {
+                    emergency_actions.push((*sender, action.clone(), *nonce));
+                }
             }
         }
 
@@ -1025,7 +1056,8 @@ impl ExecutionPipeline {
             + bridge_deposits.len()
             + bridge_withdraws.len()
             + register_l2s.len()
-            + rotate_keys.len();
+            + rotate_keys.len()
+            + emergency_actions.len();
 
         // Phase 2: Execute transactions.
         let mut exec_receipts = Vec::new();
@@ -1953,6 +1985,31 @@ impl ExecutionPipeline {
             if !passed.is_empty() {
                 let mut params = self.chain_params.write().await;
                 for proposal in &passed {
+                    if proposal.param_key == "validator_registration_mode" {
+                        if let Some(mode) =
+                            aztibase_execution::ValidatorRegistrationMode::from_str_mode(
+                                &proposal.param_value,
+                            )
+                        {
+                            let old = params.validator_registration_mode;
+                            params.validator_registration_mode = mode;
+                            gov.mark_executed(&proposal.id);
+                            tracing::info!(
+                                proposal_id = %short_hex(&proposal.id),
+                                old_mode = %old,
+                                new_mode = %mode,
+                                "Validator registration mode changed via governance"
+                            );
+                        } else {
+                            gov.mark_executed(&proposal.id);
+                            tracing::warn!(
+                                proposal_id = %short_hex(&proposal.id),
+                                value = %proposal.param_value,
+                                "Invalid validator_registration_mode value"
+                            );
+                        }
+                        continue;
+                    }
                     match params.set_from_str(&proposal.param_key, &proposal.param_value) {
                         Ok(old_value) => {
                             gov.mark_executed(&proposal.id);
@@ -1998,6 +2055,24 @@ impl ExecutionPipeline {
                     anomaly_score: 0.0,
                 });
                 continue;
+            }
+
+            // Check registration mode before proceeding
+            {
+                let params = self.chain_params.read().await;
+                if let Err(reason) = params.can_register_validator(registrant, *amount) {
+                    state.increment_nonce(registrant);
+                    exec_receipts.push(ExecutionReceipt {
+                        tx_hash,
+                        success: false,
+                        gas_used: 21_000,
+                        contract_address: None,
+                        error: Some(reason),
+                        inference_hash: None,
+                        anomaly_score: 0.0,
+                    });
+                    continue;
+                }
             }
 
             let balance = state.balance(registrant);
@@ -2064,6 +2139,119 @@ impl ExecutionPipeline {
                     });
                 }
             }
+        }
+
+        // Execute EmergencyAction transactions.
+        for (sender, action, nonce) in &emergency_actions {
+            let mut preimage = Vec::new();
+            preimage.extend_from_slice(sender);
+            preimage.push(0x1D);
+            preimage.extend_from_slice(&nonce.to_le_bytes());
+            let tx_hash = hash(&preimage);
+
+            let sender_nonce = state.nonce(sender);
+            if *nonce != sender_nonce {
+                exec_receipts.push(ExecutionReceipt {
+                    tx_hash,
+                    success: false,
+                    gas_used: 0,
+                    contract_address: None,
+                    error: Some(format!(
+                        "nonce mismatch: expected {sender_nonce}, got {nonce}"
+                    )),
+                    inference_hash: None,
+                    anomaly_score: 0.0,
+                });
+                continue;
+            }
+
+            let params = self.chain_params.read().await;
+            let emergency_key = params.emergency_key;
+            drop(params);
+
+            let authorized = match emergency_key {
+                Some(key) => *sender == key,
+                None => false,
+            };
+
+            if !authorized {
+                state.increment_nonce(sender);
+                exec_receipts.push(ExecutionReceipt {
+                    tx_hash,
+                    success: false,
+                    gas_used: 0,
+                    contract_address: None,
+                    error: Some("sender is not the emergency key".into()),
+                    inference_hash: None,
+                    anomaly_score: 0.0,
+                });
+                continue;
+            }
+
+            let current_epoch = {
+                let et = self.emission_tracker.read().await;
+                et.current_epoch
+            };
+            if current_epoch >= aztibase_execution::EMERGENCY_KEY_SUNSET_EPOCH {
+                state.increment_nonce(sender);
+                exec_receipts.push(ExecutionReceipt {
+                    tx_hash,
+                    success: false,
+                    gas_used: 0,
+                    contract_address: None,
+                    error: Some(format!(
+                        "emergency key expired at epoch {}, current epoch {}",
+                        aztibase_execution::EMERGENCY_KEY_SUNSET_EPOCH,
+                        current_epoch
+                    )),
+                    inference_hash: None,
+                    anomaly_score: 0.0,
+                });
+                continue;
+            }
+
+            let result_msg = {
+                let mut params = self.chain_params.write().await;
+                match action {
+                    aztibase_execution::EmergencyActionKind::Pause => {
+                        params.chain_paused = true;
+                        "chain paused".to_string()
+                    }
+                    aztibase_execution::EmergencyActionKind::Unpause => {
+                        params.chain_paused = false;
+                        "chain unpaused".to_string()
+                    }
+                    aztibase_execution::EmergencyActionKind::ForceParam { key, value } => {
+                        match params.set_from_str(key, value) {
+                            Ok(old) => format!("param {key} changed: {old} → {value}"),
+                            Err(e) => format!("force param failed: {e}"),
+                        }
+                    }
+                    aztibase_execution::EmergencyActionKind::RemoveValidator { target } => {
+                        let mut staking = self.staking_store.write().await;
+                        staking.deregister_validator(target);
+                        self.consensus_addrs.remove(target);
+                        format!("validator {} removed", short_hex(target))
+                    }
+                }
+            };
+
+            state.increment_nonce(sender);
+            exec_receipts.push(ExecutionReceipt {
+                tx_hash,
+                success: true,
+                gas_used: 0,
+                contract_address: None,
+                error: None,
+                inference_hash: None,
+                anomaly_score: 0.0,
+            });
+            tracing::warn!(
+                action = result_msg,
+                sender = %short_hex(sender),
+                epoch = current_epoch,
+                "Emergency action executed"
+            );
         }
 
         // Execute Stake transactions.

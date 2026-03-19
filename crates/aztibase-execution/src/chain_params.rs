@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fmt;
 
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
@@ -200,11 +200,67 @@ static PARAM_DEFS: &[ParamDef] = &[
         max: Some(3000),
         description: "Validator commission on delegation rewards (basis points, 100 = 1%)",
     },
+    ParamDef {
+        key: "stake_gated_minimum",
+        param_type: ParamType::U64,
+        default: ParamValue::U64(500_000),
+        min: Some(50_000),
+        max: Some(10_000_000),
+        description: "Minimum stake required in stake_gated registration mode",
+    },
 ];
+
+/// Controls who can register as a validator.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub enum ValidatorRegistrationMode {
+    /// Only foundation-approved pubkeys may register.
+    Permissioned,
+    /// Anyone may register, but must meet `stake_gated_minimum` (default 500K).
+    StakeGated,
+    /// Anyone may register with the standard minimum stake.
+    Open,
+}
+
+impl fmt::Display for ValidatorRegistrationMode {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Permissioned => write!(f, "permissioned"),
+            Self::StakeGated => write!(f, "stake_gated"),
+            Self::Open => write!(f, "open"),
+        }
+    }
+}
+
+impl ValidatorRegistrationMode {
+    pub fn from_str_mode(s: &str) -> Option<Self> {
+        match s.to_lowercase().as_str() {
+            "permissioned" => Some(Self::Permissioned),
+            "stake_gated" | "stakegated" => Some(Self::StakeGated),
+            "open" => Some(Self::Open),
+            _ => None,
+        }
+    }
+}
+
+/// ~365 days at 1000 rounds/epoch, 400ms block time.
+/// 365 * 24 * 3600 * 1000 / 400 / 1000 = ~78_840 epochs.
+pub const EMERGENCY_KEY_SUNSET_EPOCH: u64 = 78_840;
 
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct ChainParams {
     values: HashMap<String, ParamValue>,
+    #[serde(default = "default_registration_mode")]
+    pub validator_registration_mode: ValidatorRegistrationMode,
+    #[serde(default)]
+    pub approved_validators: HashSet<[u8; 32]>,
+    #[serde(default)]
+    pub chain_paused: bool,
+    #[serde(default)]
+    pub emergency_key: Option<[u8; 32]>,
+}
+
+fn default_registration_mode() -> ValidatorRegistrationMode {
+    ValidatorRegistrationMode::Permissioned
 }
 
 impl ChainParams {
@@ -213,7 +269,13 @@ impl ChainParams {
         for def in PARAM_DEFS {
             values.insert(def.key.to_string(), def.default.clone());
         }
-        Self { values }
+        Self {
+            values,
+            validator_registration_mode: ValidatorRegistrationMode::Permissioned,
+            approved_validators: HashSet::new(),
+            chain_paused: false,
+            emergency_key: None,
+        }
     }
 
     pub fn get(&self, key: &str) -> Option<&ParamValue> {
@@ -271,6 +333,31 @@ impl ChainParams {
             }
         })?;
         self.set(key, value)
+    }
+
+    /// Check whether a given address is allowed to register as a validator
+    /// under the current registration mode.
+    pub fn can_register_validator(&self, address: &[u8; 32], stake: u128) -> Result<(), String> {
+        match self.validator_registration_mode {
+            ValidatorRegistrationMode::Permissioned => {
+                if !self.approved_validators.contains(address) {
+                    return Err(
+                        "validator registration is permissioned; address not on approved list"
+                            .into(),
+                    );
+                }
+            }
+            ValidatorRegistrationMode::StakeGated => {
+                let min = self.get_u64("stake_gated_minimum").unwrap_or(500_000);
+                if stake < min as u128 {
+                    return Err(format!(
+                        "stake_gated mode requires minimum {min} AZTB, got {stake}"
+                    ));
+                }
+            }
+            ValidatorRegistrationMode::Open => {}
+        }
+        Ok(())
     }
 
     pub fn list(&self) -> Vec<(&str, &ParamValue)> {
@@ -428,5 +515,129 @@ mod tests {
 
         let err = params.set_from_str("unknown_key", "42").unwrap_err();
         assert!(matches!(err, ChainParamError::UnknownKey(_)));
+    }
+
+    #[test]
+    fn permissioned_mode_rejects_unapproved() {
+        let mut params = ChainParams::defaults();
+        params.validator_registration_mode = ValidatorRegistrationMode::Permissioned;
+
+        let addr = [0xAA; 32];
+        let result = params.can_register_validator(&addr, 100_000);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("not on approved list"));
+    }
+
+    #[test]
+    fn permissioned_mode_accepts_approved() {
+        let mut params = ChainParams::defaults();
+        params.validator_registration_mode = ValidatorRegistrationMode::Permissioned;
+
+        let addr = [0xBB; 32];
+        params.approved_validators.insert(addr);
+        params.can_register_validator(&addr, 100_000).unwrap();
+    }
+
+    #[test]
+    fn stake_gated_enforces_minimum() {
+        let mut params = ChainParams::defaults();
+        params.validator_registration_mode = ValidatorRegistrationMode::StakeGated;
+        params
+            .set("stake_gated_minimum", ParamValue::U64(500_000))
+            .unwrap();
+
+        let addr = [0xCC; 32];
+        let err = params.can_register_validator(&addr, 100_000);
+        assert!(err.is_err());
+        assert!(err.unwrap_err().contains("requires minimum"));
+
+        params.can_register_validator(&addr, 500_000).unwrap();
+        params.can_register_validator(&addr, 1_000_000).unwrap();
+    }
+
+    #[test]
+    fn open_mode_allows_any() {
+        let mut params = ChainParams::defaults();
+        params.validator_registration_mode = ValidatorRegistrationMode::Open;
+
+        let addr = [0xDD; 32];
+        params.can_register_validator(&addr, 10_000).unwrap();
+    }
+
+    #[test]
+    fn registration_mode_from_str() {
+        assert_eq!(
+            ValidatorRegistrationMode::from_str_mode("permissioned"),
+            Some(ValidatorRegistrationMode::Permissioned)
+        );
+        assert_eq!(
+            ValidatorRegistrationMode::from_str_mode("stake_gated"),
+            Some(ValidatorRegistrationMode::StakeGated)
+        );
+        assert_eq!(
+            ValidatorRegistrationMode::from_str_mode("open"),
+            Some(ValidatorRegistrationMode::Open)
+        );
+        assert_eq!(
+            ValidatorRegistrationMode::from_str_mode("OPEN"),
+            Some(ValidatorRegistrationMode::Open)
+        );
+        assert_eq!(ValidatorRegistrationMode::from_str_mode("invalid"), None);
+    }
+
+    #[test]
+    fn mode_transitions_via_governance() {
+        let mut params = ChainParams::defaults();
+        assert_eq!(
+            params.validator_registration_mode,
+            ValidatorRegistrationMode::Permissioned
+        );
+
+        params.validator_registration_mode =
+            ValidatorRegistrationMode::from_str_mode("stake_gated").unwrap();
+        assert_eq!(
+            params.validator_registration_mode,
+            ValidatorRegistrationMode::StakeGated
+        );
+
+        params.validator_registration_mode =
+            ValidatorRegistrationMode::from_str_mode("open").unwrap();
+        assert_eq!(
+            params.validator_registration_mode,
+            ValidatorRegistrationMode::Open
+        );
+    }
+
+    #[test]
+    fn emergency_key_sunset_constant() {
+        assert!(EMERGENCY_KEY_SUNSET_EPOCH > 70_000);
+        assert!(EMERGENCY_KEY_SUNSET_EPOCH < 100_000);
+    }
+
+    #[test]
+    fn chain_paused_defaults_false() {
+        let params = ChainParams::defaults();
+        assert!(!params.chain_paused);
+        assert!(params.emergency_key.is_none());
+    }
+
+    #[test]
+    fn chain_params_roundtrip_with_new_fields() {
+        let mut params = ChainParams::defaults();
+        params.chain_paused = true;
+        params.emergency_key = Some([0xAA; 32]);
+        params.validator_registration_mode = ValidatorRegistrationMode::StakeGated;
+        params.approved_validators.insert([0xBB; 32]);
+
+        let bytes = postcard::to_allocvec(&params).unwrap();
+        let restored: ChainParams = postcard::from_bytes(&bytes).unwrap();
+
+        assert!(restored.chain_paused);
+        assert_eq!(restored.emergency_key, Some([0xAA; 32]));
+        assert_eq!(
+            restored.validator_registration_mode,
+            ValidatorRegistrationMode::StakeGated
+        );
+        assert!(restored.approved_validators.contains(&[0xBB; 32]));
     }
 }
