@@ -378,6 +378,12 @@ impl DagStore {
         self.pruned_through
     }
 
+    /// Return the set of parent hashes that are referenced by blocks in the DAG
+    /// but have not been received yet (phantom/orphan parents).
+    pub fn orphan_parent_hashes(&self) -> Vec<BlockHash> {
+        self.orphan_parents.iter().copied().collect()
+    }
+
     /// Total number of blocks in the store.
     pub fn len(&self) -> usize {
         self.index.len()

@@ -16,8 +16,8 @@ pub use batch_archive::BatchArchive;
 pub use block_sync::{
     BLOCK_SYNC_PROTOCOL, BlockSyncCodec, BlockSyncMessage, BlockSyncProtocol, BlockSyncRequest,
     BlockSyncResponse, CommittedBatchAnnounce, SyncBatch, build_batch_request,
-    build_batch_response, decode_batch_announce, decode_block_sync, encode_batch_announce,
-    encode_block_sync,
+    build_batch_response, build_vertex_request, build_vertex_response, decode_batch_announce,
+    decode_block_sync, encode_batch_announce, encode_block_sync,
 };
 pub use connection_filter::{ConnectionFilter, FilterReason};
 pub use dht_record::{

@@ -598,35 +598,34 @@ pub async fn run_sentinel(
             stall_reported = false;
         }
 
-        // Detect chain stall — no new batches for 30+ seconds
-        let stalled = last_progress_time.elapsed() > STALL_THRESHOLD && current_batch > 0;
-        if stalled && !stall_reported {
-            stall_reported = true;
-            let stall_secs = last_progress_time.elapsed().as_secs();
-            let stall_input = SentinelInput {
-                batch_height: current_batch,
-                commit_latency_us: 0,
-                txs_processed: 0,
-                base_fee: handles.base_fee.load(Ordering::Relaxed),
-                equivocations: 0,
-                active_validators: handles.active_validators.load(Ordering::Relaxed),
-                total_gas_used: 0,
-                gas_limit: 0,
-                empty_batches: 0,
-                total_batches_window: 0,
-                ms_since_last_finality: stall_secs * 1000,
-                peer_count: handles.peer_count.load(Ordering::Relaxed),
-                mempool_size: handles.mempool_size.load(Ordering::Relaxed),
-            };
-            let health = scorer.score(&stall_input);
-            tracing::warn!(
-                score = health.score,
-                level = ?health.level,
-                stall_secs = stall_secs,
-                batch = current_batch,
-                "Chain stall detected — no new batches"
-            );
-            state.push(health).await;
+        // Detect chain stall — no new batches for 30+ seconds.
+        // Force CRITICAL regardless of model output: a halted chain is always critical.
+        // Re-publish every 10s so the RPC score stays current during extended stalls.
+        let stall_elapsed = last_progress_time.elapsed();
+        let stalled = stall_elapsed > STALL_THRESHOLD && current_batch > 0;
+        if stalled {
+            let stall_secs = stall_elapsed.as_secs();
+            if !stall_reported || stall_secs % 10 < 3 {
+                stall_reported = true;
+                let stall_health = ChainHealth {
+                    score: 1.0,
+                    level: HealthLevel::Critical,
+                    features: vec![0.0; FEATURE_NAMES.len()],
+                    feature_names: FEATURE_NAMES.iter().map(|s| s.to_string()).collect(),
+                    batch_height: current_batch,
+                    timestamp_ms: std::time::SystemTime::now()
+                        .duration_since(std::time::UNIX_EPOCH)
+                        .unwrap_or_default()
+                        .as_millis() as u64,
+                };
+                tracing::warn!(
+                    stall_secs,
+                    batch = current_batch,
+                    peer_count = handles.peer_count.load(Ordering::Relaxed),
+                    "Chain stall detected — no new batches, forcing CRITICAL"
+                );
+                state.push(stall_health).await;
+            }
             continue;
         }
 

@@ -236,6 +236,12 @@ pub enum ConsensusInput {
     UpdateValidatorSet(crate::validator::ValidatorSet),
     /// Peer count changed (sent from the network layer).
     PeerCountChanged(u64),
+    /// Request encoded vertices by hash (for serving peer fetch requests).
+    /// The reply channel receives the encoded vertices.
+    FetchVertices {
+        hashes: Vec<[u8; 32]>,
+        reply: tokio::sync::oneshot::Sender<Vec<Vec<u8>>>,
+    },
 }
 
 /// Messages flowing out of the consensus engine.
@@ -252,6 +258,8 @@ pub enum ConsensusOutput {
         existing_hash: [u8; 32],
         duplicate_hash: [u8; 32],
     },
+    /// DAG has orphan parents that need fetching from peers.
+    MissingParents(Vec<[u8; 32]>),
 }
 
 /// State root announcement broadcast to peers after executing a committed batch.
@@ -263,6 +271,9 @@ pub struct StateRootAnnounce {
     pub batch_index: u64,
     pub validator: aztibase_core::ValidatorId,
 }
+
+/// Maximum orphan parent hashes to request per fetch cycle.
+const MAX_PARENT_FETCH_HASHES: usize = 32;
 
 pub struct ConsensusEngine {
     config: ConsensusConfig,
@@ -282,6 +293,7 @@ pub struct ConsensusEngine {
     threshold_clock: ThresholdClock,
     last_proposed_round: u64,
     peer_count: u64,
+    last_parent_fetch: Instant,
 }
 
 impl ConsensusEngine {
@@ -312,6 +324,7 @@ impl ConsensusEngine {
             threshold_clock: ThresholdClock::new(),
             last_proposed_round: 0,
             peer_count: 0,
+            last_parent_fetch: Instant::now(),
         }
     }
 
@@ -667,6 +680,15 @@ impl ConsensusEngine {
                 self.peer_count = count;
                 debug!(peer_count = count, "Peer count updated in consensus engine");
             }
+            ConsensusInput::FetchVertices { hashes, reply } => {
+                let vertices = self.get_encoded_vertices(&hashes);
+                debug!(
+                    requested = hashes.len(),
+                    found = vertices.len(),
+                    "Serving vertex fetch request"
+                );
+                let _ = reply.send(vertices);
+            }
         }
         Ok(())
     }
@@ -758,6 +780,7 @@ impl ConsensusEngine {
                 self.threshold_clock
                     .add_block(author, round, &self.validators);
                 debug!(round, hash = %short_hex(&hash), "Accepted vertex from peer");
+                self.check_orphan_parents();
             }
             Err(e) => {
                 debug!(error = %e, "Rejected vertex");
@@ -882,6 +905,42 @@ impl ConsensusEngine {
 
     pub fn equivocations_detected(&self) -> u64 {
         self.equivocations_detected
+    }
+
+    /// Look up DAG blocks by hash and return their wire-encoded bytes.
+    /// Used to serve parent-fetch requests from peers.
+    pub fn get_encoded_vertices(&self, hashes: &[[u8; 32]]) -> Vec<Vec<u8>> {
+        let mut result = Vec::new();
+        for hash in hashes {
+            if let Ok(block) = self.dag.get(hash)
+                && let Ok(encoded) = wire::encode_vertex(&block)
+            {
+                result.push(encoded);
+            }
+        }
+        result
+    }
+
+    /// Check for orphan parents and emit a MissingParents output if any exist.
+    /// Rate-limited to at most once per 2 seconds.
+    fn check_orphan_parents(&mut self) {
+        if self.last_parent_fetch.elapsed() < Duration::from_secs(2) {
+            return;
+        }
+        let orphans = self.dag.orphan_parent_hashes();
+        if orphans.is_empty() {
+            return;
+        }
+        self.last_parent_fetch = Instant::now();
+        let count = orphans.len().min(MAX_PARENT_FETCH_HASHES);
+        let batch: Vec<[u8; 32]> = orphans.into_iter().take(count).collect();
+        info!(
+            missing = batch.len(),
+            "Requesting missing DAG parents from peers"
+        );
+        let _ = self
+            .outbox
+            .try_send(ConsensusOutput::MissingParents(batch));
     }
 
     fn prune_equivocation_tracker(&mut self) {

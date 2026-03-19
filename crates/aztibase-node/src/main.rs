@@ -2001,28 +2001,32 @@ async fn main() -> Result<()> {
                         } else if topic == topic_committed_batches
                             && let Ok(announce) = aztibase_network::decode_batch_announce(&data)
                         {
-                            tracing::info!(
-                                batch = announce.index,
-                                txs = announce.transactions.len(),
-                                "Received committed batch via gossip"
-                            );
                             sync_proto.set_tip_index(announce.index);
-                            if announce.index > batch_index + 1 && !catchup_pending {
+                            // Validators already receive batches from their own consensus
+                            // commits — only forward gossip batch announces on full nodes.
+                            if !node_is_validator {
                                 tracing::info!(
-                                    local = batch_index,
-                                    remote = announce.index,
-                                    gap = announce.index - batch_index - 1,
-                                    "Gap detected, triggering catch-up"
+                                    batch = announce.index,
+                                    txs = announce.transactions.len(),
+                                    "Received committed batch via gossip"
                                 );
-                            }
-                            let batch = CommittedBatch {
-                                anchor_hash: announce.anchor_hash,
-                                vertex_order: vec![],
-                                transactions: announce.transactions,
-                            };
-                            if pipeline_tx.send(batch).await.is_err() {
-                                tracing::error!("Pipeline channel closed during block sync");
-                                break;
+                                if announce.index > batch_index + 1 && !catchup_pending {
+                                    tracing::info!(
+                                        local = batch_index,
+                                        remote = announce.index,
+                                        gap = announce.index - batch_index - 1,
+                                        "Gap detected, triggering catch-up"
+                                    );
+                                }
+                                let batch = CommittedBatch {
+                                    anchor_hash: announce.anchor_hash,
+                                    vertex_order: vec![],
+                                    transactions: announce.transactions,
+                                };
+                                if pipeline_tx.send(batch).await.is_err() {
+                                    tracing::error!("Pipeline channel closed during block sync");
+                                    break;
+                                }
                             }
                         }
                     }
@@ -2075,6 +2079,20 @@ async fn main() -> Result<()> {
                                     let _ = transport.send_block_sync_response(channel, encoded);
                                 }
                             }
+                            Ok(aztibase_network::BlockSyncMessage::RequestVertices { hashes, .. }) => {
+                                tracing::info!(peer = %peer, count = hashes.len(), "DAG vertex fetch requested");
+                                let (reply_tx, reply_rx) = tokio::sync::oneshot::channel();
+                                let _ = consensus_tx.send(ConsensusInput::FetchVertices {
+                                    hashes,
+                                    reply: reply_tx,
+                                }).await;
+                                if let Ok(vertices) = reply_rx.await {
+                                    let resp = aztibase_network::build_vertex_response(vertices);
+                                    if let Ok(encoded) = aztibase_network::block_sync::encode_response(&resp) {
+                                        let _ = transport.send_block_sync_response(channel, encoded);
+                                    }
+                                }
+                            }
                             Ok(_) => {
                                 tracing::warn!(peer = %peer, "Block sync: unexpected request type");
                             }
@@ -2118,6 +2136,16 @@ async fn main() -> Result<()> {
                                         progress = %format!("{pct}%"),
                                         "Catch-up progress"
                                     );
+                                }
+                            }
+                            Ok(aztibase_network::BlockSyncMessage::ResponseVertices { vertices, .. }) => {
+                                tracing::info!(
+                                    peer = %peer,
+                                    received = vertices.len(),
+                                    "DAG vertex fetch response"
+                                );
+                                for vertex_data in vertices {
+                                    let _ = consensus_tx.send(ConsensusInput::ReceivedVertex(vertex_data)).await;
                                 }
                             }
                             Ok(_) => {}
@@ -2168,6 +2196,19 @@ async fn main() -> Result<()> {
                             duplicate_hash: Some(duplicate_hash),
                         };
                         let _ = slash_tx.send(event).await;
+                    }
+                    Some(ConsensusOutput::MissingParents(hashes)) => {
+                        if let Some(peer) = connected_peers.first() {
+                            tracing::info!(
+                                missing = hashes.len(),
+                                peer = %peer,
+                                "Requesting missing DAG vertices from peer"
+                            );
+                            let req = aztibase_network::build_vertex_request(hashes);
+                            if let Ok(encoded) = aztibase_network::block_sync::encode_request(&req) {
+                                transport.send_block_sync_request(peer, encoded);
+                            }
+                        }
                     }
                     Some(ConsensusOutput::BatchCommitted(batch)) => {
                         let snap = consensus_metrics.snapshot();

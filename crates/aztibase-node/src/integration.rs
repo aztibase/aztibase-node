@@ -513,7 +513,8 @@ mod tests {
                     ConsensusOutput::BatchCommitted(batch) => {
                         committed[node_idx].push(batch);
                     }
-                    ConsensusOutput::EquivocationDetected { .. } => {}
+                    ConsensusOutput::EquivocationDetected { .. }
+                    | ConsensusOutput::MissingParents(_) => {}
                 },
                 _ => break,
             }
@@ -743,7 +744,8 @@ mod tests {
                         committed = true;
                         break;
                     }
-                    ConsensusOutput::EquivocationDetected { .. } => {}
+                    ConsensusOutput::EquivocationDetected { .. }
+                    | ConsensusOutput::MissingParents(_) => {}
                 },
                 _ => break,
             }
@@ -983,7 +985,8 @@ mod tests {
                     ConsensusOutput::BatchCommitted(batch) => {
                         committed[node_idx].push(batch);
                     }
-                    ConsensusOutput::EquivocationDetected { .. } => {}
+                    ConsensusOutput::EquivocationDetected { .. }
+                    | ConsensusOutput::MissingParents(_) => {}
                 },
                 _ => break,
             }
@@ -2238,7 +2241,8 @@ mod tests {
                     ConsensusOutput::BatchCommitted(batch) => {
                         committed[node_idx].push(batch);
                     }
-                    ConsensusOutput::EquivocationDetected { .. } => {}
+                    ConsensusOutput::EquivocationDetected { .. }
+                    | ConsensusOutput::MissingParents(_) => {}
                 },
                 _ => break,
             }
@@ -2485,7 +2489,8 @@ mod tests {
                     ConsensusOutput::BatchCommitted(batch) => {
                         committed[node_idx].push(batch);
                     }
-                    ConsensusOutput::EquivocationDetected { .. } => {}
+                    ConsensusOutput::EquivocationDetected { .. }
+                    | ConsensusOutput::MissingParents(_) => {}
                 },
                 _ => break,
             }
@@ -3037,7 +3042,8 @@ mod tests {
                     ConsensusOutput::BatchCommitted(batch) => {
                         committed[node_idx].push(batch);
                     }
-                    ConsensusOutput::EquivocationDetected { .. } => {}
+                    ConsensusOutput::EquivocationDetected { .. }
+                    | ConsensusOutput::MissingParents(_) => {}
                 },
                 _ => break,
             }

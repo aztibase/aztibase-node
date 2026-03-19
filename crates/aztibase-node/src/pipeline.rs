@@ -375,7 +375,7 @@ impl ExecutionPipeline {
     pub async fn run(mut self) {
         while let Some(batch) = self.rx.recv().await {
             if self.executed_anchors_set.contains(&batch.anchor_hash) {
-                tracing::warn!(
+                tracing::debug!(
                     anchor = %short_hex(&batch.anchor_hash),
                     "Duplicate batch skipped"
                 );

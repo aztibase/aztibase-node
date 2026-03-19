@@ -115,6 +115,14 @@ pub enum BlockSyncMessage {
         batches: Vec<SyncBatch>,
         tip_index: u64,
     },
+    RequestVertices {
+        version: u8,
+        hashes: Vec<[u8; 32]>,
+    },
+    ResponseVertices {
+        version: u8,
+        vertices: Vec<Vec<u8>>,
+    },
 }
 
 /// A committed batch in wire format for sync.
@@ -134,7 +142,9 @@ pub fn decode_block_sync(data: &[u8]) -> Result<BlockSyncMessage, String> {
     let msg: BlockSyncMessage = postcard::from_bytes(data).map_err(|e| e.to_string())?;
     let version = match &msg {
         BlockSyncMessage::RequestBatches { version, .. }
-        | BlockSyncMessage::ResponseBatches { version, .. } => *version,
+        | BlockSyncMessage::ResponseBatches { version, .. }
+        | BlockSyncMessage::RequestVertices { version, .. }
+        | BlockSyncMessage::ResponseVertices { version, .. } => *version,
     };
     if version != BLOCK_SYNC_VERSION {
         return Err(format!("unsupported block sync version: {version}"));
@@ -171,6 +181,20 @@ pub fn build_batch_response(batches: Vec<SyncBatch>, tip_index: u64) -> BlockSyn
         version: BLOCK_SYNC_VERSION,
         batches,
         tip_index,
+    }
+}
+
+pub fn build_vertex_request(hashes: Vec<[u8; 32]>) -> BlockSyncMessage {
+    BlockSyncMessage::RequestVertices {
+        version: BLOCK_SYNC_VERSION,
+        hashes,
+    }
+}
+
+pub fn build_vertex_response(vertices: Vec<Vec<u8>>) -> BlockSyncMessage {
+    BlockSyncMessage::ResponseVertices {
+        version: BLOCK_SYNC_VERSION,
+        vertices,
     }
 }
 
