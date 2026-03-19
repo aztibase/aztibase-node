@@ -145,6 +145,10 @@ struct Cli {
     /// Enable autonomous emergency pause when CRITICAL anomaly is sustained (requires emergency key)
     #[arg(long)]
     sentinel_auto_pause: bool,
+
+    /// Export per-transaction feature vectors to CSV for anomaly model training
+    #[arg(long)]
+    tx_anomaly_export: bool,
 }
 
 #[derive(clap::Subcommand, Debug)]
@@ -1470,6 +1474,9 @@ async fn main() -> Result<()> {
     if let Some(ref dir) = anomaly_model_dir {
         exec_pipeline.set_anomaly_model_dir(dir);
     }
+    if cli.tx_anomaly_export {
+        exec_pipeline.set_tx_feature_export(config.data_dir.clone());
+    }
     tracing::info!("Execution pipeline initialized (AI runtime: tract)");
 
     // Bootstrap from snapshot file if --snapshot is provided
@@ -2771,6 +2778,7 @@ mod tests {
             sentinel_export: false,
             sentinel_dry_run: true,
             sentinel_auto_pause: false,
+            tx_anomaly_export: false,
         };
         let config = cli.apply_overrides(NodeConfig::default());
         assert_eq!(config.data_dir, PathBuf::from("/tmp/test"));
@@ -2804,6 +2812,7 @@ mod tests {
             sentinel_export: false,
             sentinel_dry_run: true,
             sentinel_auto_pause: false,
+            tx_anomaly_export: false,
         };
         let config = cli.apply_overrides(NodeConfig::default());
         assert_eq!(config.network.listen_addresses.len(), 1);
@@ -2903,6 +2912,7 @@ mod tests {
             sentinel_export: false,
             sentinel_dry_run: true,
             sentinel_auto_pause: false,
+            tx_anomaly_export: false,
         };
         let result = cli.apply_overrides(config);
 

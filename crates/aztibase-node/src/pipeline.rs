@@ -100,6 +100,69 @@ pub struct ExecutionPipeline {
     bridge_withdraw_proofs: Arc<RwLock<BridgeWithdrawProofs>>,
     archive: bool,
     faucet_enabled: bool,
+    tx_feature_exporter: Option<TxFeatureExporter>,
+}
+
+/// Appends per-transaction feature vectors to a CSV for anomaly model training.
+struct TxFeatureExporter {
+    path: std::path::PathBuf,
+    header_written: bool,
+}
+
+const TX_FEATURE_NAMES: [&str; 6] = [
+    "value",
+    "gas_price",
+    "gas_limit",
+    "payload_size",
+    "is_contract_deploy",
+    "is_ai_infer",
+];
+
+impl TxFeatureExporter {
+    fn new(path: std::path::PathBuf) -> Self {
+        let header_written = path.exists();
+        Self {
+            path,
+            header_written,
+        }
+    }
+
+    fn append(&mut self, features: &TxFeatures, score: f32, batch_height: u64) {
+        use std::io::Write;
+        let file = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&self.path);
+
+        let mut file = match file {
+            Ok(f) => f,
+            Err(e) => {
+                tracing::warn!(path = %self.path.display(), error = %e, "Failed to open tx features CSV");
+                return;
+            }
+        };
+
+        if !self.header_written {
+            let header = format!("batch_height,score,{}\n", TX_FEATURE_NAMES.join(","));
+            if file.write_all(header.as_bytes()).is_err() {
+                return;
+            }
+            self.header_written = true;
+        }
+
+        let row = format!(
+            "{},{},{},{},{},{},{},{}\n",
+            batch_height,
+            score,
+            features.value,
+            features.gas_price,
+            features.gas_limit,
+            features.payload_size,
+            if features.is_contract_deploy { 1 } else { 0 },
+            if features.is_ai_infer { 1 } else { 0 },
+        );
+        let _ = file.write_all(row.as_bytes());
+    }
 }
 
 impl ExecutionPipeline {
@@ -214,7 +277,15 @@ impl ExecutionPipeline {
             bridge_withdraw_proofs: Arc::new(RwLock::new(withdraw_proofs)),
             archive: false,
             faucet_enabled: true,
+            tx_feature_exporter: None,
         }
+    }
+
+    /// Enable tx feature CSV export for anomaly model training.
+    pub fn set_tx_feature_export(&mut self, data_dir: std::path::PathBuf) {
+        let csv_path = data_dir.join("tx_features.csv");
+        tracing::info!(path = %csv_path.display(), "Tx feature CSV export enabled");
+        self.tx_feature_exporter = Some(TxFeatureExporter::new(csv_path));
     }
 
     /// Enable archive mode (disables eviction of old data).
@@ -3174,12 +3245,17 @@ impl ExecutionPipeline {
         }
 
         // Phase 2.5: Score each executed tx for anomalous behavior.
+        let batch_height = self.batch_count.load(std::sync::atomic::Ordering::Relaxed);
         for (i, tx) in executable.iter().enumerate() {
             if i >= exec_receipts.len() {
                 break;
             }
             let features = extract_tx_features(tx);
-            exec_receipts[i].anomaly_score = self.anomaly_scorer.score(&features);
+            let score = self.anomaly_scorer.score(&features);
+            exec_receipts[i].anomaly_score = score;
+            if let Some(ref mut exporter) = self.tx_feature_exporter {
+                exporter.append(&features, score, batch_height);
+            }
         }
 
         // Phase 3: Refund unused gas and collect actual fees.
@@ -3578,6 +3654,7 @@ mod tests {
             bridge_withdraw_proofs: Arc::new(RwLock::new(BridgeWithdrawProofs::new())),
             archive: false,
             faucet_enabled: true,
+            tx_feature_exporter: None,
         }
     }
 
@@ -4119,6 +4196,7 @@ mod tests {
             bridge_withdraw_proofs: Arc::new(RwLock::new(BridgeWithdrawProofs::new())),
             archive: false,
             faucet_enabled: true,
+            tx_feature_exporter: None,
         }
     }
 
