@@ -23,10 +23,12 @@ Thumbs.db
 # Node
 node_modules/
 
-# Node runtime data (databases, peer stores)
+# Node runtime data (databases, peer stores, models, training data)
 data/*/db
 data/*/execution_db
 data/*/*.redb
+data/*/models/
+data/*/sentinel_features.csv
 
 # Website build output
 website/dist/
@@ -44,6 +46,9 @@ packaging/**/*.zip
 !wallet-extension/icons/*.png
 *.txt
 !packaging/**/README.txt
+
+# Claude Code local settings
+.claude/settings.local.json
 
 # Reference repos (not part of our codebase)
 /references/
