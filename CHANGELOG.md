@@ -5,6 +5,14 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ---
 
+## Sprint 062b — ONNX Tx Anomaly Scorer Upgrade (2026-03-19)
+
+### Changed
+- **`AnomalyScorer` upgraded with ONNX support**: Auto-loads `tx_anomaly_v1.onnx` autoencoder model from `models/` or `{data_dir}/models/`. Uses same normalize → inference → reconstruction error → score pattern as Sentinel Tier 2. Falls back to heuristic scoring when no model is present. Shares `tract-onnx` runtime with sentinel.
+- **Pipeline auto-loads tx anomaly model**: `set_anomaly_model_dir()` on pipeline, wired in `main.rs` with same model directory candidates as sentinel ONNX model.
+
+---
+
 ## Sprint 062 — Sentinel Tier 3: Autonomous Action Engine (2026-03-19)
 
 ### Added

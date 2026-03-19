@@ -1462,6 +1462,14 @@ async fn main() -> Result<()> {
         }
     }
     exec_pipeline.set_ai_runtime(ai_runtime);
+
+    // Load ONNX tx anomaly model (same model_dir candidates as sentinel)
+    let anomaly_model_dir = [PathBuf::from("models"), config.data_dir.join("models")]
+        .into_iter()
+        .find(|d| d.join("tx_anomaly_v1.onnx").exists());
+    if let Some(ref dir) = anomaly_model_dir {
+        exec_pipeline.set_anomaly_model_dir(dir);
+    }
     tracing::info!("Execution pipeline initialized (AI runtime: tract)");
 
     // Bootstrap from snapshot file if --snapshot is provided

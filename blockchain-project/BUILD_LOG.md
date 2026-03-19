@@ -21,6 +21,21 @@ Entries are prepended (newest first).
 
 ## Entries
 
+### Sprint 062b — ONNX Tx Anomaly Scorer Upgrade (2026-03-19)
+- **Date**: 2026-03-19
+- **Sprint**: 062b
+- **Commit**: (this commit)
+- **Files Changed**:
+  - `crates/aztibase-runtime/src/anomaly.rs` — `AnomalyScorer` upgraded with ONNX autoencoder support. `OnnxTxScorer` loads `tx_anomaly_v1.onnx` + `tx_anomaly_v1_params.json` from model_dir. Same pattern as sentinel Tier 2: normalize → inference → reconstruction error → score. Falls back to heuristic if no model. `with_model_dir()` builder, `is_onnx()` check. 2 new tests.
+  - `crates/aztibase-runtime/Cargo.toml` — Added `serde_json` dependency for params file parsing.
+  - `crates/aztibase-node/src/pipeline.rs` — `set_anomaly_model_dir()` method loads ONNX model into pipeline's AnomalyScorer.
+  - `crates/aztibase-node/src/main.rs` — Auto-loads tx anomaly model from `models/` or `{data_dir}/models/` (same candidates as sentinel model).
+- **Tests**: 1,013 pass (+2 new), 0 fail. Clippy 0 warnings, fmt clean.
+- **Review Notes**: Drop-in upgrade — no changes to pipeline scoring flow. Heuristic fallback preserved. Training script pending (need tx receipt data from testnet runs). Model file naming: `tx_anomaly_v1.onnx` + `tx_anomaly_v1_params.json`.
+- **Security Flags**: 0 ELEVATED, 0 MEDIUM.
+
+---
+
 ### Sprint 062 — Sentinel Tier 3: Autonomous Action Engine (2026-03-19)
 - **Date**: 2026-03-19
 - **Sprint**: 062

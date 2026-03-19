@@ -357,6 +357,17 @@ impl ExecutionPipeline {
         self.ai_runtime = Some(runtime);
     }
 
+    /// Load ONNX tx anomaly model from the given directory.
+    /// Falls back to heuristic scoring if no model found.
+    pub fn set_anomaly_model_dir(&mut self, model_dir: &std::path::Path) {
+        self.anomaly_scorer = AnomalyScorer::new().with_model_dir(model_dir);
+        if self.anomaly_scorer.is_onnx() {
+            tracing::info!("Tx anomaly scorer: ONNX model loaded");
+        } else {
+            tracing::info!("Tx anomaly scorer: heuristic (no ONNX model found)");
+        }
+    }
+
     /// Shared read handle to account state (for RPC server).
     pub fn shared_state(&self) -> Arc<RwLock<AccountState>> {
         Arc::clone(&self.state)

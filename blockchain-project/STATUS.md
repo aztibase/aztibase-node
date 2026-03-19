@@ -3,8 +3,8 @@
 **Last Updated:** 2026-03-19
 **Updated By:** blockchain-architect + security-engineer
 **Current Phase:** M9 -- Mainnet Prep
-**Current Sprint:** Sprint 062 — Sentinel Tier 3: Autonomous Action Engine
-**Sprint Status:** Sprint 062 COMPLETE. Confidence-tiered action engine (Low/Medium/High/Critical) with sustained anomaly detection, cooldown enforcement, dry-run default. 4 action types: Alert, AdjustBaseFee, ProposeGovernance, EmergencyPause. 1 new RPC (aztb_getSentinelActions). ADR-034. 1,011 tests pass (+13 new). Clippy clean, fmt clean. **Next: Sprint 062b (ONNX tx anomaly), 063 (release + stability) → MAINNET.**
+**Current Sprint:** Sprint 062b — ONNX Tx Anomaly Scorer Upgrade
+**Sprint Status:** Sprint 062b COMPLETE. AnomalyScorer upgraded with ONNX autoencoder support. Same pattern as sentinel Tier 2. Auto-loads from models/ dir, heuristic fallback. 1,013 tests (+2). Clippy clean, fmt clean. **Next: Sprint 063 (release + stability) → MAINNET.**
 
 ---
 
@@ -87,6 +87,7 @@
 - Mainnet launch blocked on: Aztibase Systems coexistence agreement (legal), public testnet infrastructure deployment (VPS provisioning)
 
 ### Recently Completed
+- **Sprint 062b (2026-03-19)**: ONNX tx anomaly scorer — AnomalyScorer upgraded with ONNX autoencoder, same pattern as sentinel Tier 2 (normalize → inference → reconstruction error). Auto-loads from models/ dir. Heuristic fallback. 1,013 tests (+2).
 - **Sprint 062 (2026-03-19)**: Sentinel Tier 3 — Autonomous action engine. Confidence-tiered actions (Low→Alert, Medium→AdjustBaseFee, High→ProposeGovernance, Critical→EmergencyPause). Sustained anomaly detection (2-3 consecutive ticks required). Cooldown enforcement (100/1000 batches). Dry-run default. `--sentinel-auto-pause` CLI flag. `aztb_getSentinelActions` RPC. Action events on WebSocket. 1,011 tests (+13). ADR-034.
 - **Sprint 061 (2026-03-19)**: Progressive decentralization — ValidatorRegistrationMode (Permissioned/StakeGated/Open), EmergencyAction TxKind (0x1D) with 1-year sunset, chain pause, aztb_getEmergencyKeyStatus RPC. ADR-033. 998 tests (+9).
 - **Post-060 (2026-03-17)**: Phantom parent desync FIXED — root cause was missing child back-patch in `insert_relaxed()`. Out-of-order gossip delivery left parent `children` sets empty, causing `causal_order()` to produce different topological sort orders on different nodes → VRF seed divergence → consensus stall after ~4000 blocks. Also: RoundState prune aligned to 16-round buffer, stale orphan parent eviction added. 988 tests (+3 new).
