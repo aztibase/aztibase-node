@@ -15,7 +15,7 @@
     1.0,
     1.0
   ],
-  "threshold": 0.08689707517623901,
+  "threshold": 0.052071381360292435,
   "feature_names": [
     "value",
     "gas_price",
