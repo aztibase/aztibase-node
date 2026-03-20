@@ -1,10 +1,10 @@
 # PROJECT STATUS: Aztibase Network
 
-**Last Updated:** 2026-03-19
-**Updated By:** blockchain-architect + security-engineer
+**Last Updated:** 2026-03-20
+**Updated By:** blockchain-architect + node-engineer
 **Current Phase:** M9 -- Mainnet Prep
-**Current Sprint:** Sprint 062b — ONNX Tx Anomaly Scorer Upgrade
-**Sprint Status:** Sprint 062b COMPLETE. AnomalyScorer upgraded with ONNX autoencoder support. Same pattern as sentinel Tier 2. Auto-loads from models/ dir, heuristic fallback. 1,013 tests (+2). Clippy clean, fmt clean. **Next: Sprint 063 (release + stability) → MAINNET.**
+**Current Sprint:** Sprint 063 — Release + VPS Deployment
+**Sprint Status:** Sprint 063 IN PROGRESS. First VPS validator deployed on Rackzar (South Africa, 102.209.21.247). Linux binary built from v0.1.4. Public testnet LIVE — single validator producing blocks. PR #1 merged dev→main. **Next: 24h stability run, friend onboarding → MAINNET.**
 
 ---
 
@@ -80,11 +80,13 @@
 | aztibase-wasm | PARTIAL | p2p-network-engineer | Tx signing, header verification — BLS verify incomplete (C-WASM-2) |
 
 ### In Progress
-- Mainnet launch preparation (M9)
-- Friends testnet rollout — invitations drafted, coordinator script ready
+- Sprint 063: Release + VPS deployment + stability run
+- 24h stability monitoring on VPS validator (102.209.21.247)
+- Friend onboarding test — VPS boot node ready, need first external validator
 
 ### Blocked
-- Mainnet launch blocked on: Aztibase Systems coexistence agreement (legal), public testnet infrastructure deployment (VPS provisioning)
+- Mainnet launch blocked on: 24h stability confirmation, friend onboarding test
+- GitHub Actions CI broken on private repo (startup_failure — billing/plan issue)
 
 ### Recently Completed
 - **Sprint 062b (2026-03-19)**: ONNX tx anomaly scorer — AnomalyScorer upgraded with ONNX autoencoder, same pattern as sentinel Tier 2 (normalize → inference → reconstruction error). Auto-loads from models/ dir. Heuristic fallback. 1,013 tests (+2).

@@ -7,7 +7,9 @@ listen_addresses = [
     "/ip4/0.0.0.0/tcp/30333",
     "/ip4/0.0.0.0/udp/30333/quic-v1",
 ]
-boot_nodes = []
+boot_nodes = [
+    "/ip4/102.209.21.247/tcp/30333",
+]
 idle_timeout_secs = 60
 stun_servers = []
 

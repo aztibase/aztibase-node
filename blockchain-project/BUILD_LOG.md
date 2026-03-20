@@ -21,6 +21,29 @@ Entries are prepended (newest first).
 
 ## Entries
 
+### Sprint 063 — VPS Deployment + Public Testnet (2026-03-20)
+- **Date**: 2026-03-20
+- **Sprint**: 063
+- **Commit**: 0b55a32 (v0.1.4 tag)
+- **PR**: #1 — merged dev→main
+- **Files Changed**:
+  - `Cargo.toml` — version bump 0.1.3 → 0.1.4
+  - `models/*` — updated sentinel + tx anomaly model parameters
+  - `scripts/setup-vps.sh` — VPS setup script (swap, Rust, build, systemd, firewall)
+  - `data/genesis/genesis-public-testnet.toml` — single-validator genesis for VPS
+  - `data/node1/node1-local.toml` — added VPS boot_node
+  - `data/node2/node2-local.toml` — added VPS boot_node
+  - `data/node3/node3-local.toml` — added VPS boot_node
+- **Infrastructure**:
+  - Rackzar KLX1 VPS (R99/mo) — Ubuntu 22.04, 1 vCPU, 2GB RAM, 25GB NVMe, Johannesburg
+  - IP: 102.209.21.247, hostname: node1.aztibase.com
+  - Rust 1.94.0 compiled on VPS, source deleted after build
+  - systemd service: auto-restart, auto-start on reboot
+  - Firewall: ports 22, 30333, 9944 open
+  - Public testnet LIVE — single validator producing blocks
+- **Review Notes**: First production Linux deployment. Binary 50MB. Memory usage 11.6MB idle. GitHub Actions CI broken on private repo (startup_failure), built directly on VPS as workaround. Source code deleted immediately after build.
+- **Security Flags**: GitHub token rotated after VPS clone. No source code remains on VPS.
+
 ### Sprint 062b — ONNX Tx Anomaly Scorer Upgrade (2026-03-19)
 - **Date**: 2026-03-19
 - **Sprint**: 062b
