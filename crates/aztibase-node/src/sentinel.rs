@@ -1015,7 +1015,7 @@ pub async fn run_sentinel(
     let mut last_seen_batch: u64 = 0;
     let mut last_progress_time = std::time::Instant::now();
     let mut stall_reported = false;
-    const STALL_THRESHOLD: std::time::Duration = std::time::Duration::from_secs(30);
+    const STALL_THRESHOLD: std::time::Duration = std::time::Duration::from_secs(120);
 
     loop {
         tokio::time::sleep(std::time::Duration::from_secs(2)).await;
