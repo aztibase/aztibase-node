@@ -38,6 +38,13 @@ struct Inner {
     pub active_validators: Gauge,
     pub total_staked: Gauge,
     pub slashes_applied: Counter,
+
+    // Sentinel / AI gauges
+    pub sentinel_health_score: Gauge,
+    pub sentinel_health_level: Gauge,
+    pub sentinel_actions_total: Counter,
+    pub anomalous_txs_total: Counter,
+    pub epoch_number: Gauge,
 }
 
 impl NodeMetrics {
@@ -59,6 +66,11 @@ impl NodeMetrics {
         let active_validators = Gauge::<i64, _>::default();
         let total_staked = Gauge::<i64, _>::default();
         let slashes_applied = Counter::default();
+        let sentinel_health_score = Gauge::<i64, _>::default();
+        let sentinel_health_level = Gauge::<i64, _>::default();
+        let sentinel_actions_total = Counter::default();
+        let anomalous_txs_total = Counter::default();
+        let epoch_number = Gauge::<i64, _>::default();
 
         registry.register(
             "aztibase_consensus_vertices_proposed",
@@ -135,6 +147,31 @@ impl NodeMetrics {
             "Total slashing events applied",
             slashes_applied.clone(),
         );
+        registry.register(
+            "aztibase_sentinel_health_score",
+            "Latest sentinel health score (0-1000, divide by 1000 for float)",
+            sentinel_health_score.clone(),
+        );
+        registry.register(
+            "aztibase_sentinel_health_level",
+            "Sentinel health level (0=normal, 1=warning, 2=critical)",
+            sentinel_health_level.clone(),
+        );
+        registry.register(
+            "aztibase_sentinel_actions_total",
+            "Total sentinel actions triggered",
+            sentinel_actions_total.clone(),
+        );
+        registry.register(
+            "aztibase_execution_anomalous_txs_total",
+            "Total transactions flagged as anomalous",
+            anomalous_txs_total.clone(),
+        );
+        registry.register(
+            "aztibase_consensus_epoch_number",
+            "Current consensus epoch number",
+            epoch_number.clone(),
+        );
 
         Self {
             inner: Arc::new(Inner {
@@ -154,6 +191,11 @@ impl NodeMetrics {
                 active_validators,
                 total_staked,
                 slashes_applied,
+                sentinel_health_score,
+                sentinel_health_level,
+                sentinel_actions_total,
+                anomalous_txs_total,
+                epoch_number,
             }),
         }
     }
@@ -212,6 +254,23 @@ impl NodeMetrics {
         self.inner.slashes_applied.inc_by(count);
     }
 
+    pub fn set_sentinel_health(&self, score_millionths: i64, level: i64) {
+        self.inner.sentinel_health_score.set(score_millionths);
+        self.inner.sentinel_health_level.set(level);
+    }
+
+    pub fn inc_sentinel_actions(&self) {
+        self.inner.sentinel_actions_total.inc();
+    }
+
+    pub fn inc_anomalous_txs(&self, count: u64) {
+        self.inner.anomalous_txs_total.inc_by(count);
+    }
+
+    pub fn set_epoch(&self, epoch: u64) {
+        self.inner.epoch_number.set(epoch as i64);
+    }
+
     /// Encode all metrics in Prometheus text exposition format.
     pub fn encode_prometheus(&self) -> String {
         let mut buf = String::new();
@@ -241,11 +300,18 @@ impl NodeMetrics {
             },
             "ai": {
                 "pending_tasks": self.inner.pending_tasks.get(),
+                "anomalous_txs_total": counter_value(&self.inner.anomalous_txs_total),
+            },
+            "sentinel": {
+                "health_score": self.inner.sentinel_health_score.get(),
+                "health_level": self.inner.sentinel_health_level.get(),
+                "actions_total": counter_value(&self.inner.sentinel_actions_total),
             },
             "staking": {
                 "active_validators": self.inner.active_validators.get(),
                 "total_staked": self.inner.total_staked.get(),
                 "slashes_applied": counter_value(&self.inner.slashes_applied),
+                "epoch_number": self.inner.epoch_number.get(),
             }
         })
     }

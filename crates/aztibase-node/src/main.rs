@@ -1770,6 +1770,7 @@ async fn main() -> Result<()> {
     let s_peer_count = Arc::clone(&sentinel_peer_count);
     let s_mempool_size = Arc::clone(&sentinel_mempool_size);
     let s_active_validators = Arc::clone(&sentinel_active_validators);
+    let shared_pending_tasks = exec_pipeline.shared_pending_task_count();
     let shared_staking = exec_pipeline.shared_staking_store();
     let shared_governance = exec_pipeline.shared_governance();
     let shared_emission = exec_pipeline.shared_emission_tracker();
@@ -1829,8 +1830,17 @@ async fn main() -> Result<()> {
             tx_sender: None,
         };
 
+        let s_metrics = node_metrics.clone();
         tokio::spawn(async move {
-            sentinel::run_sentinel(s_state, s_handles, interval, model_dir, action_config).await;
+            sentinel::run_sentinel(
+                s_state,
+                s_handles,
+                interval,
+                model_dir,
+                action_config,
+                Some(s_metrics),
+            )
+            .await;
         });
         tracing::info!(
             interval = cli.sentinel_interval,
@@ -2406,6 +2416,14 @@ async fn main() -> Result<()> {
                     let total: u128 = validators.iter().map(|v| v.effective_stake()).sum();
                     node_metrics.update_staking(validators.len() as u64, total);
                     s_active_validators.store(validators.len() as u64, std::sync::atomic::Ordering::Relaxed);
+                }
+
+                // Update pending tasks, epoch, and anomalous tx metrics
+                node_metrics.set_pending_tasks(shared_pending_tasks.load(std::sync::atomic::Ordering::Relaxed));
+                node_metrics.set_epoch(shared_emission.read().await.current_epoch);
+                let anomalous_count = result.receipts.iter().filter(|r| r.anomaly_score > 0.5).count() as u64;
+                if anomalous_count > 0 {
+                    node_metrics.inc_anomalous_txs(anomalous_count);
                 }
 
                 // Update sentinel atomics

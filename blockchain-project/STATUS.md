@@ -1,10 +1,10 @@
 # PROJECT STATUS: Aztibase Network
 
-**Last Updated:** 2026-03-20
+**Last Updated:** 2026-03-21
 **Updated By:** blockchain-architect + node-engineer
 **Current Phase:** M9 -- Mainnet Prep
-**Current Sprint:** Sprint 063 — Release + VPS Deployment
-**Sprint Status:** Sprint 063 IN PROGRESS. First VPS validator deployed on Rackzar (South Africa, 102.209.21.247). Linux binary built from v0.1.4. Public testnet LIVE — single validator producing blocks. PR #1 merged dev→main. **Next: 24h stability run, friend onboarding → MAINNET.**
+**Current Sprint:** Sprint 063b — Full Chain Monitoring
+**Sprint Status:** Sprint 063b IN PROGRESS. Full monitoring stack built: 6 new Prometheus metrics (sentinel/AI/epoch), 2 new Grafana dashboards (Chain Overview 24-panel, AI Sentinel 21-panel), 8 alert rules, VPS deploy script (VictoriaMetrics + Grafana), Claude Code MCP integration. Fixed pending_tasks metric bug. **Next: Deploy monitoring to VPS, rebuild binary with new metrics, friend onboarding → MAINNET.**
 
 ---
 
@@ -80,15 +80,16 @@
 | aztibase-wasm | PARTIAL | p2p-network-engineer | Tx signing, header verification — BLS verify incomplete (C-WASM-2) |
 
 ### In Progress
-- Sprint 063: Release + VPS deployment + stability run
+- Sprint 063b: Full chain monitoring — deploy VictoriaMetrics + Grafana to VPS, rebuild binary with new metrics
 - 24h stability monitoring on VPS validator (102.209.21.247)
 - Friend onboarding test — VPS boot node ready, need first external validator
 
 ### Blocked
-- Mainnet launch blocked on: 24h stability confirmation, friend onboarding test
+- Mainnet launch blocked on: monitoring deployment, 24h stability confirmation, friend onboarding test
 - GitHub Actions CI broken on private repo (startup_failure — billing/plan issue)
 
 ### Recently Completed
+- **Sprint 063b (2026-03-21)**: Full chain monitoring stack. 6 new Prometheus metrics (sentinel health score/level, actions, anomalous txs, epoch). 2 new Grafana dashboards (Chain Overview 24-panel, AI Sentinel 21-panel). 8 alert rules. VPS deploy script (VictoriaMetrics + Grafana self-hosted). Claude Code MCP integration for querying metrics from dev sessions. Fixed pending_tasks metric (was always 0). 1,014 tests, 0 fail.
 - **Sprint 062b (2026-03-19)**: ONNX tx anomaly scorer — AnomalyScorer upgraded with ONNX autoencoder, same pattern as sentinel Tier 2 (normalize → inference → reconstruction error). Auto-loads from models/ dir. Heuristic fallback. 1,013 tests (+2).
 - **Sprint 062 (2026-03-19)**: Sentinel Tier 3 — Autonomous action engine. Confidence-tiered actions (Low→Alert, Medium→AdjustBaseFee, High→ProposeGovernance, Critical→EmergencyPause). Sustained anomaly detection (2-3 consecutive ticks required). Cooldown enforcement (100/1000 batches). Dry-run default. `--sentinel-auto-pause` CLI flag. `aztb_getSentinelActions` RPC. Action events on WebSocket. 1,011 tests (+13). ADR-034.
 - **Sprint 061 (2026-03-19)**: Progressive decentralization — ValidatorRegistrationMode (Permissioned/StakeGated/Open), EmergencyAction TxKind (0x1D) with 1-year sunset, chain pause, aztb_getEmergencyKeyStatus RPC. ADR-033. 998 tests (+9).

@@ -1,0 +1,247 @@
+apiVersion: 1
+
+groups:
+  - orgId: 1
+    name: Aztibase Chain Alerts
+    folder: Aztibase Network
+    interval: 30s
+    rules:
+      - uid: block-production-stopped
+        title: Block Production Stopped
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: prometheus
+            model:
+              expr: rate(aztibase_execution_block_height[5m])
+              refId: A
+          - refId: C
+            relativeTimeRange:
+              from: 0
+              to: 0
+            datasourceUid: __expr__
+            model:
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator:
+                    type: lt
+                    params: [0.001]
+        for: 2m
+        annotations:
+          summary: "Block production has stopped for 2+ minutes"
+        labels:
+          severity: critical
+
+      - uid: no-peers
+        title: No Connected Peers
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 60
+              to: 0
+            datasourceUid: prometheus
+            model:
+              expr: aztibase_network_peer_count
+              refId: A
+          - refId: C
+            relativeTimeRange:
+              from: 0
+              to: 0
+            datasourceUid: __expr__
+            model:
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator:
+                    type: lt
+                    params: [1]
+        for: 1m
+        annotations:
+          summary: "Node has zero connected peers"
+        labels:
+          severity: warning
+
+      - uid: equivocation-detected
+        title: Equivocation Detected
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 60
+              to: 0
+            datasourceUid: prometheus
+            model:
+              expr: rate(aztibase_consensus_equivocations[1m])
+              refId: A
+          - refId: C
+            relativeTimeRange:
+              from: 0
+              to: 0
+            datasourceUid: __expr__
+            model:
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator:
+                    type: gt
+                    params: [0]
+        for: 0s
+        annotations:
+          summary: "Equivocation event detected — possible Byzantine validator"
+        labels:
+          severity: critical
+
+      - uid: sentinel-critical
+        title: Sentinel Health Critical
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 60
+              to: 0
+            datasourceUid: prometheus
+            model:
+              expr: aztibase_sentinel_health_level
+              refId: A
+          - refId: C
+            relativeTimeRange:
+              from: 0
+              to: 0
+            datasourceUid: __expr__
+            model:
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator:
+                    type: gt
+                    params: [1.5]
+        for: 1m
+        annotations:
+          summary: "AI Sentinel reports CRITICAL chain health"
+        labels:
+          severity: critical
+
+      - uid: sentinel-warning
+        title: Sentinel Health Warning
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 60
+              to: 0
+            datasourceUid: prometheus
+            model:
+              expr: aztibase_sentinel_health_level
+              refId: A
+          - refId: C
+            relativeTimeRange:
+              from: 0
+              to: 0
+            datasourceUid: __expr__
+            model:
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator:
+                    type: gt
+                    params: [0.5]
+        for: 5m
+        annotations:
+          summary: "AI Sentinel reports WARNING chain health for 5+ minutes"
+        labels:
+          severity: warning
+
+      - uid: high-commit-latency
+        title: High Commit Latency
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: prometheus
+            model:
+              expr: aztibase_consensus_last_commit_latency_us / 1000
+              refId: A
+          - refId: C
+            relativeTimeRange:
+              from: 0
+              to: 0
+            datasourceUid: __expr__
+            model:
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator:
+                    type: gt
+                    params: [2000]
+        for: 2m
+        annotations:
+          summary: "Commit latency exceeds 2000ms for 2+ minutes"
+        labels:
+          severity: warning
+
+      - uid: mempool-overflow
+        title: Mempool Overflow
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 60
+              to: 0
+            datasourceUid: prometheus
+            model:
+              expr: aztibase_network_mempool_size
+              refId: A
+          - refId: C
+            relativeTimeRange:
+              from: 0
+              to: 0
+            datasourceUid: __expr__
+            model:
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator:
+                    type: gt
+                    params: [5000]
+        for: 1m
+        annotations:
+          summary: "Mempool exceeds 5000 pending transactions"
+        labels:
+          severity: warning
+
+      - uid: anomaly-spike
+        title: Transaction Anomaly Spike
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: prometheus
+            model:
+              expr: rate(aztibase_execution_anomalous_txs_total[5m]) * 60
+              refId: A
+          - refId: C
+            relativeTimeRange:
+              from: 0
+              to: 0
+            datasourceUid: __expr__
+            model:
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator:
+                    type: gt
+                    params: [10]
+        for: 2m
+        annotations:
+          summary: "More than 10 anomalous transactions per minute for 2+ minutes"
+        labels:
+          severity: warning

@@ -5,6 +5,26 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ---
 
+## Sprint 063b — Full Chain Monitoring Stack (2026-03-21)
+
+### Added
+- **6 new Prometheus metrics**: `aztibase_sentinel_health_score` (gauge, score*1000), `aztibase_sentinel_health_level` (0=normal, 1=warning, 2=critical), `aztibase_sentinel_actions_total` (counter), `aztibase_execution_anomalous_txs_total` (counter), `aztibase_consensus_epoch_number` (gauge). Total Prometheus metrics: 21.
+- **Chain Overview Grafana dashboard**: 24-panel single-pane-of-glass — block production, economics, network, safety. Auto-refresh 5s.
+- **AI Sentinel Grafana dashboard**: 21-panel sentinel monitoring — health score timeline with threshold bands, anomaly detection, Tier 3 actions, correlated input metrics.
+- **8 alert rules**: Block production stopped (2m), no peers (1m), equivocation detected (immediate), sentinel critical (1m), sentinel warning (5m), high commit latency (2m), mempool overflow (1m), anomaly spike (2m).
+- **VPS monitoring deploy script** (`scripts/setup-monitoring.sh`): Installs VictoriaMetrics (single binary, 256MB cap, 6-month retention) + Grafana OSS as systemd services. Auto-provisions datasource, dashboards, and API token.
+- **Grafana MCP integration** (`scripts/setup-grafana-mcp.sh`): Connects Claude Code to Grafana via MCP protocol. Enables querying dashboards, metrics, and alerts directly from dev sessions.
+
+### Fixed
+- **`aztibase_ai_pending_tasks` always read 0**: The shared atomic was never read by NodeMetrics in the event loop. Now reads from the pre-captured `shared_pending_tasks` Arc on every batch commit.
+- **Anomalous transaction counting**: Receipts with `anomaly_score > 0.5` are now counted and exposed as `aztibase_execution_anomalous_txs_total`.
+
+### Changed
+- **`run_sentinel()` signature**: Now accepts optional `NodeMetrics` parameter to push health scores directly to Prometheus on every tick.
+- **Sentinel metrics flow**: Health score and level are updated in Prometheus on every sentinel tick (stall detection and normal scoring), not just via RPC.
+
+---
+
 ## Sprint 062b — ONNX Tx Anomaly Scorer Upgrade (2026-03-19)
 
 ### Changed

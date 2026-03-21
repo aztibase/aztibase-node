@@ -984,6 +984,7 @@ pub async fn run_sentinel(
     interval_batches: u64,
     model_dir: Option<PathBuf>,
     action_config: SentinelConfig,
+    node_metrics: Option<aztibase_rpc::NodeMetrics>,
 ) {
     let mut scorer = if let Some(ref dir) = model_dir {
         let s = ChainHealthScorer::new().with_model_dir(dir);
@@ -1059,7 +1060,16 @@ pub async fn run_sentinel(
                 let base_fee = handles.base_fee.load(Ordering::Relaxed);
                 if let Some(action) = action_engine.evaluate(&stall_health, base_fee) {
                     log_action(&action);
+                    if let Some(ref m) = node_metrics {
+                        m.inc_sentinel_actions();
+                    }
                     state.push_action(action).await;
+                }
+                if let Some(ref m) = node_metrics {
+                    m.set_sentinel_health(
+                        (stall_health.score * 1000.0) as i64,
+                        health_level_int(stall_health.level),
+                    );
                 }
                 state.push(stall_health).await;
             }
@@ -1108,11 +1118,29 @@ pub async fn run_sentinel(
         // Tier 3: evaluate health for autonomous action
         if let Some(action) = action_engine.evaluate(&health, base_fee) {
             log_action(&action);
+            if let Some(ref m) = node_metrics {
+                m.inc_sentinel_actions();
+            }
             state.push_action(action).await;
+        }
+
+        if let Some(ref m) = node_metrics {
+            m.set_sentinel_health(
+                (health.score * 1000.0) as i64,
+                health_level_int(health.level),
+            );
         }
 
         state.push(health).await;
         last_scored_batch = current_batch;
+    }
+}
+
+fn health_level_int(level: HealthLevel) -> i64 {
+    match level {
+        HealthLevel::Normal => 0,
+        HealthLevel::Warning => 1,
+        HealthLevel::Critical => 2,
     }
 }
 

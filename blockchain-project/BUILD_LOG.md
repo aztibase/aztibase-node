@@ -21,6 +21,27 @@ Entries are prepended (newest first).
 
 ## Entries
 
+### Sprint 063b — Full Chain Monitoring Stack (2026-03-21)
+- **Date**: 2026-03-21
+- **Sprint**: 063b
+- **Commit**: (this commit)
+- **Files Changed**:
+  - `crates/aztibase-rpc/src/metrics.rs` — 6 new Prometheus metrics: `aztibase_sentinel_health_score` (gauge, millionths), `aztibase_sentinel_health_level` (gauge, 0/1/2), `aztibase_sentinel_actions_total` (counter), `aztibase_execution_anomalous_txs_total` (counter), `aztibase_consensus_epoch_number` (gauge). New setter methods: `set_sentinel_health()`, `inc_sentinel_actions()`, `inc_anomalous_txs()`, `set_epoch()`. JSON encoding updated with `sentinel` and extended `ai` sections.
+  - `crates/aztibase-node/src/sentinel.rs` — `run_sentinel()` now accepts optional `NodeMetrics` parameter. Updates Prometheus gauges on every sentinel tick (health score, level) and increments action counter on Tier 3 actions. Added `health_level_int()` helper.
+  - `crates/aztibase-node/src/main.rs` — Wired `NodeMetrics` into sentinel spawn. Fixed `aztibase_ai_pending_tasks` (was always 0, now reads shared atomic). Added anomalous tx counting per batch (receipts with `anomaly_score > 0.5`). Added epoch number metric from EmissionTracker.
+  - `monitoring/grafana/dashboards/chain-overview.json` — NEW: 24-panel Chain Overview dashboard (6 stat + 13 timeseries + 5 rows). Block production, economics, network, safety sections.
+  - `monitoring/grafana/dashboards/ai-sentinel.json` — NEW: 21-panel AI Sentinel dashboard. Health score timeline with threshold bands, anomaly detection, Tier 3 action log, correlated metrics.
+  - `monitoring/grafana/provisioning/alerting/alert-rules.yml` — NEW: 8 alert rules (block production stopped, no peers, equivocation, sentinel critical/warning, high latency, mempool overflow, anomaly spike).
+  - `scripts/setup-monitoring.sh` — NEW: VPS deployment script for VictoriaMetrics + Grafana self-hosted. Installs both as systemd services, auto-provisions datasource and dashboards, creates API token for MCP.
+  - `scripts/setup-grafana-mcp.sh` — NEW: Claude Code MCP integration setup. Configures `mcp-grafana` server for querying dashboards/metrics from Claude sessions.
+  - `workspace/grafana-mockup.html` — Visual mockup of all 5 dashboard tabs.
+- **Metrics**: Total Prometheus metrics: 21 (was 15, +6 new). Total dashboards: 4 (was 2, +2 new). Total alert rules: 8 (new).
+- **Tests**: 1,014 pass, 0 fail. Clippy 0 warnings, fmt clean.
+- **Review Notes**: Self-hosted monitoring stack chosen over Grafana Cloud for zero third-party dependency, full-resolution data, and local query latency. VictoriaMetrics chosen over Prometheus for lower memory footprint (~20MB vs ~200MB). Grafana MCP server enables Claude Code to query chain metrics directly during dev sessions. Alert rules cover the 8 most critical failure modes.
+- **Security Flags**: 0 ELEVATED. Grafana port 3000 exposed on VPS (password-protected, service account token for MCP).
+
+---
+
 ### Sprint 063 — VPS Deployment + Public Testnet (2026-03-20)
 - **Date**: 2026-03-20
 - **Sprint**: 063
