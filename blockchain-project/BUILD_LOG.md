@@ -21,18 +21,27 @@ Entries are prepended (newest first).
 
 ## Entries
 
-### Code Audit + DHT Quorum Fix (2026-03-21)
+### Code Audit + Stake-Gated Registration + VPS Redeploy (2026-03-21)
 - **Date**: 2026-03-21
-- **Sprint**: Post-063b (code audit)
-- **Commit**: pending
+- **Sprint**: Post-063b (audit + validator onboarding)
+- **Commits**: aed8245, d648374
 - **Files Changed**:
-  - `crates/aztibase-network/src/dht_record.rs` — Fixed quorum bypass vulnerability: `validate_dht_record()` now deduplicates `validator_id` via HashSet before counting signatures. Previously, duplicate signatures from the same validator inflated quorum count. Added `duplicate_signatures_rejected` test.
+  - `crates/aztibase-network/src/dht_record.rs` — DHT quorum bypass fix: deduplicates validator_id before counting signatures.
+  - `crates/aztibase-node/src/genesis.rs` — Added `registration_mode` field to GenesisConfig.
+  - `crates/aztibase-node/src/main.rs` — Parse registration_mode from genesis; ApproveValidator CLI command.
+  - `crates/aztibase-execution/src/routing.rs` — Added `ApproveValidator` to EmergencyActionKind.
+  - `crates/aztibase-node/src/pipeline.rs` — Handle ApproveValidator emergency action.
+  - `crates/aztibase-node/src/wallet.rs` — sign_approve_validator functions.
+  - `wallet-extension/popup.js` — "Become Validator" now prompts for stake amount (min 500K).
+  - `wallet-extension/popup.html` — Updated stake hint text.
+  - `packaging/validator/` — Consolidated from friend-validator. Genesis matches VPS. AI enabled.
 - **Review Notes**:
-  - Full 9-crate code audit (51K lines, 89 files). 1,014 tests pass. Zero clippy warnings, zero unsafe blocks, zero TODO/FIXME.
-  - 1 real bug found (DHT quorum bypass — FIXED).
-  - 16 medium hardening items catalogued (not blocking mainnet). See audit report in conversation.
-  - EVM balance overflow (evm.rs:60) reviewed and downgraded to LOW — unreachable in practice since all balances originate from u128 state.
-  - Phantom parent desync: existing 3-layer defense (insert_relaxed back-patch, peer wait, active fetch) is adequate for small validator sets. Multi-peer fetch deferred pending diagnostic logging.
+  - Full 9-crate code audit (51K lines, 89 files). 1,035 tests pass. Zero clippy warnings, zero unsafe blocks.
+  - 1 bug found and fixed (DHT quorum bypass). 16 medium hardening items catalogued.
+  - VPS redeployed: new binary, new validator key, stake_gated genesis, AI sentinel enabled.
+  - Validator onboarding VALIDATED: download → start → wallet → faucet → register with 500K stake → 2nd validator producing blocks.
+  - Genesis validation rule discovered: validator address cannot appear in [accounts] section.
+  - SSH from WSL broken (no private key). Workaround: build in WSL, copy to Desktop, SCP from Windows terminal.
 - **Security Flags**: DHT quorum bypass RESOLVED. No remaining ELEVATED flags.
 
 ---
