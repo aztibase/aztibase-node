@@ -358,6 +358,46 @@ pub fn sign_register_validator_encrypted(
     )
 }
 
+pub fn sign_approve_validator(
+    keyfile_path: &Path,
+    target_hex: &str,
+    nonce: u64,
+    gas_price: u64,
+) -> Result<Vec<u8>> {
+    let (kp, sender) = load_keyfile(keyfile_path)?;
+    let target = parse_address(target_hex)?;
+    build_signed_tx(
+        &kp,
+        TxKind::EmergencyAction {
+            sender,
+            action: aztibase_execution::EmergencyActionKind::ApproveValidator { target },
+            nonce,
+            gas_price,
+        },
+    )
+}
+
+pub fn sign_approve_validator_encrypted(
+    keyfile_path: &Path,
+    passphrase: &str,
+    target_hex: &str,
+    nonce: u64,
+    gas_price: u64,
+) -> Result<Vec<u8>> {
+    let kp = load_encrypted_keyfile(keyfile_path, passphrase)?;
+    let sender = address_from_pubkey(kp.public_key().as_bytes());
+    let target = parse_address(target_hex)?;
+    build_signed_tx(
+        &kp,
+        TxKind::EmergencyAction {
+            sender,
+            action: aztibase_execution::EmergencyActionKind::ApproveValidator { target },
+            nonce,
+            gas_price,
+        },
+    )
+}
+
 pub fn sign_stake(
     keyfile_path: &Path,
     amount: u128,

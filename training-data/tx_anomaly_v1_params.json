@@ -1,0 +1,27 @@
+{
+  "mins": [
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0
+  ],
+  "ranges": [
+    820.0,
+    1.0,
+    21000.0,
+    1.0,
+    1.0,
+    1.0
+  ],
+  "threshold": 0.052071381360292435,
+  "feature_names": [
+    "value",
+    "gas_price",
+    "gas_limit",
+    "payload_size",
+    "is_contract_deploy",
+    "is_ai_infer"
+  ]
+}

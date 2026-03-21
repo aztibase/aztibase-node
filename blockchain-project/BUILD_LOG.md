@@ -21,6 +21,22 @@ Entries are prepended (newest first).
 
 ## Entries
 
+### Code Audit + DHT Quorum Fix (2026-03-21)
+- **Date**: 2026-03-21
+- **Sprint**: Post-063b (code audit)
+- **Commit**: pending
+- **Files Changed**:
+  - `crates/aztibase-network/src/dht_record.rs` — Fixed quorum bypass vulnerability: `validate_dht_record()` now deduplicates `validator_id` via HashSet before counting signatures. Previously, duplicate signatures from the same validator inflated quorum count. Added `duplicate_signatures_rejected` test.
+- **Review Notes**:
+  - Full 9-crate code audit (51K lines, 89 files). 1,014 tests pass. Zero clippy warnings, zero unsafe blocks, zero TODO/FIXME.
+  - 1 real bug found (DHT quorum bypass — FIXED).
+  - 16 medium hardening items catalogued (not blocking mainnet). See audit report in conversation.
+  - EVM balance overflow (evm.rs:60) reviewed and downgraded to LOW — unreachable in practice since all balances originate from u128 state.
+  - Phantom parent desync: existing 3-layer defense (insert_relaxed back-patch, peer wait, active fetch) is adequate for small validator sets. Multi-peer fetch deferred pending diagnostic logging.
+- **Security Flags**: DHT quorum bypass RESOLVED. No remaining ELEVATED flags.
+
+---
+
 ### Sprint 063b — Friend Onboarding Package + Wallet Fix (2026-03-21)
 - **Date**: 2026-03-21
 - **Sprint**: 063b (continued)

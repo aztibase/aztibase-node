@@ -2356,6 +2356,10 @@ impl ExecutionPipeline {
                         self.consensus_addrs.remove(target);
                         format!("validator {} removed", short_hex(target))
                     }
+                    aztibase_execution::EmergencyActionKind::ApproveValidator { target } => {
+                        params.approved_validators.insert(*target);
+                        format!("validator {} approved for registration", short_hex(target))
+                    }
                 }
             };
 

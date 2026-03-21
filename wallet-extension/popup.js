@@ -944,12 +944,21 @@ async function becomeValidator() {
   if (!wasm || !secretHex) { toast("Wallet not ready", "error"); return; }
   if (!rpcConnected) { toast("Not connected to network", "error"); return; }
 
+  const MIN_STAKE = "500000";
+  const input = prompt(`Stake amount (minimum ${MIN_STAKE} AZTB):`, MIN_STAKE);
+  if (!input) return;
+  const stakeAmount = input.trim();
+  if (Number(stakeAmount) < Number(MIN_STAKE)) {
+    toast(`Minimum stake is ${MIN_STAKE} AZTB`, "error");
+    return;
+  }
+
   const authed = await require2FA();
   if (!authed) return;
 
   try {
     await refreshNonce();
-    const signedHex = wasm.signRegisterValidator(secretHex, "0", BigInt(currentNonce), 1n);
+    const signedHex = wasm.signRegisterValidator(secretHex, stakeAmount, BigInt(currentNonce), 1n);
     if (signedHex.startsWith("error:")) { toast(signedHex, "error"); return; }
 
     const txHash = await rpcCall("aztb_sendRawTransaction", [signedHex]);
@@ -958,8 +967,8 @@ async function becomeValidator() {
     if (receipt && receipt.success === false) {
       toast(`Registration failed: ${receipt.error || "execution rejected"}`, "error");
     } else {
-      toast("You are now a validator! Active at next epoch.", "success");
-      addTxToHistory("Become Validator", addressHex, "0", "stake");
+      toast(`Validator registered with ${stakeAmount} AZTB stake! Active at next epoch.`, "success");
+      addTxToHistory("Become Validator", addressHex, stakeAmount, "stake");
       const btn = document.getElementById("btn-become-validator");
       if (btn) { btn.textContent = "Registered"; btn.disabled = true; }
     }

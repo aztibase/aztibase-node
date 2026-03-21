@@ -365,6 +365,27 @@ enum WalletAction {
         #[arg(long)]
         rpc: Option<String>,
     },
+    /// Approve a validator address for registration (emergency key only)
+    ApproveValidator {
+        /// Path to emergency key file
+        #[arg(long)]
+        key: PathBuf,
+        /// Validator address to approve (hex)
+        #[arg(long)]
+        target: String,
+        /// Account nonce
+        #[arg(long)]
+        nonce: u64,
+        /// Gas price
+        #[arg(long, default_value = "1")]
+        gas_price: u64,
+        /// Passphrase for encrypted keyfile
+        #[arg(long)]
+        passphrase: Option<String>,
+        /// RPC endpoint to broadcast to
+        #[arg(long)]
+        rpc: Option<String>,
+    },
     /// Register as a validator and join the network
     RegisterValidator {
         /// Path to validator key file
@@ -915,6 +936,30 @@ async fn main() -> Result<()> {
                     if let Some(rpc_url) = rpc {
                         let tx_hash = wallet::broadcast_transaction(&rpc_url, &hex).await?;
                         println!("Broadcast OK. TX hash: {tx_hash}");
+                    } else {
+                        println!("{hex}");
+                    }
+                }
+                WalletAction::ApproveValidator {
+                    key,
+                    target,
+                    nonce,
+                    gas_price,
+                    passphrase,
+                    rpc,
+                } => {
+                    let envelope = if let Some(pass) = passphrase {
+                        wallet::sign_approve_validator_encrypted(
+                            &key, &pass, &target, nonce, gas_price,
+                        )?
+                    } else {
+                        wallet::sign_approve_validator(&key, &target, nonce, gas_price)?
+                    };
+                    let hex = genesis::hex_encode(&envelope);
+                    if let Some(rpc_url) = rpc {
+                        let tx_hash = wallet::broadcast_transaction(&rpc_url, &hex).await?;
+                        println!("ApproveValidator TX broadcast OK. TX hash: {tx_hash}");
+                        println!("Address {target} is now approved to register as a validator.");
                     } else {
                         println!("{hex}");
                     }
@@ -1567,6 +1612,16 @@ async fn main() -> Result<()> {
                 }
             }
             exec_pipeline.set_approved_validators(approved).await;
+
+            // Set registration mode from genesis if specified
+            if let Some(mode) = gen_cfg.registration_mode.as_deref().and_then(
+                aztibase_execution::ValidatorRegistrationMode::from_str_mode,
+            ) {
+                let cp = exec_pipeline.shared_chain_params();
+                let mut params = cp.write().await;
+                params.validator_registration_mode = mode;
+                tracing::info!(mode = %mode, "Validator registration mode set from genesis");
+            }
 
             // Set emergency key from genesis if present
             if let Some(key) = gen_cfg

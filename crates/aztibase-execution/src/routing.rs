@@ -268,6 +268,7 @@ pub enum EmergencyActionKind {
     Unpause,
     ForceParam { key: String, value: String },
     RemoveValidator { target: Address },
+    ApproveValidator { target: Address },
 }
 
 impl TxKind {

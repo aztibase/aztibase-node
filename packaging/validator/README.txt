@@ -1,55 +1,55 @@
 AZTIBASE VALIDATOR NODE
 ======================
 
-Run a validator node on the Aztibase testnet.
+Join the Aztibase testnet as a validator.
 
-Prerequisites:
-  - Windows x64
-  - Node.js installed (for the dashboard server)
-  - AZTB tokens for staking (minimum 10,000 AZTB)
+Quick Start (Windows):
+  1. Double-click start.bat
+  2. Wait for "Validator is RUNNING"
+  3. Install the Aztibase Wallet Chrome extension
+  4. Connect wallet to http://127.0.0.1:9944
+  5. Click "Faucet" to get testnet AZTB
+  6. Click "Become Validator"
+  7. Done! You'll join at the next epoch boundary.
 
-Quick Start:
-  1. Run: bash start.sh
-     (This auto-generates your validator keys on first run)
+Quick Start (Linux/Mac):
+  chmod +x aztibase
+  ./aztibase --config node.toml --genesis genesis.toml
 
-  2. Install the Aztibase Wallet extension (Chrome)
-     Connect to http://127.0.0.1:9944
-
-  3. Hit the Faucet button to get testnet AZTB
-
-  4. Go to Staking tab → hit "Become Validator"
-     That's it — you're a validator at the next epoch.
-
-  5. Open the dashboard:
-     http://127.0.0.1:8080
-
-How It Works:
-  - The --testnet flag uses the built-in genesis config and connects to
-    public testnet boot nodes automatically.
-  - node.toml has boot_nodes pre-configured for the public testnet.
-  - Your validator key is generated on first run and saved to keys/.
-  - After staking, your node joins the active validator set at the next
-    epoch boundary and starts earning rewards automatically.
-
-Tokenomics:
-  - Genesis supply: 400,000,000 AZTB
-  - Validator allocation: 20,000,000 AZTB (5% of genesis)
-  - Emission: 600,000,000 AZTB over ~10 years (halving every 2 years)
-  - Rewards: 70% of epoch emission goes to validators, proportional to stake
-  - No claim step — rewards are auto-credited to your balance each epoch
-
-Endpoints:
-  RPC:        http://127.0.0.1:9944
-  Dashboard:  http://127.0.0.1:8080
-  Health:     http://127.0.0.1:9944/health
-  Metrics:    http://127.0.0.1:9944/metrics/json
+What Happens:
+  - First run generates your validator key in keys/
+  - Node connects to the Aztibase VPS boot node
+  - Syncs the full chain from genesis
+  - After you register, you produce blocks alongside other validators
 
 Files:
-  aztibase.exe   - The node binary
-  node.toml      - Node configuration (boot nodes pre-configured)
-  keys/          - Your validator keypair (auto-generated on first run)
-  explorer/      - Validator Dashboard (web UI)
-  start.sh       - Start/stop script
+  aztibase.exe   - Node binary (Windows)
+  aztibase       - Node binary (Linux)
+  node.toml      - Configuration (boot node pre-configured)
+  genesis.toml   - Genesis block (must match the network)
+  start.bat      - Windows launcher (double-click)
+  stop.bat       - Stop the node
+  keys/          - Your validator keypair (auto-generated)
+  data/          - Chain data (created on first run)
+  node.log       - Log output
 
-Stop:  bash start.sh stop
-Logs:  node.log
+Endpoints (after starting):
+  RPC:       http://127.0.0.1:9944
+  Health:    http://127.0.0.1:9944/health
+  Metrics:   http://127.0.0.1:9944/metrics/json
+
+Requirements:
+  - Windows 10/11 x64 or Linux x64
+  - Internet connection
+  - Port 30333 open (for P2P)
+
+Stop:
+  Close the terminal window, or double-click stop.bat
+
+Staking:
+  - Minimum stake: 10,000 AZTB (faucet gives 1,000,000)
+  - Rewards: 70% of epoch emission to validators
+  - No claim step - rewards auto-credit each epoch
+
+Need Help?
+  Contact the network coordinator.

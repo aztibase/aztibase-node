@@ -621,6 +621,9 @@ Introduce `SignedDhtRecord` — a wrapper around DHT values that includes: (1) `
 - Unsigned legacy records are rejected — all DHT records must use the new format
 - Future: per-kind quorum thresholds (e.g., ValidatorSet requires ≥ f+1 signatures)
 
+### Amendment (2026-03-21): Signature deduplication
+Code audit found that `validate_dht_record()` did not deduplicate `validator_id` before counting quorum. A single compromised validator could submit duplicate signatures to meet the quorum threshold. Fixed by adding `HashSet<[u8;32]>` deduplication — unique signers are now counted after verification, and the quorum check runs against the deduplicated count.
+
 ---
 
 ## ADR-021: No mempool persistence — re-gossip from peers on restart

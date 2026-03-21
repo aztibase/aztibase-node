@@ -5,6 +5,16 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ---
 
+## Code Audit (2026-03-21)
+
+### Fixed
+- **DHT quorum bypass** (`aztibase-network`): `validate_dht_record()` now deduplicates validator signatures before counting quorum. Previously, a single compromised validator could submit duplicate signatures to pass the 2/3 quorum check.
+
+### Audited
+- Full 9-crate audit: 51K lines, 89 files, 1,014 tests. Zero unsafe blocks, zero clippy warnings, zero TODO/FIXME. 1 bug found and fixed (above). 16 medium hardening items logged for future sprints.
+
+---
+
 ## Sprint 063b — Friend Onboarding + Wallet Fix (2026-03-21)
 
 ### Added

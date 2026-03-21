@@ -7,9 +7,7 @@ listen_addresses = [
     "/ip4/0.0.0.0/udp/30333/quic-v1",
 ]
 boot_nodes = [
-    "/dns4/testnet1.aztibase.com/tcp/30333",
-    "/dns4/testnet2.aztibase.com/tcp/30334",
-    "/dns4/testnet3.aztibase.com/tcp/30335",
+    "/ip4/102.209.21.247/tcp/30333",
 ]
 idle_timeout_secs = 60
 stun_servers = [
@@ -25,7 +23,7 @@ enabled = true
 level = "info"
 
 [ai]
-enabled = false
+enabled = true
 models = []
 
 [metrics]

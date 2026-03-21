@@ -115,12 +115,23 @@ where
     }
 
     let signing_payload = dht_signing_payload(record);
+    let mut seen = std::collections::HashSet::new();
     for sig in &record.signatures {
+        if !seen.insert(sig.validator_id) {
+            continue;
+        }
         if !verify_sig(&sig.validator_id, &signing_payload, &sig.signature) {
             return Err(DhtValidationError::InvalidSignature {
                 validator: sig.validator_id,
             });
         }
+    }
+
+    if seen.len() < effective_quorum {
+        return Err(DhtValidationError::InsufficientSignatures {
+            got: seen.len(),
+            need: effective_quorum,
+        });
     }
 
     Ok(())
@@ -205,6 +216,25 @@ mod tests {
         let record = make_record(100, 3);
         let err = validate_dht_record(&record, 200, 2, always_invalid).unwrap_err();
         assert!(matches!(err, DhtValidationError::InvalidSignature { .. }));
+    }
+
+    #[test]
+    fn duplicate_signatures_rejected() {
+        let dup_sig = DhtRecordSignature {
+            validator_id: [0u8; 32],
+            signature: vec![0xAA; 64],
+        };
+        let record = SignedDhtRecord {
+            kind: DhtRecordKind::ValidatorSet,
+            round: 100,
+            data: vec![1, 2, 3, 4],
+            signatures: vec![dup_sig.clone(), dup_sig.clone(), dup_sig],
+        };
+        let err = validate_dht_record(&record, 200, 2, always_valid).unwrap_err();
+        assert!(matches!(
+            err,
+            DhtValidationError::InsufficientSignatures { got: 1, need: 2 }
+        ));
     }
 
     #[test]
