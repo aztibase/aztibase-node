@@ -45,6 +45,7 @@ struct Inner {
     pub sentinel_actions_total: Counter,
     pub anomalous_txs_total: Counter,
     pub epoch_number: Gauge,
+    pub sentinel_epoch_summaries: Gauge,
 }
 
 impl NodeMetrics {
@@ -71,6 +72,7 @@ impl NodeMetrics {
         let sentinel_actions_total = Counter::default();
         let anomalous_txs_total = Counter::default();
         let epoch_number = Gauge::<i64, _>::default();
+        let sentinel_epoch_summaries = Gauge::<i64, _>::default();
 
         registry.register(
             "aztibase_consensus_vertices_proposed",
@@ -172,6 +174,11 @@ impl NodeMetrics {
             "Current consensus epoch number",
             epoch_number.clone(),
         );
+        registry.register(
+            "aztibase_sentinel_epoch_summaries",
+            "Number of epoch summaries in sentinel memory",
+            sentinel_epoch_summaries.clone(),
+        );
 
         Self {
             inner: Arc::new(Inner {
@@ -196,6 +203,7 @@ impl NodeMetrics {
                 sentinel_actions_total,
                 anomalous_txs_total,
                 epoch_number,
+                sentinel_epoch_summaries,
             }),
         }
     }
@@ -271,6 +279,10 @@ impl NodeMetrics {
         self.inner.epoch_number.set(epoch as i64);
     }
 
+    pub fn set_sentinel_epoch_summaries(&self, count: u64) {
+        self.inner.sentinel_epoch_summaries.set(count as i64);
+    }
+
     /// Encode all metrics in Prometheus text exposition format.
     pub fn encode_prometheus(&self) -> String {
         let mut buf = String::new();
@@ -306,6 +318,7 @@ impl NodeMetrics {
                 "health_score": self.inner.sentinel_health_score.get(),
                 "health_level": self.inner.sentinel_health_level.get(),
                 "actions_total": counter_value(&self.inner.sentinel_actions_total),
+                "epoch_summaries": self.inner.sentinel_epoch_summaries.get(),
             },
             "staking": {
                 "active_validators": self.inner.active_validators.get(),

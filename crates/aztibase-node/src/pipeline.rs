@@ -1,6 +1,8 @@
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::sync::Arc;
 
+type VertexCounts = Arc<std::sync::Mutex<HashMap<[u8; 32], (u64, u64)>>>;
+
 use aztibase_consensus::{
     AttestationAggregator, CHECKPOINT_INTERVAL, Checkpoint, CommittedBatch, ComputeCommitmentStore,
     InferenceAttestation,
@@ -101,6 +103,10 @@ pub struct ExecutionPipeline {
     archive: bool,
     faucet_enabled: bool,
     tx_feature_exporter: Option<TxFeatureExporter>,
+    sentinel_memory: Option<Arc<RwLock<crate::profiler::SentinelMemory>>>,
+    rpc_sentinel_memory: Option<Arc<RwLock<Option<serde_json::Value>>>>,
+    vertex_counts: Option<VertexCounts>,
+    epoch_start_batch: u64,
 }
 
 /// Appends per-transaction feature vectors to a CSV for anomaly model training.
@@ -278,6 +284,10 @@ impl ExecutionPipeline {
             archive: false,
             faucet_enabled: true,
             tx_feature_exporter: None,
+            sentinel_memory: None,
+            rpc_sentinel_memory: None,
+            vertex_counts: None,
+            epoch_start_batch: 0,
         }
     }
 
@@ -297,6 +307,21 @@ impl ExecutionPipeline {
     #[allow(dead_code)]
     pub fn set_faucet_enabled(&mut self, enabled: bool) {
         self.faucet_enabled = enabled;
+    }
+
+    pub fn set_sentinel_memory(&mut self, memory: Arc<RwLock<crate::profiler::SentinelMemory>>) {
+        self.sentinel_memory = Some(memory);
+    }
+
+    pub fn set_rpc_sentinel_memory(
+        &mut self,
+        rpc_mem: Arc<RwLock<Option<serde_json::Value>>>,
+    ) {
+        self.rpc_sentinel_memory = Some(rpc_mem);
+    }
+
+    pub fn set_vertex_counts(&mut self, counts: VertexCounts) {
+        self.vertex_counts = Some(counts);
     }
 
     /// Shared compute commitment store (for RPC server).
@@ -3476,6 +3501,7 @@ impl ExecutionPipeline {
                         });
                     }
                     drop(staking);
+                    let credits_snapshot = credits.clone();
                     for (addr, amount) in credits {
                         let prev = state.balance(&addr);
                         state.set_balance(&addr, prev + amount);
@@ -3541,6 +3567,79 @@ impl ExecutionPipeline {
                         downtime_slashed = inactive_validators.len(),
                         "Epoch boundary — rewards distributed, validator set refreshed"
                     );
+
+                    // Validator profiling + epoch summary persistence.
+                    if let Some(ref sentinel_mem) = self.sentinel_memory {
+                        let mut profiler = crate::profiler::ProfileAccumulator::new();
+
+                        if let Some(ref vc) = self.vertex_counts
+                            && let Ok(mut counts) = vc.lock()
+                        {
+                            profiler.merge_vertex_counts(std::mem::take(&mut *counts));
+                        }
+
+                        let epoch_rounds = self.current_round.saturating_sub(self.epoch_start_batch);
+                        profiler.set_total_rounds(epoch_rounds);
+
+                        let slash_amounts: std::collections::HashMap<[u8; 32], u128> =
+                            inactive_validators.iter().map(|v| (*v, 0u128)).collect();
+                        let equivocation_counts = std::collections::HashMap::new();
+
+                        let profiles = profiler.finalize(
+                            &active_set,
+                            &credits_snapshot,
+                            &inactive_validators,
+                            &slash_amounts,
+                            &equivocation_counts,
+                        );
+
+                        let now = std::time::SystemTime::now()
+                            .duration_since(std::time::UNIX_EPOCH)
+                            .unwrap_or_default()
+                            .as_millis() as u64;
+                        let epoch_start_ms = now.saturating_sub(
+                            epoch_rounds * 400,
+                        );
+
+                        let summary = crate::profiler::EpochSummary {
+                            epoch: epoch_num,
+                            start_batch: self.epoch_start_batch,
+                            end_batch: self.current_round,
+                            duration_ms: now.saturating_sub(epoch_start_ms),
+                            avg_health_score: 0.0,
+                            max_health_score: 0.0,
+                            warning_ticks: 0,
+                            critical_ticks: 0,
+                            actions_taken: 0,
+                            avg_tps: 0.0,
+                            avg_commit_latency_ms: 0.0,
+                            equivocations_total: 0,
+                            anomalous_tx_count: 0,
+                            validator_profiles: profiles,
+                        };
+
+                        let mut mem = sentinel_mem.write().await;
+                        mem.push_epoch(summary);
+
+                        if let Some(ref store) = self.store {
+                            let _ = aztibase_execution::flush_sentinel_memory(store, &*mem);
+                        }
+
+                        if let Some(ref rpc_mem) = self.rpc_sentinel_memory
+                            && let Ok(json) = serde_json::to_value(&*mem)
+                        {
+                            *rpc_mem.write().await = Some(json);
+                        }
+
+                        tracing::info!(
+                            epoch = epoch_num,
+                            profiles = mem.epoch_summaries.back()
+                                .map_or(0, |s| s.validator_profiles.len()),
+                            total_epochs = mem.epoch_summaries.len(),
+                            "Epoch profiling complete — sentinel memory persisted"
+                        );
+                    }
+                    self.epoch_start_batch = self.current_round;
                 }
             }
         }
@@ -3671,6 +3770,10 @@ mod tests {
             archive: false,
             faucet_enabled: true,
             tx_feature_exporter: None,
+            sentinel_memory: None,
+            rpc_sentinel_memory: None,
+            vertex_counts: None,
+            epoch_start_batch: 0,
         }
     }
 
@@ -4213,6 +4316,10 @@ mod tests {
             archive: false,
             faucet_enabled: true,
             tx_feature_exporter: None,
+            sentinel_memory: None,
+            rpc_sentinel_memory: None,
+            vertex_counts: None,
+            epoch_start_batch: 0,
         }
     }
 

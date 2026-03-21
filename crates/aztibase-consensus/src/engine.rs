@@ -294,6 +294,7 @@ pub struct ConsensusEngine {
     last_proposed_round: u64,
     peer_count: u64,
     last_parent_fetch: Instant,
+    vertex_counts: Arc<std::sync::Mutex<HashMap<ValidatorId, (u64, u64)>>>,
 }
 
 impl ConsensusEngine {
@@ -325,11 +326,18 @@ impl ConsensusEngine {
             last_proposed_round: 0,
             peer_count: 0,
             last_parent_fetch: Instant::now(),
+            vertex_counts: Arc::new(std::sync::Mutex::new(HashMap::new())),
         }
     }
 
     pub fn metrics(&self) -> Arc<ConsensusMetrics> {
         Arc::clone(&self.metrics)
+    }
+
+    /// Shared handle to per-validator vertex counts.
+    /// The pipeline reads and clears this at epoch boundaries for profiling.
+    pub fn vertex_counts_handle(&self) -> Arc<std::sync::Mutex<HashMap<ValidatorId, (u64, u64)>>> {
+        Arc::clone(&self.vertex_counts)
     }
 
     /// Run the consensus loop. Uses a message-driven threshold clock:
@@ -637,6 +645,11 @@ impl ConsensusEngine {
         self.metrics
             .vertices_proposed
             .fetch_add(1, AtomicOrdering::Relaxed);
+        if let Ok(mut counts) = self.vertex_counts.lock() {
+            let entry = counts.entry(self.identity).or_insert((0, 0));
+            entry.0 += 1;
+            entry.1 += payload.len() as u64;
+        }
 
         match self
             .outbox
@@ -735,6 +748,11 @@ impl ConsensusEngine {
         self.metrics
             .vertices_received
             .fetch_add(1, AtomicOrdering::Relaxed);
+        if let Ok(mut counts) = self.vertex_counts.lock() {
+            let entry = counts.entry(block.author).or_insert((0, 0));
+            entry.0 += 1;
+            entry.1 += block.payload.len() as u64;
+        }
         self.try_insert_vertex(block)
     }
 

@@ -392,6 +392,7 @@ const L2_REGISTRY_KEY: &[u8] = b"l2_registry";
 const L2_ANCHORS_KEY: &[u8] = b"l2_anchors";
 const BRIDGE_ESCROW_KEY: &[u8] = b"bridge_escrow";
 const BRIDGE_PROOFS_KEY: &[u8] = b"bridge_proofs";
+const SENTINEL_MEMORY_KEY: &[u8] = b"sentinel_memory";
 
 fn flush_serializable<T: serde::Serialize>(
     store: &StateStore,
@@ -493,6 +494,19 @@ pub fn load_bridge_stores(
         load_serializable(store, BRIDGE_ESCROW_KEY)?,
         load_serializable(store, BRIDGE_PROOFS_KEY)?,
     ))
+}
+
+pub fn flush_sentinel_memory<T: serde::Serialize>(
+    store: &StateStore,
+    memory: &T,
+) -> StorageResult<()> {
+    flush_serializable(store, SENTINEL_MEMORY_KEY, memory)
+}
+
+pub fn load_sentinel_memory<T: serde::de::DeserializeOwned + Default>(
+    store: &StateStore,
+) -> StorageResult<T> {
+    load_serializable(store, SENTINEL_MEMORY_KEY)
 }
 
 /// Flush all protocol stores in sequence.

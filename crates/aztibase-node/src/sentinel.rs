@@ -653,6 +653,13 @@ pub enum ActionKind {
     },
     /// Emergency chain pause via EmergencyAction::Pause.
     EmergencyPause,
+    /// Per-validator performance warning (observer-only).
+    ValidatorWarning {
+        validator_id: [u8; 32],
+        message: String,
+    },
+    /// Cross-epoch pattern detected (observer-only).
+    PatternAlert { pattern: String, details: String },
 }
 
 const ACTION_LOG_CAPACITY: usize = 100;
@@ -1185,6 +1192,23 @@ fn log_action(action: &SentinelAction) {
                 score = action.score,
                 batch = action.batch_height,
                 "Sentinel action: EMERGENCY PAUSE{dry_tag}"
+            );
+        }
+        ActionKind::ValidatorWarning {
+            validator_id,
+            message,
+        } => {
+            tracing::warn!(
+                tier = ?action.tier,
+                validator = format!("{:02x}{:02x}{:02x}{:02x}", validator_id[0], validator_id[1], validator_id[2], validator_id[3]),
+                "{message}{dry_tag}"
+            );
+        }
+        ActionKind::PatternAlert { pattern, details } => {
+            tracing::warn!(
+                tier = ?action.tier,
+                %pattern, %details,
+                "Sentinel pattern alert{dry_tag}"
             );
         }
     }

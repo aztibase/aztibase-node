@@ -4,6 +4,7 @@ mod genesis;
 mod integration;
 mod mempool;
 mod pipeline;
+pub mod profiler;
 pub mod sentinel;
 mod sync;
 mod task_pool;
@@ -1479,6 +1480,22 @@ async fn main() -> Result<()> {
     }
     tracing::info!("Execution pipeline initialized (AI runtime: tract)");
 
+    // Sentinel memory: persistent cross-epoch profiling + pattern detection.
+    let sentinel_memory = {
+        let mem: profiler::SentinelMemory =
+            aztibase_execution::load_sentinel_memory(&exec_store).unwrap_or_default();
+        if !mem.epoch_summaries.is_empty() {
+            tracing::info!(
+                epochs = mem.epoch_summaries.len(),
+                "Sentinel memory loaded from disk"
+            );
+        }
+        Arc::new(tokio::sync::RwLock::new(mem))
+    };
+    exec_pipeline.set_sentinel_memory(Arc::clone(&sentinel_memory));
+    exec_pipeline.set_vertex_counts(engine.vertex_counts_handle());
+    // rpc_sentinel_memory is wired after it's created below
+
     // Bootstrap from snapshot file if --snapshot is provided
     if let Some(ref snapshot_path) = cli.snapshot {
         let shared = exec_pipeline.shared_state();
@@ -1583,6 +1600,12 @@ async fn main() -> Result<()> {
         Arc::new(tokio::sync::RwLock::new(Vec::new()));
     let rpc_sentinel_actions: Arc<tokio::sync::RwLock<Vec<serde_json::Value>>> =
         Arc::new(tokio::sync::RwLock::new(Vec::new()));
+    let rpc_sentinel_memory: Arc<tokio::sync::RwLock<Option<serde_json::Value>>> = {
+        let mem = sentinel_memory.read().await;
+        let json = serde_json::to_value(&*mem).ok();
+        Arc::new(tokio::sync::RwLock::new(json))
+    };
+    exec_pipeline.set_rpc_sentinel_memory(Arc::clone(&rpc_sentinel_memory));
 
     // RPC server
     let (mempool_tx, mut mempool_rx) = tokio::sync::mpsc::channel::<Vec<u8>>(4096);
@@ -1617,7 +1640,8 @@ async fn main() -> Result<()> {
         Arc::clone(&rpc_sentinel_latest),
         Arc::clone(&rpc_sentinel_history),
     )
-    .with_sentinel_actions(Arc::clone(&rpc_sentinel_actions));
+    .with_sentinel_actions(Arc::clone(&rpc_sentinel_actions))
+    .with_sentinel_memory(Arc::clone(&rpc_sentinel_memory));
 
     if let Some(ref gen_cfg) = genesis_config {
         rpc_server = rpc_server.with_genesis_hash(genesis::genesis_hash(gen_cfg)?);

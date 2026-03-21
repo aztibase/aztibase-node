@@ -44,10 +44,12 @@ pub use parallel::{BatchResult, TransferTx, TxReceipt, TxStatus, execute_transfe
 pub use persist::{
     check_sentinel, clear_sentinel, evict_old_batch_roots, evict_old_transactions,
     flush_agent_policies, flush_bridge_stores, flush_chain_params, flush_emission,
-    flush_governance, flush_protocol_stores, flush_staking, flush_state, get_batch_by_number,
+    flush_governance, flush_protocol_stores, flush_sentinel_memory, flush_staking, flush_state,
+    get_batch_by_number,
     get_batch_range, get_batch_root, get_batch_txs, get_checkpoint_raw, get_equivocation_proof,
     get_transaction, latest_batch_index, latest_checkpoint_raw, load_agent_policies, load_base_fee,
-    load_bridge_stores, load_chain_params, load_emission, load_governance, load_staking,
+    load_bridge_stores, load_chain_params, load_emission, load_governance, load_sentinel_memory,
+    load_staking,
     load_state, store_base_fee, store_batch_index, store_batch_root, store_batch_txs,
     store_checkpoint_raw, store_equivocation_proof, store_transaction, write_sentinel,
 };

@@ -136,6 +136,7 @@ pub struct RpcState {
     pub sentinel_latest: Arc<RwLock<Option<serde_json::Value>>>,
     pub sentinel_history: Arc<RwLock<Vec<serde_json::Value>>>,
     pub sentinel_actions: Arc<RwLock<Vec<serde_json::Value>>>,
+    pub sentinel_memory: Arc<RwLock<Option<serde_json::Value>>>,
 }
 
 impl Clone for RpcState {
@@ -174,6 +175,7 @@ impl Clone for RpcState {
             sentinel_latest: Arc::clone(&self.sentinel_latest),
             sentinel_history: Arc::clone(&self.sentinel_history),
             sentinel_actions: Arc::clone(&self.sentinel_actions),
+            sentinel_memory: Arc::clone(&self.sentinel_memory),
         }
     }
 }
@@ -372,6 +374,7 @@ impl RpcServer {
                 sentinel_latest: Arc::new(RwLock::new(None)),
                 sentinel_history: Arc::new(RwLock::new(Vec::new())),
                 sentinel_actions: Arc::new(RwLock::new(Vec::new())),
+                sentinel_memory: Arc::new(RwLock::new(None)),
             },
         }
     }
@@ -388,6 +391,14 @@ impl RpcServer {
 
     pub fn with_sentinel_actions(mut self, actions: Arc<RwLock<Vec<serde_json::Value>>>) -> Self {
         self.state.sentinel_actions = actions;
+        self
+    }
+
+    pub fn with_sentinel_memory(
+        mut self,
+        memory: Arc<RwLock<Option<serde_json::Value>>>,
+    ) -> Self {
+        self.state.sentinel_memory = memory;
         self
     }
 
@@ -674,6 +685,9 @@ async fn dispatch(state: &RpcState, req: &JsonRpcRequest) -> JsonRpcResponse {
         "aztb_getHealthHistory" => handle_get_health_history(state, req).await,
         "aztb_getSentinelActions" => handle_get_sentinel_actions(state, req).await,
         "aztb_getEmergencyKeyStatus" => handle_get_emergency_key_status(state, req).await,
+        "aztb_getValidatorProfile" => handle_get_validator_profile(state, req).await,
+        "aztb_getEpochSummary" => handle_get_epoch_summary(state, req).await,
+        "aztb_getEpochSummaries" => handle_get_epoch_summaries(state, req).await,
         _ => JsonRpcResponse::error(
             req.id.clone(),
             METHOD_NOT_FOUND,
@@ -2667,6 +2681,123 @@ async fn handle_get_emergency_key_status(
     )
 }
 
+async fn handle_get_validator_profile(
+    state: &RpcState,
+    req: &JsonRpcRequest,
+) -> JsonRpcResponse {
+    let validator_id = match parse_hash_param(&req.params, 0) {
+        Ok(h) => h,
+        Err(e) => return JsonRpcResponse::error(req.id.clone(), INVALID_PARAMS, e),
+    };
+
+    let mem = state.sentinel_memory.read().await;
+    let memory = match &*mem {
+        Some(m) => m,
+        None => {
+            return JsonRpcResponse::error(
+                req.id.clone(),
+                -32000,
+                "sentinel memory not available".into(),
+            )
+        }
+    };
+
+    let summaries = memory
+        .get("epoch_summaries")
+        .and_then(|s| s.as_array());
+
+    let latest = match summaries.and_then(|arr| arr.last()) {
+        Some(s) => s,
+        None => return JsonRpcResponse::success(req.id.clone(), serde_json::Value::Null),
+    };
+
+    let vid_hex = hex::encode(validator_id);
+    let profile = latest
+        .get("validator_profiles")
+        .and_then(|ps| ps.as_array())
+        .and_then(|arr| {
+            arr.iter().find(|p| {
+                p.get("validator_id")
+                    .and_then(|v| v.as_array())
+                    .is_some_and(|bytes| {
+                        let reconstructed: Vec<u8> = bytes
+                            .iter()
+                            .filter_map(|b| b.as_u64().map(|n| n as u8))
+                            .collect();
+                        hex::encode(&reconstructed) == vid_hex
+                    })
+            })
+        });
+
+    JsonRpcResponse::success(
+        req.id.clone(),
+        profile.cloned().unwrap_or(serde_json::Value::Null),
+    )
+}
+
+async fn handle_get_epoch_summary(state: &RpcState, req: &JsonRpcRequest) -> JsonRpcResponse {
+    let epoch = match parse_u64_param(&req.params, 0) {
+        Ok(e) => e,
+        Err(e) => return JsonRpcResponse::error(req.id.clone(), INVALID_PARAMS, e),
+    };
+
+    let mem = state.sentinel_memory.read().await;
+    let memory = match &*mem {
+        Some(m) => m,
+        None => {
+            return JsonRpcResponse::error(
+                req.id.clone(),
+                -32000,
+                "sentinel memory not available".into(),
+            )
+        }
+    };
+
+    let result = memory
+        .get("epoch_summaries")
+        .and_then(|s| s.as_array())
+        .and_then(|arr| arr.iter().find(|s| s.get("epoch").and_then(|e| e.as_u64()) == Some(epoch)))
+        .cloned()
+        .unwrap_or(serde_json::Value::Null);
+
+    JsonRpcResponse::success(req.id.clone(), result)
+}
+
+async fn handle_get_epoch_summaries(state: &RpcState, req: &JsonRpcRequest) -> JsonRpcResponse {
+    let limit = req
+        .params
+        .get(0)
+        .and_then(|v| v.as_u64())
+        .unwrap_or(10)
+        .min(50) as usize;
+
+    let mem = state.sentinel_memory.read().await;
+    let memory = match &*mem {
+        Some(m) => m,
+        None => {
+            return JsonRpcResponse::error(
+                req.id.clone(),
+                -32000,
+                "sentinel memory not available".into(),
+            )
+        }
+    };
+
+    let summaries = memory
+        .get("epoch_summaries")
+        .and_then(|s| s.as_array())
+        .map(|arr| {
+            arr.iter()
+                .rev()
+                .take(limit)
+                .cloned()
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default();
+
+    JsonRpcResponse::success(req.id.clone(), serde_json::json!(summaries))
+}
+
 fn parse_u64_param(params: &serde_json::Value, index: usize) -> Result<u64, String> {
     let val = params
         .get(index)
@@ -2778,6 +2909,7 @@ mod tests {
             sentinel_latest: Arc::new(RwLock::new(None)),
             sentinel_history: Arc::new(RwLock::new(Vec::new())),
             sentinel_actions: Arc::new(RwLock::new(Vec::new())),
+            sentinel_memory: Arc::new(RwLock::new(None)),
         };
         (state, rx)
     }
@@ -2824,6 +2956,7 @@ mod tests {
             sentinel_latest: Arc::new(RwLock::new(None)),
             sentinel_history: Arc::new(RwLock::new(Vec::new())),
             sentinel_actions: Arc::new(RwLock::new(Vec::new())),
+            sentinel_memory: Arc::new(RwLock::new(None)),
         };
         (state, rx)
     }
@@ -3082,6 +3215,7 @@ mod tests {
             sentinel_latest: Arc::new(RwLock::new(None)),
             sentinel_history: Arc::new(RwLock::new(Vec::new())),
             sentinel_actions: Arc::new(RwLock::new(Vec::new())),
+            sentinel_memory: Arc::new(RwLock::new(None)),
         };
         (state, rx, path)
     }
@@ -3479,6 +3613,7 @@ mod tests {
             sentinel_latest: Arc::new(RwLock::new(None)),
             sentinel_history: Arc::new(RwLock::new(Vec::new())),
             sentinel_actions: Arc::new(RwLock::new(Vec::new())),
+            sentinel_memory: Arc::new(RwLock::new(None)),
         };
         (state, rx)
     }
@@ -3585,6 +3720,7 @@ mod tests {
             sentinel_latest: Arc::new(RwLock::new(None)),
             sentinel_history: Arc::new(RwLock::new(Vec::new())),
             sentinel_actions: Arc::new(RwLock::new(Vec::new())),
+            sentinel_memory: Arc::new(RwLock::new(None)),
         };
 
         let task_hex = hex::encode(task_id);
