@@ -21,6 +21,23 @@ Entries are prepended (newest first).
 
 ## Entries
 
+### Sprint 063b — Friend Onboarding Package + Wallet Fix (2026-03-21)
+- **Date**: 2026-03-21
+- **Sprint**: 063b (continued)
+- **Commit**: 9f98677
+- **Files Changed**:
+  - `wallet-extension/popup.js` — Fixed RPC default from `https://rpc.aztibase.com` (broken DNS) to `http://102.209.21.247:9944` (VPS direct). Updated PUBLIC_RPC, getNetworkName(), and preset button detection to recognize VPS IP.
+  - `wallet-extension/manifest.json` — Added `http://102.209.21.247:*/*` to host_permissions.
+  - `explorer/index.html` — Fixed public mode detection to recognize VPS IP. Updated defaultRpc for public mode.
+  - `packaging/friend-validator/` — NEW: Complete friend validator package. `node.toml` with VPS boot node, VPS genesis, `start.bat` (native Windows, no Git Bash), `stop.bat`, `dashboard/index.html`, `README.txt`.
+  - `docs/VALIDATOR_ONBOARDING.md` — Rewritten: removed Tailscale dependency, simplified to 5-minute quick start, added Linux path, updated network info.
+- **GitHub Release**: v0.1.4 at aztibase/aztibase-node with 3 assets: Windows validator package (17MB), Linux validator package (18MB), wallet extension (179KB).
+- **Infrastructure**: WSL Ubuntu build environment established. Windows binary rebuilt from v0.1.4 source. Linux binary from prior WSL build.
+- **Review Notes**: Friend onboarding flow: download → extract → double-click start.bat → wallet faucet → become validator. No Git Bash, no Tailscale, no VPS needed. Node connects to VPS boot node via P2P, gossips transactions for VPS to commit.
+- **Security Flags**: 0 ELEVATED. Public repo (aztibase/aztibase-node) contains only README.md — no source code exposed.
+
+---
+
 ### Sprint 063b — Full Chain Monitoring Stack (2026-03-21)
 - **Date**: 2026-03-21
 - **Sprint**: 063b

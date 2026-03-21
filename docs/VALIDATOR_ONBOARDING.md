@@ -1,151 +1,113 @@
 # Validator Onboarding Guide
 
-Welcome to the Aztibase Friends Testnet! This guide gets you connected in under 10 minutes.
+Welcome to the Aztibase Network testnet! This guide gets you running as a validator in under 5 minutes.
 
 ## What You Need
 
-- A PC (Windows, Mac, or Linux)
+- A PC (Windows 10/11 x64) or Linux x64 machine
 - Internet connection
 
-## Option A: Connect as a Light Client (Easiest)
+## Quick Start (Windows)
 
-No software to install. Use the public RPC endpoints directly.
+1. Download `aztibase-validator-v0.1.4-windows-x64.zip` from GitHub:
+   https://github.com/aztibase/aztibase-node/releases
 
-### Check the network
+2. Extract the zip to a folder
 
-```bash
-curl -s https://rpc.aztibase.com -X POST \
-  -H "Content-Type: application/json" \
-  -d '{"jsonrpc":"2.0","method":"aztb_blockHeight","params":[],"id":1}'
-```
+3. Double-click `start.bat`
 
-### Get testnet tokens
+4. Wait for "Validator is RUNNING"
 
-```bash
-curl -s https://rpc.aztibase.com -X POST \
-  -H "Content-Type: application/json" \
-  -d '{"jsonrpc":"2.0","method":"aztb_faucetDrip","params":["0xYOUR_ADDRESS"],"id":1}'
-```
+5. Install the Aztibase Wallet Chrome extension
 
-### Check balance
+6. Connect wallet to `http://127.0.0.1:9944`
 
-```bash
-curl -s https://rpc.aztibase.com -X POST \
-  -H "Content-Type: application/json" \
-  -d '{"jsonrpc":"2.0","method":"aztb_getBalance","params":["0xYOUR_ADDRESS"],"id":1}'
-```
+7. Click "Faucet" to get testnet AZTB
 
-## Option B: Run a Validator Node (Pre-built Binary)
+8. Click "Become Validator"
 
-### Step 1: Install Tailscale
+9. Done! You join the active validator set at the next epoch boundary.
 
-Tailscale creates a secure private network between you and the testnet.
-
-1. Go to https://tailscale.com/download
-2. Install for your OS
-3. Sign in with the same account as the coordinator
-4. Once connected, you'll get an IP like `100.x.x.x`
-5. Verify: `ping 100.104.71.94` (coordinator's node)
-
-### Step 2: Download the Node Package
-
-Download from GitHub releases:
-
-https://github.com/aztibase/aztibase-node/releases
-
-Choose your package:
-- **aztibase-testnet-v0.1.0-windows-x64.tar.gz** — Generic full node (configure your own keys)
-- **aztibase-validator4-v0.1.0-windows-x64.tar.gz** — Pre-configured validator-4 (ready to run)
-
-Extract the archive. You need Git Bash or WSL to run the start script.
-
-### Step 3: Configure (if using generic package)
-
-Edit `node.toml` — replace `SEED_NODE_IP` with the coordinator's Tailscale IP:
-```toml
-boot_nodes = [
-    "/ip4/100.104.71.94/tcp/30333",
-]
-```
-
-If you have a validator key, place it in the same folder and add to `node.toml`:
-```toml
-validator_key = "./keys/your-validator.json"
-```
-
-### Step 4: Start Your Node
+## Quick Start (Linux)
 
 ```bash
-bash start.sh
+# Download and extract
+wget https://github.com/aztibase/aztibase-node/releases/download/v0.1.4/aztibase-validator-v0.1.4-linux-x64.tar.gz
+tar xzf aztibase-validator-v0.1.4-linux-x64.tar.gz
+cd aztibase-validator
+
+# Generate keys and start
+chmod +x aztibase
+./aztibase wallet generate --validator --output keys/validator.json
+./aztibase --config node.toml --genesis genesis.toml
 ```
 
-### Step 6: Verify Connection
-
-Check that your node sees peers:
+Then use the wallet CLI to register:
 ```bash
-curl -s http://localhost:9944 -X POST \
-  -H "Content-Type: application/json" \
-  -d '{"jsonrpc":"2.0","method":"aztb_nodeInfo","params":[],"id":1}'
+./aztibase wallet faucet --rpc http://127.0.0.1:9944
+./aztibase wallet register-validator --rpc http://127.0.0.1:9944
 ```
 
-Check block production:
-```bash
-curl -s http://localhost:9944 -X POST \
-  -H "Content-Type: application/json" \
-  -d '{"jsonrpc":"2.0","method":"aztb_blockHeight","params":[],"id":1}'
-```
+## What Happens After Starting
 
-## Option C: Build from Source (Advanced)
+1. Your node connects to the Aztibase VPS boot node (102.209.21.247)
+2. Syncs the full chain from genesis block 1
+3. Once synced, you see blocks being produced in the logs
+4. After you register as validator, you start producing blocks at the next epoch
 
-If you have access to the private source repo:
+## Check Your Node
 
 ```bash
-# Install Rust
-curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
-
-# Clone and build
-git clone <private-repo-url>
-cd aztibase
-cargo build --release
-
-# Generate validator keys
-cargo run --package aztibase-core --example keygen > my-validator.json
+curl -s http://127.0.0.1:9944/health
+curl -s http://127.0.0.1:9944 -X POST -H "Content-Type: application/json" -d '{"jsonrpc":"2.0","method":"aztb_blockHeight","params":[],"id":1}'
+curl -s http://127.0.0.1:9944 -X POST -H "Content-Type: application/json" -d '{"jsonrpc":"2.0","method":"aztb_nodeInfo","params":[],"id":1}'
 ```
-
-Send the coordinator your **address**, **public_key**, and **bls_public_key** (never the secret keys).
 
 ## Network Info
 
-| Endpoint | URL |
-|----------|-----|
-| RPC (Node 1) | https://rpc.aztibase.com |
-| RPC (Node 2) | https://rpc2.aztibase.com |
-| RPC (Node 3) | https://rpc3.aztibase.com |
+| Item | Value |
+|------|-------|
 | Chain ID | 0xA27B |
 | Token | AZTB |
+| Boot Node | /ip4/102.209.21.247/tcp/30333 |
+| RPC (VPS) | http://102.209.21.247:9944 |
+| Minimum Stake | 10,000 AZTB |
+| Faucet Drip | 1,000,000 AZTB |
+
+## Staking & Rewards
+
+- Faucet gives 1,000,000 AZTB (enough to register)
+- Minimum validator stake: 10,000 AZTB
+- Epoch rewards: 70% of emission goes to validators
+- Rewards auto-credit each epoch (no claim step)
+- Commission: 10% (configurable via governance)
 
 ## Troubleshooting
 
 ### "Connection refused" to boot node
-- Make sure Tailscale is running (green icon in system tray)
-- Ping the coordinator: `ping 100.104.71.94`
-- The coordinator's testnet must be running
+- Check that 102.209.21.247 is reachable: `ping 102.209.21.247`
+- The VPS must be running (it should be 24/7)
 
-### No blocks produced
-- Consensus needs all genesis validators online (currently 4)
-- Check your logs for errors
+### No peers found
+- Ensure port 30333 is not blocked by your firewall
+- On Windows: allow aztibase.exe through Windows Firewall when prompted
+
+### Node syncing slowly
+- This is normal on first start. The node catches up from genesis.
+- Watch block height increase in logs or via health endpoint.
 
 ### Genesis hash mismatch
-- You have a different genesis.toml than the coordinator
-- Re-download the file and restart
-
-### Node won't compile
-- Ensure Rust is up to date: `rustup update`
-- On Windows: install Visual Studio Build Tools with C++ workload
+- You have a different genesis.toml than the network
+- Re-download the package and use the included genesis.toml
 
 ## Security
 
 - This is a **testnet** -- tokens have no real value
 - Never reuse mainnet keys on a testnet
-- Never share your `my-validator.json` file
-- Back up your keys offline
+- Back up your `keys/validator.json` file
+- Never share your key file with anyone
+
+## Stop Your Node
+
+- Windows: close the terminal window or double-click `stop.bat`
+- Linux: Ctrl+C or `kill $(pgrep aztibase)`

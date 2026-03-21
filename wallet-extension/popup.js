@@ -3,7 +3,7 @@ import { TwoFactorAuth, isWebAuthnAvailable } from "./twofa.js";
 let wasm = null;
 let secretHex = null;
 let addressHex = null;
-let rpcUrl = "https://rpc.aztibase.com";
+let rpcUrl = "http://102.209.21.247:9944";
 let currentNonce = 0;
 const twofa = new TwoFactorAuth();
 let pending2FAResolve = null;
@@ -15,7 +15,7 @@ const DECIMALS = 0;
 const BASE = 1n;
 
 const LOCAL_RPC = "http://127.0.0.1:9944";
-const PUBLIC_RPC = "https://rpc.aztibase.com";
+const PUBLIC_RPC = "http://102.209.21.247:9944";
 const RPC_TIMEOUT = 5000;
 const RECONNECT_INTERVAL = 15000;
 
@@ -131,7 +131,7 @@ async function retryConnection() {
 
 function getNetworkName(url) {
   if (url.includes("127.0.0.1") || url.includes("localhost")) return "Local Testnet";
-  if (url.includes("rpc.aztibase.com")) return "Testnet";
+  if (url.includes("102.209.21.247") || url.includes("rpc.aztibase.com")) return "Testnet";
   return "Custom";
 }
 
@@ -147,7 +147,7 @@ function updateNetPresetButtons() {
   document.querySelectorAll(".net-preset").forEach(btn => btn.classList.remove("active"));
   const action = rpcUrl.includes("127.0.0.1") || rpcUrl.includes("localhost")
     ? "netLocal"
-    : rpcUrl.includes("rpc.aztibase.com") ? "netPublic" : "netCustom";
+    : (rpcUrl.includes("102.209.21.247") || rpcUrl.includes("rpc.aztibase.com")) ? "netPublic" : "netCustom";
   const activeBtn = document.querySelector(`[data-action="${action}"]`);
   if (activeBtn) activeBtn.classList.add("active");
 }

@@ -5,9 +5,8 @@
   "description": "Browser wallet for the Aztibase Network — send, receive, and stake AZTB",
   "permissions": ["storage", "identity"],
   "host_permissions": [
+    "http://102.209.21.247:*/*",
     "https://rpc.aztibase.com/*",
-    "https://rpc2.aztibase.com/*",
-    "https://rpc3.aztibase.com/*",
     "http://127.0.0.1:*/*",
     "http://localhost:*/*",
     "https://github.com/*",

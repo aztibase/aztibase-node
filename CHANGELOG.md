@@ -5,6 +5,19 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ---
 
+## Sprint 063b — Friend Onboarding + Wallet Fix (2026-03-21)
+
+### Added
+- **Friend validator package**: Complete download-and-run package for Windows and Linux. Includes node binary, pre-configured boot node (VPS), genesis, native `start.bat` launcher, local node dashboard. Available at GitHub v0.1.4 release.
+- **Dashboard bundled in package**: `dashboard/index.html` — local node view showing blocks, peers, staking, health. Connects to `127.0.0.1:9944` automatically.
+
+### Fixed
+- **Wallet extension RPC**: Default endpoint changed from `https://rpc.aztibase.com` (broken DNS) to `http://102.209.21.247:9944` (VPS direct). Added VPS IP to manifest host_permissions. Network name detection recognizes VPS IP as "Testnet".
+- **Explorer public mode**: Now detects VPS IP as public mode. Updated default RPC for public-hosted explorer.
+- **Onboarding docs**: Removed Tailscale dependency, simplified to 5-minute flow, added Linux instructions.
+
+---
+
 ## Sprint 063b — Full Chain Monitoring Stack (2026-03-21)
 
 ### Added
