@@ -376,18 +376,33 @@ impl ConsensusEngine {
             }
         }
 
-        info!(
-            seeded,
-            clock_round = self.threshold_clock.get_round(),
-            last_proposed = self.last_proposed_round,
-            "Threshold clock seeded — waiting for peers before first proposal"
-        );
+        let highest_in_dag = self.dag.highest_round().unwrap_or(0);
+        if highest_in_dag > 0 {
+            self.last_proposed_round = highest_in_dag;
+            let target_clock = highest_in_dag + 1;
+            while self.threshold_clock.get_round() < target_clock {
+                self.threshold_clock.force_advance();
+            }
+            self.round_start = Instant::now();
+            info!(
+                seeded,
+                round = target_clock,
+                "Resumed from existing chain — fast-forwarded to current round"
+            );
+        } else {
+            info!(
+                seeded,
+                clock_round = self.threshold_clock.get_round(),
+                last_proposed = self.last_proposed_round,
+                "Threshold clock seeded — waiting for peers before first proposal"
+            );
+        }
 
         // Wait for all other validators before starting consensus.
         // Starting with fewer peers causes fast nodes to race ahead, producing
         // blocks that late-joining nodes can never sync (gossipsub doesn't
         // retroactively deliver old rounds), leading to permanent phantom parents.
-        let required_peers = self.validators.len().saturating_sub(1).max(1) as u64;
+        let required_peers = self.validators.len().saturating_sub(1) as u64;
         let peer_deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(30);
         while self.peer_count < required_peers {
             tokio::select! {
@@ -488,9 +503,12 @@ impl ConsensusEngine {
             let round = self.last_proposed_round + 1;
             self.state.current_round = round;
             self.round_start = Instant::now();
-            self.propose_vertex()?;
+            let proposed = self.propose_vertex()?;
             self.evaluate_commits()?;
             self.prune_equivocation_tracker();
+            if !proposed {
+                break;
+            }
             self.metrics
                 .rounds_advanced
                 .fetch_add(1, AtomicOrdering::Relaxed);
@@ -585,23 +603,24 @@ impl ConsensusEngine {
         Ok(())
     }
 
-    fn propose_vertex(&mut self) -> Result<()> {
+    fn propose_vertex(&mut self) -> Result<bool> {
         // Full nodes (not in the validator set) observe but don't propose.
         if !self.validators.contains(&self.identity) {
-            return Ok(());
+            return Ok(true);
         }
 
         let round = self.state.current_round;
-        let parents = self.state.select_parents(self.config.max_parents);
 
-        // Round 0 is genesis — already inserted
+        // Round 0 is genesis — already inserted.
         if round == 0 {
-            return Ok(());
+            return Ok(true);
         }
+
+        let parents = self.state.select_parents(self.config.max_parents);
 
         if parents.is_empty() {
             warn!(round, "No parents available, skipping proposal");
-            return Ok(());
+            return Ok(false);
         }
 
         let quorum = self.validators.quorum_count();
@@ -663,7 +682,7 @@ impl ConsensusEngine {
             }
         }
 
-        Ok(())
+        Ok(true)
     }
 
     pub fn handle_input(&mut self, input: ConsensusInput) -> Result<()> {

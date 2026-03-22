@@ -1,0 +1,26 @@
+data_dir = "./data/singlenode"
+genesis_path = "./data/singlenode/genesis.toml"
+validator_key = "./data/node1/keys/validator1.json"
+
+[network]
+listen_addresses = [
+    "/ip4/127.0.0.1/tcp/30340",
+    "/ip4/127.0.0.1/udp/30340/quic-v1",
+]
+boot_nodes = []
+idle_timeout_secs = 60
+stun_servers = []
+
+[rpc]
+listen_addr = "127.0.0.1:9950"
+enabled = true
+
+[log]
+level = "info"
+
+[ai]
+enabled = false
+models = []
+
+[metrics]
+enabled = false

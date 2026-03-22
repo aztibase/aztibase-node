@@ -5,6 +5,19 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ---
 
+## v0.1.7 — Consensus Engine: Phantom Parent Stall Fix (2026-03-22)
+
+### Fixed
+- **`propose_vertex` cascade stall** (`aztibase-consensus`): `propose_vertex` returned `Ok(())` even when skipping a proposal due to no available parents. `try_advance` would advance `last_proposed_round` unconditionally, creating a gap in `vertices_by_round` that cascaded into a permanent consensus stall. Now returns `Result<bool>`; `try_advance` only advances round state when a vertex was actually created.
+- **Single-validator peer-wait deadlock** (`aztibase-consensus`): `.max(1)` in `required_peers` calculation forced a single-validator node (n=1) to wait forever for a peer before starting consensus. Removed — for n=1 the required peer count is now 0 and consensus starts immediately.
+- **Restart "No parents available" loop** (`aztibase-consensus`): On restart with existing chain data, `last_proposed_round` and the threshold clock were not synced to the DAG's highest round, causing the node to loop on round 1 indefinitely. Fixed by directly fast-forwarding both on startup via `force_advance()`, bypassing the guard that prevented the prior approach from working.
+- **New validator quorum disruption** (`aztibase-node`): Validators registered mid-epoch were admitted into live `consensus_addrs` immediately, shrinking the quorum threshold without a matching DAG update. Admission now deferred to the next epoch boundary via `pending_consensus_addrs`.
+
+### Added
+- **Single-node local test setup**: `data/singlenode/` config (mirrors VPS — 1 validator, no boot nodes, port 30340/9950) and `test-singlenode.sh` convenience script.
+
+---
+
 ## v0.1.6 — Validator Package Fix (2026-03-22)
 
 ### Fixed

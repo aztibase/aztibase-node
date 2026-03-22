@@ -21,6 +21,27 @@ Entries are prepended (newest first).
 
 ## Entries
 
+### Consensus Engine — Phantom Parent Stall Fix (2026-03-22)
+- **Date**: 2026-03-22
+- **Sprint**: Post-063b (consensus reliability)
+- **Commit**: PENDING (uncommitted)
+- **Files Changed**:
+  - `crates/aztibase-consensus/src/engine.rs` — 4 fixes (see below)
+  - `crates/aztibase-node/src/pipeline.rs` — `pending_consensus_addrs` deferred admission
+  - `data/singlenode/genesis.toml` — single-node local test config (mirrors VPS)
+  - `data/singlenode/node.toml` — single-node local test config (mirrors VPS)
+  - `test-singlenode.sh` — convenience script for local single-node testing
+- **Review Notes**:
+  - **Fix 1 — `propose_vertex` → `Result<bool>`**: Previously returned `Ok(())` even when skipping proposal (no parents available). `try_advance` would advance `last_proposed_round` regardless, creating a gap in `vertices_by_round` that cascaded into a permanent stall. Now returns `false` when skipping; `try_advance` breaks the loop without advancing round state.
+  - **Fix 2 — Single-validator peer-wait removed**: `required_peers = validators.len().saturating_sub(1).max(1)` forced a single-validator node (n=1) to wait for 1 peer before starting consensus. Removed `.max(1)` — for n=1 the required count is now 0.
+  - **Fix 3 — Restart fast-forward**: On restart with existing chain data, `insert_genesis` (else branch) set `state.current_round = highest + 1` but did not sync `last_proposed_round` or the threshold clock. `fast_forward_round(highest + 1)` was then a no-op (guard: `target <= current_round`). Fixed by directly advancing the threshold clock via `force_advance()` and setting `last_proposed_round = highest_in_dag` in `run()`, bypassing the guard entirely.
+  - **Fix 4 — `pending_consensus_addrs`** (pipeline): New validators registered mid-epoch were admitted into the live `consensus_addrs` set immediately, shrinking the required quorum without a corresponding DAG update. Now deferred to the next epoch boundary.
+  - Local single-node test PASSED: fresh start (wave 0→48 in 10s), restart with existing data (resumes wave 44→107+). Zero stalls in both scenarios.
+  - VPS deploy PENDING — binary built (WSL), on Desktop. Commands ready.
+- **Security Flags**: 0 ELEVATED. Consensus correctness fix, no new attack surfaces.
+
+---
+
 ### Validator Package v0.1.6 — Genesis Fix + Live Dashboard (2026-03-22)
 - **Date**: 2026-03-22
 - **Sprint**: Post-063b (validator onboarding fixes)

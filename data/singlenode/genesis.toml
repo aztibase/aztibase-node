@@ -1,0 +1,13 @@
+chain_id = 41595
+timestamp = 1772993141269
+registration_mode = "stake_gated"
+
+[[validators]]
+name = "validator-1"
+address = "3d2ffd489e1527d0ea45aa989b90224e3486d0bf4091f274087039457386288e"
+public_key = "ffe4c3733781176443e9ed5cb0032380e932f40c4e01b4483f86a38274c3ffde"
+stake = "1000000"
+bls_public_key = "8d06896adf4af47dcb4c4d8936e66baf24186228b0c4e1038efb248385d6a40b695dc8d9da195a55a59262d9c77a5b0f"
+
+[accounts.52363030812007defb19d2fd2c3a46af026e3891ad9f7a542c60249c743970d0]
+balance = "10000000"
