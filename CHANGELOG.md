@@ -5,6 +5,19 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ---
 
+## v0.1.6 — Validator Package Fix (2026-03-22)
+
+### Fixed
+- **Chain-starter bug**: `start.bat` always passed `--genesis`, causing every restart to bootstrap a new chain. New validators would create their own chain instead of joining the VPS network. Now only initializes genesis on first boot (empty data dir).
+- **Dashboard "Total Staked" always stale**: Was reading from a Prometheus gauge set once at genesis. Now queries live validator set via `aztb_getActiveValidators` and sums `effective_stake`.
+- **README minimum stake**: Corrected from 10,000 to 500,000 AZTB.
+
+### Added
+- **Node status banner**: Persistent banner in dashboard showing role (Validator/Full), peers, sync progress (producing/syncing/stalled), finality latency, and epoch number — all color-coded.
+- **Live monitoring in start.bat**: Block height, peers, validators, epoch, and sync status printed every 30s. Clear failure feedback on startup.
+
+---
+
 ## Code Audit (2026-03-21)
 
 ### Fixed

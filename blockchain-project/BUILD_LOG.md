@@ -21,6 +21,22 @@ Entries are prepended (newest first).
 
 ## Entries
 
+### Validator Package v0.1.6 — Genesis Fix + Live Dashboard (2026-03-22)
+- **Date**: 2026-03-22
+- **Sprint**: Post-063b (validator onboarding fixes)
+- **Commit**: 5e569de
+- **Files Changed**:
+  - `packaging/validator/start.bat` — Fixed chain-starter bug: `--genesis` now only runs on first boot (empty data dir). Added live monitoring loop (block height, peers, validators, epoch, sync status every 30s). Clear startup failure feedback.
+  - `packaging/validator/dashboard/index.html` — Total Staked now computed from live `aztb_getActiveValidators` data instead of stale metrics gauge. Added persistent node status banner (role, peers, sync progress, finality latency, epoch). Sync detection: producing/syncing/stalled/disconnected with color-coded indicators.
+  - `packaging/validator/README.txt` — Linux instructions split into first-boot vs subsequent-boot commands. Minimum stake corrected to 500K AZTB.
+- **Review Notes**:
+  - Critical bug: start.bat always passed `--genesis genesis.toml`, causing every restart to initialize a new chain instead of resuming from synced data. New validators would create their own chain instead of joining the VPS network.
+  - Dashboard "Total Staked" was reading from a stale Prometheus gauge. Now queries actual validator set via RPC.
+  - No crates/ code touched — packaging-only fix per feedback memory.
+- **Security Flags**: 0 ELEVATED. No code changes to consensus/execution.
+
+---
+
 ### Code Audit + Stake-Gated Registration + VPS Redeploy (2026-03-21)
 - **Date**: 2026-03-21
 - **Sprint**: Post-063b (audit + validator onboarding)
