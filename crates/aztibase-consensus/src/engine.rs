@@ -357,6 +357,15 @@ impl ConsensusEngine {
         let genesis_count = self.state.vertices_at_round(0).len();
         info!(genesis_blocks = genesis_count, "Genesis blocks in DAG");
 
+        if let Ok(Some(wave)) = self.dag.load_committed_wave() {
+            self.state.last_committed_wave = Some(wave);
+            info!(wave, "Restored last_committed_wave from disk");
+        }
+        if let Ok(Some(seed)) = self.dag.load_vrf_seed() {
+            self.vrf_seed = seed;
+            info!("Restored VRF seed from disk");
+        }
+
         // Seed threshold clock with genesis blocks (round 0).
         let mut seeded = 0usize;
         for &hash in self.state.vertices_at_round(0) {
@@ -858,7 +867,6 @@ impl ConsensusEngine {
                 match status {
                     LeaderStatus::Commit(hash) => {
                         let latency = self.round_start.elapsed();
-                        info!(wave, hash = %short_hex(&hash), "Block committed (direct)");
                         self.metrics.commits.fetch_add(1, AtomicOrdering::Relaxed);
                         self.metrics
                             .last_commit_latency_us
@@ -882,26 +890,14 @@ impl ConsensusEngine {
                                 for vh in &batch.vertex_order {
                                     self.state.record_commit(*vh);
                                 }
-                                let mut pending = Some(ConsensusOutput::BatchCommitted(batch));
-                                for attempt in 0..100 {
-                                    let m = pending.take().expect("retry invariant");
-                                    match self.outbox.try_send(m) {
-                                        Ok(()) => break,
-                                        Err(mpsc::error::TrySendError::Full(returned)) => {
-                                            if attempt == 0 {
-                                                tracing::warn!(
-                                                    "Outbox full, retrying committed batch delivery"
-                                                );
-                                            }
-                                            pending = Some(returned);
-                                            std::thread::sleep(Duration::from_millis(10));
-                                        }
-                                        Err(mpsc::error::TrySendError::Closed(_)) => {
-                                            tracing::error!(
-                                                "Outbox closed, cannot deliver committed batch"
-                                            );
-                                            break;
-                                        }
+                                info!(wave, hash = %short_hex(&hash), txs = batch.transactions.len(), "Batch committed");
+                                match self.outbox.try_send(ConsensusOutput::BatchCommitted(batch)) {
+                                    Ok(()) => {}
+                                    Err(mpsc::error::TrySendError::Full(_)) => {
+                                        tracing::warn!(wave, "Outbox full, batch dropped");
+                                    }
+                                    Err(mpsc::error::TrySendError::Closed(_)) => {
+                                        tracing::error!("Outbox closed");
                                     }
                                 }
                             }
@@ -912,10 +908,13 @@ impl ConsensusEngine {
                                 tracing::warn!("Failed to extract committed batch: {e}");
                             }
                         }
+                        let _ = self.dag.save_committed_wave(wave);
+                        let _ = self.dag.save_vrf_seed(&self.vrf_seed);
                     }
                     LeaderStatus::Skip(r) => {
                         debug!(wave, round = r, "Leader skipped");
                         self.state.last_committed_wave = Some(wave);
+                        let _ = self.dag.save_committed_wave(wave);
                     }
                     LeaderStatus::Undecided(r) => {
                         let voting_round = r + 1;

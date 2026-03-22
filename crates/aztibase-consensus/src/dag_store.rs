@@ -46,6 +46,9 @@ struct DagEntry {
 /// Must be ≥ 2 × wave_length to avoid pruning blocks needed by the commit rule.
 const DAG_RETENTION_BUFFER: u64 = 16;
 
+const META_LAST_COMMITTED_WAVE: &[u8] = b"__meta_last_committed_wave";
+const META_VRF_SEED: &[u8] = b"__meta_vrf_seed";
+
 pub struct DagStore {
     store: StateStore,
     index: HashMap<BlockHash, DagEntry>,
@@ -399,6 +402,38 @@ impl DagStore {
         self.rounds.keys().max().copied()
     }
 
+    pub fn save_committed_wave(&self, wave: u64) -> DagStoreResult<()> {
+        self.store
+            .put(BLOCKS_TABLE, META_LAST_COMMITTED_WAVE, &wave.to_le_bytes())?;
+        Ok(())
+    }
+
+    pub fn load_committed_wave(&self) -> DagStoreResult<Option<u64>> {
+        match self.store.get(BLOCKS_TABLE, META_LAST_COMMITTED_WAVE)? {
+            Some(bytes) if bytes.len() == 8 => {
+                let wave = u64::from_le_bytes(bytes.try_into().unwrap());
+                Ok(Some(wave))
+            }
+            _ => Ok(None),
+        }
+    }
+
+    pub fn save_vrf_seed(&self, seed: &[u8; 32]) -> DagStoreResult<()> {
+        self.store.put(BLOCKS_TABLE, META_VRF_SEED, seed)?;
+        Ok(())
+    }
+
+    pub fn load_vrf_seed(&self) -> DagStoreResult<Option<[u8; 32]>> {
+        match self.store.get(BLOCKS_TABLE, META_VRF_SEED)? {
+            Some(bytes) if bytes.len() == 32 => {
+                let mut seed = [0u8; 32];
+                seed.copy_from_slice(&bytes);
+                Ok(Some(seed))
+            }
+            _ => Ok(None),
+        }
+    }
+
     /// Collect all block hashes reachable by walking parents from the given tips.
     fn reachable_set(&self, tips: &[BlockHash]) -> HashSet<BlockHash> {
         let mut visited = HashSet::new();
@@ -425,7 +460,10 @@ impl DagStore {
         let all = self.store.iter(BLOCKS_TABLE)?;
         let mut blocks: Vec<DagBlock> = Vec::with_capacity(all.len());
 
-        for (_key, value) in &all {
+        for (key, value) in &all {
+            if key.starts_with(b"__meta_") {
+                continue;
+            }
             let block: DagBlock = postcard::from_bytes(value)
                 .map_err(|e| DagStoreError::Serialization(e.to_string()))?;
             blocks.push(block);

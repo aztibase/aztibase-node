@@ -5,7 +5,7 @@ cd /d "%~dp0"
 
 echo.
 echo  ============================================
-echo   Aztibase Network - Validator Node v0.1.5
+echo   Aztibase Network - Validator Node v0.1.8
 echo  ============================================
 echo.
 
