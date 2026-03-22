@@ -95,6 +95,7 @@ pub struct ExecutionPipeline {
     consensus_tx: Option<mpsc::Sender<aztibase_consensus::ConsensusInput>>,
     epoch_participation: HashSet<[u8; 32]>,
     consensus_addrs: HashSet<[u8; 32]>,
+    pending_consensus_addrs: HashSet<[u8; 32]>,
     agent_policy_store: Arc<RwLock<AgentPolicyStore>>,
     l2_registry: Arc<RwLock<L2Registry>>,
     l2_anchor_store: Arc<RwLock<L2AnchorStore>>,
@@ -276,6 +277,7 @@ impl ExecutionPipeline {
             consensus_tx: None,
             epoch_participation: HashSet::new(),
             consensus_addrs: HashSet::new(),
+            pending_consensus_addrs: HashSet::new(),
             agent_policy_store: Arc::new(RwLock::new(agent_policies)),
             l2_registry: Arc::new(RwLock::new(l2_registry)),
             l2_anchor_store: Arc::new(RwLock::new(l2_anchors)),
@@ -2232,7 +2234,7 @@ impl ExecutionPipeline {
                     }
                     state.increment_nonce(registrant);
                     if *amount >= MIN_VALIDATOR_STAKE {
-                        self.consensus_addrs.insert(*registrant);
+                        self.pending_consensus_addrs.insert(*registrant);
                     }
                     exec_receipts.push(ExecutionReceipt {
                         tx_hash,
@@ -2246,7 +2248,7 @@ impl ExecutionPipeline {
                     tracing::info!(
                         validator = %short_hex(registrant),
                         stake = amount,
-                        "New validator registered via RegisterValidator tx"
+                        "New validator registered — pending consensus admission next epoch"
                     );
                 }
                 Err(e) => {
@@ -2437,12 +2439,13 @@ impl ExecutionPipeline {
                     if let Some(vs) = staking_read.get_validator(staker)
                         && vs.effective_stake() >= MIN_VALIDATOR_STAKE
                         && !self.consensus_addrs.contains(staker)
+                        && !self.pending_consensus_addrs.contains(staker)
                     {
-                        self.consensus_addrs.insert(*staker);
+                        self.pending_consensus_addrs.insert(*staker);
                         tracing::info!(
                             validator = %short_hex(staker),
                             stake = vs.effective_stake(),
-                            "Validator reached minimum stake — added to consensus set"
+                            "Validator reached minimum stake — pending consensus admission next epoch"
                         );
                     }
                     drop(staking_read);
@@ -3536,6 +3539,19 @@ impl ExecutionPipeline {
 
                     self.epoch_participation.clear();
 
+                    // Graduate pending validators into the live consensus set.
+                    // One epoch of grace time gives new validators a chance to spin
+                    // up their node before the chain depends on them for quorum.
+                    let graduating: Vec<[u8; 32]> =
+                        self.pending_consensus_addrs.drain().collect();
+                    for vid in graduating {
+                        self.consensus_addrs.insert(vid);
+                        tracing::info!(
+                            validator = %short_hex(&vid),
+                            "Pending validator graduated into consensus set"
+                        );
+                    }
+
                     // Propagate updated validator set to consensus engine.
                     // Only include validators already known to consensus — prevents
                     // adding staked-but-offline validators that would cause phantom
@@ -3766,6 +3782,7 @@ mod tests {
             consensus_tx: None,
             epoch_participation: HashSet::new(),
             consensus_addrs: HashSet::new(),
+            pending_consensus_addrs: HashSet::new(),
             agent_policy_store: Arc::new(RwLock::new(AgentPolicyStore::new())),
             l2_registry: Arc::new(RwLock::new(L2Registry::new())),
             l2_anchor_store: Arc::new(RwLock::new(L2AnchorStore::new())),
@@ -4312,6 +4329,7 @@ mod tests {
             consensus_tx: None,
             epoch_participation: HashSet::new(),
             consensus_addrs: HashSet::new(),
+            pending_consensus_addrs: HashSet::new(),
             agent_policy_store: Arc::new(RwLock::new(AgentPolicyStore::new())),
             l2_registry: Arc::new(RwLock::new(L2Registry::new())),
             l2_anchor_store: Arc::new(RwLock::new(L2AnchorStore::new())),
