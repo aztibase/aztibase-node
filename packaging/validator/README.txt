@@ -14,7 +14,10 @@ Quick Start (Windows):
 
 Quick Start (Linux/Mac):
   chmod +x aztibase
+  # First boot only (empty data dir):
   ./aztibase --config node.toml --genesis genesis.toml
+  # Subsequent boots (resume from synced data):
+  ./aztibase --config node.toml
 
 What Happens:
   - First run generates your validator key in keys/
@@ -47,7 +50,7 @@ Stop:
   Close the terminal window, or double-click stop.bat
 
 Staking:
-  - Minimum stake: 10,000 AZTB (faucet gives 1,000,000)
+  - Minimum stake: 500,000 AZTB (faucet gives 1,000,000)
   - Rewards: 70% of epoch emission to validators
   - No claim step - rewards auto-credit each epoch
 
