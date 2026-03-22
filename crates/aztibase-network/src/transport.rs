@@ -78,7 +78,7 @@ pub struct TransportConfig {
 impl Default for TransportConfig {
     fn default() -> Self {
         Self {
-            idle_timeout_secs: 60,
+            idle_timeout_secs: 300,
             reputation_store: None,
             peer_store: None,
             enable_autonat: true,

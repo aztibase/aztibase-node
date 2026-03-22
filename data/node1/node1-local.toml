@@ -10,7 +10,7 @@ listen_addresses = [
 boot_nodes = [
     "/ip4/102.209.21.247/tcp/30333",
 ]
-idle_timeout_secs = 60
+idle_timeout_secs = 300
 stun_servers = []
 
 [rpc]

@@ -12,7 +12,7 @@ boot_nodes = [
     "/ip4/127.0.0.1/tcp/30334",
     "/ip4/127.0.0.1/tcp/30335",
 ]
-idle_timeout_secs = 60
+idle_timeout_secs = 300
 stun_servers = []
 
 [rpc]

@@ -5,6 +5,15 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ---
 
+## v0.1.9 — P2P + Block Sync: Validator Onboarding Fix (2026-03-22)
+
+### Fixed
+- **P2P connection drops after 60s** (`aztibase-network`): `idle_timeout_secs` default was 60, causing libp2p to kill connections after 60s of low substream activity. New validators lost the VPS connection before completing sync. Increased to 300s.
+- **Block sync stalls after reconnect** (`aztibase-node`): After P2P reconnection, the node didn't know the chain had advanced (stale `tip_index`). Now sends an immediate block sync probe on `PeerConnected` to discover the current tip and trigger catch-up.
+- **Non-validator consensus churn** (`aztibase-consensus`): `propose_vertex()` returned `Ok(true)` for non-validators, causing the consensus engine to advance rounds, evaluate commits, and log "Batch committed" on every liveness timeout — thousands of times. Changed to `Ok(false)` so the engine loop stops immediately for non-validators. Saves CPU and eliminates misleading log output.
+
+---
+
 ## v0.1.7 — Consensus Engine: Phantom Parent Stall Fix (2026-03-22)
 
 ### Fixed

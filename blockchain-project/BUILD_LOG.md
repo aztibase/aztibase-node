@@ -21,6 +21,27 @@ Entries are prepended (newest first).
 
 ## Entries
 
+### P2P + Block Sync — Validator Onboarding Fix (2026-03-22)
+- **Date**: 2026-03-22
+- **Sprint**: Post-063b (validator sync bug)
+- **Commit**: PENDING
+- **Files Changed**:
+  - `crates/aztibase-network/src/transport.rs` — `idle_timeout_secs` default 60→300
+  - `crates/aztibase-node/src/config.rs` — `idle_timeout_secs` default 60→300
+  - `crates/aztibase-node/src/main.rs` — Probe peer for current tip on PeerConnected (non-validators only)
+  - `crates/aztibase-consensus/src/engine.rs` — `propose_vertex` returns false for non-validators (stops consensus loop churning)
+  - `packaging/validator/node.toml` — idle_timeout 60→300
+  - `data/node{1,2,3,4}/**.toml`, `data/singlenode/node.toml`, `packaging/fullnode/node.toml` — idle_timeout 60→300
+- **Review Notes**:
+  - **Root cause**: P2P connections dropped after 60s idle timeout. New validators lost VPS connection before completing sync. After disconnect, block sync couldn't resume because tip_index was stale and no probe was sent on reconnect.
+  - **Fix 1 — idle_timeout 60→300**: libp2p `with_idle_connection_timeout` killed connections after 60s of no substream activity. 300s gives nodes time to sync, register, and stabilize.
+  - **Fix 2 — Tip probe on PeerConnected**: Non-validator nodes now send an immediate block sync request when a peer connects. The response's `tip_index` field updates the sync protocol's target, triggering catch-up even if gossip announces were missed during disconnection.
+  - **Fix 3 — Non-validator consensus skip**: `propose_vertex()` returned `Ok(true)` for non-validators, causing `try_advance()` to advance rounds and run `evaluate_commits()` on every liveness timeout. Changed to `Ok(false)` so the loop breaks immediately. Prevents CPU waste and confusing "Batch committed" log output from the consensus engine on full nodes.
+  - Tests: 1,035 pass. Clippy clean.
+- **Security Flags**: 0 ELEVATED. No new attack surfaces. Longer idle timeout is safe — connection limits still enforced.
+
+---
+
 ### Consensus Engine — Phantom Parent Stall Fix (2026-03-22)
 - **Date**: 2026-03-22
 - **Sprint**: Post-063b (consensus reliability)

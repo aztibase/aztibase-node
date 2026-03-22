@@ -8,7 +8,7 @@ listen_addresses = [
     "/ip4/127.0.0.1/udp/30340/quic-v1",
 ]
 boot_nodes = []
-idle_timeout_secs = 60
+idle_timeout_secs = 300
 stun_servers = []
 
 [rpc]

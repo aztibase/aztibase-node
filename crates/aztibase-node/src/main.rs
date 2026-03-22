@@ -1986,6 +1986,22 @@ async fn main() -> Result<()> {
                         }
                         tracing::info!(peer = %peer, peers = peer_count, "Peer connected");
                         let _ = consensus_tx.send(ConsensusInput::PeerCountChanged(peer_count)).await;
+
+                        if !node_is_validator {
+                            let probe = aztibase_network::block_sync::build_batch_request(
+                                sync_proto.last_synced_index() + 1,
+                                1,
+                            );
+                            if let Ok(encoded) = aztibase_network::block_sync::encode_request(&probe) {
+                                tracing::info!(
+                                    peer = %peer,
+                                    from = sync_proto.last_synced_index() + 1,
+                                    "Probing peer for current tip"
+                                );
+                                transport.send_block_sync_request(&peer, encoded);
+                                catchup_pending = true;
+                            }
+                        }
                     }
                     NetworkEvent::PeerDisconnected(peer) => {
                         peer_count = peer_count.saturating_sub(1);

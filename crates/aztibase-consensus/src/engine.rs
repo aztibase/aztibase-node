@@ -615,7 +615,7 @@ impl ConsensusEngine {
     fn propose_vertex(&mut self) -> Result<bool> {
         // Full nodes (not in the validator set) observe but don't propose.
         if !self.validators.contains(&self.identity) {
-            return Ok(true);
+            return Ok(false);
         }
 
         let round = self.state.current_round;

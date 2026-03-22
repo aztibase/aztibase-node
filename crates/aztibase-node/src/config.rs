@@ -122,7 +122,7 @@ impl Default for NetworkConfig {
                 "/ip4/0.0.0.0/udp/30333/quic-v1".into(),
             ],
             boot_nodes: Vec::new(),
-            idle_timeout_secs: 60,
+            idle_timeout_secs: 300,
             stun_servers: vec![
                 "stun:stun.l.google.com:19302".into(),
                 "stun:stun1.l.google.com:19302".into(),
