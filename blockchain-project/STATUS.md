@@ -3,8 +3,8 @@
 **Last Updated:** 2026-03-23
 **Updated By:** p2p-network-engineer + node-engineer + consensus-engineer
 **Current Phase:** M9 -- Mainnet Prep
-**Current Sprint:** Post-063b — Validator sync + stability fixes
-**Sprint Status:** v0.1.9 local stability test PASSED — 3 validators, 100K+ blocks, 500+ epochs, zero slashes, transactions working, epoch rewards flowing. **Next: deploy fixed binary to VPS (chain wipe), then external validator onboarding test.**
+**Current Sprint:** Post-063b — VPS validator onboarding test COMPLETE
+**Sprint Status:** v0.1.10 released. VPS live at 64K+ blocks. 4 validators registered (1 VPS + 3 local). GitHub release v0.1.10 published with Windows, Linux, wallet extension assets. 4 deployment bugs found and fixed during live onboarding test.
 
 ---
 
