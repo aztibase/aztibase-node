@@ -3513,10 +3513,16 @@ impl ExecutionPipeline {
                         let prev = state.balance(&addr);
                         state.set_balance(&addr, prev + amount);
                     }
-                    // Downtime slashing: validators who didn't participate get slashed.
+                    // Downtime slashing: only slash validators in the consensus set
+                    // who didn't participate. Newly registered validators still in
+                    // pending_consensus_addrs get a grace epoch before they can be
+                    // slashed — they haven't been admitted to consensus yet.
                     let inactive_validators: Vec<[u8; 32]> = active_set
                         .iter()
-                        .filter(|(vid, _)| !self.epoch_participation.contains(vid))
+                        .filter(|(vid, _)| {
+                            self.consensus_addrs.contains(vid)
+                                && !self.epoch_participation.contains(vid)
+                        })
                         .map(|(vid, _)| *vid)
                         .collect();
                     if !inactive_validators.is_empty() {
@@ -3539,50 +3545,30 @@ impl ExecutionPipeline {
 
                     self.epoch_participation.clear();
 
-                    // Graduate pending validators into the live consensus set.
-                    // One epoch of grace time gives new validators a chance to spin
-                    // up their node before the chain depends on them for quorum.
+                    // Validator set for the consensus engine is fixed at startup.
+                    // New validators join the consensus set by restarting their node
+                    // after registering on-chain — the startup code reads the staking
+                    // store and builds the ValidatorSet from all active validators.
+                    // This avoids quorum disruption from adding validators who aren't
+                    // yet producing blocks in the DAG.
+
+                    // Graduate pending validators AFTER sending UpdateValidatorSet.
+                    // They'll be included in the NEXT epoch's validator set update,
+                    // giving them one full epoch to sync DAG and start producing.
                     let graduating: Vec<[u8; 32]> =
                         self.pending_consensus_addrs.drain().collect();
-                    for vid in graduating {
-                        self.consensus_addrs.insert(vid);
+                    for vid in &graduating {
+                        self.consensus_addrs.insert(*vid);
                         tracing::info!(
-                            validator = %short_hex(&vid),
-                            "Pending validator graduated into consensus set"
-                        );
-                    }
-
-                    // Propagate updated validator set to consensus engine.
-                    // Only include validators already known to consensus — prevents
-                    // adding staked-but-offline validators that would cause phantom
-                    // parent desync (see epoch-boundary stall bug).
-                    if let Some(ref ctx) = self.consensus_tx {
-                        let mut new_vs = aztibase_consensus::ValidatorSet::new();
-                        let staking_read = self.staking_store.read().await;
-                        for (vid, stake) in &active_set {
-                            if !self.consensus_addrs.contains(vid) {
-                                tracing::debug!(
-                                    validator = %short_hex(vid),
-                                    "Skipping validator not in consensus set"
-                                );
-                                continue;
-                            }
-                            new_vs.add(*vid, *stake);
-                            if let Some(vs) = staking_read.get_validator(vid)
-                                && let Some(pk) = vs.ed25519_pubkey
-                            {
-                                new_vs.set_ed25519_key(vid, pk);
-                            }
-                        }
-                        drop(staking_read);
-                        let _ = ctx.try_send(
-                            aztibase_consensus::ConsensusInput::UpdateValidatorSet(new_vs),
+                            validator = %short_hex(vid),
+                            "Pending validator graduated into consensus set (active next epoch)"
                         );
                     }
 
                     tracing::info!(
                         round = self.current_round,
                         active_validators = active_set.len(),
+                        graduated = graduating.len(),
                         validator_pool = %dist.validator_rewards,
                         downtime_slashed = inactive_validators.len(),
                         "Epoch boundary — rewards distributed, validator set refreshed"

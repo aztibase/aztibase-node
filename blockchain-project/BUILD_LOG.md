@@ -21,10 +21,27 @@ Entries are prepended (newest first).
 
 ## Entries
 
-### P2P + Block Sync — Validator Onboarding Fix (2026-03-22)
-- **Date**: 2026-03-22
-- **Sprint**: Post-063b (validator sync bug)
+### Validator Onboarding — Stability Fixes (2026-03-23)
+- **Date**: 2026-03-23
+- **Sprint**: Post-063b (validator stability)
 - **Commit**: PENDING
+- **Files Changed**:
+  - `crates/aztibase-node/src/pipeline.rs` — Downtime slash gated by consensus_addrs. Removed dynamic UpdateValidatorSet at epoch boundaries (prevents quorum disruption). Graduation moved after UpdateValidatorSet send.
+  - `crates/aztibase-node/src/main.rs` — Gossip consensus vertices gated by node_is_validator (prevents DAG corruption on full nodes). Staking store check at startup (register → restart → activate as validator).
+- **Review Notes**:
+  - **Downtime slash fix**: Newly registered validators in pending_consensus_addrs were slashed 0.5%/epoch before they could participate. Now only validators in consensus_addrs are eligible for downtime slashing.
+  - **Quorum stall fix**: UpdateValidatorSet at epoch boundaries added non-producing validators to quorum, stalling the chain. Removed — consensus engine keeps its startup set. New validators join by restarting their node.
+  - **DAG corruption fix**: Non-validator nodes received gossip consensus vertices, causing thousands of phantom parent warnings and corrupted DAG state. Now gated by node_is_validator.
+  - **Restart-based activation**: Staking store checked at startup. If this node's key is registered on-chain, activates validator mode and builds consensus set from all active validators.
+  - **Local test PASSED**: 3 validators, 100K+ blocks, 500+ epochs, zero slashes, transactions + epoch rewards working. 5+ hours continuous run.
+- **Security Flags**: 0 ELEVATED.
+
+---
+
+### P2P + Block Sync — Validator Onboarding Fix (2026-03-23)
+- **Date**: 2026-03-23
+- **Sprint**: Post-063b (validator sync bug)
+- **Commit**: 144fa47
 - **Files Changed**:
   - `crates/aztibase-network/src/transport.rs` — `idle_timeout_secs` default 60→300
   - `crates/aztibase-node/src/config.rs` — `idle_timeout_secs` default 60→300
@@ -38,6 +55,8 @@ Entries are prepended (newest first).
   - **Fix 2 — Tip probe on PeerConnected**: Non-validator nodes now send an immediate block sync request when a peer connects. The response's `tip_index` field updates the sync protocol's target, triggering catch-up even if gossip announces were missed during disconnection.
   - **Fix 3 — Non-validator consensus skip**: `propose_vertex()` returned `Ok(true)` for non-validators, causing `try_advance()` to advance rounds and run `evaluate_commits()` on every liveness timeout. Changed to `Ok(false)` so the loop breaks immediately. Prevents CPU waste and confusing "Batch committed" log output from the consensus engine on full nodes.
   - Tests: 1,035 pass. Clippy clean.
+  - **VALIDATED (2026-03-23)**: VPS v0.1.9 deployed, chain wiped, fresh genesis. Local validator connected, synced, registered with 500K stake, receiving epoch rewards. Connection held past old 60s cutoff. 2 peers, 2 validators on Grafana.
+  - **Known issue**: Stake balance decreasing (500K→497.5K) without slashing — under investigation.
 - **Security Flags**: 0 ELEVATED. No new attack surfaces. Longer idle timeout is safe — connection limits still enforced.
 
 ---

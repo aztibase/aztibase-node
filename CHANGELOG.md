@@ -5,7 +5,20 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ---
 
-## v0.1.9 — P2P + Block Sync: Validator Onboarding Fix (2026-03-22)
+## v0.1.9 — Validator Onboarding + Stability (2026-03-23)
+
+### Fixed
+- **Downtime slash on pending validators** (`aztibase-node`): Newly registered validators were slashed 0.5%/epoch before they could participate in consensus. Now only slashes validators in `consensus_addrs`.
+- **Quorum stall on validator addition** (`aztibase-node`): Dynamic `UpdateValidatorSet` at epoch boundaries added non-producing validators to quorum, stalling the chain. Removed — consensus engine keeps its startup set. New validators activate by restarting.
+- **DAG corruption on full nodes** (`aztibase-node`): Non-validators received gossip consensus vertices, causing phantom parent floods. Now gated by `node_is_validator`.
+
+### Added
+- **Restart-based validator activation**: Staking store checked at startup. Registered validators automatically activate without being in genesis.
+- **Sentinel training data export**: Health history exportable via `aztb_getHealthHistory` RPC for ONNX model training.
+
+---
+
+## v0.1.9 — P2P + Block Sync: Validator Onboarding Fix (2026-03-23)
 
 ### Fixed
 - **P2P connection drops after 60s** (`aztibase-network`): `idle_timeout_secs` default was 60, causing libp2p to kill connections after 60s of low substream activity. New validators lost the VPS connection before completing sync. Increased to 300s.

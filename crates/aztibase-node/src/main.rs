@@ -136,7 +136,7 @@ struct Cli {
     sentinel_interval: u64,
 
     /// Export sentinel feature vectors to CSV for Tier 2 training data collection
-    #[arg(long)]
+    #[arg(long, default_value = "true")]
     sentinel_export: bool,
 
     /// Run Sentinel Tier 3 in dry-run mode — log actions without executing (default: true)
@@ -1335,6 +1335,54 @@ async fn main() -> Result<()> {
         ([cli.validator_index; 32], vs, true)
     };
 
+    // Check staking store for validators registered on-chain but not in genesis.
+    // This enables the "register → restart → join consensus" flow.
+    let (validators, node_is_validator) = {
+        let exec_path = config.execution_storage_path();
+        tracing::debug!(path = %exec_path.display(), "Checking staking store for on-chain validators");
+        if let Ok(store) = StateStore::open(exec_path.to_str().unwrap_or("")) {
+            if let Ok(staking) = aztibase_execution::load_staking(&store) {
+                let active = staking.active_validators();
+                tracing::info!(
+                    on_chain = active.len(),
+                    genesis = validators.len(),
+                    "Staking store check"
+                );
+                if active.len() > validators.len() {
+                    let mut vs = validators;
+                    let mut is_val = node_is_validator;
+                    for v in &active {
+                        if !vs.contains(&v.validator_id) {
+                            vs.add(v.validator_id, v.effective_stake());
+                            if let Some(pk) = v.ed25519_pubkey {
+                                vs.set_ed25519_key(&v.validator_id, pk);
+                            }
+                            tracing::info!(
+                                validator = %genesis::hex_encode(&v.validator_id),
+                                stake = v.effective_stake(),
+                                "Added on-chain registered validator to consensus set"
+                            );
+                        }
+                        if v.validator_id == identity && !is_val {
+                            tracing::info!(
+                                address = %genesis::hex_encode(&identity),
+                                "This node is registered on-chain — activating validator mode"
+                            );
+                            is_val = true;
+                        }
+                    }
+                    (vs, is_val)
+                } else {
+                    (validators, node_is_validator)
+                }
+            } else {
+                (validators, node_is_validator)
+            }
+        } else {
+            (validators, node_is_validator)
+        }
+    };
+
     let consensus_config = ConsensusConfig {
         archive: config.archive,
         ..ConsensusConfig::default()
@@ -2021,7 +2069,7 @@ async fn main() -> Result<()> {
                             bytes = data.len(),
                             "Received message"
                         );
-                        if topic == topic_consensus {
+                        if topic == topic_consensus && node_is_validator {
                             tracing::debug!(
                                 source = %source,
                                 bytes = data.len(),
