@@ -803,7 +803,7 @@ mod tests {
             accounts: BTreeMap::from([(hex_encode(&[0x02; 32]), AccountEntry { balance: 50_000 })]),
             approved_validators: Vec::new(),
             emergency_key: None,
-        registration_mode: None,
+            registration_mode: None,
         }
     }
 
@@ -933,7 +933,7 @@ mod tests {
             accounts: BTreeMap::from([("bad_hex".into(), AccountEntry { balance: 100 })]),
             approved_validators: Vec::new(),
             emergency_key: None,
-        registration_mode: None,
+            registration_mode: None,
         };
         let errs = validate_genesis(&cfg).unwrap_err();
         assert!(errs.len() >= 2); // NoValidators + InvalidAccountAddress
@@ -954,7 +954,7 @@ mod tests {
             accounts: BTreeMap::new(),
             approved_validators: Vec::new(),
             emergency_key: None,
-        registration_mode: None,
+            registration_mode: None,
         };
         let addr = [0xAA; 32];
         config
@@ -983,7 +983,7 @@ mod tests {
             accounts: BTreeMap::new(),
             approved_validators: Vec::new(),
             emergency_key: None,
-        registration_mode: None,
+            registration_mode: None,
         };
 
         let mut state = AccountState::new();

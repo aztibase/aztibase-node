@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::net::IpAddr;
 use std::time::Instant;
 
-pub const MAX_CONNS_PER_IP: u32 = 3;
+pub const MAX_CONNS_PER_IP: u32 = 8;
 pub const MIN_CONNECT_INTERVAL_MS: u64 = 1000;
 pub const MAX_PEERS_PER_SUBNET: u32 = 5;
 
@@ -72,6 +72,7 @@ impl ConnectionFilter {
                 return Err(FilterReason::IpLimit);
             }
             if !is_loopback
+                && state.active == 0
                 && now.duration_since(state.last_connect).as_millis() < self.min_interval_ms as u128
             {
                 return Err(FilterReason::RateLimit);
@@ -155,12 +156,14 @@ mod tests {
     }
 
     #[test]
-    fn rate_limit_rejection() {
+    fn rate_limit_skipped_when_active() {
         let mut filter = ConnectionFilter::with_limits(10, 5000, 100);
         let ip = IpAddr::V4(Ipv4Addr::new(10, 0, 0, 2));
 
         assert!(filter.try_accept(ip).is_ok());
-        assert_eq!(filter.try_accept(ip), Err(FilterReason::RateLimit));
+        // Second connection while first is active should succeed (dual transport)
+        assert!(filter.try_accept(ip).is_ok());
+        assert_eq!(filter.active_count(ip), 2);
     }
 
     #[test]

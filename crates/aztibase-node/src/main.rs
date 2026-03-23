@@ -1348,33 +1348,17 @@ async fn main() -> Result<()> {
                     genesis = validators.len(),
                     "Staking store check"
                 );
-                if active.len() > validators.len() {
-                    let mut vs = validators;
-                    let mut is_val = node_is_validator;
-                    for v in &active {
-                        if !vs.contains(&v.validator_id) {
-                            vs.add(v.validator_id, v.effective_stake());
-                            if let Some(pk) = v.ed25519_pubkey {
-                                vs.set_ed25519_key(&v.validator_id, pk);
-                            }
-                            tracing::info!(
-                                validator = %genesis::hex_encode(&v.validator_id),
-                                stake = v.effective_stake(),
-                                "Added on-chain registered validator to consensus set"
-                            );
-                        }
-                        if v.validator_id == identity && !is_val {
-                            tracing::info!(
-                                address = %genesis::hex_encode(&identity),
-                                "This node is registered on-chain — activating validator mode"
-                            );
-                            is_val = true;
-                        }
+                let mut is_val = node_is_validator;
+                for v in &active {
+                    if v.validator_id == identity && !is_val {
+                        tracing::info!(
+                            address = %genesis::hex_encode(&identity),
+                            "This node is registered on-chain — activating validator mode"
+                        );
+                        is_val = true;
                     }
-                    (vs, is_val)
-                } else {
-                    (validators, node_is_validator)
                 }
+                (validators, is_val)
             } else {
                 (validators, node_is_validator)
             }
@@ -1662,9 +1646,11 @@ async fn main() -> Result<()> {
             exec_pipeline.set_approved_validators(approved).await;
 
             // Set registration mode from genesis if specified
-            if let Some(mode) = gen_cfg.registration_mode.as_deref().and_then(
-                aztibase_execution::ValidatorRegistrationMode::from_str_mode,
-            ) {
+            if let Some(mode) = gen_cfg
+                .registration_mode
+                .as_deref()
+                .and_then(aztibase_execution::ValidatorRegistrationMode::from_str_mode)
+            {
                 let cp = exec_pipeline.shared_chain_params();
                 let mut params = cp.write().await;
                 params.validator_registration_mode = mode;
@@ -1720,6 +1706,16 @@ async fn main() -> Result<()> {
         exec_pipeline.shared_base_fee(),
     )
     .with_faucet_enabled(config.profile.faucet_enabled())
+    .with_faucet_nonce({
+        let faucet_seed = aztibase_core::hash(b"AZTIBASE_TESTNET_FAUCET");
+        let faucet_kp = aztibase_core::Keypair::from_secret_bytes(&faucet_seed);
+        let faucet_addr = aztibase_core::address_from_pubkey(faucet_kp.public_key().as_bytes());
+        let state = exec_pipeline.shared_state();
+        let guard = state.read().await;
+        let n = guard.nonce(&faucet_addr);
+        tracing::info!(faucet_nonce = n, "Faucet nonce loaded from chain state");
+        n
+    })
     .with_rate_limit(config.rpc.rate_limit_per_ip)
     .with_cors_config(
         config.profile.permissive_cors(),

@@ -394,10 +394,7 @@ impl RpcServer {
         self
     }
 
-    pub fn with_sentinel_memory(
-        mut self,
-        memory: Arc<RwLock<Option<serde_json::Value>>>,
-    ) -> Self {
+    pub fn with_sentinel_memory(mut self, memory: Arc<RwLock<Option<serde_json::Value>>>) -> Self {
         self.state.sentinel_memory = memory;
         self
     }
@@ -409,6 +406,13 @@ impl RpcServer {
 
     pub fn with_faucet_enabled(mut self, enabled: bool) -> Self {
         self.state.faucet_enabled = enabled;
+        self
+    }
+
+    pub fn with_faucet_nonce(self, nonce: u64) -> Self {
+        self.state
+            .faucet_nonce
+            .store(nonce, std::sync::atomic::Ordering::Relaxed);
         self
     }
 
@@ -2681,10 +2685,7 @@ async fn handle_get_emergency_key_status(
     )
 }
 
-async fn handle_get_validator_profile(
-    state: &RpcState,
-    req: &JsonRpcRequest,
-) -> JsonRpcResponse {
+async fn handle_get_validator_profile(state: &RpcState, req: &JsonRpcRequest) -> JsonRpcResponse {
     let validator_id = match parse_hash_param(&req.params, 0) {
         Ok(h) => h,
         Err(e) => return JsonRpcResponse::error(req.id.clone(), INVALID_PARAMS, e),
@@ -2698,13 +2699,11 @@ async fn handle_get_validator_profile(
                 req.id.clone(),
                 -32000,
                 "sentinel memory not available".into(),
-            )
+            );
         }
     };
 
-    let summaries = memory
-        .get("epoch_summaries")
-        .and_then(|s| s.as_array());
+    let summaries = memory.get("epoch_summaries").and_then(|s| s.as_array());
 
     let latest = match summaries.and_then(|arr| arr.last()) {
         Some(s) => s,
@@ -2749,14 +2748,17 @@ async fn handle_get_epoch_summary(state: &RpcState, req: &JsonRpcRequest) -> Jso
                 req.id.clone(),
                 -32000,
                 "sentinel memory not available".into(),
-            )
+            );
         }
     };
 
     let result = memory
         .get("epoch_summaries")
         .and_then(|s| s.as_array())
-        .and_then(|arr| arr.iter().find(|s| s.get("epoch").and_then(|e| e.as_u64()) == Some(epoch)))
+        .and_then(|arr| {
+            arr.iter()
+                .find(|s| s.get("epoch").and_then(|e| e.as_u64()) == Some(epoch))
+        })
         .cloned()
         .unwrap_or(serde_json::Value::Null);
 
@@ -2779,20 +2781,14 @@ async fn handle_get_epoch_summaries(state: &RpcState, req: &JsonRpcRequest) -> J
                 req.id.clone(),
                 -32000,
                 "sentinel memory not available".into(),
-            )
+            );
         }
     };
 
     let summaries = memory
         .get("epoch_summaries")
         .and_then(|s| s.as_array())
-        .map(|arr| {
-            arr.iter()
-                .rev()
-                .take(limit)
-                .cloned()
-                .collect::<Vec<_>>()
-        })
+        .map(|arr| arr.iter().rev().take(limit).cloned().collect::<Vec<_>>())
         .unwrap_or_default();
 
     JsonRpcResponse::success(req.id.clone(), serde_json::json!(summaries))

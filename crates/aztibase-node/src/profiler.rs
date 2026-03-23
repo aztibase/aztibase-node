@@ -522,8 +522,7 @@ mod tests {
         acc.record_vertex(v1, 0);
         acc.set_total_rounds(10);
 
-        let profiles =
-            acc.finalize(&[(v1, 100_000)], &[], &[], &HashMap::new(), &HashMap::new());
+        let profiles = acc.finalize(&[(v1, 100_000)], &[], &[], &HashMap::new(), &HashMap::new());
         let p = &profiles[0];
         assert_eq!(p.empty_payloads, 2);
         assert_eq!(p.total_payloads, 3);
@@ -540,8 +539,7 @@ mod tests {
         acc.merge_vertex_counts(external);
         acc.set_total_rounds(10);
 
-        let profiles =
-            acc.finalize(&[(v1, 100_000)], &[], &[], &HashMap::new(), &HashMap::new());
+        let profiles = acc.finalize(&[(v1, 100_000)], &[], &[], &HashMap::new(), &HashMap::new());
         assert_eq!(profiles[0].vertices_proposed, 6);
     }
 
@@ -555,8 +553,13 @@ mod tests {
         let mut slash_amounts = HashMap::new();
         slash_amounts.insert(v1, 5000u128);
 
-        let profiles =
-            acc.finalize(&[(v1, 100_000)], &[], &[v1], &slash_amounts, &HashMap::new());
+        let profiles = acc.finalize(
+            &[(v1, 100_000)],
+            &[],
+            &[v1],
+            &slash_amounts,
+            &HashMap::new(),
+        );
         assert_eq!(profiles[0].amount_slashed, 5000);
         assert!(profiles[0].reputation_score < 0.9);
     }
@@ -642,9 +645,11 @@ mod tests {
         summaries.push_back(make_summary(2, vec![make_profile(v1, 0.84, 100)]));
 
         let alerts = detector.detect(&summaries);
-        assert!(alerts
-            .iter()
-            .any(|a| matches!(a, PatternAlert::ValidatorDegrading { .. })));
+        assert!(
+            alerts
+                .iter()
+                .any(|a| matches!(a, PatternAlert::ValidatorDegrading { .. }))
+        );
     }
 
     #[test]
@@ -658,9 +663,11 @@ mod tests {
         summaries.push_back(make_summary(2, vec![make_profile(v1, 0.94, 100)]));
 
         let alerts = detector.detect(&summaries);
-        assert!(!alerts
-            .iter()
-            .any(|a| matches!(a, PatternAlert::ValidatorDegrading { .. })));
+        assert!(
+            !alerts
+                .iter()
+                .any(|a| matches!(a, PatternAlert::ValidatorDegrading { .. }))
+        );
     }
 
     #[test]
@@ -675,9 +682,11 @@ mod tests {
         }
 
         let alerts = detector.detect(&summaries);
-        assert!(alerts
-            .iter()
-            .any(|a| matches!(a, PatternAlert::LatencyCreep { .. })));
+        assert!(
+            alerts
+                .iter()
+                .any(|a| matches!(a, PatternAlert::LatencyCreep { .. }))
+        );
     }
 
     #[test]
@@ -698,9 +707,11 @@ mod tests {
         summaries.push_back(make_summary(2, profiles));
 
         let alerts = detector.detect(&summaries);
-        assert!(alerts
-            .iter()
-            .any(|a| matches!(a, PatternAlert::StakeCentralization { .. })));
+        assert!(
+            alerts
+                .iter()
+                .any(|a| matches!(a, PatternAlert::StakeCentralization { .. }))
+        );
     }
 
     #[test]
@@ -715,9 +726,11 @@ mod tests {
         }
 
         let alerts = detector.detect(&summaries);
-        assert!(alerts
-            .iter()
-            .any(|a| matches!(a, PatternAlert::HealthDeteriorating { .. })));
+        assert!(
+            alerts
+                .iter()
+                .any(|a| matches!(a, PatternAlert::HealthDeteriorating { .. }))
+        );
     }
 
     #[test]

@@ -315,10 +315,7 @@ impl ExecutionPipeline {
         self.sentinel_memory = Some(memory);
     }
 
-    pub fn set_rpc_sentinel_memory(
-        &mut self,
-        rpc_mem: Arc<RwLock<Option<serde_json::Value>>>,
-    ) {
+    pub fn set_rpc_sentinel_memory(&mut self, rpc_mem: Arc<RwLock<Option<serde_json::Value>>>) {
         self.rpc_sentinel_memory = Some(rpc_mem);
     }
 
@@ -3555,8 +3552,7 @@ impl ExecutionPipeline {
                     // Graduate pending validators AFTER sending UpdateValidatorSet.
                     // They'll be included in the NEXT epoch's validator set update,
                     // giving them one full epoch to sync DAG and start producing.
-                    let graduating: Vec<[u8; 32]> =
-                        self.pending_consensus_addrs.drain().collect();
+                    let graduating: Vec<[u8; 32]> = self.pending_consensus_addrs.drain().collect();
                     for vid in &graduating {
                         self.consensus_addrs.insert(*vid);
                         tracing::info!(
@@ -3584,7 +3580,8 @@ impl ExecutionPipeline {
                             profiler.merge_vertex_counts(std::mem::take(&mut *counts));
                         }
 
-                        let epoch_rounds = self.current_round.saturating_sub(self.epoch_start_batch);
+                        let epoch_rounds =
+                            self.current_round.saturating_sub(self.epoch_start_batch);
                         profiler.set_total_rounds(epoch_rounds);
 
                         let slash_amounts: std::collections::HashMap<[u8; 32], u128> =
@@ -3603,9 +3600,7 @@ impl ExecutionPipeline {
                             .duration_since(std::time::UNIX_EPOCH)
                             .unwrap_or_default()
                             .as_millis() as u64;
-                        let epoch_start_ms = now.saturating_sub(
-                            epoch_rounds * 400,
-                        );
+                        let epoch_start_ms = now.saturating_sub(epoch_rounds * 400);
 
                         let summary = crate::profiler::EpochSummary {
                             epoch: epoch_num,
@@ -3639,7 +3634,9 @@ impl ExecutionPipeline {
 
                         tracing::info!(
                             epoch = epoch_num,
-                            profiles = mem.epoch_summaries.back()
+                            profiles = mem
+                                .epoch_summaries
+                                .back()
                                 .map_or(0, |s| s.validator_profiles.len()),
                             total_epochs = mem.epoch_summaries.len(),
                             "Epoch profiling complete — sentinel memory persisted"
@@ -6705,20 +6702,18 @@ mod tests {
         );
         pipeline.execute_batch(&batch).await.unwrap();
 
-        // Check that UpdateValidatorSet was sent to consensus.
-        let mut found_update = false;
+        // UpdateValidatorSet is no longer sent at epoch boundaries to avoid
+        // quorum disruption. Validators join by restarting their node after
+        // registering on-chain. Verify no UpdateValidatorSet was emitted.
         while let Ok(msg) = crx.try_recv() {
-            if matches!(
-                msg,
-                aztibase_consensus::ConsensusInput::UpdateValidatorSet(_)
-            ) {
-                found_update = true;
-            }
+            assert!(
+                !matches!(
+                    msg,
+                    aztibase_consensus::ConsensusInput::UpdateValidatorSet(_)
+                ),
+                "UpdateValidatorSet should NOT be sent at epoch boundary"
+            );
         }
-        assert!(
-            found_update,
-            "Expected UpdateValidatorSet to be sent at epoch boundary"
-        );
     }
 
     // ── Phase 4: Throughput measurement tests ──────────────────────
