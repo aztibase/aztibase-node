@@ -21,6 +21,23 @@ Entries are prepended (newest first).
 
 ## Entries
 
+### v0.1.10 — P2P Connection Stability + Faucet Nonce (2026-03-23)
+- **Date**: 2026-03-23
+- **Sprint**: Post-063b (VPS validator onboarding test)
+- **Commit**: d1b7819
+- **Files Changed**:
+  - `crates/aztibase-network/src/connection_filter.rs` — Skip rate-limit when active connection exists (dual transport fix). MAX_CONNS_PER_IP 3→8 for NAT.
+  - `crates/aztibase-node/src/main.rs` — Remove staking-store validators from consensus set at startup (self-activation only). Initialize faucet nonce from on-chain state.
+  - `crates/aztibase-rpc/src/server.rs` — `with_faucet_nonce()` builder method.
+  - `crates/aztibase-node/src/pipeline.rs` — Updated epoch boundary test (UpdateValidatorSet no longer sent).
+- **Review Notes**:
+  - 4 deployment bugs found during live VPS onboarding with 4 validators (1 VPS + 3 local behind NAT).
+  - All bugs were latent — worked in local testing, failed under real network conditions.
+  - GitHub release v0.1.10 at aztibase/aztibase-node with Windows, Linux, wallet extension assets.
+- **Security Flags**: 0 ELEVATED.
+
+---
+
 ### Validator Onboarding — Stability Fixes (2026-03-23)
 - **Date**: 2026-03-23
 - **Sprint**: Post-063b (validator stability)

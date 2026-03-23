@@ -5,6 +5,19 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ---
 
+## v0.1.10 — P2P Connection Stability + Faucet Nonce (2026-03-23)
+
+### Fixed
+- **Dual-transport rate-limit** (`aztibase-network`): TCP+QUIC connections from the same IP were rate-limited within 1ms, killing the peer connection. Fix: skip rate-limit when an active connection already exists from that IP.
+- **Per-IP connection limit too low** (`aztibase-network`): `MAX_CONNS_PER_IP` was 3, too low for multiple nodes behind the same NAT (each uses TCP+QUIC = 2 connections). Increased to 8.
+- **Startup quorum disruption** (`aztibase-node`): On restart, all staking-store validators were added to the consensus set, breaking quorum when they weren't online. Fix: only check self-activation — other validators join by restarting their own nodes.
+- **Faucet nonce reset on restart** (`aztibase-rpc`, `aztibase-node`): Faucet nonce counter reset to 0 on restart while on-chain nonce was ahead, causing all drips to be rejected. Fix: initialize from faucet address's on-chain nonce.
+
+### Added
+- `RpcServer::with_faucet_nonce()` builder method for nonce initialization.
+
+---
+
 ## v0.1.9 — Validator Onboarding + Stability (2026-03-23)
 
 ### Fixed
