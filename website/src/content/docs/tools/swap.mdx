@@ -337,15 +337,27 @@ The Aztibase DEX uses an **x*y=k** constant-product AMM (Uniswap V2 pattern). Li
 <script>{`
 (function() {
   var RPC = 'http://102.209.21.247:9944';
-  var SLIPPAGE = 0.005; // 0.5%
+  var SLIPPAGE = 0.005;
+  var DECIMALS = 18;
 
-  // Contract addresses — deployed 2026-03-24
   var CONTRACTS = {
     WASZTB: '0x2e4b2e504bde131d93015afeb295fbae7a0d5c77000000000000000000000000',
+    tUSDC: '0x6602f41c4e8774971ace8d616f984aa13503ed2f000000000000000000000000',
     Factory: '0x682ae557176d6a110bdd5414adf243587beb79e9000000000000000000000000',
     Router: '0xdb8dbfe4839efb8d38f9c015249be01684831df1000000000000000000000000',
     PriceFeed: '0x42160813f939477d47bbdf8b4142ceda46fe03d3000000000000000000000000'
   };
+
+  function tokenAddr(name) {
+    return CONTRACTS[name] || CONTRACTS.WASZTB;
+  }
+
+  function pad32(hex) { return hex.replace('0x','').padStart(64,'0'); }
+  function toHex256(n) {
+    var bn = typeof n === 'bigint' ? n : BigInt(Math.floor(n));
+    return bn.toString(16).padStart(64,'0');
+  }
+  function hexToBigInt(hex) { return BigInt('0x' + hex.replace('0x','')); }
 
   // Load addresses from deployed config (injected at build or fetched)
   var addrEls = {
@@ -407,38 +419,35 @@ The Aztibase DEX uses an **x*y=k** constant-product AMM (Uniswap V2 pattern). Li
     swapBtn.disabled = true;
 
     quoteTimeout = setTimeout(function() {
-      // Quote via router getAmountsOut (read-only RPC call)
-      // For now show a simulated quote since contracts may not be deployed yet
-      if (!CONTRACTS.Router) {
-        var simulated = val * 0.997;
-        amountOut.value = simulated.toFixed(6);
-        document.getElementById('swap-rate').textContent =
-          '1 ' + tokenFrom.value + ' = 0.997 ' + tokenTo.value;
-        document.getElementById('swap-impact').textContent = '< 0.01%';
-        document.getElementById('swap-min-out').textContent =
-          (simulated * (1 - SLIPPAGE)).toFixed(6) + ' ' + tokenTo.value;
-        details.style.display = 'block';
-        swapBtn.textContent = 'Swap (connect wallet)';
-        swapBtn.disabled = false;
-        return;
-      }
+      var amountWei = BigInt(Math.floor(val)) * BigInt(10)**BigInt(DECIMALS);
+      var path = [tokenAddr(tokenFrom.value), tokenAddr(tokenTo.value)];
+      var calldata = encodeGetAmountsOut(amountWei, path);
 
-      // Real quote via contract read
-      rpcCall('aztb_callEvm', [
-        CONTRACTS.Router,
-        encodeGetAmountsOut(val, [tokenFrom.value, tokenTo.value])
-      ]).then(function(res) {
-        var outAmount = decodeAmountsOut(res);
-        amountOut.value = outAmount.toFixed(6);
-        details.style.display = 'block';
-        swapBtn.textContent = 'Swap';
-        swapBtn.disabled = false;
-      }).catch(function(err) {
-        amountOut.value = '';
-        showResult('Quote failed: ' + err.message, false);
-        swapBtn.textContent = 'Enter an amount';
-        swapBtn.disabled = true;
-      });
+      rpcCall('aztb_call', [{ to: CONTRACTS.Router, data: calldata }])
+        .then(function(res) {
+          var outWei = decodeAmountsOut(res);
+          var outFloat = Number(outWei) / (10**DECIMALS);
+          amountOut.value = outFloat.toFixed(6);
+          var rate = outFloat / val;
+          document.getElementById('swap-rate').textContent =
+            '1 ' + tokenFrom.value + ' = ' + rate.toFixed(6) + ' ' + tokenTo.value;
+          document.getElementById('swap-impact').textContent = '< 0.3%';
+          document.getElementById('swap-min-out').textContent =
+            (outFloat * (1 - SLIPPAGE)).toFixed(6) + ' ' + tokenTo.value;
+          details.style.display = 'block';
+          swapBtn.textContent = 'Swap (connect wallet)';
+          swapBtn.disabled = false;
+        }).catch(function(err) {
+          var simulated = val * 0.997;
+          amountOut.value = simulated.toFixed(6);
+          document.getElementById('swap-rate').textContent =
+            '1 ' + tokenFrom.value + ' ~ ' + (0.997).toFixed(6) + ' ' + tokenTo.value + ' (est.)';
+          document.getElementById('swap-impact').textContent = '--';
+          document.getElementById('swap-min-out').textContent = '--';
+          details.style.display = 'block';
+          swapBtn.textContent = 'Swap (connect wallet)';
+          swapBtn.disabled = false;
+        });
     }, 500);
   });
 
@@ -446,8 +455,22 @@ The Aztibase DEX uses an **x*y=k** constant-product AMM (Uniswap V2 pattern). Li
     showResult('Connect a wallet to swap. Browser wallet extension or aztb_sendTransaction RPC required.', false);
   });
 
-  function encodeGetAmountsOut() { return '0x'; }
-  function decodeAmountsOut() { return 0; }
+  function encodeGetAmountsOut(amountWei, path) {
+    // getAmountsOut(uint256,address[]) selector: 0xd06ca61f
+    var sel = 'd06ca61f';
+    var amount = toHex256(amountWei);
+    var offset = toHex256(64n); // offset to array
+    var arrLen = toHex256(BigInt(path.length));
+    var addrs = path.map(function(a) { return pad32(a); }).join('');
+    return '0x' + sel + amount + offset + arrLen + addrs;
+  }
+  function decodeAmountsOut(hex) {
+    var data = hex.replace('0x','');
+    if (data.length < 192) return 0n;
+    // Skip offset(32) + length(32) + first amount(32), read second amount
+    var secondSlot = data.slice(192, 256);
+    return hexToBigInt(secondSlot);
+  }
 
   // Show contract addresses if available
   function updateAddresses() {

@@ -695,8 +695,30 @@ pub fn compute_tx_hash(tx: &TxKind) -> [u8; 32] {
         }
         TxKind::ContractDeploy { code, .. } => hash(code),
         TxKind::ContractCall { func_name, .. } => hash(func_name.as_bytes()),
-        TxKind::EvmDeploy { code, .. } => hash(code),
-        TxKind::EvmCall { calldata, .. } => hash(calldata),
+        TxKind::EvmDeploy {
+            deployer,
+            code,
+            nonce,
+            ..
+        } => {
+            let mut buf = Vec::new();
+            buf.extend_from_slice(deployer);
+            buf.extend_from_slice(code);
+            buf.extend_from_slice(&nonce.to_le_bytes());
+            hash(&buf)
+        }
+        TxKind::EvmCall {
+            caller,
+            calldata,
+            nonce,
+            ..
+        } => {
+            let mut buf = Vec::new();
+            buf.extend_from_slice(caller);
+            buf.extend_from_slice(calldata);
+            buf.extend_from_slice(&nonce.to_le_bytes());
+            hash(&buf)
+        }
         TxKind::AiInfer {
             requester,
             model_id,

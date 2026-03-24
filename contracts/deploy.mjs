@@ -310,8 +310,9 @@ function encodeSelector(sig) {
 }
 
 function encodeAddress(addrHex) {
-  const bytes = hexToBytes(addrHex.replace('0x', '').padStart(64, '0'));
-  return bytes.slice(0, 32);
+  const raw = addrHex.replace('0x', '').replace(/0+$/, '');
+  const padded = raw.padStart(64, '0');
+  return hexToBytes(padded);
 }
 
 function encodeUint256(n) {

@@ -1201,7 +1201,11 @@ impl ExecutionPipeline {
         }
 
         for (deployer, code, nonce, gas_limit) in &evm_deploys {
-            let tx_hash = hash(code);
+            let mut buf = Vec::new();
+            buf.extend_from_slice(deployer);
+            buf.extend_from_slice(code);
+            buf.extend_from_slice(&nonce.to_le_bytes());
+            let tx_hash = hash(&buf);
             let cr = evm::evm_deploy(&mut state, tx_hash, deployer, code, *nonce, *gas_limit);
             exec_receipts.push(ExecutionReceipt {
                 tx_hash: cr.tx_hash,
@@ -1215,7 +1219,11 @@ impl ExecutionPipeline {
         }
 
         for (caller, contract, calldata, nonce, gas_limit, value) in &evm_calls {
-            let tx_hash = hash(calldata);
+            let mut buf = Vec::new();
+            buf.extend_from_slice(caller);
+            buf.extend_from_slice(calldata);
+            buf.extend_from_slice(&nonce.to_le_bytes());
+            let tx_hash = hash(&buf);
             let cr = evm::evm_call(
                 &mut state, tx_hash, caller, contract, calldata, *nonce, *gas_limit, *value,
             );
