@@ -1,4 +1,5 @@
 export { AztibaseClient } from './client.js';
+export { AztibaseWs } from './ws.js';
 export { RpcClient, AztibaseRpcError } from './rpc.js';
 export {
   type Hex,

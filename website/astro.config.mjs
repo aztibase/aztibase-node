@@ -67,6 +67,7 @@ export default defineConfig({
 						{ label: 'Quick Start', slug: 'guides/quickstart' },
 						{ label: 'Run a Full Node', slug: 'guides/run-fullnode' },
 						{ label: 'Run a Validator', slug: 'guides/run-validator' },
+						{ label: 'TypeScript SDK', slug: 'guides/sdk' },
 					],
 				},
 				{
