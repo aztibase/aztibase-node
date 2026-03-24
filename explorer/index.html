@@ -6,8 +6,8 @@
 <title>Aztibase Explorer</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/tweetnacl@1.0.3/nacl-fast.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/tweetnacl@1.0.3/nacl-fast.min.js"></script>
 <style>
 :root {
   --bg-primary: #121016;
@@ -41,9 +41,9 @@
   --orange-soft: rgba(222,174,156,0.12);
   --mono: 'JetBrains Mono', ui-monospace, monospace;
   --sans: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
-  --shadow: 0 2px 8px rgba(0,0,0,0.4);
-  --shadow-md: 0 4px 16px rgba(0,0,0,0.5);
-  --shadow-lg: 0 8px 32px rgba(0,0,0,0.6);
+  --shadow: 0 1px 3px rgba(0,0,0,0.12);
+  --shadow-md: 0 2px 6px rgba(0,0,0,0.15);
+  --shadow-lg: 0 4px 12px rgba(0,0,0,0.18);
   --radius: 12px;
   --radius-sm: 8px;
 }
@@ -78,7 +78,7 @@ header {
   letter-spacing: -0.03em; color: var(--text);
   white-space: nowrap; display: flex; align-items: center; gap: 8px;
 }
-.logo .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 12px var(--accent-glow); }
+.logo .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); }
 .logo em { font-style: normal; color: var(--text-secondary); font-weight: 500; font-size: 13px; }
 
 nav.tabs { display: flex; gap: 2px; }
@@ -92,7 +92,6 @@ nav.tabs button {
 nav.tabs button:hover { color: var(--text-secondary); background: rgba(255,255,255,0.04); }
 nav.tabs button.active {
   color: #fff; background: var(--accent);
-  box-shadow: 0 2px 12px var(--accent-glow);
 }
 
 .hdr-right {
@@ -111,7 +110,7 @@ nav.tabs button.active {
   width: 7px; height: 7px; border-radius: 50%;
   display: inline-block; flex-shrink: 0;
 }
-.status-dot.ok { background: var(--green); box-shadow: 0 0 8px rgba(64,192,87,0.5); }
+.status-dot.ok { background: var(--green); }
 .status-dot.err { background: var(--red); }
 .status-dot.pending { background: var(--text-muted); }
 
@@ -129,7 +128,7 @@ nav.tabs button.active {
   box-shadow: var(--shadow);
   transition: border-color 0.2s;
 }
-.search-bar:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft), var(--shadow); }
+.search-bar:focus-within { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); }
 .search-bar input {
   flex: 1;
   padding: 12px 18px; font-size: 13px;
@@ -163,7 +162,7 @@ main { max-width: 1280px; margin: 0 auto; padding: 20px 24px 40px; }
   transition: transform 0.15s, border-color 0.15s;
   position: relative; overflow: hidden;
 }
-.stat-card:hover { transform: translateY(-2px); border-color: var(--border-light); }
+.stat-card:hover { border-color: var(--border-light); }
 .stat-card .icon {
   width: 32px; height: 32px; border-radius: 8px;
   display: flex; align-items: center; justify-content: center;
@@ -335,7 +334,7 @@ main { max-width: 1280px; margin: 0 auto; padding: 20px 24px 40px; }
 }
 .btn:hover { opacity: 0.88; }
 .btn:disabled { opacity: 0.4; cursor: not-allowed; }
-.btn-primary { background: var(--accent); color: #fff; box-shadow: 0 2px 12px var(--accent-glow); }
+.btn-primary { background: var(--accent); color: #fff; }
 .btn-green { background: var(--green); color: #fff; }
 .btn-secondary { background: var(--border); color: var(--text); }
 .btn-red { background: var(--red); color: #fff; }
@@ -378,7 +377,7 @@ main { max-width: 1280px; margin: 0 auto; padding: 20px 24px 40px; }
   min-height: 60vh; text-align: center; gap: 16px;
 }
 .connect-gate .logo-big { font-size: 32px; font-weight: 800; letter-spacing: -1px; display: flex; align-items: center; gap: 12px; }
-.connect-gate .logo-big .dot { width: 12px; height: 12px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 20px var(--accent-glow); }
+.connect-gate .logo-big .dot { width: 12px; height: 12px; border-radius: 50%; background: var(--accent); }
 .connect-gate .logo-big em { font-style: normal; color: var(--text-secondary); font-weight: 500; font-size: 18px; }
 .connect-gate .subtitle { color: var(--text-muted); font-size: 14px; margin-bottom: 4px; }
 .connect-gate .rpc-form { display: flex; gap: 0; width: 100%; max-width: 460px; background: var(--bg-card); border: 1.5px solid var(--border); border-radius: var(--radius); overflow: hidden; }
@@ -823,7 +822,7 @@ function txTypeName(typeCode) {
 const chartDefaults = {
   responsive: true,
   maintainAspectRatio: false,
-  animation: { duration: 400 },
+  animation: false,
   plugins: { legend: { display: false }, tooltip: {
     backgroundColor: '#1a1720', borderColor: '#2e2a38', borderWidth: 1,
     titleColor: '#e8e4ec', bodyColor: 'rgba(232,228,236,0.72)', padding: 10,
@@ -918,8 +917,8 @@ function navigate(tab) {
   Object.keys(chartInstances).forEach(k => { chartInstances[k].destroy(); delete chartInstances[k]; });
 
   if (tab === 'dashboard') showDashboard();
-  else if (tab === 'blocks') { showBlocks(); pollTimer = setInterval(showBlocks, 3000); }
-  else if (tab === 'transactions') { showTransactions(); pollTimer = setInterval(showTransactions, 4000); }
+  else if (tab === 'blocks') { showBlocks(); pollTimer = setInterval(showBlocks, 5000); }
+  else if (tab === 'transactions') { showTransactions(); pollTimer = setInterval(showTransactions, 6000); }
   else if (tab === 'validators') showValidators();
   else if (tab === 'wallet') showWallet();
 }
@@ -1106,14 +1105,14 @@ async function showDashboard() {
       }
     }
 
-    if (!pollTimer) pollTimer = setInterval(refreshDashboard, 5000);
+    if (!pollTimer) pollTimer = setInterval(refreshDashboard, 8000);
 
   } catch (e) {
     if (!dashboardInitialized) {
       el.innerHTML = `<div class="empty-state">Failed to connect to node at ${escapeHtml(RPC_URL)}<br><br>${escapeHtml(e.message)}<br><br>Use ?rpc=http://host:port to set endpoint</div>`;
       updateHeader(null, false);
     }
-    if (!pollTimer) pollTimer = setInterval(refreshDashboard, 5000);
+    if (!pollTimer) pollTimer = setInterval(refreshDashboard, 8000);
   }
   requestInFlight = false;
 }
@@ -1222,6 +1221,8 @@ async function showBlock(num) {
 // TRANSACTIONS
 // ══════════════════════════════════════════════════════════════════
 
+const txCache = new Map();
+
 async function showTransactions() {
   const el = document.getElementById('content');
   if (!document.getElementById('tx-table')) {
@@ -1238,33 +1239,48 @@ async function showTransactions() {
     const blocks = await rpc('aztb_getBlockRange', [from, h]);
     if (!blocks || blocks.length === 0) { document.getElementById('tx-table').innerHTML = '<div class="empty-state">No blocks</div>'; return; }
 
-    const txRows = [];
-    const seenHashes = new Set();
+    const allHashes = [];
+    const hashToBlock = new Map();
     for (const b of blocks.reverse()) {
       const num = typeof b.number === 'string' ? parseInt(b.number, 16) : b.number;
-      let txHashes = [];
-      try {
-        const full = await rpc('aztb_getBlockByNumber', [num]);
-        txHashes = [...new Set((full && full.transactions) || [])];
-      } catch (_) {}
+      const txHashes = b.transactions || [];
       for (const txHash of txHashes) {
-        if (seenHashes.has(txHash)) continue;
-        seenHashes.add(txHash);
-        try {
-          const tx = await rpc('aztb_getTransactionByHash', [txHash]);
-          if (tx) {
-            const receipt = tx.receipt || {};
-            txRows.push({ hash: txHash, block: num, type: tx.type || tx.tx_type || tx.kind || 0,
-              from: tx.from || tx.sender || '--', to: tx.to || tx.recipient || '--',
-              value: tx.value || 0, gas: receipt.gasUsed || tx.gas_used || tx.gas_limit || '--',
-              status: receipt.success != null ? (receipt.success ? 1 : 0) : (tx.status != null ? tx.status : null),
-              timestamp: b.timestamp,
-            });
-          }
-        } catch (_) {}
-        if (txRows.length >= 50) break;
+        if (!hashToBlock.has(txHash)) {
+          hashToBlock.set(txHash, { num, timestamp: b.timestamp });
+          allHashes.push(txHash);
+        }
+        if (allHashes.length >= 50) break;
       }
-      if (txRows.length >= 50) break;
+      if (allHashes.length >= 50) break;
+    }
+
+    const uncached = allHashes.filter(h => !txCache.has(h));
+    const BATCH = 10;
+    for (let i = 0; i < uncached.length; i += BATCH) {
+      const batch = uncached.slice(i, i + BATCH);
+      const results = await Promise.all(
+        batch.map(hash => rpc('aztb_getTransactionByHash', [hash]).catch(() => null))
+      );
+      results.forEach((tx, idx) => { if (tx) txCache.set(batch[idx], tx); });
+    }
+
+    if (txCache.size > 500) {
+      const keys = [...txCache.keys()];
+      for (let i = 0; i < keys.length - 500; i++) txCache.delete(keys[i]);
+    }
+
+    const txRows = [];
+    for (const txHash of allHashes) {
+      const tx = txCache.get(txHash);
+      const blockInfo = hashToBlock.get(txHash);
+      if (!tx || !blockInfo) continue;
+      const receipt = tx.receipt || {};
+      txRows.push({ hash: txHash, block: blockInfo.num, type: tx.type || tx.tx_type || tx.kind || 0,
+        from: tx.from || tx.sender || '--', to: tx.to || tx.recipient || '--',
+        value: tx.value || 0, gas: receipt.gasUsed || tx.gas_used || tx.gas_limit || '--',
+        status: receipt.success != null ? (receipt.success ? 1 : 0) : (tx.status != null ? tx.status : null),
+        timestamp: blockInfo.timestamp,
+      });
     }
 
     const container = document.getElementById('tx-table');

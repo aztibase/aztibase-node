@@ -1,0 +1,36 @@
+{
+  "name": "@aztibase/sdk",
+  "version": "0.1.0",
+  "description": "TypeScript SDK for the Aztibase Network",
+  "type": "module",
+  "main": "dist/index.cjs",
+  "module": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    }
+  },
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src/"
+  },
+  "keywords": ["aztibase", "blockchain", "web3", "sdk", "rpc"],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/aztibase/sdk"
+  },
+  "devDependencies": {
+    "tsup": "^8.0.0",
+    "typescript": "^5.4.0",
+    "vitest": "^2.0.0"
+  }
+}

@@ -87,6 +87,13 @@ export default defineConfig({
 					],
 				},
 				{
+					label: 'Tools',
+					items: [
+						{ label: 'Testnet Faucet', slug: 'tools/faucet' },
+						{ label: 'Deploy Contracts', slug: 'tools/deploy' },
+					],
+				},
+				{
 					label: 'Network',
 					items: [
 						{ label: 'Testnet Guide', slug: 'network/testnet' },

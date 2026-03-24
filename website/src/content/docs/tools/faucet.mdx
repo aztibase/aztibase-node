@@ -1,0 +1,244 @@
+---
+title: Testnet Faucet
+description: Get free AZTB tokens for the Aztibase testnet
+---
+
+<div class="faucet-container" id="faucet">
+  <div class="faucet-card">
+    <div class="faucet-header">
+      <span class="faucet-dot"></span>
+      <span class="faucet-label">Testnet Faucet</span>
+    </div>
+    <p class="faucet-desc">
+      Request <strong>1,000,000 AZTB</strong> testnet tokens. One drip per address every 60 seconds.
+    </p>
+    <div class="faucet-form">
+      <input
+        type="text"
+        id="faucet-addr"
+        class="faucet-input"
+        placeholder="0x your address (64 hex chars)"
+        spellcheck="false"
+        autocomplete="off"
+      />
+      <button id="faucet-btn" class="faucet-submit" type="button">
+        Request Tokens
+      </button>
+    </div>
+    <div id="faucet-result" class="faucet-result" style="display:none;"></div>
+    <div class="faucet-info">
+      <div class="faucet-info-row">
+        <span class="faucet-info-label">RPC</span>
+        <code class="faucet-info-val" id="faucet-rpc">http://102.209.21.247:9944</code>
+      </div>
+      <div class="faucet-info-row">
+        <span class="faucet-info-label">Method</span>
+        <code class="faucet-info-val">aztb_faucetDrip</code>
+      </div>
+      <div class="faucet-info-row">
+        <span class="faucet-info-label">Amount</span>
+        <span class="faucet-info-val">1,000,000 AZTB</span>
+      </div>
+      <div class="faucet-info-row">
+        <span class="faucet-info-label">Cooldown</span>
+        <span class="faucet-info-val">60 seconds</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<style>{`
+.faucet-container {
+  max-width: 520px;
+  margin: 2rem auto;
+}
+.faucet-card {
+  border: 1.5px solid var(--sl-color-gray-5);
+  border-radius: 12px;
+  padding: 2rem;
+  background: var(--sl-color-bg-nav);
+}
+:root[data-theme='dark'] .faucet-card {
+  border-color: rgba(136, 120, 166, 0.15);
+}
+.faucet-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+}
+.faucet-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #5db88a;
+  animation: faucet-pulse 2s ease-in-out infinite;
+}
+@keyframes faucet-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+.faucet-label {
+  font-family: 'Jura', sans-serif;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--sl-color-gray-2);
+}
+.faucet-desc {
+  font-size: 0.95rem;
+  line-height: 1.6;
+  color: var(--sl-color-gray-2);
+  margin-bottom: 1.5rem;
+}
+.faucet-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+.faucet-input {
+  width: 100%;
+  padding: 0.75rem 1rem;
+  border: 1.5px solid var(--sl-color-gray-5);
+  border-radius: 8px;
+  background: var(--sl-color-black);
+  color: var(--sl-color-white);
+  font-family: 'Fira Code', ui-monospace, monospace;
+  font-size: 0.85rem;
+  outline: none;
+  transition: border-color 0.2s;
+}
+:root[data-theme='dark'] .faucet-input {
+  border-color: rgba(136, 120, 166, 0.15);
+}
+.faucet-input:focus {
+  border-color: var(--sl-color-accent);
+}
+.faucet-input::placeholder {
+  color: var(--sl-color-gray-3);
+}
+.faucet-submit {
+  padding: 0.75rem 1.5rem;
+  border: none;
+  border-radius: 8px;
+  background: #3D9A6C;
+  color: #fff;
+  font-family: 'Instrument Sans', sans-serif;
+  font-size: 0.92rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s, transform 0.1s;
+}
+.faucet-submit:hover:not(:disabled) {
+  background: #2E8558;
+  transform: translateY(-1px);
+}
+.faucet-submit:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.faucet-result {
+  margin-top: 1rem;
+  padding: 0.75rem 1rem;
+  border-radius: 8px;
+  font-size: 0.85rem;
+  font-family: 'Fira Code', ui-monospace, monospace;
+  word-break: break-all;
+  line-height: 1.5;
+}
+.faucet-result.success {
+  background: rgba(93, 184, 138, 0.1);
+  border: 1px solid rgba(93, 184, 138, 0.25);
+  color: #5db88a;
+}
+.faucet-result.error {
+  background: rgba(201, 146, 126, 0.1);
+  border: 1px solid rgba(201, 146, 126, 0.25);
+  color: #c9927e;
+}
+.faucet-info {
+  margin-top: 1.5rem;
+  border-top: 1px solid var(--sl-color-gray-5);
+  padding-top: 1rem;
+}
+:root[data-theme='dark'] .faucet-info {
+  border-top-color: rgba(136, 120, 166, 0.10);
+}
+.faucet-info-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.35rem 0;
+  font-size: 0.8rem;
+}
+.faucet-info-label {
+  color: var(--sl-color-gray-3);
+  font-weight: 600;
+  text-transform: uppercase;
+  font-size: 0.7rem;
+  letter-spacing: 0.04em;
+}
+.faucet-info-val {
+  color: var(--sl-color-gray-2);
+  font-size: 0.8rem;
+}
+@media (max-width: 480px) {
+  .faucet-card { padding: 1.25rem; }
+}
+`}</style>
+
+<script>{`
+(function() {
+  const RPC = 'http://102.209.21.247:9944';
+  const btn = document.getElementById('faucet-btn');
+  const input = document.getElementById('faucet-addr');
+  const result = document.getElementById('faucet-result');
+
+  function showResult(msg, ok) {
+    result.textContent = msg;
+    result.className = 'faucet-result ' + (ok ? 'success' : 'error');
+    result.style.display = 'block';
+  }
+
+  btn.addEventListener('click', async function() {
+    const addr = input.value.trim();
+    if (!addr.match(/^0x[0-9a-fA-F]{64}$/)) {
+      showResult('Invalid address. Must be 0x + 64 hex characters.', false);
+      return;
+    }
+
+    btn.disabled = true;
+    btn.textContent = 'Requesting...';
+    result.style.display = 'none';
+
+    try {
+      const resp = await fetch(RPC, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          method: 'aztb_faucetDrip',
+          params: [addr],
+          id: 1
+        })
+      });
+      const data = await resp.json();
+      if (data.error) {
+        showResult('Error: ' + (data.error.message || JSON.stringify(data.error)), false);
+      } else {
+        showResult('Sent 1,000,000 AZTB\\nTx: ' + (data.result || 'submitted'), true);
+      }
+    } catch (e) {
+      showResult('Network error: ' + e.message, false);
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'Request Tokens';
+    }
+  });
+
+  input.addEventListener('keydown', function(e) {
+    if (e.key === 'Enter') btn.click();
+  });
+})();
+`}</script>

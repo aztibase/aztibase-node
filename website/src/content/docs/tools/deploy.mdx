@@ -1,0 +1,351 @@
+---
+title: Deploy Contracts
+description: Deploy smart contracts to Aztibase via EVM or WASM
+---
+
+Aztibase supports two virtual machines — deploy in **Solidity** (EVM) or **Rust/AssemblyScript** (WASM).
+
+## EVM Contracts (Solidity)
+
+### Using the CLI
+
+```bash
+# Compile your contract
+solc --bin --abi MyContract.sol -o build/
+
+# Deploy via RPC
+curl -X POST http://102.209.21.247:9944 \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "jsonrpc": "2.0",
+    "method": "aztb_sendTransaction",
+    "params": ["0x<signed-deploy-tx-hex>"],
+    "id": 1
+  }'
+```
+
+### Using the Web Deployer
+
+<div class="deploy-container" id="deployer">
+  <div class="deploy-card">
+    <div class="deploy-header">
+      <span class="deploy-badge evm">EVM</span>
+      <span class="deploy-badge wasm">WASM</span>
+    </div>
+    <div class="deploy-section">
+      <label class="deploy-label" for="deploy-bytecode">Contract Bytecode</label>
+      <textarea
+        id="deploy-bytecode"
+        class="deploy-textarea"
+        rows="4"
+        placeholder="0x 608060405234801561001057..."
+        spellcheck="false"
+      ></textarea>
+    </div>
+    <div class="deploy-section">
+      <label class="deploy-label" for="deploy-from">Deployer Address</label>
+      <input
+        type="text"
+        id="deploy-from"
+        class="deploy-input"
+        placeholder="0x your address (64 hex chars)"
+        spellcheck="false"
+      />
+    </div>
+    <div class="deploy-row">
+      <div class="deploy-section deploy-half">
+        <label class="deploy-label" for="deploy-gas">Gas Limit</label>
+        <input
+          type="text"
+          id="deploy-gas"
+          class="deploy-input"
+          value="1000000"
+        />
+      </div>
+      <div class="deploy-section deploy-half">
+        <label class="deploy-label" for="deploy-value">Value (AZTB)</label>
+        <input
+          type="text"
+          id="deploy-value"
+          class="deploy-input"
+          value="0"
+        />
+      </div>
+    </div>
+    <button id="deploy-estimate" class="deploy-btn estimate" type="button">
+      Estimate Gas
+    </button>
+    <div id="deploy-result" class="deploy-result" style="display:none;"></div>
+    <p class="deploy-note">
+      This tool estimates gas costs. To deploy, sign the transaction with your wallet
+      or use the <a href="/api/rpc/">aztb_sendTransaction</a> RPC method.
+    </p>
+  </div>
+</div>
+
+## WASM Contracts (Rust)
+
+### Write your contract
+
+```rust
+#[no_mangle]
+pub extern "C" fn call() {
+    // Read input
+    let input = aztb::input();
+    // Process
+    let result = process(input);
+    // Return output
+    aztb::ret(&result);
+}
+```
+
+### Compile to WASM
+
+```bash
+cargo build --target wasm32-unknown-unknown --release
+wasm-opt -Oz target/wasm32-unknown-unknown/release/my_contract.wasm -o optimized.wasm
+```
+
+### Deploy
+
+```bash
+# The WASM bytecode is deployed using TxKind::DeployWasm (0x0B)
+# Use the wallet extension or construct the transaction manually
+```
+
+## Transaction Types
+
+| TxKind | Hex | Purpose |
+|--------|-----|---------|
+| `DeployEvm` | `0x0A` | Deploy an EVM contract |
+| `DeployWasm` | `0x0B` | Deploy a WASM contract |
+| `CallEvm` | `0x0C` | Call an EVM contract |
+| `CallWasm` | `0x0D` | Call a WASM contract |
+| `CrossVmCall` | `0x1A` | Call across VMs (WASM↔EVM) |
+
+## Gas Costs
+
+| Operation | Gas |
+|-----------|-----|
+| Transfer | 21,000 |
+| EVM deploy | ~200,000 - 2,000,000 |
+| WASM deploy | ~100,000 - 1,000,000 |
+| EVM call | ~30,000 - 500,000 |
+| WASM call | ~20,000 - 300,000 |
+| Cross-VM call | +50,000 overhead |
+
+## Verification
+
+After deployment, verify your contract is live:
+
+```bash
+# Check contract code exists
+curl -X POST http://102.209.21.247:9944 \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "jsonrpc": "2.0",
+    "method": "aztb_getCode",
+    "params": ["0x<contract-address>"],
+    "id": 1
+  }'
+
+# Check account type is "Contract"
+curl -X POST http://102.209.21.247:9944 \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "jsonrpc": "2.0",
+    "method": "aztb_getAccountType",
+    "params": ["0x<contract-address>"],
+    "id": 1
+  }'
+```
+
+<style>{`
+.deploy-container {
+  max-width: 580px;
+  margin: 1.5rem 0;
+}
+.deploy-card {
+  border: 1.5px solid var(--sl-color-gray-5);
+  border-radius: 12px;
+  padding: 1.75rem;
+  background: var(--sl-color-bg-nav);
+}
+:root[data-theme='dark'] .deploy-card {
+  border-color: rgba(136, 120, 166, 0.15);
+}
+.deploy-header {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 1.25rem;
+}
+.deploy-badge {
+  padding: 0.3rem 0.75rem;
+  border-radius: 6px;
+  font-family: 'Fira Code', monospace;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
+.deploy-badge.evm {
+  background: rgba(136, 120, 166, 0.12);
+  color: var(--sl-color-accent);
+}
+.deploy-badge.wasm {
+  background: rgba(93, 184, 138, 0.12);
+  color: #5db88a;
+}
+.deploy-section {
+  margin-bottom: 1rem;
+}
+.deploy-label {
+  display: block;
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--sl-color-gray-3);
+  margin-bottom: 0.4rem;
+}
+.deploy-input, .deploy-textarea {
+  width: 100%;
+  padding: 0.65rem 0.9rem;
+  border: 1.5px solid var(--sl-color-gray-5);
+  border-radius: 8px;
+  background: var(--sl-color-black);
+  color: var(--sl-color-white);
+  font-family: 'Fira Code', ui-monospace, monospace;
+  font-size: 0.82rem;
+  outline: none;
+  transition: border-color 0.2s;
+  resize: vertical;
+}
+:root[data-theme='dark'] .deploy-input,
+:root[data-theme='dark'] .deploy-textarea {
+  border-color: rgba(136, 120, 166, 0.15);
+}
+.deploy-input:focus, .deploy-textarea:focus {
+  border-color: var(--sl-color-accent);
+}
+.deploy-input::placeholder, .deploy-textarea::placeholder {
+  color: var(--sl-color-gray-3);
+}
+.deploy-row {
+  display: flex;
+  gap: 1rem;
+}
+.deploy-half {
+  flex: 1;
+}
+.deploy-btn {
+  padding: 0.7rem 1.5rem;
+  border: none;
+  border-radius: 8px;
+  font-family: 'Instrument Sans', sans-serif;
+  font-size: 0.88rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s, transform 0.1s;
+}
+.deploy-btn.estimate {
+  background: var(--sl-color-accent);
+  color: #fff;
+}
+.deploy-btn.estimate:hover:not(:disabled) {
+  opacity: 0.9;
+  transform: translateY(-1px);
+}
+.deploy-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.deploy-result {
+  margin-top: 1rem;
+  padding: 0.7rem 1rem;
+  border-radius: 8px;
+  font-size: 0.82rem;
+  font-family: 'Fira Code', monospace;
+  word-break: break-all;
+  line-height: 1.5;
+}
+.deploy-result.success {
+  background: rgba(93, 184, 138, 0.1);
+  border: 1px solid rgba(93, 184, 138, 0.25);
+  color: #5db88a;
+}
+.deploy-result.error {
+  background: rgba(201, 146, 126, 0.1);
+  border: 1px solid rgba(201, 146, 126, 0.25);
+  color: #c9927e;
+}
+.deploy-note {
+  margin-top: 1rem;
+  font-size: 0.8rem;
+  color: var(--sl-color-gray-3);
+  line-height: 1.5;
+}
+@media (max-width: 480px) {
+  .deploy-card { padding: 1.25rem; }
+  .deploy-row { flex-direction: column; gap: 0; }
+}
+`}</style>
+
+<script>{`
+(function() {
+  const RPC = 'http://102.209.21.247:9944';
+  const btn = document.getElementById('deploy-estimate');
+  const result = document.getElementById('deploy-result');
+
+  function showResult(msg, ok) {
+    result.textContent = msg;
+    result.className = 'deploy-result ' + (ok ? 'success' : 'error');
+    result.style.display = 'block';
+  }
+
+  btn.addEventListener('click', async function() {
+    const bytecode = document.getElementById('deploy-bytecode').value.trim();
+    const from = document.getElementById('deploy-from').value.trim();
+    const gas = document.getElementById('deploy-gas').value.trim();
+
+    if (!bytecode.match(/^0x[0-9a-fA-F]+$/)) {
+      showResult('Invalid bytecode. Must start with 0x followed by hex.', false);
+      return;
+    }
+    if (!from.match(/^0x[0-9a-fA-F]{64}$/)) {
+      showResult('Invalid address. Must be 0x + 64 hex characters.', false);
+      return;
+    }
+
+    btn.disabled = true;
+    btn.textContent = 'Estimating...';
+    result.style.display = 'none';
+
+    try {
+      const resp = await fetch(RPC, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          method: 'aztb_estimateGas',
+          params: [{ from: from, data: bytecode, gas: '0x' + parseInt(gas).toString(16) }],
+          id: 1
+        })
+      });
+      const data = await resp.json();
+      if (data.error) {
+        showResult('Error: ' + (data.error.message || JSON.stringify(data.error)), false);
+      } else {
+        const estimated = typeof data.result === 'string' && data.result.startsWith('0x')
+          ? parseInt(data.result, 16)
+          : data.result;
+        showResult('Estimated gas: ' + Number(estimated).toLocaleString(), true);
+      }
+    } catch (e) {
+      showResult('Network error: ' + e.message, false);
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'Estimate Gas';
+    }
+  });
+})();
+`}</script>
