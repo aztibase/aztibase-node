@@ -26,29 +26,43 @@ fn from_evm_address(addr: &EvmAddress) -> Address {
     buf
 }
 
-fn build_db(state: &AccountState, addresses: &[Address]) -> CacheDB<EmptyDB> {
-    let mut db = CacheDB::new(EmptyDB::default());
-    for addr in addresses {
-        let evm_addr = to_evm_address(addr);
-        let info = revm::state::AccountInfo {
-            balance: U256::from(state.balance(addr)),
-            nonce: state.nonce(addr),
-            code_hash: revm::primitives::KECCAK_EMPTY,
-            account_id: None,
-            code: state
-                .code(addr)
-                .map(|c| revm::bytecode::Bytecode::new_legacy(Bytes::copy_from_slice(c))),
-        };
-        db.insert_account_info(evm_addr, info);
+fn load_account(db: &mut CacheDB<EmptyDB>, state: &AccountState, addr: &Address) {
+    let evm_addr = to_evm_address(addr);
+    let info = revm::state::AccountInfo {
+        balance: U256::from(state.balance(addr)),
+        nonce: state.nonce(addr),
+        code_hash: revm::primitives::KECCAK_EMPTY,
+        account_id: None,
+        code: state
+            .code(addr)
+            .map(|c| revm::bytecode::Bytecode::new_legacy(Bytes::copy_from_slice(c))),
+    };
+    db.insert_account_info(evm_addr, info);
 
-        if let Some(acct) = state.get(addr) {
-            for (k, v) in &acct.storage {
-                let slot = U256::from_be_slice(k);
-                let value = U256::from_be_slice(v);
-                let _ = db.insert_account_storage(evm_addr, slot, value);
-            }
+    if let Some(acct) = state.get(addr) {
+        for (k, v) in &acct.storage {
+            let slot = U256::from_be_slice(k);
+            let value = U256::from_be_slice(v);
+            let _ = db.insert_account_storage(evm_addr, slot, value);
         }
     }
+}
+
+fn build_db(state: &AccountState, addresses: &[Address]) -> CacheDB<EmptyDB> {
+    let mut db = CacheDB::new(EmptyDB::default());
+    let mut loaded = std::collections::HashSet::new();
+
+    for addr in addresses {
+        load_account(&mut db, state, addr);
+        loaded.insert(*addr);
+    }
+
+    for (addr, acct) in state.iter_accounts() {
+        if !loaded.contains(addr) && !acct.code.is_empty() {
+            load_account(&mut db, state, addr);
+        }
+    }
+
     db
 }
 
