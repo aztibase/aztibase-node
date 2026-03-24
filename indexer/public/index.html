@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Aztibase Indexer</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Segoe UI',system-ui,-apple-system,sans-serif;background:#0a0a0f;color:#c8c4d4;line-height:1.5;min-height:100vh}
+a{color:#8878a6;text-decoration:none}
+a:hover{color:#b0a0d0}
+.container{max-width:960px;margin:0 auto;padding:1.5rem}
+header{border-bottom:1px solid rgba(136,120,166,0.12);padding-bottom:1rem;margin-bottom:1.5rem;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:1rem}
+h1{font-size:1.2rem;font-weight:600;color:#e0dce8;letter-spacing:0.02em}
+h1 span{color:#8878a6;font-weight:400;font-size:0.85rem;margin-left:0.5rem}
+.search-box{display:flex;gap:0.5rem;flex:1;max-width:420px}
+.search-box input{flex:1;padding:0.5rem 0.75rem;border:1px solid rgba(136,120,166,0.15);border-radius:6px;background:#12121a;color:#e0dce8;font-size:0.82rem;font-family:'Consolas','Fira Code',monospace;outline:none}
+.search-box input:focus{border-color:#8878a6}
+.search-box input::placeholder{color:#555}
+.search-box button{padding:0.5rem 1rem;border:none;border-radius:6px;background:#8878a6;color:#fff;font-size:0.8rem;font-weight:600;cursor:pointer}
+.search-box button:hover{background:#7060a0}
+.stats-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:0.75rem;margin-bottom:1.5rem}
+.stat-card{background:#12121a;border:1px solid rgba(136,120,166,0.1);border-radius:8px;padding:1rem}
+.stat-label{font-size:0.65rem;text-transform:uppercase;letter-spacing:0.06em;color:#666;margin-bottom:0.25rem}
+.stat-value{font-size:1.4rem;font-weight:700;color:#e0dce8;font-family:'Consolas',monospace}
+nav{display:flex;gap:0.25rem;margin-bottom:1rem;border-bottom:1px solid rgba(136,120,166,0.08);padding-bottom:0}
+nav button{padding:0.5rem 1rem;border:none;background:transparent;color:#777;font-size:0.82rem;font-weight:500;cursor:pointer;border-bottom:2px solid transparent;transition:all 0.15s}
+nav button:hover{color:#c8c4d4}
+nav button.active{color:#e0dce8;border-bottom-color:#8878a6}
+.panel{display:none}
+.panel.active{display:block}
+table{width:100%;border-collapse:collapse;font-size:0.8rem}
+th{text-align:left;padding:0.5rem 0.75rem;color:#666;font-size:0.7rem;text-transform:uppercase;letter-spacing:0.04em;border-bottom:1px solid rgba(136,120,166,0.1)}
+td{padding:0.5rem 0.75rem;border-bottom:1px solid rgba(136,120,166,0.05);font-family:'Consolas',monospace;font-size:0.78rem;color:#b0aac0}
+tr:hover td{background:rgba(136,120,166,0.04)}
+.hash{max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:inline-block;vertical-align:bottom}
+.addr{max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:inline-block;vertical-align:bottom}
+.tag{display:inline-block;padding:0.1rem 0.4rem;border-radius:3px;font-size:0.68rem;font-weight:600}
+.tag-block{background:rgba(93,184,138,0.1);color:#5db88a}
+.tag-tx{background:rgba(136,120,166,0.1);color:#8878a6}
+.empty{text-align:center;padding:3rem;color:#555;font-size:0.9rem}
+.detail-card{background:#12121a;border:1px solid rgba(136,120,166,0.1);border-radius:8px;padding:1.25rem;margin-bottom:1rem}
+.detail-row{display:flex;padding:0.4rem 0;border-bottom:1px solid rgba(136,120,166,0.05)}
+.detail-row:last-child{border:none}
+.detail-key{width:140px;flex-shrink:0;color:#666;font-size:0.75rem;text-transform:uppercase;letter-spacing:0.03em}
+.detail-val{font-family:'Consolas',monospace;font-size:0.8rem;word-break:break-all;color:#b0aac0}
+.back-btn{display:inline-block;margin-bottom:1rem;padding:0.35rem 0.75rem;border:1px solid rgba(136,120,166,0.15);border-radius:5px;font-size:0.78rem;color:#888;cursor:pointer;background:transparent}
+.back-btn:hover{border-color:#8878a6;color:#c8c4d4}
+#detail-view{display:none}
+.loading{color:#555;text-align:center;padding:2rem}
+</style>
+</head>
+<body>
+<div class="container">
+  <header>
+    <h1>Aztibase Indexer <span>v0.1.0</span></h1>
+    <div class="search-box">
+      <input type="text" id="search" placeholder="Search block, tx hash, or address..." spellcheck="false">
+      <button onclick="doSearch()">Search</button>
+    </div>
+  </header>
+
+  <div class="stats-row" id="stats-row">
+    <div class="stat-card"><div class="stat-label">Blocks</div><div class="stat-value" id="s-blocks">--</div></div>
+    <div class="stat-card"><div class="stat-label">Transactions</div><div class="stat-value" id="s-txs">--</div></div>
+    <div class="stat-card"><div class="stat-label">Addresses</div><div class="stat-value" id="s-addrs">--</div></div>
+    <div class="stat-card"><div class="stat-label">Latest Block</div><div class="stat-value" id="s-latest">--</div></div>
+  </div>
+
+  <div id="list-view">
+    <nav>
+      <button class="active" onclick="switchTab('blocks',this)">Blocks</button>
+      <button onclick="switchTab('txs',this)">Transactions</button>
+      <button onclick="switchTab('addresses',this)">Top Addresses</button>
+    </nav>
+    <div class="panel active" id="panel-blocks"></div>
+    <div class="panel" id="panel-txs"></div>
+    <div class="panel" id="panel-addresses"></div>
+  </div>
+
+  <div id="detail-view">
+    <button class="back-btn" onclick="showList()">&larr; Back</button>
+    <div id="detail-content"></div>
+  </div>
+</div>
+
+<script>
+var API='';
+var fmt=n=>(typeof n==='number'?n:parseInt(n)||0).toLocaleString();
+var short=(s,n)=>s?(s.length>n?s.slice(0,n)+'...':s):'--';
+
+async function api(path){
+  var r=await fetch(API+path);
+  if(!r.ok)throw new Error(r.statusText);
+  return r.json();
+}
+
+async function loadStats(){
+  try{
+    var d=await api('/stats');
+    document.getElementById('s-blocks').textContent=fmt(d.total_blocks);
+    document.getElementById('s-txs').textContent=fmt(d.total_txs);
+    document.getElementById('s-addrs').textContent=fmt(d.active_addresses);
+    document.getElementById('s-latest').textContent=fmt(d.last_block);
+  }catch(e){}
+}
+
+async function loadBlocks(){
+  var el=document.getElementById('panel-blocks');
+  try{
+    var blocks=await api('/blocks/recent?limit=30');
+    if(!blocks.length){el.innerHTML='<div class="empty">No blocks indexed yet</div>';return;}
+    var h='<table><tr><th>Block</th><th>Hash</th><th>Txs</th><th>Time</th></tr>';
+    blocks.forEach(function(b){
+      h+='<tr><td><a href="#" onclick="viewBlock('+b.number+');return false">'
+        +fmt(b.number)+'</a></td><td><span class="hash">'+b.hash+'</span></td><td>'
+        +(b.tx_count||0)+'</td><td>'+(b.timestamp?new Date(b.timestamp*1000).toLocaleTimeString():'--')+'</td></tr>';
+    });
+    el.innerHTML=h+'</table>';
+  }catch(e){el.innerHTML='<div class="empty">Failed to load blocks</div>';}
+}
+
+async function loadTxs(){
+  var el=document.getElementById('panel-txs');
+  try{
+    var txs=await api('/txs/recent?limit=30');
+    if(!txs.length){el.innerHTML='<div class="empty">No transactions indexed yet</div>';return;}
+    var h='<table><tr><th>Hash</th><th>From</th><th>To</th><th>Block</th></tr>';
+    txs.forEach(function(t){
+      h+='<tr><td><a href="#" onclick="viewTx(\''+t.hash+'\');return false"><span class="hash">'
+        +t.hash+'</span></a></td><td><a href="#" onclick="viewAddr(\''+t.from_addr+'\');return false"><span class="addr">'
+        +(t.from_addr||'--')+'</span></a></td><td><a href="#" onclick="viewAddr(\''+(t.to_addr||'')+'\');return false"><span class="addr">'
+        +(t.to_addr||'--')+'</span></a></td><td>'+fmt(t.block_number)+'</td></tr>';
+    });
+    el.innerHTML=h+'</table>';
+  }catch(e){el.innerHTML='<div class="empty">Failed to load transactions</div>';}
+}
+
+async function loadAddresses(){
+  var el=document.getElementById('panel-addresses');
+  try{
+    var addrs=await api('/addresses/top?limit=30');
+    if(!addrs.length){el.innerHTML='<div class="empty">No addresses found</div>';return;}
+    var h='<table><tr><th>#</th><th>Address</th><th>Transactions</th></tr>';
+    addrs.forEach(function(a,i){
+      h+='<tr><td>'+(i+1)+'</td><td><a href="#" onclick="viewAddr(\''+a.address+'\');return false"><span class="hash">'
+        +a.address+'</span></a></td><td>'+fmt(a.tx_count)+'</td></tr>';
+    });
+    el.innerHTML=h+'</table>';
+  }catch(e){el.innerHTML='<div class="empty">Failed to load addresses</div>';}
+}
+
+function switchTab(name,btn){
+  document.querySelectorAll('nav button').forEach(function(b){b.classList.remove('active')});
+  document.querySelectorAll('.panel').forEach(function(p){p.classList.remove('active')});
+  btn.classList.add('active');
+  document.getElementById('panel-'+name).classList.add('active');
+  if(name==='blocks')loadBlocks();
+  else if(name==='txs')loadTxs();
+  else if(name==='addresses')loadAddresses();
+}
+
+function showList(){
+  document.getElementById('list-view').style.display='';
+  document.getElementById('detail-view').style.display='none';
+}
+
+function showDetail(html){
+  document.getElementById('list-view').style.display='none';
+  document.getElementById('detail-view').style.display='';
+  document.getElementById('detail-content').innerHTML=html;
+}
+
+async function viewBlock(num){
+  showDetail('<div class="loading">Loading block...</div>');
+  try{
+    var b=await api('/block/'+num);
+    var h='<div class="detail-card"><h3 style="margin-bottom:0.75rem;color:#e0dce8"><span class="tag tag-block">BLOCK</span> #'+fmt(b.number)+'</h3>';
+    h+='<div class="detail-row"><div class="detail-key">Hash</div><div class="detail-val">'+b.hash+'</div></div>';
+    h+='<div class="detail-row"><div class="detail-key">Parent</div><div class="detail-val">'+(b.parent_hash||'--')+'</div></div>';
+    h+='<div class="detail-row"><div class="detail-key">Time</div><div class="detail-val">'+(b.timestamp?new Date(b.timestamp*1000).toLocaleString():'--')+'</div></div>';
+    h+='<div class="detail-row"><div class="detail-key">Transactions</div><div class="detail-val">'+(b.transactions?b.transactions.length:0)+'</div></div>';
+    h+='</div>';
+    if(b.transactions&&b.transactions.length){
+      h+='<table><tr><th>Hash</th><th>From</th><th>To</th></tr>';
+      b.transactions.forEach(function(t){
+        h+='<tr><td><a href="#" onclick="viewTx(\''+t.hash+'\');return false"><span class="hash">'+t.hash+'</span></a></td>'
+          +'<td><span class="addr">'+(t.from_addr||'--')+'</span></td>'
+          +'<td><span class="addr">'+(t.to_addr||'--')+'</span></td></tr>';
+      });
+      h+='</table>';
+    }
+    showDetail(h);
+  }catch(e){showDetail('<div class="empty">Block not found</div>');}
+}
+
+async function viewTx(hash){
+  showDetail('<div class="loading">Loading transaction...</div>');
+  try{
+    var t=await api('/tx/'+hash);
+    var h='<div class="detail-card"><h3 style="margin-bottom:0.75rem;color:#e0dce8"><span class="tag tag-tx">TX</span> Transaction</h3>';
+    h+='<div class="detail-row"><div class="detail-key">Hash</div><div class="detail-val">'+t.hash+'</div></div>';
+    h+='<div class="detail-row"><div class="detail-key">Block</div><div class="detail-val"><a href="#" onclick="viewBlock('+t.block_number+');return false">'+fmt(t.block_number)+'</a></div></div>';
+    h+='<div class="detail-row"><div class="detail-key">From</div><div class="detail-val"><a href="#" onclick="viewAddr(\''+t.from_addr+'\');return false">'+(t.from_addr||'--')+'</a></div></div>';
+    h+='<div class="detail-row"><div class="detail-key">To</div><div class="detail-val"><a href="#" onclick="viewAddr(\''+(t.to_addr||'')+'\');return false">'+(t.to_addr||'--')+'</a></div></div>';
+    if(t.value)h+='<div class="detail-row"><div class="detail-key">Value</div><div class="detail-val">'+t.value+'</div></div>';
+    if(t.tx_type)h+='<div class="detail-row"><div class="detail-key">Type</div><div class="detail-val">'+t.tx_type+'</div></div>';
+    h+='</div>';
+    showDetail(h);
+  }catch(e){showDetail('<div class="empty">Transaction not found</div>');}
+}
+
+async function viewAddr(addr){
+  if(!addr)return;
+  showDetail('<div class="loading">Loading address...</div>');
+  try{
+    var d=await api('/address/'+addr+'/txs?limit=30');
+    var h='<div class="detail-card"><h3 style="margin-bottom:0.75rem;color:#e0dce8">Address</h3>';
+    h+='<div class="detail-row"><div class="detail-key">Address</div><div class="detail-val">'+d.address+'</div></div>';
+    h+='<div class="detail-row"><div class="detail-key">Total Txs</div><div class="detail-val">'+fmt(d.total)+'</div></div>';
+    h+='</div>';
+    if(d.transactions&&d.transactions.length){
+      h+='<table><tr><th>Hash</th><th>From</th><th>To</th><th>Block</th></tr>';
+      d.transactions.forEach(function(t){
+        h+='<tr><td><a href="#" onclick="viewTx(\''+t.hash+'\');return false"><span class="hash">'+t.hash+'</span></a></td>'
+          +'<td><span class="addr">'+(t.from_addr||'--')+'</span></td>'
+          +'<td><span class="addr">'+(t.to_addr||'--')+'</span></td>'
+          +'<td>'+fmt(t.block_number)+'</td></tr>';
+      });
+      h+='</table>';
+    }else{h+='<div class="empty">No transactions for this address</div>';}
+    showDetail(h);
+  }catch(e){showDetail('<div class="empty">Address not found</div>');}
+}
+
+async function doSearch(){
+  var q=document.getElementById('search').value.trim();
+  if(!q)return;
+  try{
+    var r=await api('/search/'+encodeURIComponent(q));
+    if(r.type==='block')viewBlock(r.data.number);
+    else if(r.type==='transaction')viewTx(r.data.hash);
+    else if(r.type==='address')viewAddr(r.data.address);
+  }catch(e){
+    showDetail('<div class="empty">Nothing found for "'+q+'"</div>');
+  }
+}
+
+document.getElementById('search').addEventListener('keydown',function(e){if(e.key==='Enter')doSearch()});
+
+loadStats();
+loadBlocks();
+setInterval(loadStats,10000);
+</script>
+</body>
+</html>

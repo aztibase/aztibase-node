@@ -22,13 +22,19 @@ Thumbs.db
 
 # Node
 node_modules/
+package-lock.json
+
+# Python
+__pycache__/
 
 # Node runtime data (databases, peer stores, models, training data)
-data/*/db
-data/*/execution_db
-data/*/*.redb
-data/*/models/
-data/*/sentinel_features.csv
+data/
+*.csv
+
+# SQLite runtime files
+*.db-shm
+*.db-wal
+*.db-journal
 
 # Website build output
 website/dist/

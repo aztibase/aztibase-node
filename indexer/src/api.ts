@@ -1,3 +1,6 @@
+import { join, dirname } from 'path';
+import { fileURLToPath } from 'url';
+import { readFileSync } from 'fs';
 import Fastify from 'fastify';
 import type { IndexerDb } from './db.js';
 
@@ -12,6 +15,18 @@ export function createApi(db: IndexerDb, port: number = 3001) {
       reply.status(204).send();
     }
   });
+
+  app.get('/', async (_request, reply) => {
+    const htmlPath = join(dirname(fileURLToPath(import.meta.url)), '..', 'public', 'index.html');
+    const html = readFileSync(htmlPath, 'utf-8');
+    reply.type('text/html').send(html);
+  });
+
+  app.get('/api', async () => ({
+    service: 'aztibase-indexer',
+    version: '0.1.0',
+    endpoints: ['/stats','/blocks/recent','/block/:number','/txs/recent','/tx/:hash','/address/:addr/txs','/addresses/top','/search/:query'],
+  }));
 
   app.get('/health', async () => ({ status: 'ok', service: 'aztibase-indexer' }));
 
