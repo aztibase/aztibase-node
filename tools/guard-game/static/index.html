@@ -1,0 +1,754 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>Aztibase Guard Game</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+:root {
+  --bg: #0f1117;
+  --card: #1a1d27;
+  --accent: #00d4aa;
+  --accent-dim: #00a88a;
+  --red: #ff4757;
+  --green: #2ed573;
+  --gold: #ffa502;
+  --text: #e8e8e8;
+  --muted: #7a7d8e;
+  --border: #2a2d3a;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+.header {
+  text-align: center;
+  padding: 20px 16px 10px;
+}
+
+.header h1 {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--accent);
+  letter-spacing: 1px;
+}
+
+.header .subtitle {
+  font-size: 12px;
+  color: var(--muted);
+  margin-top: 2px;
+}
+
+.balance-bar {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+}
+
+.balance-display {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 10px 20px;
+  text-align: center;
+  flex: 1;
+  max-width: 220px;
+}
+
+.balance-label {
+  font-size: 11px;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.balance-value {
+  font-size: 28px;
+  font-weight: 700;
+  color: var(--gold);
+  margin-top: 2px;
+}
+
+.balance-unit {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.faucet-btn {
+  background: var(--accent);
+  color: var(--bg);
+  border: none;
+  border-radius: 10px;
+  padding: 12px 16px;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.faucet-btn:active { transform: scale(0.95); }
+.faucet-btn:disabled { opacity: 0.4; }
+
+/* Tabs */
+.tabs {
+  display: flex;
+  gap: 0;
+  padding: 0 16px;
+  margin-bottom: 16px;
+}
+
+.tab {
+  flex: 1;
+  text-align: center;
+  padding: 10px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  color: var(--muted);
+  transition: all 0.2s;
+}
+
+.tab.active {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+}
+
+/* Game panels */
+.game-panel { display: none; padding: 0 16px; }
+.game-panel.active { display: block; }
+
+.game-card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 20px;
+  margin-bottom: 16px;
+}
+
+/* Coin flip */
+.coin-container {
+  text-align: center;
+  margin: 16px 0;
+}
+
+.coin {
+  width: 120px;
+  height: 120px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 40px;
+  font-weight: 700;
+  background: linear-gradient(135deg, var(--gold), #e88f00);
+  color: var(--bg);
+  transition: transform 0.6s;
+  box-shadow: 0 4px 20px rgba(255, 165, 2, 0.3);
+}
+
+.coin.spinning {
+  animation: spin 0.5s ease-in-out;
+}
+
+@keyframes spin {
+  0% { transform: rotateY(0deg) scale(1); }
+  50% { transform: rotateY(180deg) scale(0.8); }
+  100% { transform: rotateY(360deg) scale(1); }
+}
+
+.coin.win { box-shadow: 0 4px 30px rgba(46, 213, 115, 0.5); }
+.coin.lose { box-shadow: 0 4px 30px rgba(255, 71, 87, 0.5); }
+
+.side-buttons {
+  display: flex;
+  gap: 12px;
+  margin: 16px 0;
+}
+
+.side-btn {
+  flex: 1;
+  padding: 14px;
+  border-radius: 12px;
+  border: 2px solid var(--border);
+  background: transparent;
+  color: var(--text);
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.side-btn.selected {
+  border-color: var(--accent);
+  background: rgba(0, 212, 170, 0.1);
+  color: var(--accent);
+}
+
+/* Dice */
+.dice-display {
+  text-align: center;
+  margin: 16px 0;
+}
+
+.dice-value {
+  font-size: 64px;
+  font-weight: 700;
+  color: var(--text);
+  transition: all 0.3s;
+}
+
+.dice-value.rolling {
+  animation: shake 0.4s ease-in-out;
+}
+
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  20% { transform: translateX(-8px) rotate(-5deg); }
+  40% { transform: translateX(8px) rotate(5deg); }
+  60% { transform: translateX(-4px) rotate(-2deg); }
+  80% { transform: translateX(4px) rotate(2deg); }
+}
+
+.slider-container {
+  margin: 16px 0;
+}
+
+.slider-container label {
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.target-slider {
+  width: 100%;
+  margin: 8px 0;
+  -webkit-appearance: none;
+  height: 6px;
+  border-radius: 3px;
+  background: linear-gradient(to right, var(--red) 0%, var(--green) 100%);
+  outline: none;
+}
+
+.target-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--text);
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.4);
+}
+
+.slider-info {
+  display: flex;
+  justify-content: space-between;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.direction-btns {
+  display: flex;
+  gap: 12px;
+  margin: 12px 0;
+}
+
+.dir-btn {
+  flex: 1;
+  padding: 12px;
+  border-radius: 10px;
+  border: 2px solid var(--border);
+  background: transparent;
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.dir-btn.selected {
+  border-color: var(--accent);
+  background: rgba(0, 212, 170, 0.1);
+  color: var(--accent);
+}
+
+/* Bet input */
+.bet-section {
+  margin: 16px 0;
+}
+
+.bet-section label {
+  font-size: 13px;
+  color: var(--muted);
+  display: block;
+  margin-bottom: 6px;
+}
+
+.bet-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.bet-input {
+  flex: 1;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 12px;
+  color: var(--text);
+  font-size: 18px;
+  font-weight: 600;
+  text-align: center;
+  outline: none;
+}
+
+.bet-input:focus { border-color: var(--accent); }
+
+.bet-quick {
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--muted);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.bet-quick:active { background: var(--border); }
+
+.play-btn {
+  width: 100%;
+  padding: 16px;
+  border-radius: 12px;
+  border: none;
+  font-size: 18px;
+  font-weight: 700;
+  cursor: pointer;
+  margin-top: 12px;
+  transition: all 0.2s;
+}
+
+.play-btn.flip-btn {
+  background: linear-gradient(135deg, var(--gold), #e88f00);
+  color: var(--bg);
+}
+
+.play-btn.dice-btn {
+  background: linear-gradient(135deg, var(--accent), var(--accent-dim));
+  color: var(--bg);
+}
+
+.play-btn:active { transform: scale(0.97); }
+.play-btn:disabled { opacity: 0.4; transform: none; }
+
+/* Result toast */
+.result-toast {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%) scale(0);
+  background: var(--card);
+  border: 2px solid var(--border);
+  border-radius: 20px;
+  padding: 30px 40px;
+  text-align: center;
+  z-index: 100;
+  transition: transform 0.3s ease;
+  box-shadow: 0 10px 40px rgba(0,0,0,0.6);
+}
+
+.result-toast.show { transform: translate(-50%, -50%) scale(1); }
+.result-toast.win { border-color: var(--green); }
+.result-toast.lose { border-color: var(--red); }
+
+.result-toast .result-text {
+  font-size: 32px;
+  font-weight: 700;
+}
+
+.result-toast.win .result-text { color: var(--green); }
+.result-toast.lose .result-text { color: var(--red); }
+
+.result-toast .result-detail {
+  font-size: 14px;
+  color: var(--muted);
+  margin-top: 8px;
+}
+
+/* History */
+.history-panel { padding: 0 16px 20px; }
+
+.history-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 14px;
+  background: var(--card);
+  border-radius: 10px;
+  margin-bottom: 6px;
+  font-size: 13px;
+}
+
+.history-item .game-type {
+  font-weight: 600;
+  width: 50px;
+}
+
+.history-item .result-col {
+  color: var(--muted);
+}
+
+.history-item .payout-col.win { color: var(--green); font-weight: 600; }
+.history-item .payout-col.lose { color: var(--red); }
+
+/* Seed info */
+.seed-info {
+  text-align: center;
+  padding: 10px 16px 20px;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.seed-hash {
+  font-family: monospace;
+  font-size: 10px;
+  word-break: break-all;
+  color: var(--accent-dim);
+}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>AZTIBASE GUARD</h1>
+  <div class="subtitle">Provably Fair Games</div>
+</div>
+
+<div class="balance-bar">
+  <div class="balance-display">
+    <div class="balance-label">Balance</div>
+    <div class="balance-value" id="balance">0</div>
+    <div class="balance-unit">AZTB</div>
+  </div>
+  <button class="faucet-btn" id="faucetBtn" onclick="faucet()">FREE<br>10K</button>
+</div>
+
+<div class="tabs">
+  <div class="tab active" onclick="switchTab('flip')">COIN FLIP</div>
+  <div class="tab" onclick="switchTab('dice')">DICE</div>
+  <div class="tab" onclick="switchTab('history')">HISTORY</div>
+</div>
+
+<!-- Coin Flip -->
+<div class="game-panel active" id="panel-flip">
+  <div class="game-card">
+    <div class="coin-container">
+      <div class="coin" id="coin">?</div>
+    </div>
+
+    <div class="side-buttons">
+      <button class="side-btn selected" id="btn-heads" onclick="selectSide('heads')">HEADS</button>
+      <button class="side-btn" id="btn-tails" onclick="selectSide('tails')">TAILS</button>
+    </div>
+
+    <div class="bet-section">
+      <label>Bet Amount</label>
+      <div class="bet-row">
+        <button class="bet-quick" onclick="setBet('flip', 'half')">1/2</button>
+        <input type="number" class="bet-input" id="flip-bet" value="100" min="1">
+        <button class="bet-quick" onclick="setBet('flip', 'double')">2x</button>
+        <button class="bet-quick" onclick="setBet('flip', 'max')">MAX</button>
+      </div>
+    </div>
+
+    <button class="play-btn flip-btn" id="flipBtn" onclick="playFlip()">FLIP - WIN 1.96x</button>
+  </div>
+</div>
+
+<!-- Dice -->
+<div class="game-panel" id="panel-dice">
+  <div class="game-card">
+    <div class="dice-display">
+      <div class="dice-value" id="diceValue">--</div>
+    </div>
+
+    <div class="direction-btns">
+      <button class="dir-btn selected" id="btn-over" onclick="selectDir('over')">ROLL OVER</button>
+      <button class="dir-btn" id="btn-under" onclick="selectDir('under')">ROLL UNDER</button>
+    </div>
+
+    <div class="slider-container">
+      <label>Target: <strong id="targetLabel">50</strong></label>
+      <input type="range" class="target-slider" id="targetSlider" min="5" max="95" value="50" oninput="updateTarget()">
+      <div class="slider-info">
+        <span>Win: <span id="winChance">50%</span></span>
+        <span>Payout: <span id="diceMultiplier">1.96x</span></span>
+      </div>
+    </div>
+
+    <div class="bet-section">
+      <label>Bet Amount</label>
+      <div class="bet-row">
+        <button class="bet-quick" onclick="setBet('dice', 'half')">1/2</button>
+        <input type="number" class="bet-input" id="dice-bet" value="100" min="1">
+        <button class="bet-quick" onclick="setBet('dice', 'double')">2x</button>
+        <button class="bet-quick" onclick="setBet('dice', 'max')">MAX</button>
+      </div>
+    </div>
+
+    <button class="play-btn dice-btn" id="diceBtn" onclick="playDice()">ROLL DICE</button>
+  </div>
+</div>
+
+<!-- History -->
+<div class="game-panel" id="panel-history">
+  <div class="history-panel" id="historyList">
+    <div style="text-align:center; color:var(--muted); padding:40px;">No bets yet. Play a game!</div>
+  </div>
+</div>
+
+<!-- Result overlay -->
+<div class="result-toast" id="resultToast">
+  <div class="result-text" id="resultText"></div>
+  <div class="result-detail" id="resultDetail"></div>
+</div>
+
+<div class="seed-info">
+  Provably Fair | Server Seed: <span class="seed-hash" id="seedHash">loading...</span>
+</div>
+
+<script>
+const API = window.location.origin;
+const tg = window.Telegram?.WebApp;
+let initData = '';
+
+if (tg) {
+  tg.ready();
+  tg.expand();
+  initData = tg.initData || '';
+}
+
+let state = { side: 'heads', direction: 'over', target: 50, playing: false };
+
+function headers() {
+  const h = { 'Content-Type': 'application/json' };
+  if (initData) h['X-Telegram-Init-Data'] = initData;
+  else h['X-Test-User-Id'] = '12345';
+  return h;
+}
+
+async function api(method, path, body) {
+  const opts = { method, headers: headers() };
+  if (body) opts.body = JSON.stringify(body);
+  const res = await fetch(API + path, opts);
+  return res.json();
+}
+
+async function loadStatus() {
+  try {
+    const data = await api('GET', '/api/status');
+    if (data.error) return;
+    document.getElementById('balance').textContent = data.balance.toLocaleString();
+    document.getElementById('seedHash').textContent = data.seed_hash?.slice(0, 24) + '...';
+    if (data.history) renderHistory(data.history);
+  } catch (e) {
+    console.error('Status error:', e);
+  }
+}
+
+async function faucet() {
+  const btn = document.getElementById('faucetBtn');
+  btn.disabled = true;
+  try {
+    const data = await api('POST', '/api/faucet');
+    if (data.error) {
+      showResult(false, data.error, '');
+    } else {
+      document.getElementById('balance').textContent = data.balance.toLocaleString();
+      showResult(true, '+10,000 AZTB', 'From faucet');
+    }
+  } catch (e) {
+    showResult(false, 'Error', e.message);
+  }
+  setTimeout(() => btn.disabled = false, 2000);
+}
+
+function selectSide(side) {
+  state.side = side;
+  document.getElementById('btn-heads').classList.toggle('selected', side === 'heads');
+  document.getElementById('btn-tails').classList.toggle('selected', side === 'tails');
+}
+
+function selectDir(dir) {
+  state.direction = dir;
+  document.getElementById('btn-over').classList.toggle('selected', dir === 'over');
+  document.getElementById('btn-under').classList.toggle('selected', dir === 'under');
+  updateTarget();
+}
+
+function updateTarget() {
+  const t = parseInt(document.getElementById('targetSlider').value);
+  state.target = t;
+  document.getElementById('targetLabel').textContent = t;
+  const chance = state.direction === 'over' ? (100 - t) : t;
+  const multi = chance > 0 ? ((1 - 0.02) / (chance / 100)).toFixed(2) : '0.00';
+  document.getElementById('winChance').textContent = chance + '%';
+  document.getElementById('diceMultiplier').textContent = multi + 'x';
+}
+
+function setBet(game, action) {
+  const input = document.getElementById(game + '-bet');
+  const bal = parseInt(document.getElementById('balance').textContent.replace(/,/g, '')) || 0;
+  let val = parseInt(input.value) || 0;
+  if (action === 'half') val = Math.max(1, Math.floor(val / 2));
+  else if (action === 'double') val = Math.min(bal, val * 2);
+  else if (action === 'max') val = bal;
+  input.value = val;
+}
+
+async function playFlip() {
+  if (state.playing) return;
+  const amount = parseInt(document.getElementById('flip-bet').value) || 0;
+  if (amount < 1) return;
+
+  state.playing = true;
+  const btn = document.getElementById('flipBtn');
+  const coin = document.getElementById('coin');
+  btn.disabled = true;
+
+  coin.classList.add('spinning');
+  coin.textContent = '?';
+  coin.className = 'coin spinning';
+
+  try {
+    const data = await api('POST', '/api/flip', {
+      amount, side: state.side, client_seed: crypto.randomUUID().slice(0, 16)
+    });
+
+    setTimeout(() => {
+      coin.classList.remove('spinning');
+
+      if (data.error) {
+        showResult(false, data.error, '');
+        coin.textContent = '?';
+      } else {
+        coin.textContent = data.result === 'heads' ? 'H' : 'T';
+        coin.classList.add(data.won ? 'win' : 'lose');
+        document.getElementById('balance').textContent = data.balance.toLocaleString();
+
+        if (data.won) {
+          showResult(true, `+${data.payout.toLocaleString()} AZTB`, `${data.result.toUpperCase()} - You win!`);
+        } else {
+          showResult(false, `-${amount.toLocaleString()} AZTB`, `${data.result.toUpperCase()} - You lose`);
+        }
+        loadStatus();
+      }
+      btn.disabled = false;
+      state.playing = false;
+    }, 600);
+  } catch (e) {
+    coin.classList.remove('spinning');
+    showResult(false, 'Error', e.message);
+    btn.disabled = false;
+    state.playing = false;
+  }
+}
+
+async function playDice() {
+  if (state.playing) return;
+  const amount = parseInt(document.getElementById('dice-bet').value) || 0;
+  if (amount < 1) return;
+
+  state.playing = true;
+  const btn = document.getElementById('diceBtn');
+  const dv = document.getElementById('diceValue');
+  btn.disabled = true;
+
+  dv.classList.add('rolling');
+  dv.textContent = '??';
+
+  try {
+    const data = await api('POST', '/api/dice', {
+      amount, target: state.target, direction: state.direction,
+      client_seed: crypto.randomUUID().slice(0, 16)
+    });
+
+    setTimeout(() => {
+      dv.classList.remove('rolling');
+
+      if (data.error) {
+        showResult(false, data.error, '');
+        dv.textContent = '--';
+      } else {
+        dv.textContent = data.roll;
+        dv.style.color = data.won ? 'var(--green)' : 'var(--red)';
+        document.getElementById('balance').textContent = data.balance.toLocaleString();
+
+        if (data.won) {
+          showResult(true, `+${data.payout.toLocaleString()} AZTB`, `Rolled ${data.roll} (${data.multiplier}x)`);
+        } else {
+          showResult(false, `-${amount.toLocaleString()} AZTB`, `Rolled ${data.roll}`);
+        }
+        setTimeout(() => dv.style.color = 'var(--text)', 2000);
+        loadStatus();
+      }
+      btn.disabled = false;
+      state.playing = false;
+    }, 500);
+  } catch (e) {
+    dv.classList.remove('rolling');
+    showResult(false, 'Error', e.message);
+    btn.disabled = false;
+    state.playing = false;
+  }
+}
+
+function showResult(won, text, detail) {
+  const toast = document.getElementById('resultToast');
+  document.getElementById('resultText').textContent = text;
+  document.getElementById('resultDetail').textContent = detail;
+  toast.className = 'result-toast show ' + (won ? 'win' : 'lose');
+  setTimeout(() => toast.className = 'result-toast', 2000);
+}
+
+function renderHistory(history) {
+  const el = document.getElementById('historyList');
+  if (!history || history.length === 0) {
+    el.innerHTML = '<div style="text-align:center;color:var(--muted);padding:40px;">No bets yet.</div>';
+    return;
+  }
+  el.innerHTML = history.reverse().map(h => {
+    const won = h.won;
+    const game = h.game === 'flip' ? 'FLIP' : 'DICE';
+    const result = h.game === 'flip' ? h.result.toUpperCase() : `Roll: ${h.roll}`;
+    const payout = won ? `+${h.payout.toLocaleString()}` : `-${h.bet.toLocaleString()}`;
+    return `<div class="history-item">
+      <span class="game-type">${game}</span>
+      <span class="result-col">${result}</span>
+      <span class="payout-col ${won ? 'win' : 'lose'}">${payout}</span>
+    </div>`;
+  }).join('');
+}
+
+function switchTab(tab) {
+  document.querySelectorAll('.tab').forEach((t, i) => {
+    t.classList.toggle('active', ['flip', 'dice', 'history'][i] === tab);
+  });
+  document.querySelectorAll('.game-panel').forEach(p => p.classList.remove('active'));
+  document.getElementById('panel-' + tab).classList.add('active');
+  if (tab === 'history') loadStatus();
+}
+
+loadStatus();
+</script>
+</body>
+</html>
