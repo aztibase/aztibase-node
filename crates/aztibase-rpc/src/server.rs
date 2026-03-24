@@ -692,6 +692,8 @@ async fn dispatch(state: &RpcState, req: &JsonRpcRequest) -> JsonRpcResponse {
         "aztb_getValidatorProfile" => handle_get_validator_profile(state, req).await,
         "aztb_getEpochSummary" => handle_get_epoch_summary(state, req).await,
         "aztb_getEpochSummaries" => handle_get_epoch_summaries(state, req).await,
+        "aztb_call" => handle_static_call(state, req).await,
+        "eth_call" => handle_static_call(state, req).await,
         _ => JsonRpcResponse::error(
             req.id.clone(),
             METHOD_NOT_FOUND,
@@ -1607,6 +1609,106 @@ async fn handle_get_block_by_hash(state: &RpcState, req: &JsonRpcRequest) -> Jso
         }
         Ok(None) => JsonRpcResponse::success(req.id.clone(), serde_json::Value::Null),
         Err(e) => JsonRpcResponse::error(req.id.clone(), -32000, format!("storage error: {e}")),
+    }
+}
+
+async fn handle_static_call(state: &RpcState, req: &JsonRpcRequest) -> JsonRpcResponse {
+    let params = match req.params.get(0).and_then(|v| v.as_object()) {
+        Some(obj) => obj,
+        None => {
+            return JsonRpcResponse::error(
+                req.id.clone(),
+                INVALID_PARAMS,
+                "expected object with 'to' and 'data' fields".into(),
+            );
+        }
+    };
+
+    let to_hex = match params.get("to").and_then(|v| v.as_str()) {
+        Some(s) => s.strip_prefix("0x").unwrap_or(s),
+        None => {
+            return JsonRpcResponse::error(
+                req.id.clone(),
+                INVALID_PARAMS,
+                "missing 'to' field".into(),
+            );
+        }
+    };
+    let contract: [u8; 32] = match hex::decode(to_hex) {
+        Ok(b) if b.len() == 32 => {
+            let mut arr = [0u8; 32];
+            arr.copy_from_slice(&b);
+            arr
+        }
+        Ok(b) if b.len() == 20 => {
+            let mut arr = [0u8; 32];
+            arr[..20].copy_from_slice(&b);
+            arr
+        }
+        _ => {
+            return JsonRpcResponse::error(
+                req.id.clone(),
+                INVALID_PARAMS,
+                "invalid 'to' address".into(),
+            );
+        }
+    };
+
+    let data_hex = params.get("data").and_then(|v| v.as_str()).unwrap_or("0x");
+    let calldata = match hex::decode(data_hex.strip_prefix("0x").unwrap_or(data_hex)) {
+        Ok(b) => b,
+        Err(_) => {
+            return JsonRpcResponse::error(
+                req.id.clone(),
+                INVALID_PARAMS,
+                "invalid 'data' hex".into(),
+            );
+        }
+    };
+
+    let from_hex = params.get("from").and_then(|v| v.as_str());
+    let caller: [u8; 32] = if let Some(fh) = from_hex {
+        let fh = fh.strip_prefix("0x").unwrap_or(fh);
+        match hex::decode(fh) {
+            Ok(b) if b.len() == 32 => {
+                let mut arr = [0u8; 32];
+                arr.copy_from_slice(&b);
+                arr
+            }
+            Ok(b) if b.len() == 20 => {
+                let mut arr = [0u8; 32];
+                arr[..20].copy_from_slice(&b);
+                arr
+            }
+            _ => [0u8; 32],
+        }
+    } else {
+        [0u8; 32]
+    };
+
+    let gas_limit = params
+        .get("gas")
+        .and_then(|v| v.as_str())
+        .and_then(|s| u64::from_str_radix(s.strip_prefix("0x").unwrap_or(s), 16).ok())
+        .unwrap_or(10_000_000);
+
+    let accounts = state.accounts.read().await;
+    let result = aztibase_execution::evm::evm_static_call(
+        &accounts, &caller, &contract, &calldata, gas_limit,
+    );
+    drop(accounts);
+
+    if result.success {
+        JsonRpcResponse::success(
+            req.id.clone(),
+            serde_json::json!(format!("0x{}", hex::encode(&result.output))),
+        )
+    } else {
+        JsonRpcResponse::error(
+            req.id.clone(),
+            3,
+            result.error.unwrap_or_else(|| "execution reverted".into()),
+        )
     }
 }
 

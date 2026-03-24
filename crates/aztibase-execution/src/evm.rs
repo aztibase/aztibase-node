@@ -305,6 +305,87 @@ pub fn evm_call(
     }
 }
 
+pub struct StaticCallResult {
+    pub success: bool,
+    pub output: Vec<u8>,
+    pub gas_used: u64,
+    pub error: Option<String>,
+}
+
+pub fn evm_static_call(
+    state: &AccountState,
+    caller: &Address,
+    contract: &Address,
+    calldata: &[u8],
+    gas_limit: u64,
+) -> StaticCallResult {
+    let db = build_db(state, &[*caller, *contract]);
+    let ctx = Context::mainnet().with_db(db).modify_cfg_chained(|cfg| {
+        cfg.chain_id = AZTIBASE_CHAIN_ID;
+    });
+
+    let tx = match TxEnv::builder()
+        .caller(to_evm_address(caller))
+        .kind(EvmTxKind::Call(to_evm_address(contract)))
+        .data(Bytes::copy_from_slice(calldata))
+        .gas_limit(gas_limit)
+        .nonce(state.nonce(caller))
+        .gas_price(0)
+        .value(U256::ZERO)
+        .chain_id(Some(AZTIBASE_CHAIN_ID))
+        .build()
+    {
+        Ok(tx) => tx,
+        Err(e) => {
+            return StaticCallResult {
+                success: false,
+                output: vec![],
+                gas_used: 0,
+                error: Some(format!("tx build failed: {e}")),
+            };
+        }
+    };
+
+    let mut evm = ctx.build_mainnet();
+    match evm.transact(tx) {
+        Ok(result_and_state) => {
+            let gas_used = result_and_state.result.gas().spent();
+            match result_and_state.result {
+                ExecutionResult::Success { output, .. } => {
+                    let bytes = match output {
+                        revm::context_interface::result::Output::Call(b) => b.to_vec(),
+                        revm::context_interface::result::Output::Create(b, _) => b.to_vec(),
+                    };
+                    StaticCallResult {
+                        success: true,
+                        output: bytes,
+                        gas_used,
+                        error: None,
+                    }
+                }
+                ExecutionResult::Revert { output, .. } => StaticCallResult {
+                    success: false,
+                    output: output.to_vec(),
+                    gas_used,
+                    error: Some(format!("revert: 0x{}", hex_encode_bounded(&output))),
+                },
+                ExecutionResult::Halt { reason, .. } => StaticCallResult {
+                    success: false,
+                    output: vec![],
+                    gas_used,
+                    error: Some(format!("halt: {reason:?}")),
+                },
+            }
+        }
+        Err(e) => StaticCallResult {
+            success: false,
+            output: vec![],
+            gas_used: 0,
+            error: Some(format!("evm error: {e}")),
+        },
+    }
+}
+
 fn hex_encode_bounded(bytes: &[u8]) -> String {
     let truncated = bytes.len() > MAX_REVERT_REASON_BYTES;
     let slice = if truncated {
@@ -441,6 +522,52 @@ mod tests {
             call_receipt.gas_used < 500_000,
             "gas_used must be less than gas_limit"
         );
+    }
+
+    #[test]
+    fn evm_static_call_reads_without_modifying_state() {
+        let mut state = AccountState::new();
+        let deployer = [1u8; 32];
+        state.set_balance(&deployer, 1_000_000_000);
+
+        // Runtime: PUSH1 0x42, PUSH1 0, MSTORE, PUSH1 32, PUSH1 0, RETURN
+        let runtime = [0x60u8, 0x42, 0x60, 0x00, 0x52, 0x60, 0x20, 0x60, 0x00, 0xf3];
+        // Init: PUSH10 <runtime>, PUSH1 0, MSTORE, PUSH1 10, PUSH1 22, RETURN
+        let mut init_code = vec![0x69];
+        init_code.extend_from_slice(&runtime);
+        init_code.extend_from_slice(&[0x60, 0x00, 0x52, 0x60, 0x0a, 0x60, 0x16, 0xf3]);
+
+        let receipt = evm_deploy(
+            &mut state,
+            hash(b"static-deploy"),
+            &deployer,
+            &init_code,
+            0,
+            1_000_000,
+        );
+        assert!(receipt.success);
+        let contract_addr = receipt.contract_address.unwrap();
+        let balance_before = state.balance(&deployer);
+        let nonce_before = state.nonce(&deployer);
+
+        let result = evm_static_call(&state, &deployer, &contract_addr, &[], 1_000_000);
+        assert!(result.success);
+        assert_eq!(result.output.len(), 32);
+        assert_eq!(result.output[31], 0x42);
+        assert!(result.gas_used > 0);
+
+        assert_eq!(state.balance(&deployer), balance_before);
+        assert_eq!(state.nonce(&deployer), nonce_before);
+    }
+
+    #[test]
+    fn evm_static_call_nonexistent_contract() {
+        let state = AccountState::new();
+        let caller = [1u8; 32];
+        let fake_contract = [99u8; 32];
+        let result = evm_static_call(&state, &caller, &fake_contract, &[0xDE, 0xAD], 1_000_000);
+        assert!(result.success);
+        assert!(result.output.is_empty());
     }
 
     #[test]

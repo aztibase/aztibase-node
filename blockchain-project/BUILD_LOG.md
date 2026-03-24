@@ -21,6 +21,16 @@ Entries are prepended (newest first).
 
 ## Entries
 
+### aztb_call / eth_call — Read-Only EVM Calls (2026-03-24)
+- **Date**: 2026-03-24
+- **Sprint**: Ecosystem Phase 2g (Post-M9)
+- **Commits**: pending
+- **Files Changed**:
+  - `crates/aztibase-execution/src/evm.rs` — Added `evm_static_call()` and `StaticCallResult`. Runs EVM in read-only mode, no state changes. 2 tests.
+  - `crates/aztibase-rpc/src/server.rs` — Added `aztb_call` and `eth_call` RPC methods. Accepts `{to, data, from?, gas?}`, returns hex output. Supports both 20-byte and 32-byte addresses.
+- **Review Notes**: This was the single biggest missing piece for all contract interaction. Without it, no dApp could read contract state (reserves, prices, balances, allowances). Now swap UI, price display, wallet token balances, and any ethers.js/viem integration can work.
+- **Security Flags**: None.
+
 ### Block Sync Pipelining + Validator Catch-Up (2026-03-24)
 - **Date**: 2026-03-24
 - **Sprint**: Ecosystem Phase 2e (Post-M9)

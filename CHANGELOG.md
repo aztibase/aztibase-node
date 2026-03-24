@@ -5,6 +5,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ---
 
+## Ecosystem Phase 2g — aztb_call / eth_call (2026-03-24)
+
+### Added
+- **`aztb_call` / `eth_call` RPC** — Read-only EVM execution. Query any contract state without sending a transaction. Accepts `{to, data, from?, gas?}`. Unblocks: swap quotes, oracle price reads, token balance checks, all dApp interaction.
+
+---
+
 ## Ecosystem Phase 2f — Block Sync Pipelining + Validator Catch-Up (2026-03-24)
 
 ### Fixed

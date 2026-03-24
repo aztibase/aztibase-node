@@ -154,6 +154,19 @@ Retrieve a range of blocks (max 100).
 
 **Returns:** Array of `{ "number": "0x...", "hash": "0x...", "transactions": ["0x..."], "stateRoot": "0x...", "timestamp": "0x...", "gasUsed": "0x..." }`
 
+### aztb_call / eth_call
+
+Read-only EVM call. Executes contract code without sending a transaction.
+
+**Parameters:** `[{ "to": "0x...", "data": "0x...", "from": "0x..." (optional), "gas": "0x..." (optional) }]`
+
+**Returns:** Hex-encoded return data, or error with revert reason.
+
+```bash
+curl -X POST http://localhost:9944 -H 'Content-Type: application/json' \
+  -d '{"jsonrpc":"2.0","method":"aztb_call","params":[{"to":"0x42160813f939477d47bbdf8b4142ceda46fe03d3000000000000000000000000","data":"0x46b4ee00"}],"id":1}'
+```
+
 ### aztb_getBlockTransactionCount
 
 Returns the number of transactions in a block.
