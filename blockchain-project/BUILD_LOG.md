@@ -21,6 +21,17 @@ Entries are prepended (newest first).
 
 ## Entries
 
+### EVM Cross-Contract Fix + Liquidity Seeding (2026-03-24)
+- **Date**: 2026-03-24
+- **Sprint**: Ecosystem Phase 2 (Post-M9)
+- **Commits**: e60b8bb (EVM fix), PENDING (liquidity)
+- **Files Changed**:
+  - `crates/aztibase-execution/src/evm.rs` — **Critical fix**: `build_db` now loads all accounts with code into EVM CacheDB, not just caller+target. Enables cross-contract calls (Factory→Pair→Token). Extracted `load_account` helper.
+  - `contracts/seed-liquidity.mjs` — Liquidity seeding script: wraps AZTB, approves Router, creates pair, adds liquidity.
+- **Deployed**: WASZTB/tUSDC pair created via Factory. 100K WASZTB + 100B tUSDC liquidity seeded. Node binary rebuilt and deployed to VPS.
+- **Review Notes**: The EVM DB limitation was the root cause of all createPair/addLiquidity reverts. The fix loads every account with non-empty code into the CacheDB before EVM execution. This is O(n) in the number of contracts but acceptable for testnet. May need optimization for mainnet (lazy loading).
+- **Security Flags**: None.
+
 ### L2 Ecosystem Phase 2 — Contract Deployment + Swap UI (2026-03-24)
 - **Date**: 2026-03-24
 - **Sprint**: Ecosystem Phase 2 (Post-M9)

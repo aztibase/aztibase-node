@@ -5,6 +5,17 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ---
 
+## Ecosystem Phase 2c — EVM Cross-Contract Fix + Liquidity (2026-03-24)
+
+### Fixed
+- **EVM cross-contract calls** (`aztibase-execution`): `build_db` now loads all accounts with deployed code into the CacheDB before EVM execution. Previously only loaded caller + target, causing any contract-to-contract call to revert (Factory→Pair, Pair→Token, Router→Factory, etc.).
+
+### Deployed
+- **WASZTB/tUSDC pair** created via AztibaseFactory. Initial liquidity: 100K WASZTB + 100B tUSDC.
+- **Updated node binary** deployed to VPS with cross-contract fix.
+
+---
+
 ## Ecosystem Phase 2b — Contract Deployment + Swap UI (2026-03-24)
 
 ### Deployed

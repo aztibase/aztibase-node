@@ -4,7 +4,7 @@
 **Updated By:** project-lead
 **Current Phase:** M10 -- L2 Ecosystem Build
 **Current Sprint:** Ecosystem Phase 2 — DeFi deployment
-**Sprint Status:** Phase 2 CONTRACTS DEPLOYED. All 5 contracts live on testnet: PriceFeed oracle, WASZTB, AztibaseFactory, AztibaseRouter, TestUSDC. Swap UI built. Deployer script working. Next: seed initial liquidity (WASZTB/tUSDC pair), start price updater on VPS, wallet integration for live swaps.
+**Sprint Status:** Phase 2 LIQUIDITY LIVE. All 5 contracts deployed + WASZTB/tUSDC pair created with initial liquidity. EVM cross-contract call fix deployed. Swap UI built. Next: start price updater on VPS, wallet integration for live swaps, then Phase 3 (AI Moat).
 
 ---
 
