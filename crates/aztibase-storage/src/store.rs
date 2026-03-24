@@ -46,6 +46,9 @@ pub const BATCH_INDEX_TABLE: TableDefinition<&[u8], &[u8]> = TableDefinition::ne
 /// Batch transaction list: anchor hash (32 bytes) → postcard(Vec<[u8; 32]>).
 pub const BATCH_TXS_TABLE: TableDefinition<&[u8], &[u8]> = TableDefinition::new("batch_txs");
 
+/// Batch metadata: anchor hash (32 bytes) → postcard(BatchMeta { timestamp, gas_used }).
+pub const BATCH_META_TABLE: TableDefinition<&[u8], &[u8]> = TableDefinition::new("batch_meta");
+
 /// Weak subjectivity checkpoints: batch index (u64 BE) → postcard(Checkpoint).
 pub const CHECKPOINTS_TABLE: TableDefinition<&[u8], &[u8]> = TableDefinition::new("checkpoints");
 
@@ -54,7 +57,7 @@ pub const EQUIVOCATION_PROOFS_TABLE: TableDefinition<&[u8], &[u8]> =
     TableDefinition::new("equivocation_proofs");
 
 /// All table definitions for batch initialization.
-const ALL_TABLES: [TableDefinition<&[u8], &[u8]>; 14] = [
+const ALL_TABLES: [TableDefinition<&[u8], &[u8]>; 15] = [
     BLOCKS_TABLE,
     STATE_TABLE,
     TX_TABLE,
@@ -67,6 +70,7 @@ const ALL_TABLES: [TableDefinition<&[u8], &[u8]>; 14] = [
     BATCH_ROOTS_TABLE,
     BATCH_INDEX_TABLE,
     BATCH_TXS_TABLE,
+    BATCH_META_TABLE,
     CHECKPOINTS_TABLE,
     EQUIVOCATION_PROOFS_TABLE,
 ];

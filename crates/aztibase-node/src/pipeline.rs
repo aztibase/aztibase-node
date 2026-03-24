@@ -3373,6 +3373,16 @@ impl ExecutionPipeline {
             let tx_hashes: Vec<[u8; 32]> = receipts.iter().map(|r| r.tx_hash).collect();
             let _ = aztibase_execution::store_batch_txs(store, &batch.anchor_hash, &tx_hashes);
 
+            let now_secs = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_secs())
+                .unwrap_or(0);
+            let meta = aztibase_execution::BatchMeta {
+                timestamp: now_secs,
+                gas_used: total_gas,
+            };
+            let _ = aztibase_execution::store_batch_meta(store, &batch.anchor_hash, &meta);
+
             if batch_number > 0 && batch_number.is_multiple_of(CHECKPOINT_INTERVAL) {
                 let now_ms = std::time::SystemTime::now()
                     .duration_since(std::time::UNIX_EPOCH)

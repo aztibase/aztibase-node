@@ -371,7 +371,10 @@ impl Libp2pTransport {
                                 "Rejected invalid gossip message"
                             );
                             if !self.boot_peers.contains(&propagation_source) {
-                                self.record_peer_offense(&propagation_source, OffenseSeverity::Medium);
+                                self.record_peer_offense(
+                                    &propagation_source,
+                                    OffenseSeverity::Medium,
+                                );
                             }
                         }
                         gossip::MessageAcceptance::Ignore => {}
@@ -440,8 +443,11 @@ impl Libp2pTransport {
                 SwarmEvent::OutgoingConnectionError { error, peer_id, .. } => {
                     warn!("Outgoing connection denied: {error}");
                     if let (Some(rep_store), Some(pid)) = (&self.reputation, peer_id) {
-                        if !self.boot_peers.contains(&pid) {
-                            let _ = rep_store.record_offense(&pid.to_bytes(), OffenseSeverity::Low);
+                        let is_boot = self.boot_peers.contains(&pid);
+                        if !is_boot {
+                            rep_store
+                                .record_offense(&pid.to_bytes(), OffenseSeverity::Low)
+                                .ok();
                         }
                     }
                 }

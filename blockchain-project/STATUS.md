@@ -3,8 +3,8 @@
 **Last Updated:** 2026-03-24
 **Updated By:** project-lead
 **Current Phase:** M10 -- L2 Ecosystem Build
-**Current Sprint:** Ecosystem Phase 2 — DeFi deployment
-**Sprint Status:** Phase 2 COMPLETE. All 5 contracts deployed + WASZTB/tUSDC pair with liquidity. EVM cross-contract fix live. Swap UI + indexer explorer UI built. Old explorer removed. Local cross-compilation via cargo-zigbuild set up. Next: fix getBlockRange RPC to return full block data (txs/timestamps), start price updater, then Phase 3 (AI Moat).
+**Current Sprint:** Ecosystem Phase 2f — Sync + RPC fixes
+**Sprint Status:** Phase 2 COMPLETE. getBlockRange RPC enriched (full block data). Price updater built. Block sync pipelining: validators catch up, 5 in-flight requests, 100 batches/req, adaptive ticker. Sentinel CSV evaluated — not worth retraining (no real tx load yet). Next: deploy to VPS, then Phase 3 (AI Moat).
 
 ---
 

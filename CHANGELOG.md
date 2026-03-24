@@ -5,6 +5,27 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ---
 
+## Ecosystem Phase 2f — Block Sync Pipelining + Validator Catch-Up (2026-03-24)
+
+### Fixed
+- **Validators can now catch up**: Removed `!node_is_validator` gate that prevented validators from using block sync catch-up. Previously, a validator that fell behind had NO recovery mechanism.
+- **Sync throughput**: Pipelined 5 concurrent in-flight requests (was 1 sequential). 100 batches per request (was 50). Adaptive ticker: 100ms during catch-up, 5s when synced. Theoretical ~500x improvement.
+- **Timeout reduced**: Block sync read timeout 30s → 5s (fail fast, retry with another peer).
+
+---
+
+## Ecosystem Phase 2e — RPC Block Data + Price Updater (2026-03-24)
+
+### Fixed
+- **getBlockRange RPC**: Now returns full block data (`transactions`, `stateRoot`, `timestamp`, `gasUsed`) instead of just `{number, hash}`. Indexer backfill works correctly.
+- **getBlockByNumber / getBlockByHash**: Also enriched with `timestamp` and `gasUsed` fields.
+
+### Added
+- **Batch metadata storage** (`BATCH_META_TABLE`): Persists timestamp and gas_used per committed batch. Enables time-based queries and explorer display.
+- **Price feed updater** (`contracts/oracle/price-updater.mjs`): Long-running process that fetches BTC, ETH, AZTB, USDC prices from CoinGecko and submits batch updates to the on-chain PriceFeed oracle via signed EVM calls.
+
+---
+
 ## Ecosystem Phase 2d — Indexer Explorer UI + Cleanup (2026-03-24)
 
 ### Added

@@ -21,6 +21,34 @@ Entries are prepended (newest first).
 
 ## Entries
 
+### Block Sync Pipelining + Validator Catch-Up (2026-03-24)
+- **Date**: 2026-03-24
+- **Sprint**: Ecosystem Phase 2e (Post-M9)
+- **Commits**: pending
+- **Files Changed**:
+  - `crates/aztibase-network/src/block_sync.rs` — Pipelined sync: 5 in-flight requests (was 1), 100 batches/request (was 50), 8MB frame (was 4MB), 5s timeout (was 30s). New `request_failed()`, `can_request()`, `inflight()` on BlockSyncProtocol. 3 new tests (pipelining, request_failed, state_machine updated).
+  - `crates/aztibase-node/src/main.rs` — Validators now catch up via block sync (removed `!node_is_validator` gate). Adaptive ticker: 100ms when behind, 5s when synced. Pipelined request loop fires up to 5 concurrent requests per tick. Gossip batch announces only forwarded to pipeline for non-validators at exact next index.
+  - `crates/aztibase-network/src/transport.rs` — Fixed pre-existing clippy collapsible_if warning.
+- **Review Notes**: Root cause of 92K block sync gap: validators had NO catch-up mechanism (code gated behind `!node_is_validator`). Full nodes limited to 10 blocks/sec (50 batches, 1 in-flight, 5s interval). Research: Sui uses 5 concurrent fetches, Lighthouse pipelines 5 batches, Mysticeti handles validator crash recovery via uncertified DAG sync. New throughput: ~5000 blocks/sec theoretical, pipeline-execution-limited in practice.
+- **Security Flags**: None.
+
+### RPC Block Data Enrichment + Price Updater (2026-03-24)
+- **Date**: 2026-03-24
+- **Sprint**: Ecosystem Phase 2d (Post-M9)
+- **Commits**: pending
+- **Files Changed**:
+  - `crates/aztibase-storage/src/store.rs` — Added `BATCH_META_TABLE` (anchor_hash → timestamp + gas_used). ALL_TABLES 14→15.
+  - `crates/aztibase-storage/src/lib.rs` — Re-export BATCH_META_TABLE.
+  - `crates/aztibase-execution/src/persist.rs` — Added `BatchMeta` struct, `store_batch_meta`, `get_batch_meta` + test.
+  - `crates/aztibase-execution/src/lib.rs` — Export BatchMeta, store/get functions.
+  - `crates/aztibase-node/src/pipeline.rs` — Store BatchMeta (timestamp + gas_used) at commit time.
+  - `crates/aztibase-rpc/src/server.rs` — `getBlockRange` now returns full block data (transactions, stateRoot, timestamp, gasUsed). `getBlockByNumber` and `getBlockByHash` also include timestamp + gasUsed.
+  - `crates/aztibase-network/src/transport.rs` — Fixed pre-existing clippy collapsible_if warning.
+  - `contracts/oracle/price-updater.mjs` — Working price updater: CoinGecko fetch → ABI encode updatePrices → sign + send via RPC. 4 feeds (BTC, ETH, AZTB, USDC).
+  - `docs/rpc-api.md` — Updated getBlockRange return format.
+- **Review Notes**: getBlockRange was only returning {number, hash} — indexer expected full block data. Added BATCH_META_TABLE for timestamp/gasUsed storage. Old blocks (pre-upgrade) will have no metadata (graceful null). Price updater uses same Ed25519 signing as deploy.mjs.
+- **Security Flags**: None.
+
 ### Indexer Explorer UI + Cleanup (2026-03-24)
 - **Date**: 2026-03-24
 - **Sprint**: Ecosystem Phase 2 (Post-M9)

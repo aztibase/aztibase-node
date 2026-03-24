@@ -2006,11 +2006,11 @@ async fn main() -> Result<()> {
     let mut pending_batch_txs: std::collections::HashMap<[u8; 32], Vec<Vec<u8>>> =
         std::collections::HashMap::new();
 
-    // Block sync: catch-up protocol for full nodes
     let mut sync_proto = BlockSyncProtocol::new(batch_index);
     let mut connected_peers: Vec<PeerId> = Vec::new();
-    let mut catchup_pending = false;
-    let mut catchup_ticker = tokio::time::interval(std::time::Duration::from_secs(5));
+    let catchup_fast = std::time::Duration::from_millis(100);
+    let catchup_idle = std::time::Duration::from_secs(5);
+    let mut catchup_ticker = tokio::time::interval(catchup_idle);
     catchup_ticker.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
 
     // Request snapshot if state is empty (new node joining the network)
@@ -2039,19 +2039,13 @@ async fn main() -> Result<()> {
                         tracing::info!(peer = %peer, peers = peer_count, "Peer connected");
                         let _ = consensus_tx.send(ConsensusInput::PeerCountChanged(peer_count)).await;
 
-                        if !node_is_validator {
+                        {
                             let probe = aztibase_network::block_sync::build_batch_request(
                                 sync_proto.last_synced_index() + 1,
                                 1,
                             );
                             if let Ok(encoded) = aztibase_network::block_sync::encode_request(&probe) {
-                                tracing::info!(
-                                    peer = %peer,
-                                    from = sync_proto.last_synced_index() + 1,
-                                    "Probing peer for current tip"
-                                );
                                 transport.send_block_sync_request(&peer, encoded);
-                                catchup_pending = true;
                             }
                         }
                     }
@@ -2230,29 +2224,13 @@ async fn main() -> Result<()> {
                             && let Ok(announce) = aztibase_network::decode_batch_announce(&data)
                         {
                             sync_proto.set_tip_index(announce.index);
-                            // Validators already receive batches from their own consensus
-                            // commits — only forward gossip batch announces on full nodes.
-                            if !node_is_validator {
-                                tracing::info!(
-                                    batch = announce.index,
-                                    txs = announce.transactions.len(),
-                                    "Received committed batch via gossip"
-                                );
-                                if announce.index > batch_index + 1 && !catchup_pending {
-                                    tracing::info!(
-                                        local = batch_index,
-                                        remote = announce.index,
-                                        gap = announce.index - batch_index - 1,
-                                        "Gap detected, triggering catch-up"
-                                    );
-                                }
+                            if !node_is_validator && announce.index == batch_index + 1 {
                                 let batch = CommittedBatch {
                                     anchor_hash: announce.anchor_hash,
                                     vertex_order: vec![],
                                     transactions: announce.transactions,
                                 };
                                 if pipeline_tx.send(batch).await.is_err() {
-                                    tracing::error!("Pipeline channel closed during block sync");
                                     break;
                                 }
                             }
@@ -2330,15 +2308,8 @@ async fn main() -> Result<()> {
                         }
                     }
                     NetworkEvent::BlockSyncResponse { peer, response, .. } => {
-                        catchup_pending = false;
                         match aztibase_network::block_sync::decode_response(&response) {
                             Ok(aztibase_network::BlockSyncMessage::ResponseBatches { batches, tip_index, .. }) => {
-                                tracing::info!(
-                                    peer = %peer,
-                                    received = batches.len(),
-                                    tip = tip_index,
-                                    "Block sync: catch-up response"
-                                );
                                 let applied = sync_proto.apply_response(&batches, tip_index);
                                 for b in &batches {
                                     let committed = CommittedBatch {
@@ -2347,7 +2318,6 @@ async fn main() -> Result<()> {
                                         transactions: b.transactions.clone(),
                                     };
                                     if pipeline_tx.send(committed).await.is_err() {
-                                        tracing::error!("Pipeline channel closed during catch-up");
                                         break;
                                     }
                                 }
@@ -2367,11 +2337,6 @@ async fn main() -> Result<()> {
                                 }
                             }
                             Ok(aztibase_network::BlockSyncMessage::ResponseVertices { vertices, .. }) => {
-                                tracing::info!(
-                                    peer = %peer,
-                                    received = vertices.len(),
-                                    "DAG vertex fetch response"
-                                );
                                 for vertex_data in vertices {
                                     let _ = consensus_tx.send(ConsensusInput::ReceivedVertex(vertex_data)).await;
                                 }
@@ -2383,7 +2348,7 @@ async fn main() -> Result<()> {
                         }
                     }
                     NetworkEvent::BlockSyncOutboundFailure { peer, error, .. } => {
-                        catchup_pending = false;
+                        sync_proto.request_failed();
                         tracing::warn!(peer = %peer, error = ?error, "Block sync: outbound failure");
                     }
                 }
@@ -2579,35 +2544,26 @@ async fn main() -> Result<()> {
                 s_txs_processed.fetch_add(result.receipts.len() as u64, std::sync::atomic::Ordering::Relaxed);
             }
             _ = catchup_ticker.tick() => {
-                if !node_is_validator {
-                    let needs = sync_proto.needs_sync();
-                    let has_peers = !connected_peers.is_empty();
-                    tracing::debug!(
-                        needs_sync = needs,
-                        catchup_pending,
-                        peers = connected_peers.len(),
-                        tip = sync_proto.tip_index(),
-                        synced = sync_proto.last_synced_index(),
-                        batch_index,
-                        "Catch-up ticker"
-                    );
-                    if needs
-                        && !catchup_pending
-                        && has_peers
-                        && let Some(req_msg) = sync_proto.next_request()
-                    {
-                        let peer_idx = (batch_index as usize) % connected_peers.len();
+                let behind = sync_proto.batches_behind();
+
+                if behind > 10 {
+                    catchup_ticker = tokio::time::interval(catchup_fast);
+                    catchup_ticker.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+                } else if behind == 0 {
+                    catchup_ticker = tokio::time::interval(catchup_idle);
+                    catchup_ticker.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+                }
+
+                if !connected_peers.is_empty() {
+                    while sync_proto.can_request() {
+                        let Some(req_msg) = sync_proto.next_request() else { break };
+                        let peer_idx = (sync_proto.last_synced_index() as usize + sync_proto.inflight()) % connected_peers.len();
                         let peer = connected_peers[peer_idx];
-                        if let Ok(encoded) = aztibase_network::block_sync::encode_request(&req_msg) {
-                            tracing::info!(
-                                peer = %peer,
-                                from = sync_proto.last_synced_index() + 1,
-                                behind = sync_proto.batches_behind(),
-                                "Sending catch-up request"
-                            );
-                            transport.send_block_sync_request(&peer, encoded);
-                            catchup_pending = true;
+                        let Ok(encoded) = aztibase_network::block_sync::encode_request(&req_msg) else { break };
+                        if behind > 100 && sync_proto.inflight() <= 1 {
+                            tracing::info!(behind, inflight = sync_proto.inflight(), "Catch-up sync");
                         }
+                        transport.send_block_sync_request(&peer, encoded);
                     }
                 }
             }

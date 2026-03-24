@@ -152,7 +152,7 @@ Retrieve a range of blocks (max 100).
 
 **Parameters:** `[from, to]` — u64 values
 
-**Returns:** Array of `{ "number": "0x...", "hash": "0x..." }`
+**Returns:** Array of `{ "number": "0x...", "hash": "0x...", "transactions": ["0x..."], "stateRoot": "0x...", "timestamp": "0x...", "gasUsed": "0x..." }`
 
 ### aztb_getBlockTransactionCount
 

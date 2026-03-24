@@ -1546,6 +1546,9 @@ async fn handle_get_block_by_number(state: &RpcState, req: &JsonRpcRequest) -> J
                 .iter()
                 .map(|h| format!("0x{}", hex::encode(h)))
                 .collect();
+            let meta = aztibase_execution::get_batch_meta(store, &anchor_hash)
+                .ok()
+                .flatten();
             let mut result = serde_json::json!({
                 "number": format!("0x{num:x}"),
                 "hash": format!("0x{}", hex::encode(anchor_hash)),
@@ -1553,6 +1556,10 @@ async fn handle_get_block_by_number(state: &RpcState, req: &JsonRpcRequest) -> J
             });
             if let Some(sr) = state_root {
                 result["stateRoot"] = serde_json::json!(format!("0x{}", hex::encode(sr)));
+            }
+            if let Some(m) = meta {
+                result["timestamp"] = serde_json::json!(format!("0x{:x}", m.timestamp));
+                result["gasUsed"] = serde_json::json!(format!("0x{:x}", m.gas_used));
             }
             JsonRpcResponse::success(req.id.clone(), result)
         }
@@ -1580,18 +1587,23 @@ async fn handle_get_block_by_hash(state: &RpcState, req: &JsonRpcRequest) -> Jso
                 .ok()
                 .flatten()
                 .unwrap_or_default();
+            let meta = aztibase_execution::get_batch_meta(store, &hash)
+                .ok()
+                .flatten();
             let txs: Vec<String> = tx_hashes
                 .iter()
                 .map(|h| format!("0x{}", hex::encode(h)))
                 .collect();
-            JsonRpcResponse::success(
-                req.id.clone(),
-                serde_json::json!({
-                    "hash": format!("0x{}", hex::encode(hash)),
-                    "stateRoot": format!("0x{}", hex::encode(state_root)),
-                    "transactions": txs,
-                }),
-            )
+            let mut result = serde_json::json!({
+                "hash": format!("0x{}", hex::encode(hash)),
+                "stateRoot": format!("0x{}", hex::encode(state_root)),
+                "transactions": txs,
+            });
+            if let Some(m) = meta {
+                result["timestamp"] = serde_json::json!(format!("0x{:x}", m.timestamp));
+                result["gasUsed"] = serde_json::json!(format!("0x{:x}", m.gas_used));
+            }
+            JsonRpcResponse::success(req.id.clone(), result)
         }
         Ok(None) => JsonRpcResponse::success(req.id.clone(), serde_json::Value::Null),
         Err(e) => JsonRpcResponse::error(req.id.clone(), -32000, format!("storage error: {e}")),
@@ -1851,10 +1863,33 @@ async fn handle_get_block_range(state: &RpcState, req: &JsonRpcRequest) -> JsonR
             let blocks: Vec<serde_json::Value> = entries
                 .iter()
                 .map(|(num, hash)| {
-                    serde_json::json!({
+                    let state_root = aztibase_execution::get_batch_root(store, hash)
+                        .ok()
+                        .flatten();
+                    let tx_hashes = aztibase_execution::get_batch_txs(store, hash)
+                        .ok()
+                        .flatten()
+                        .unwrap_or_default();
+                    let meta = aztibase_execution::get_batch_meta(store, hash)
+                        .ok()
+                        .flatten();
+                    let txs: Vec<String> = tx_hashes
+                        .iter()
+                        .map(|h| format!("0x{}", hex::encode(h)))
+                        .collect();
+                    let mut block = serde_json::json!({
                         "number": format!("0x{num:x}"),
                         "hash": format!("0x{}", hex::encode(hash)),
-                    })
+                        "transactions": txs,
+                    });
+                    if let Some(sr) = state_root {
+                        block["stateRoot"] = serde_json::json!(format!("0x{}", hex::encode(sr)));
+                    }
+                    if let Some(m) = meta {
+                        block["timestamp"] = serde_json::json!(format!("0x{:x}", m.timestamp));
+                        block["gasUsed"] = serde_json::json!(format!("0x{:x}", m.gas_used));
+                    }
+                    block
                 })
                 .collect();
             JsonRpcResponse::success(req.id.clone(), serde_json::json!(blocks))

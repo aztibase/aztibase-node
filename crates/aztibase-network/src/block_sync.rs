@@ -7,8 +7,8 @@ use libp2p::request_response;
 use serde::{Deserialize, Serialize};
 
 const BLOCK_SYNC_VERSION: u8 = 1;
-pub const MAX_BATCHES_PER_REQUEST: u64 = 50;
-const MAX_FRAME_SIZE: usize = 4_194_304; // 4 MiB (batches can be large)
+pub const MAX_BATCHES_PER_REQUEST: u64 = 100;
+const MAX_FRAME_SIZE: usize = 8_388_608;
 
 pub const BLOCK_SYNC_PROTOCOL: StreamProtocol = StreamProtocol::new("/aztibase/block-sync/1");
 
@@ -74,7 +74,7 @@ impl request_response::Codec for BlockSyncCodec {
     }
 }
 
-const READ_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(30);
+const READ_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(5);
 
 async fn read_frame<T: AsyncRead + Unpin + Send>(io: &mut T) -> io::Result<Vec<u8>> {
     let mut len_buf = [0u8; 4];
@@ -206,17 +206,22 @@ pub fn build_vertex_response(vertices: Vec<Vec<u8>>) -> BlockSyncMessage {
     }
 }
 
-/// Tracks block sync state for a full node catching up to the network tip.
+pub const MAX_INFLIGHT_REQUESTS: usize = 5;
+
 pub struct BlockSyncProtocol {
     last_synced_index: u64,
+    next_request_index: u64,
     tip_index: u64,
+    inflight: usize,
 }
 
 impl BlockSyncProtocol {
     pub fn new(last_synced_index: u64) -> Self {
         Self {
             last_synced_index,
+            next_request_index: last_synced_index,
             tip_index: last_synced_index,
+            inflight: 0,
         }
     }
 
@@ -226,6 +231,10 @@ impl BlockSyncProtocol {
 
     pub fn tip_index(&self) -> u64 {
         self.tip_index
+    }
+
+    pub fn inflight(&self) -> usize {
+        self.inflight
     }
 
     pub fn set_tip_index(&mut self, tip: u64) {
@@ -238,20 +247,33 @@ impl BlockSyncProtocol {
         self.last_synced_index < self.tip_index
     }
 
+    pub fn can_request(&self) -> bool {
+        self.next_request_index < self.tip_index && self.inflight < MAX_INFLIGHT_REQUESTS
+    }
+
     pub fn batches_behind(&self) -> u64 {
         self.tip_index.saturating_sub(self.last_synced_index)
     }
 
-    pub fn next_request(&self) -> Option<BlockSyncMessage> {
-        if !self.needs_sync() {
+    pub fn next_request(&mut self) -> Option<BlockSyncMessage> {
+        if !self.can_request() {
             return None;
         }
-        let remaining = self.tip_index - self.last_synced_index;
+        let remaining = self.tip_index - self.next_request_index;
         let count = remaining.min(MAX_BATCHES_PER_REQUEST);
-        Some(build_batch_request(self.last_synced_index + 1, count))
+        let msg = build_batch_request(self.next_request_index + 1, count);
+        self.next_request_index += count;
+        self.inflight += 1;
+        Some(msg)
+    }
+
+    pub fn request_failed(&mut self) {
+        self.inflight = self.inflight.saturating_sub(1);
+        self.next_request_index = self.last_synced_index;
     }
 
     pub fn apply_response(&mut self, batches: &[SyncBatch], peer_tip: u64) -> u64 {
+        self.inflight = self.inflight.saturating_sub(1);
         let mut applied = 0u64;
         for b in batches {
             if b.index == self.last_synced_index + 1 {
@@ -264,8 +286,6 @@ impl BlockSyncProtocol {
     }
 }
 
-/// Gossip-published committed batch for live sync.
-/// Validators publish this after each commit so full nodes can follow in real time.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct CommittedBatchAnnounce {
     pub index: u64,
@@ -364,23 +384,19 @@ mod tests {
                 from_index, count, ..
             } => {
                 assert_eq!(from_index, 1);
-                assert_eq!(count, 50);
+                assert_eq!(count, 100);
             }
             _ => panic!("expected RequestBatches"),
         }
+        assert_eq!(proto.inflight(), 1);
 
-        let batches: Vec<SyncBatch> = (1..=50).map(make_batch).collect();
+        let batches: Vec<SyncBatch> = (1..=100).map(make_batch).collect();
         let applied = proto.apply_response(&batches, 100);
-        assert_eq!(applied, 50);
-        assert_eq!(proto.last_synced_index(), 50);
-        assert!(proto.needs_sync());
-
-        let batches2: Vec<SyncBatch> = (51..=100).map(make_batch).collect();
-        let applied2 = proto.apply_response(&batches2, 100);
-        assert_eq!(applied2, 50);
+        assert_eq!(applied, 100);
         assert_eq!(proto.last_synced_index(), 100);
         assert!(!proto.needs_sync());
         assert!(proto.next_request().is_none());
+        assert_eq!(proto.inflight(), 0);
     }
 
     #[test]
@@ -396,10 +412,41 @@ mod tests {
     fn sync_protocol_skips_out_of_order() {
         let mut proto = BlockSyncProtocol::new(0);
         proto.set_tip_index(10);
+        let _ = proto.next_request();
         let batch5 = make_batch(5);
         let applied = proto.apply_response(&[batch5], 10);
         assert_eq!(applied, 0);
         assert_eq!(proto.last_synced_index(), 0);
+    }
+
+    #[test]
+    fn sync_protocol_pipelining() {
+        let mut proto = BlockSyncProtocol::new(0);
+        proto.set_tip_index(1000);
+
+        for i in 0..MAX_INFLIGHT_REQUESTS {
+            assert!(proto.can_request());
+            let _ = proto.next_request().unwrap();
+            assert_eq!(proto.inflight(), i + 1);
+        }
+        assert!(!proto.can_request());
+        assert!(proto.next_request().is_none());
+
+        let batches: Vec<SyncBatch> = (1..=100).map(make_batch).collect();
+        proto.apply_response(&batches, 1000);
+        assert_eq!(proto.inflight(), MAX_INFLIGHT_REQUESTS - 1);
+        assert!(proto.can_request());
+    }
+
+    #[test]
+    fn sync_protocol_request_failed_resets() {
+        let mut proto = BlockSyncProtocol::new(0);
+        proto.set_tip_index(500);
+        let _ = proto.next_request();
+        assert_eq!(proto.inflight(), 1);
+        proto.request_failed();
+        assert_eq!(proto.inflight(), 0);
+        assert!(proto.can_request());
     }
 
     #[test]

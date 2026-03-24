@@ -1,7 +1,7 @@
 use aztibase_storage::{
-    ACCOUNTS_TABLE, BATCH_INDEX_TABLE, BATCH_ROOTS_TABLE, BATCH_TXS_TABLE, CHECKPOINTS_TABLE,
-    CONTRACT_CODE_TABLE, CONTRACT_STORAGE_TABLE, EQUIVOCATION_PROOFS_TABLE, STATE_TABLE,
-    StateStore, StorageError, StorageResult, TX_TABLE, TableDef,
+    ACCOUNTS_TABLE, BATCH_INDEX_TABLE, BATCH_META_TABLE, BATCH_ROOTS_TABLE, BATCH_TXS_TABLE,
+    CHECKPOINTS_TABLE, CONTRACT_CODE_TABLE, CONTRACT_STORAGE_TABLE, EQUIVOCATION_PROOFS_TABLE,
+    STATE_TABLE, StateStore, StorageError, StorageResult, TX_TABLE, TableDef,
 };
 
 use crate::agent::AgentPolicyStore;
@@ -262,6 +262,37 @@ pub fn get_batch_txs(
     match store.get(BATCH_TXS_TABLE, anchor_hash)? {
         Some(bytes) => match postcard::from_bytes::<Vec<[u8; 32]>>(&bytes) {
             Ok(hashes) => Ok(Some(hashes)),
+            Err(_) => Ok(None),
+        },
+        None => Ok(None),
+    }
+}
+
+/// Per-batch metadata stored alongside roots and tx lists.
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
+pub struct BatchMeta {
+    pub timestamp: u64,
+    pub gas_used: u64,
+}
+
+pub fn store_batch_meta(
+    store: &StateStore,
+    anchor_hash: &[u8; 32],
+    meta: &BatchMeta,
+) -> StorageResult<()> {
+    let Ok(data) = postcard::to_allocvec(meta) else {
+        return Ok(());
+    };
+    store.put(BATCH_META_TABLE, anchor_hash, &data)
+}
+
+pub fn get_batch_meta(
+    store: &StateStore,
+    anchor_hash: &[u8; 32],
+) -> StorageResult<Option<BatchMeta>> {
+    match store.get(BATCH_META_TABLE, anchor_hash)? {
+        Some(bytes) => match postcard::from_bytes::<BatchMeta>(&bytes) {
+            Ok(meta) => Ok(Some(meta)),
             Err(_) => Ok(None),
         },
         None => Ok(None),
@@ -776,6 +807,27 @@ mod tests {
         assert_eq!(loaded, tx_hashes);
 
         assert!(get_batch_txs(&store, &[0xFF; 32]).unwrap().is_none());
+
+        cleanup(&path);
+    }
+
+    #[test]
+    fn batch_meta_roundtrip() {
+        let path = test_db_path();
+        let store = StateStore::open(path.to_str().unwrap()).unwrap();
+
+        let anchor = [0xEE; 32];
+        let meta = BatchMeta {
+            timestamp: 1711234567,
+            gas_used: 500_000,
+        };
+
+        store_batch_meta(&store, &anchor, &meta).unwrap();
+        let loaded = get_batch_meta(&store, &anchor).unwrap().unwrap();
+        assert_eq!(loaded.timestamp, 1711234567);
+        assert_eq!(loaded.gas_used, 500_000);
+
+        assert!(get_batch_meta(&store, &[0xFF; 32]).unwrap().is_none());
 
         cleanup(&path);
     }
