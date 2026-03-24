@@ -5,6 +5,25 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ---
 
+## Ecosystem Phase 2b — Contract Deployment + Swap UI (2026-03-24)
+
+### Deployed
+- **PriceFeed Oracle** deployed to testnet: `0x42160813f939477d...`
+- **WASZTB** (wrapped native AZTB) deployed: `0x2e4b2e504bde131d...`
+- **AztibaseFactory** deployed: `0x682ae557176d6a11...`
+- **AztibaseRouter** deployed: `0xdb8dbfe4839efb8d...`
+- **TestUSDC** deployed: `0x6602f41c4e877497...` (10M minted for liquidity)
+
+### Added
+- **Swap UI** (`/tools/swap/`): Token swap interface with pair selection, quote simulation, rate/impact display, and deployed contract addresses.
+- **Contract deployer** (`contracts/deploy.mjs`): Self-contained deployment script — postcard encoding, Ed25519 signing, AZTB envelope format. Supports single or batch deployments.
+- **TestUSDC** (`contracts/dex/TestUSDC.sol`): Test stablecoin for DEX liquidity pairing.
+
+### Fixed
+- **WASZTB withdraw** (`Waztb.sol`): Replaced deprecated `payable.transfer()` with `call{value:}` pattern.
+
+---
+
 ## Ecosystem Phase 2 — Oracle + AMM DEX (2026-03-24)
 
 ### Added

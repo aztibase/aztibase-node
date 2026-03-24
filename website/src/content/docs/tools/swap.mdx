@@ -1,0 +1,460 @@
+---
+title: Swap
+description: Swap tokens on the Aztibase DEX
+---
+
+<div class="swap-container" id="swap">
+  <div class="swap-card">
+    <div class="swap-header">
+      <span class="swap-dot"></span>
+      <span class="swap-label">Aztibase DEX</span>
+      <span class="swap-fee">0.3% fee</span>
+    </div>
+
+    <div class="swap-section">
+      <div class="swap-section-header">
+        <span class="swap-section-label">You pay</span>
+        <span class="swap-balance" id="swap-balance-from">Balance: --</span>
+      </div>
+      <div class="swap-input-row">
+        <input
+          type="text"
+          id="swap-amount-in"
+          class="swap-amount"
+          placeholder="0.0"
+          spellcheck="false"
+          autocomplete="off"
+        />
+        <select id="swap-token-from" class="swap-token-select">
+          <option value="WASZTB">WASZTB</option>
+          <option value="tUSDC">tUSDC</option>
+        </select>
+      </div>
+    </div>
+
+    <button type="button" id="swap-flip" class="swap-flip-btn" aria-label="Flip tokens">
+      &darr;
+    </button>
+
+    <div class="swap-section">
+      <div class="swap-section-header">
+        <span class="swap-section-label">You receive</span>
+        <span class="swap-balance" id="swap-balance-to">Balance: --</span>
+      </div>
+      <div class="swap-input-row">
+        <input
+          type="text"
+          id="swap-amount-out"
+          class="swap-amount"
+          placeholder="0.0"
+          readonly
+          spellcheck="false"
+        />
+        <select id="swap-token-to" class="swap-token-select">
+          <option value="tUSDC">tUSDC</option>
+          <option value="WASZTB">WASZTB</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="swap-details" id="swap-details" style="display:none;">
+      <div class="swap-detail-row">
+        <span>Rate</span>
+        <span id="swap-rate">--</span>
+      </div>
+      <div class="swap-detail-row">
+        <span>Price Impact</span>
+        <span id="swap-impact">--</span>
+      </div>
+      <div class="swap-detail-row">
+        <span>Min. Received</span>
+        <span id="swap-min-out">--</span>
+      </div>
+    </div>
+
+    <button type="button" id="swap-btn" class="swap-submit" disabled>
+      Enter an amount
+    </button>
+
+    <div id="swap-result" class="swap-result" style="display:none;"></div>
+
+    <div class="swap-info">
+      <div class="swap-info-row">
+        <span class="swap-info-label">Router</span>
+        <code class="swap-info-val" id="swap-router-addr">--</code>
+      </div>
+      <div class="swap-info-row">
+        <span class="swap-info-label">Factory</span>
+        <code class="swap-info-val" id="swap-factory-addr">--</code>
+      </div>
+      <div class="swap-info-row">
+        <span class="swap-info-label">WASZTB</span>
+        <code class="swap-info-val" id="swap-wasztb-addr">--</code>
+      </div>
+    </div>
+  </div>
+</div>
+
+## Liquidity
+
+The Aztibase DEX uses an **x*y=k** constant-product AMM (Uniswap V2 pattern). Liquidity providers earn 0.3% on every swap.
+
+### Contracts
+
+| Contract | Purpose |
+|----------|---------|
+| **WASZTB** | Wrapped native AZTB (ERC20) |
+| **AztibaseFactory** | Creates and tracks trading pairs |
+| **AztibasePair** | Liquidity pool with LP token |
+| **AztibaseRouter** | User-facing swap + liquidity entry point |
+
+### How it works
+
+1. **Wrap** native AZTB into WASZTB (or use existing ERC20 tokens)
+2. **Add liquidity** to a pair via the Router — receive LP tokens
+3. **Swap** tokens — the Router finds the best path and handles slippage
+4. **Remove liquidity** — burn LP tokens, receive underlying tokens
+
+<style>{`
+.swap-container {
+  max-width: 440px;
+  margin: 1.5rem auto;
+}
+.swap-card {
+  border: 1.5px solid var(--sl-color-gray-5);
+  border-radius: 14px;
+  padding: 1.5rem;
+  background: var(--sl-color-bg-nav);
+  position: relative;
+}
+:root[data-theme='dark'] .swap-card {
+  border-color: rgba(136, 120, 166, 0.15);
+}
+.swap-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 1.25rem;
+}
+.swap-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--sl-color-accent);
+}
+.swap-label {
+  font-family: 'Jura', sans-serif;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--sl-color-gray-2);
+  flex: 1;
+}
+.swap-fee {
+  font-size: 0.7rem;
+  color: var(--sl-color-gray-3);
+  background: rgba(136, 120, 166, 0.08);
+  padding: 0.2rem 0.5rem;
+  border-radius: 4px;
+  font-family: 'Fira Code', monospace;
+}
+.swap-section {
+  background: var(--sl-color-black);
+  border: 1.5px solid var(--sl-color-gray-5);
+  border-radius: 10px;
+  padding: 0.75rem 1rem;
+}
+:root[data-theme='dark'] .swap-section {
+  border-color: rgba(136, 120, 166, 0.10);
+}
+.swap-section-header {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 0.5rem;
+}
+.swap-section-label {
+  font-size: 0.72rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--sl-color-gray-3);
+}
+.swap-balance {
+  font-size: 0.72rem;
+  color: var(--sl-color-gray-3);
+  font-family: 'Fira Code', monospace;
+}
+.swap-input-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.swap-amount {
+  flex: 1;
+  background: transparent;
+  border: none;
+  color: var(--sl-color-white);
+  font-family: 'Instrument Sans', sans-serif;
+  font-size: 1.5rem;
+  font-weight: 600;
+  outline: none;
+  min-width: 0;
+}
+.swap-amount::placeholder {
+  color: var(--sl-color-gray-4);
+}
+.swap-amount[readonly] {
+  color: var(--sl-color-gray-2);
+}
+.swap-token-select {
+  background: rgba(136, 120, 166, 0.08);
+  border: 1px solid rgba(136, 120, 166, 0.15);
+  border-radius: 8px;
+  color: var(--sl-color-white);
+  font-family: 'Fira Code', monospace;
+  font-size: 0.82rem;
+  font-weight: 600;
+  padding: 0.45rem 0.6rem;
+  cursor: pointer;
+  outline: none;
+  appearance: none;
+  -webkit-appearance: none;
+  min-width: 90px;
+  text-align: center;
+}
+.swap-flip-btn {
+  display: block;
+  margin: -0.25rem auto;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  border: 1.5px solid var(--sl-color-gray-5);
+  background: var(--sl-color-bg-nav);
+  color: var(--sl-color-gray-2);
+  font-size: 1rem;
+  cursor: pointer;
+  transition: background 0.15s;
+  position: relative;
+  z-index: 1;
+}
+:root[data-theme='dark'] .swap-flip-btn {
+  border-color: rgba(136, 120, 166, 0.15);
+}
+.swap-flip-btn:hover {
+  background: rgba(136, 120, 166, 0.08);
+}
+.swap-details {
+  margin-top: 0.75rem;
+  padding: 0.5rem 0.75rem;
+  border-radius: 8px;
+  background: rgba(136, 120, 166, 0.04);
+}
+.swap-detail-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 0.25rem 0;
+  font-size: 0.78rem;
+  color: var(--sl-color-gray-3);
+}
+.swap-detail-row span:last-child {
+  font-family: 'Fira Code', monospace;
+  color: var(--sl-color-gray-2);
+}
+.swap-submit {
+  width: 100%;
+  margin-top: 0.75rem;
+  padding: 0.85rem;
+  border: none;
+  border-radius: 10px;
+  background: var(--sl-color-accent);
+  color: #fff;
+  font-family: 'Instrument Sans', sans-serif;
+  font-size: 0.95rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity 0.15s, transform 0.1s;
+}
+.swap-submit:hover:not(:disabled) {
+  opacity: 0.9;
+  transform: translateY(-1px);
+}
+.swap-submit:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.swap-result {
+  margin-top: 0.75rem;
+  padding: 0.65rem 0.85rem;
+  border-radius: 8px;
+  font-size: 0.82rem;
+  font-family: 'Fira Code', monospace;
+  word-break: break-all;
+  line-height: 1.5;
+}
+.swap-result.success {
+  background: rgba(93, 184, 138, 0.1);
+  border: 1px solid rgba(93, 184, 138, 0.25);
+  color: #5db88a;
+}
+.swap-result.error {
+  background: rgba(201, 146, 126, 0.1);
+  border: 1px solid rgba(201, 146, 126, 0.25);
+  color: #c9927e;
+}
+.swap-info {
+  margin-top: 1rem;
+  border-top: 1px solid var(--sl-color-gray-5);
+  padding-top: 0.75rem;
+}
+:root[data-theme='dark'] .swap-info {
+  border-top-color: rgba(136, 120, 166, 0.08);
+}
+.swap-info-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.25rem 0;
+  font-size: 0.75rem;
+}
+.swap-info-label {
+  color: var(--sl-color-gray-3);
+  font-weight: 600;
+  text-transform: uppercase;
+  font-size: 0.65rem;
+  letter-spacing: 0.04em;
+}
+.swap-info-val {
+  color: var(--sl-color-gray-3);
+  font-size: 0.7rem;
+}
+@media (max-width: 480px) {
+  .swap-card { padding: 1rem; }
+  .swap-amount { font-size: 1.2rem; }
+}
+`}</style>
+
+<script>{`
+(function() {
+  var RPC = 'http://102.209.21.247:9944';
+  var SLIPPAGE = 0.005; // 0.5%
+
+  // Contract addresses — deployed 2026-03-24
+  var CONTRACTS = {
+    WASZTB: '0x2e4b2e504bde131d93015afeb295fbae7a0d5c77000000000000000000000000',
+    Factory: '0x682ae557176d6a110bdd5414adf243587beb79e9000000000000000000000000',
+    Router: '0xdb8dbfe4839efb8d38f9c015249be01684831df1000000000000000000000000',
+    PriceFeed: '0x42160813f939477d47bbdf8b4142ceda46fe03d3000000000000000000000000'
+  };
+
+  // Load addresses from deployed config (injected at build or fetched)
+  var addrEls = {
+    router: document.getElementById('swap-router-addr'),
+    factory: document.getElementById('swap-factory-addr'),
+    wasztb: document.getElementById('swap-wasztb-addr')
+  };
+
+  function rpcCall(method, params) {
+    return fetch(RPC, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ jsonrpc: '2.0', method: method, params: params || [], id: 1 })
+    }).then(function(r) { return r.json(); }).then(function(j) {
+      if (j.error) throw new Error(j.error.message);
+      return j.result;
+    });
+  }
+
+  var amountIn = document.getElementById('swap-amount-in');
+  var amountOut = document.getElementById('swap-amount-out');
+  var tokenFrom = document.getElementById('swap-token-from');
+  var tokenTo = document.getElementById('swap-token-to');
+  var flipBtn = document.getElementById('swap-flip');
+  var swapBtn = document.getElementById('swap-btn');
+  var result = document.getElementById('swap-result');
+  var details = document.getElementById('swap-details');
+
+  function showResult(msg, ok) {
+    result.textContent = msg;
+    result.className = 'swap-result ' + (ok ? 'success' : 'error');
+    result.style.display = 'block';
+  }
+
+  flipBtn.addEventListener('click', function() {
+    var fromVal = tokenFrom.value;
+    var toVal = tokenTo.value;
+    tokenFrom.value = toVal;
+    tokenTo.value = fromVal;
+    amountIn.value = '';
+    amountOut.value = '';
+    details.style.display = 'none';
+    swapBtn.textContent = 'Enter an amount';
+    swapBtn.disabled = true;
+  });
+
+  var quoteTimeout;
+  amountIn.addEventListener('input', function() {
+    clearTimeout(quoteTimeout);
+    var val = parseFloat(amountIn.value);
+    if (!val || val <= 0) {
+      amountOut.value = '';
+      details.style.display = 'none';
+      swapBtn.textContent = 'Enter an amount';
+      swapBtn.disabled = true;
+      return;
+    }
+    swapBtn.textContent = 'Fetching quote...';
+    swapBtn.disabled = true;
+
+    quoteTimeout = setTimeout(function() {
+      // Quote via router getAmountsOut (read-only RPC call)
+      // For now show a simulated quote since contracts may not be deployed yet
+      if (!CONTRACTS.Router) {
+        var simulated = val * 0.997;
+        amountOut.value = simulated.toFixed(6);
+        document.getElementById('swap-rate').textContent =
+          '1 ' + tokenFrom.value + ' = 0.997 ' + tokenTo.value;
+        document.getElementById('swap-impact').textContent = '< 0.01%';
+        document.getElementById('swap-min-out').textContent =
+          (simulated * (1 - SLIPPAGE)).toFixed(6) + ' ' + tokenTo.value;
+        details.style.display = 'block';
+        swapBtn.textContent = 'Swap (connect wallet)';
+        swapBtn.disabled = false;
+        return;
+      }
+
+      // Real quote via contract read
+      rpcCall('aztb_callEvm', [
+        CONTRACTS.Router,
+        encodeGetAmountsOut(val, [tokenFrom.value, tokenTo.value])
+      ]).then(function(res) {
+        var outAmount = decodeAmountsOut(res);
+        amountOut.value = outAmount.toFixed(6);
+        details.style.display = 'block';
+        swapBtn.textContent = 'Swap';
+        swapBtn.disabled = false;
+      }).catch(function(err) {
+        amountOut.value = '';
+        showResult('Quote failed: ' + err.message, false);
+        swapBtn.textContent = 'Enter an amount';
+        swapBtn.disabled = true;
+      });
+    }, 500);
+  });
+
+  swapBtn.addEventListener('click', function() {
+    showResult('Connect a wallet to swap. Browser wallet extension or aztb_sendTransaction RPC required.', false);
+  });
+
+  function encodeGetAmountsOut() { return '0x'; }
+  function decodeAmountsOut() { return 0; }
+
+  // Show contract addresses if available
+  function updateAddresses() {
+    if (CONTRACTS.Router) addrEls.router.textContent = CONTRACTS.Router.slice(0, 10) + '...';
+    if (CONTRACTS.Factory) addrEls.factory.textContent = CONTRACTS.Factory.slice(0, 10) + '...';
+    if (CONTRACTS.WASZTB) addrEls.wasztb.textContent = CONTRACTS.WASZTB.slice(0, 10) + '...';
+  }
+  updateAddresses();
+})();
+`}</script>

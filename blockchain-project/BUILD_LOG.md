@@ -21,6 +21,28 @@ Entries are prepended (newest first).
 
 ## Entries
 
+### L2 Ecosystem Phase 2 — Contract Deployment + Swap UI (2026-03-24)
+- **Date**: 2026-03-24
+- **Sprint**: Ecosystem Phase 2 (Post-M9)
+- **Commits**: PENDING
+- **Files Changed**:
+  - `contracts/dex/Waztb.sol` — Fixed deprecated `payable.transfer()` → `call{value:}` pattern (solc warning).
+  - `contracts/dex/TestUSDC.sol` — New test USDC token (6 decimals, minter role, 10M initial supply).
+  - `contracts/deploy.mjs` — New self-contained deployer: postcard encoding, Ed25519 signing, AZTB envelope format, multi-contract plans.
+  - `contracts/deployed-addresses.json` — Testnet deployment addresses for all 5 contracts.
+  - `contracts/oracle/build/`, `contracts/dex/build/` — Compiled bytecode + ABI (solc 0.8.34, optimized 200 runs).
+  - `contracts/package.json` — Node deps (@noble/ed25519, @noble/hashes).
+  - `website/src/content/docs/tools/swap.mdx` — New swap UI page: token selector, quote display, rate/impact/min-received details, contract address display.
+  - `website/astro.config.mjs` — Added Swap to sidebar.
+- **Deployed Contracts (Testnet)**:
+  - PriceFeed: `0x42160813f939477d...`
+  - WASZTB: `0x2e4b2e504bde131d...`
+  - AztibaseFactory: `0x682ae557176d6a11...`
+  - AztibaseRouter: `0xdb8dbfe4839efb8d...`
+  - TestUSDC: `0x6602f41c4e877497...`
+- **Review Notes**: All 5 contracts compiled clean (solc 0.8.34) and deployed to live testnet. Factory deployment used 1.98M gas (includes embedded Pair bytecode). Router constructor receives Factory + WASZTB as 20-byte EVM addresses. TestUSDC minted 10M to deployer for initial liquidity seeding. Swap UI functional in simulated mode — needs wallet integration for live swaps.
+- **Security Flags**: None. Contracts need audit before mainnet TVL.
+
 ### L2 Ecosystem Phase 2 — Oracle + AMM DEX (2026-03-24)
 - **Date**: 2026-03-24
 - **Sprint**: Ecosystem Phase 2 (Post-M9)

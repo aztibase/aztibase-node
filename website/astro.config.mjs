@@ -92,6 +92,7 @@ export default defineConfig({
 					items: [
 						{ label: 'Testnet Faucet', slug: 'tools/faucet' },
 						{ label: 'Deploy Contracts', slug: 'tools/deploy' },
+						{ label: 'Swap', slug: 'tools/swap' },
 					],
 				},
 				{

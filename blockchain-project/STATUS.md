@@ -3,8 +3,8 @@
 **Last Updated:** 2026-03-24
 **Updated By:** project-lead
 **Current Phase:** M10 -- L2 Ecosystem Build
-**Current Sprint:** Ecosystem Phase 1 — Developer tooling
-**Sprint Status:** Phase 1 COMPLETE + Phase 2 contracts scaffolded. SDK v0.1.0, faucet UI, deploy page, explorer perf, indexer, boot node fix all shipped. Oracle contract (PriceFeed.sol) + AMM DEX contracts (Factory, Pair, Router, WASZTB) written. VPS at 280K+ blocks, v0.1.10, 2 peers. Next: compile + deploy contracts, seed liquidity, swap UI.
+**Current Sprint:** Ecosystem Phase 2 — DeFi deployment
+**Sprint Status:** Phase 2 CONTRACTS DEPLOYED. All 5 contracts live on testnet: PriceFeed oracle, WASZTB, AztibaseFactory, AztibaseRouter, TestUSDC. Swap UI built. Deployer script working. Next: seed initial liquidity (WASZTB/tUSDC pair), start price updater on VPS, wallet integration for live swaps.
 
 ---
 
