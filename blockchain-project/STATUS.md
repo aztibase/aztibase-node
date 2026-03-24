@@ -4,7 +4,7 @@
 **Updated By:** project-lead
 **Current Phase:** M10 -- L2 Ecosystem Build
 **Current Sprint:** Ecosystem Phase 1 — Developer tooling
-**Sprint Status:** SDK v0.1.0 shipped (RPC + WS + 21 tests). Faucet UI + contract deploy page live on docs site. Explorer perf fixed (N+1 eliminated). Boot node ban immunity deployed to both nodes. Transaction indexer built and tested (backfill + live + REST API). VPS at 280K+ blocks, both nodes on v0.1.10 with 2 peers connected. Phase 2 next: RedStone oracle → AMM DEX.
+**Sprint Status:** Phase 1 COMPLETE + Phase 2 contracts scaffolded. SDK v0.1.0, faucet UI, deploy page, explorer perf, indexer, boot node fix all shipped. Oracle contract (PriceFeed.sol) + AMM DEX contracts (Factory, Pair, Router, WASZTB) written. VPS at 280K+ blocks, v0.1.10, 2 peers. Next: compile + deploy contracts, seed liquidity, swap UI.
 
 ---
 
@@ -81,9 +81,10 @@
 | aztibase-wasm | PARTIAL | p2p-network-engineer | Tx signing, header verification — BLS verify incomplete (C-WASM-2) |
 
 ### In Progress
-- L2 Ecosystem Phase 2: RedStone oracle integration → AMM DEX
+- L2 Ecosystem Phase 2: compile + deploy oracle + DEX contracts to testnet
 - Deploy indexer to VPS alongside node
 - Deploy public explorer to Vercel (explorer.aztibase.com)
+- Build swap UI for DEX
 
 ### Blocked
 - GitHub Actions CI broken on private repo (startup_failure — billing/plan issue)

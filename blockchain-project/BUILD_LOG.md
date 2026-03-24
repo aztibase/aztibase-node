@@ -21,6 +21,22 @@ Entries are prepended (newest first).
 
 ## Entries
 
+### L2 Ecosystem Phase 2 — Oracle + AMM DEX (2026-03-24)
+- **Date**: 2026-03-24
+- **Sprint**: Ecosystem Phase 2 (Post-M9)
+- **Commits**: c907116, e79ce80
+- **Files Changed**:
+  - `contracts/oracle/PriceFeed.sol` — On-chain price feed oracle. Trusted updater model, 8-decimal precision, batch updates, staleness checks, feed registry.
+  - `contracts/oracle/scripts/updater.ts` — CoinGecko price fetcher. Pulls BTC, ETH, AZTB, USDC prices every 60s. Dry-run tested ($71K BTC, $2.1K ETH confirmed).
+  - `contracts/oracle/scripts/deploy.ts` — Deployment helper with feed ID generation.
+  - `contracts/dex/AztibaseFactory.sol` — Pair factory. Creates and tracks trading pairs.
+  - `contracts/dex/AztibasePair.sol` — Constant-product (x*y=k) liquidity pool. 0.3% swap fee. LP token minting/burning.
+  - `contracts/dex/AztibaseRouter.sol` — User-facing router. Multi-hop swaps, slippage protection, deadline enforcement, liquidity add/remove.
+  - `contracts/dex/Waztb.sol` — Wrapped AZTB ERC20. Deposit/withdraw native AZTB.
+  - `contracts/dex/IERC20.sol` — Standard ERC20 interface.
+- **Review Notes**: Contracts follow Uniswap V2 pattern — battle-tested design. Not yet compiled or deployed. Next step: solc compile → deploy → seed liquidity → swap UI.
+- **Security Flags**: None. Contracts need audit before mainnet TVL.
+
 ### L2 Ecosystem Phase 1 + Boot Node Fix + Indexer (2026-03-24)
 - **Date**: 2026-03-24
 - **Sprint**: Ecosystem Phase 1 (Post-M9)

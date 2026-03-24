@@ -5,6 +5,14 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ---
 
+## Ecosystem Phase 2 — Oracle + AMM DEX (2026-03-24)
+
+### Added
+- **PriceFeed Oracle** (`contracts/oracle/`): EVM oracle contract with trusted updater model. 8-decimal precision. Single and batch price updates. Staleness checks via `getFreshPrice()`. Feed registry. CoinGecko price updater script pulling BTC, ETH, AZTB, USDC.
+- **AMM DEX** (`contracts/dex/`): Uniswap V2 pattern constant-product AMM. Four contracts: WASZTB (wrapped native token), AztibaseFactory (pair creation), AztibasePair (x*y=k pool, 0.3% fee), AztibaseRouter (multi-hop swaps, slippage, deadlines, liquidity management).
+
+---
+
 ## Ecosystem Phase 1 — SDK, Indexer, Developer Tools (2026-03-24)
 
 ### Added
