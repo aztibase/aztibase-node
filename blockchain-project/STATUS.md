@@ -1,10 +1,10 @@
 # PROJECT STATUS: Aztibase Network
 
-**Last Updated:** 2026-03-23
-**Updated By:** p2p-network-engineer + node-engineer + consensus-engineer
-**Current Phase:** M9 -- Mainnet Prep
-**Current Sprint:** Post-063b — VPS validator onboarding test COMPLETE
-**Sprint Status:** v0.1.10 released. VPS live at 64K+ blocks. 4 validators registered (1 VPS + 3 local). GitHub release v0.1.10 published with Windows, Linux, wallet extension assets. 4 deployment bugs found and fixed during live onboarding test.
+**Last Updated:** 2026-03-24
+**Updated By:** project-lead
+**Current Phase:** M10 -- L2 Ecosystem Build
+**Current Sprint:** Ecosystem Phase 1 — Developer tooling
+**Sprint Status:** SDK v0.1.0 shipped (RPC + WS + 21 tests). Faucet UI + contract deploy page live on docs site. Explorer perf fixed (N+1 eliminated). Boot node ban immunity deployed to both nodes. Transaction indexer built and tested (backfill + live + REST API). VPS at 280K+ blocks, both nodes on v0.1.10 with 2 peers connected. Phase 2 next: RedStone oracle → AMM DEX.
 
 ---
 
@@ -22,6 +22,7 @@
 | M7 | Security audit + hardening | DONE | 2026-03-08 | 2026-03-08 |
 | M8 | Public testnet | DONE | 2026-03-08 | 2026-03-10 |
 | M9 | Mainnet launch | IN PROGRESS | 2026-03-10 | -- |
+| M10 | L2 Ecosystem Build | IN PROGRESS | 2026-03-24 | -- |
 
 ---
 
@@ -80,14 +81,16 @@
 | aztibase-wasm | PARTIAL | p2p-network-engineer | Tx signing, header verification — BLS verify incomplete (C-WASM-2) |
 
 ### In Progress
+- L2 Ecosystem Phase 2: RedStone oracle integration → AMM DEX
+- Deploy indexer to VPS alongside node
 - Deploy public explorer to Vercel (explorer.aztibase.com)
-- First friend validator onboarding test — package ready, need friend to download and run
 
 ### Blocked
-- Mainnet launch blocked on: friend onboarding confirmation
 - GitHub Actions CI broken on private repo (startup_failure — billing/plan issue)
+- WSL broken on dev machine (Docker disk path issue) — affects Linux cross-compilation
 
 ### Recently Completed
+- **Ecosystem Phase 1 (2026-03-24)**: TypeScript SDK v0.1.0 (RPC + WebSocket + 21 tests). Faucet web UI. Contract deploy page. Explorer N+1 fix (300→7 calls/poll) + shadow/perf cleanup. Boot node ban immunity (Rust fix, deployed both nodes). Transaction indexer (SQLite + Fastify, 8 REST endpoints, ~2,200 blocks/sec backfill). SDK docs page. VPS updated to v0.1.10 with ban fix.
 - **Sprint 063b (2026-03-21)**: Full chain monitoring DEPLOYED. GitHub v0.1.4 release with friend validator packages (Windows + Linux). Wallet extension RPC fix (pointed to VPS IP). WSL cross-compile environment. VictoriaMetrics + Grafana self-hosted on VPS. 6 new Prometheus metrics, 2 dashboards, 8 alert rules.
 - **Sprint 063b (2026-03-21)**: Full chain monitoring stack. 6 new Prometheus metrics (sentinel health score/level, actions, anomalous txs, epoch). 2 new Grafana dashboards (Chain Overview 24-panel, AI Sentinel 21-panel). 8 alert rules. VPS deploy script (VictoriaMetrics + Grafana self-hosted). Claude Code MCP integration for querying metrics from dev sessions. Fixed pending_tasks metric (was always 0). 1,014 tests, 0 fail.
 - **Sprint 062b (2026-03-19)**: ONNX tx anomaly scorer — AnomalyScorer upgraded with ONNX autoencoder, same pattern as sentinel Tier 2 (normalize → inference → reconstruction error). Auto-loads from models/ dir. Heuristic fallback. 1,013 tests (+2).

@@ -5,6 +5,25 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ---
 
+## Ecosystem Phase 1 — SDK, Indexer, Developer Tools (2026-03-24)
+
+### Added
+- **TypeScript SDK** (`@aztibase/sdk` v0.1.0): RPC client wrapping all 57 methods, WebSocket subscription client with auto-reconnect, full TypeScript types for all chain objects, ESM+CJS dual build, 21 unit tests.
+- **Transaction Indexer** (`indexer/`): Standalone SQLite-backed service. Backfills historical blocks at ~2,200 blocks/sec. Live follower polls every 5s. REST API on port 3001 with 8 endpoints: `/tx/:hash`, `/address/:addr/txs`, `/block/:number`, `/blocks/recent`, `/txs/recent`, `/stats`, `/search/:query`, `/addresses/top`.
+- **Faucet Web UI**: Interactive faucet page on docs site at `/tools/faucet/`. Calls `aztb_faucetDrip` directly from browser.
+- **Contract Deploy page**: EVM + WASM deploy documentation with gas estimator UI at `/tools/deploy/`.
+- **SDK docs page**: Full API reference with code examples at `/guides/sdk/`.
+
+### Fixed
+- **Boot node ban immunity** (`aztibase-network`): Boot node peers were being banned after repeated connection timeouts (e.g. PC sleep), creating a permanent disconnect death spiral. Boot peer IPs are now extracted from config and matched on connection — exempt from offense recording and ban checks at all 3 ban paths.
+- **Explorer N+1 RPC** (`explorer/`): Transactions tab was making ~300 sequential RPC calls per poll. Reduced to ~7 calls via parallel batching (Promise.all) + client-side tx cache.
+- **Explorer performance** (`explorer/`): Reduced shadow opacity (0.4→0.12), removed glow effects, disabled chart animations, deferred CDN scripts, increased poll intervals.
+
+### Deployed
+- VPS updated to v0.1.10 with boot node ban fix. Source code cleaned from VPS after build.
+
+---
+
 ## v0.1.10 — P2P Connection Stability + Faucet Nonce (2026-03-23)
 
 ### Fixed

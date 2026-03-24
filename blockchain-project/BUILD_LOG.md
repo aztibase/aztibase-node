@@ -21,6 +21,25 @@ Entries are prepended (newest first).
 
 ## Entries
 
+### L2 Ecosystem Phase 1 + Boot Node Fix + Indexer (2026-03-24)
+- **Date**: 2026-03-24
+- **Sprint**: Ecosystem Phase 1 (Post-M9)
+- **Commits**: a37cb0c, ea784cf, 9548251, 89038d2
+- **Files Changed**:
+  - `crates/aztibase-network/src/transport.rs` — Boot node ban immunity: boot peer IPs extracted from config, 3 ban paths protected (OutgoingConnectionError, ConnectionEstablished, gossip reject). Added `boot_peers: HashSet<PeerId>`, `boot_node_ips: HashSet<IpAddr>`.
+  - `crates/aztibase-network/src/lib.rs` — Exported `ip_from_multiaddr`.
+  - `crates/aztibase-node/src/main.rs` — Extract boot node IPs from multiaddrs, pass to TransportConfig for both validator and fullnode paths.
+  - `explorer/index.html` — Performance: shadows reduced (0.4→0.12 opacity), glow effects removed, chart animations disabled, CDN scripts deferred, polling intervals increased (3-8s → 5-8s). N+1 fix: transactions tab reduced from ~300 sequential RPC calls to ~7 batched calls via Promise.all + client-side txCache.
+  - `sdk/` — New TypeScript SDK (@aztibase/sdk v0.1.0): RPC client (57 methods), WebSocket subscription client, 21 vitest tests, ESM+CJS dual build.
+  - `website/src/content/docs/tools/faucet.mdx` — Faucet web UI with address input + RPC call.
+  - `website/src/content/docs/tools/deploy.mdx` — Contract deploy page with gas estimator, EVM+WASM docs.
+  - `website/src/content/docs/guides/sdk.md` — Full SDK documentation page.
+  - `website/astro.config.mjs` — Added Tools sidebar section + SDK to Getting Started.
+  - `website/src/components/Header.astro` — Added Faucet nav link.
+  - `indexer/` — New standalone transaction indexer: SQLite + Fastify REST API, backfill at ~2,200 blocks/sec, live follower, 8 REST endpoints.
+- **Review Notes**: Boot node ban immunity deployed to both VPS and local. VPS updated to v0.1.10 with fix. Both nodes connected (2 peers). Indexer tested against live node — backfilled 44K blocks in 20 seconds. Rate-limit throttling with retry.
+- **Security Flags**: None. Boot node fix is defensive — prevents self-inflicted network isolation.
+
 ### v0.1.10 — P2P Connection Stability + Faucet Nonce (2026-03-23)
 - **Date**: 2026-03-23
 - **Sprint**: Post-063b (VPS validator onboarding test)
