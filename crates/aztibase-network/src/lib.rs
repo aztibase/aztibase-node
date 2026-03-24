@@ -42,7 +42,7 @@ pub use peer_store::{PeerStore, StoredPeer};
 pub use reputation::{OffenseSeverity, PeerReputation, PeerReputationStore};
 pub use transport::{
     AGENT_PREFIX, DEFAULT_WEBRTC_PORT, Libp2pTransport, NatStatus, NatTraversalStats, NetworkEvent,
-    PROTOCOL_VERSION, TransportConfig, agent_version, parse_agent_version,
+    PROTOCOL_VERSION, TransportConfig, agent_version, ip_from_multiaddr, parse_agent_version,
 };
 #[cfg(feature = "webrtc")]
 pub use webrtc::{WebRtcConfig, WebRtcTransport};

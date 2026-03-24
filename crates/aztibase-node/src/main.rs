@@ -1785,6 +1785,13 @@ async fn main() -> Result<()> {
         Some(cfg) => Some(genesis::genesis_hash(cfg)?),
         None => None,
     };
+    let boot_ips: std::collections::HashSet<std::net::IpAddr> = config
+        .network
+        .boot_nodes
+        .iter()
+        .filter_map(|s| s.parse::<aztibase_network::Multiaddr>().ok())
+        .filter_map(|a| aztibase_network::ip_from_multiaddr(&a))
+        .collect();
     let transport_config = TransportConfig {
         idle_timeout_secs: config.network.idle_timeout_secs,
         reputation_store: Some(rep_store),
@@ -1793,6 +1800,7 @@ async fn main() -> Result<()> {
         enable_webrtc: cli.webrtc || config.network.enable_webrtc,
         webrtc_listen_port: config.network.webrtc_listen_port,
         genesis_hash: transport_genesis_hash,
+        boot_node_ips: boot_ips,
         ..TransportConfig::default()
     };
     let mut transport =
@@ -2675,6 +2683,13 @@ async fn run_light_node(config: &NodeConfig) -> Result<()> {
         .as_ref()
         .and_then(|p| genesis::load_genesis(p).ok())
         .and_then(|g| genesis::genesis_hash(&g).ok());
+    let light_boot_ips: std::collections::HashSet<std::net::IpAddr> = config
+        .network
+        .boot_nodes
+        .iter()
+        .filter_map(|s| s.parse::<aztibase_network::Multiaddr>().ok())
+        .filter_map(|a| aztibase_network::ip_from_multiaddr(&a))
+        .collect();
     let transport_config = TransportConfig {
         idle_timeout_secs: config.network.idle_timeout_secs,
         reputation_store: Some(light_rep_store),
@@ -2683,6 +2698,7 @@ async fn run_light_node(config: &NodeConfig) -> Result<()> {
         enable_webrtc: config.network.enable_webrtc,
         webrtc_listen_port: config.network.webrtc_listen_port,
         genesis_hash: light_genesis_hash,
+        boot_node_ips: light_boot_ips,
         ..TransportConfig::default()
     };
     let mut transport =

@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::net::IpAddr;
 use std::sync::Arc;
 use std::time::Duration;
@@ -73,6 +73,7 @@ pub struct TransportConfig {
     pub enable_webrtc: bool,
     pub webrtc_listen_port: u16,
     pub genesis_hash: Option<[u8; 32]>,
+    pub boot_node_ips: HashSet<IpAddr>,
 }
 
 impl Default for TransportConfig {
@@ -87,6 +88,7 @@ impl Default for TransportConfig {
             enable_webrtc: false,
             webrtc_listen_port: DEFAULT_WEBRTC_PORT,
             genesis_hash: None,
+            boot_node_ips: HashSet::new(),
         }
     }
 }
@@ -153,6 +155,8 @@ pub struct Libp2pTransport {
     kad_bootstrapped: bool,
     nat_traversal_stats: NatTraversalStats,
     genesis_hex: Option<String>,
+    boot_peers: HashSet<PeerId>,
+    boot_node_ips: HashSet<IpAddr>,
 }
 
 impl Libp2pTransport {
@@ -252,6 +256,8 @@ impl Libp2pTransport {
             kad_bootstrapped: false,
             nat_traversal_stats: NatTraversalStats::default(),
             genesis_hex,
+            boot_peers: HashSet::new(),
+            boot_node_ips: config.boot_node_ips,
         };
 
         transport.subscribe_all()?;
@@ -320,6 +326,10 @@ impl Libp2pTransport {
         Ok(())
     }
 
+    pub fn mark_boot_peer(&mut self, peer_id: PeerId) {
+        self.boot_peers.insert(peer_id);
+    }
+
     pub fn add_peer(&mut self, peer_id: PeerId, addr: Multiaddr) {
         self.swarm
             .behaviour_mut()
@@ -360,7 +370,9 @@ impl Libp2pTransport {
                                 len = message.data.len(),
                                 "Rejected invalid gossip message"
                             );
-                            self.record_peer_offense(&propagation_source, OffenseSeverity::Medium);
+                            if !self.boot_peers.contains(&propagation_source) {
+                                self.record_peer_offense(&propagation_source, OffenseSeverity::Medium);
+                            }
                         }
                         gossip::MessageAcceptance::Ignore => {}
                     }
@@ -428,7 +440,9 @@ impl Libp2pTransport {
                 SwarmEvent::OutgoingConnectionError { error, peer_id, .. } => {
                     warn!("Outgoing connection denied: {error}");
                     if let (Some(rep_store), Some(pid)) = (&self.reputation, peer_id) {
-                        let _ = rep_store.record_offense(&pid.to_bytes(), OffenseSeverity::Low);
+                        if !self.boot_peers.contains(&pid) {
+                            let _ = rep_store.record_offense(&pid.to_bytes(), OffenseSeverity::Low);
+                        }
                     }
                 }
                 SwarmEvent::NewListenAddr { address, .. } => {
@@ -439,7 +453,9 @@ impl Libp2pTransport {
                 } => {
                     if let Some(ref rep_store) = self.reputation {
                         let peer_bytes = peer_id.to_bytes();
-                        if rep_store.is_banned(&peer_bytes).unwrap_or(false) {
+                        if !self.boot_peers.contains(&peer_id)
+                            && rep_store.is_banned(&peer_bytes).unwrap_or(false)
+                        {
                             warn!(%peer_id, "Rejecting banned peer");
                             let _ = self.swarm.disconnect_peer_id(peer_id);
                             continue;
@@ -450,6 +466,9 @@ impl Libp2pTransport {
 
                     let remote_addr = endpoint.get_remote_address().clone();
                     if let Some(ip) = ip_from_multiaddr(&remote_addr) {
+                        if self.boot_node_ips.contains(&ip) {
+                            self.boot_peers.insert(peer_id);
+                        }
                         if let Err(reason) = self.conn_filter.try_accept(ip) {
                             warn!(%peer_id, %ip, %reason, "Connection filtered");
                             let _ = self.swarm.disconnect_peer_id(peer_id);
@@ -726,7 +745,7 @@ impl Libp2pTransport {
     }
 }
 
-fn ip_from_multiaddr(addr: &Multiaddr) -> Option<IpAddr> {
+pub fn ip_from_multiaddr(addr: &Multiaddr) -> Option<IpAddr> {
     for proto in addr.iter() {
         match proto {
             libp2p::multiaddr::Protocol::Ip4(ip) => return Some(IpAddr::V4(ip)),
