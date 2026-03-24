@@ -21,10 +21,25 @@ Entries are prepended (newest first).
 
 ## Entries
 
+### Indexer Explorer UI + Cleanup (2026-03-24)
+- **Date**: 2026-03-24
+- **Sprint**: Ecosystem Phase 2 (Post-M9)
+- **Commits**: 22dac58
+- **Files Changed**:
+  - `indexer/public/index.html` — New block explorer UI: stats bar, blocks/txs/addresses tabs, search, detail views with clickable links.
+  - `indexer/src/api.ts` — Root `/` serves HTML explorer, `/api` returns endpoint list.
+  - `indexer/start.bat` — Start script for indexer.
+  - `website/start.bat` — Start script for docs site.
+  - `website/src/components/Header.astro` — Added Swap link to top nav.
+  - `explorer/index.html` — Removed. Replaced by indexer UI.
+  - `.gitignore` — Added package-lock, __pycache__, data/, sqlite runtime files.
+- **Review Notes**: Old standalone explorer removed. Indexer now serves as the block explorer with a proper UI. Start scripts placed in their respective directories.
+- **Security Flags**: None.
+
 ### EVM Cross-Contract Fix + Liquidity Seeding (2026-03-24)
 - **Date**: 2026-03-24
 - **Sprint**: Ecosystem Phase 2 (Post-M9)
-- **Commits**: e60b8bb (EVM fix), PENDING (liquidity)
+- **Commits**: e60b8bb (EVM fix), 0a3ce35 (liquidity)
 - **Files Changed**:
   - `crates/aztibase-execution/src/evm.rs` — **Critical fix**: `build_db` now loads all accounts with code into EVM CacheDB, not just caller+target. Enables cross-contract calls (Factory→Pair→Token). Extracted `load_account` helper.
   - `contracts/seed-liquidity.mjs` — Liquidity seeding script: wraps AZTB, approves Router, creates pair, adds liquidity.
@@ -35,7 +50,7 @@ Entries are prepended (newest first).
 ### L2 Ecosystem Phase 2 — Contract Deployment + Swap UI (2026-03-24)
 - **Date**: 2026-03-24
 - **Sprint**: Ecosystem Phase 2 (Post-M9)
-- **Commits**: PENDING
+- **Commits**: 63bb33c
 - **Files Changed**:
   - `contracts/dex/Waztb.sol` — Fixed deprecated `payable.transfer()` → `call{value:}` pattern (solc warning).
   - `contracts/dex/TestUSDC.sol` — New test USDC token (6 decimals, minter role, 10M initial supply).

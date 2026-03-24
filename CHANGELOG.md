@@ -5,6 +5,18 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ---
 
+## Ecosystem Phase 2d — Indexer Explorer UI + Cleanup (2026-03-24)
+
+### Added
+- **Indexer Explorer UI** (`indexer/public/index.html`): Block explorer served at `http://localhost:3001`. Stats bar, blocks/txs/addresses tabs, search by hash/number/address, clickable detail views.
+- **Start scripts**: `indexer/start.bat` and `website/start.bat` for easy local launch.
+- **Swap nav link**: Added to site header navigation.
+
+### Removed
+- **Old standalone explorer** (`explorer/index.html`): Replaced by the indexer-backed explorer.
+
+---
+
 ## Ecosystem Phase 2c — EVM Cross-Contract Fix + Liquidity (2026-03-24)
 
 ### Fixed
