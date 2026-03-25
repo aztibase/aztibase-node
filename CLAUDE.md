@@ -4,8 +4,8 @@
 This is the Aztibase Network blockchain project. A Layer-1 AI-native, server-independent blockchain built in Rust.
 
 ## Key Documents
+- Litepaper: `docs/LITEPAPER.md`
 - Master Plan: `blockchain-project/AZTIBASE_MASTER_PLAN.md`
-- Full Design: `blockchain-project/MASTER_DESIGN.md`
 - Research: `blockchain-project/RESEARCH_BRIEF.md`
 - Legal: `blockchain-project/LEGAL_LANDSCAPE.md`, `blockchain-project/LEGAL_CLEARANCE_REPORT.md`
 - Naming: `blockchain-project/NAMING_REPORT.md`
