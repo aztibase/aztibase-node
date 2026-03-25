@@ -180,7 +180,12 @@ async function main() {
   console.log(`  WASZTB amount: ${WASZTB_AMOUNT}`);
   console.log(`  tUSDC amount:  ${TUSDC_AMOUNT}`);
 
-  let nonce = 9;
+  const nonceRes = await fetch(RPC, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ jsonrpc: '2.0', method: 'aztb_getNonce', params: [callerHex], id: 0 }),
+  });
+  let nonce = Number((await nonceRes.json()).result);
 
   // Step 1: Wrap AZTB → WASZTB via deposit() with value
   console.log('\n  Step 1: Wrap AZTB → WASZTB');
@@ -234,7 +239,7 @@ async function main() {
     abiAddress(callerHex + '000000000000000000000000'),  // to (deployer, padded to 32 bytes)
     abiUint256(deadline),             // deadline
   );
-  const payload4 = await buildEvmCall(callerAddr, router32, addLiq, nonce, 500000, 0n);
+  const payload4 = await buildEvmCall(callerAddr, router32, addLiq, nonce, 3000000, 0n);
   const tx4 = await signAndSend(payload4, keyBytes);
   console.log(`    Tx: ${tx4}`);
   const r4 = await waitReceipt(tx4, 'addLiquidity');

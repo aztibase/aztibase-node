@@ -3,7 +3,7 @@ import { IndexerDb } from './db.js';
 import { Syncer } from './sync.js';
 import { createApi } from './api.js';
 
-const RPC_URL = process.env.AZTB_RPC || 'http://127.0.0.1:9944';
+const RPC_URL = process.env.AZTB_RPC || 'http://102.209.21.247:9944';
 const DB_PATH = process.env.AZTB_DB || path.resolve('indexer.db');
 const API_PORT = parseInt(process.env.AZTB_API_PORT || '3001', 10);
 const POLL_INTERVAL = parseInt(process.env.AZTB_POLL_MS || '5000', 10);
