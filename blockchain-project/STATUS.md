@@ -1,10 +1,10 @@
 # PROJECT STATUS: Aztibase Network
 
-**Last Updated:** 2026-03-24
+**Last Updated:** 2026-03-25
 **Updated By:** project-lead
-**Current Phase:** M10 -- L2 Ecosystem Build
-**Current Sprint:** Ecosystem Phase 2f — Sync + RPC fixes
-**Sprint Status:** Phase 2 COMPLETE. getBlockRange RPC enriched (full block data). Price updater built. Block sync pipelining: validators catch up, 5 in-flight requests, 100 batches/req, adaptive ticker. Sentinel CSV evaluated — not worth retraining (no real tx load yet). Next: deploy to VPS, then Phase 3 (AI Moat).
+**Current Phase:** M10 -- L2 Ecosystem Build (Phase 2 COMPLETE)
+**Current Sprint:** Phase 2 closed. Phase 3 (AI Moat) next.
+**Sprint Status:** v0.1.11 deployed to VPS (fresh chain). aztb_call/eth_call working. 5 contracts deployed. WASZTB/tUSDC pair live with liquidity. Price updater running. Block sync pipelining shipped. Swap UI wired for live execution. GitHub release v0.1.11 with 3 assets (Linux, Windows, Wallet). Next: Phase 3 — Content Provenance Registry.
 
 ---
 

@@ -21,6 +21,26 @@ Entries are prepended (newest first).
 
 ## Entries
 
+### v0.1.11 Full Deployment + Swap Execution (2026-03-25)
+- **Date**: 2026-03-25
+- **Sprint**: Ecosystem Phase 2 close-out
+- **Commits**: ab5f4fb, f2f230d, fe4c09d, 1b06e1f, 66bacd9, 5b84a1a
+- **Files Changed**:
+  - `crates/aztibase-execution/src/routing.rs` — EVM tx hash includes deployer+nonce+gas_limit.
+  - `crates/aztibase-node/src/pipeline.rs` — Pipeline tx hash matches RPC for EvmDeploy/EvmCall.
+  - `crates/aztibase-rpc/src/server.rs` — aztb_getStorageAt RPC added. aztb_call handler.
+  - `contracts/deploy.mjs` — Router ctor arg order fix (Factory,WASZTB). Pre-seeds addresses. Router/tusdc plans.
+  - `contracts/seed-liquidity.mjs` — Nonce from chain. 3M gas for addLiquidity.
+  - `contracts/deployed-addresses.json` — Fresh chain addresses.
+  - `contracts/oracle/price-updater.mjs` — Price updater deployed to VPS.
+  - `indexer/src/index.ts` — Default RPC to VPS.
+  - `indexer/start.bat` — --fresh flag support.
+  - `website/src/content/docs/tools/swap.mdx` — Live swap execution: Ed25519 signing, approve+swap flow, keccak selectors. New contract addresses.
+  - `Cargo.toml` — Version 0.1.11.
+- **Deployed**: Fresh VPS chain. 5 contracts. WASZTB/tUSDC pair with liquidity. Price updater running.
+- **GitHub Release**: v0.1.11 with 3 assets (Linux tar.gz, Windows zip, Wallet extension zip).
+- **Security Flags**: None.
+
 ### aztb_call / eth_call — Read-Only EVM Calls (2026-03-24)
 - **Date**: 2026-03-24
 - **Sprint**: Ecosystem Phase 2g (Post-M9)

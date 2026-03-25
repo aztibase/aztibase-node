@@ -11,8 +11,7 @@ Download the latest release from [GitHub Releases](https://github.com/aztibase/a
 
 ```bash
 # Extract the full node package
-tar -xzf aztibase-fullnode-v0.1.2-windows-x64.tar.gz
-cd fullnode
+tar -xzf aztibase-validator-linux-v0.1.11.tar.gz
 
 # Start the node
 bash start.sh

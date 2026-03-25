@@ -164,8 +164,32 @@ Read-only EVM call. Executes contract code without sending a transaction.
 
 ```bash
 curl -X POST http://localhost:9944 -H 'Content-Type: application/json' \
-  -d '{"jsonrpc":"2.0","method":"aztb_call","params":[{"to":"0x42160813f939477d47bbdf8b4142ceda46fe03d3000000000000000000000000","data":"0x46b4ee00"}],"id":1}'
+  -d '{"jsonrpc":"2.0","method":"aztb_call","params":[{"to":"0x74af2626ed64f9966994a2f0828915b4524d0fae000000000000000000000000","data":"0x2e0f2625"}],"id":1}'
 ```
+
+### aztb_getStorageAt
+
+Read a single storage slot from a contract.
+
+**Parameters:** `[address, slotHex]`
+
+**Returns:** `{ "value": "0x..." | null, "storageSlots": number }`
+
+### aztb_getChainHealth
+
+Current chain health assessment from the AI Sentinel.
+
+**Parameters:** none
+
+**Returns:** `{ "level": "normal"|"warning"|"critical", "score": float, "features": [...] }`
+
+### aztb_getValidatorProfile
+
+Validator info including stake, commission, and uptime.
+
+**Parameters:** `[address]`
+
+**Returns:** Validator profile object or null.
 
 ### aztb_getBlockTransactionCount
 
