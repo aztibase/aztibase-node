@@ -393,7 +393,17 @@ const DEPLOY_PLANS = {
     steps: [
       { name: 'WASZTB',          buildDir: resolve(__dirname, 'dex/build') },
       { name: 'AztibaseFactory', buildDir: resolve(__dirname, 'dex/build') },
-      { name: 'AztibaseRouter',  buildDir: resolve(__dirname, 'dex/build'), ctorArgs: ['WASZTB', 'AztibaseFactory'] },
+      { name: 'AztibaseRouter',  buildDir: resolve(__dirname, 'dex/build'), ctorArgs: ['AztibaseFactory', 'WASZTB'] },
+    ],
+  },
+  router: {
+    steps: [
+      { name: 'AztibaseRouter', buildDir: resolve(__dirname, 'dex/build'), ctorArgs: ['AztibaseFactory', 'WASZTB'] },
+    ],
+  },
+  tusdc: {
+    steps: [
+      { name: 'TestUSDC', buildDir: resolve(__dirname, 'dex/build') },
     ],
   },
   all: {
@@ -401,7 +411,8 @@ const DEPLOY_PLANS = {
       { name: 'PriceFeed',       buildDir: resolve(__dirname, 'oracle/build') },
       { name: 'WASZTB',          buildDir: resolve(__dirname, 'dex/build') },
       { name: 'AztibaseFactory', buildDir: resolve(__dirname, 'dex/build') },
-      { name: 'AztibaseRouter',  buildDir: resolve(__dirname, 'dex/build'), ctorArgs: ['WASZTB', 'AztibaseFactory'] },
+      { name: 'AztibaseRouter',  buildDir: resolve(__dirname, 'dex/build'), ctorArgs: ['AztibaseFactory', 'WASZTB'] },
+      { name: 'TestUSDC',        buildDir: resolve(__dirname, 'dex/build') },
     ],
   },
 };
@@ -441,7 +452,12 @@ async function main() {
   let nonce = await getNonce(deployerAddr);
   console.log(`  Nonce:    ${nonce}`);
 
-  const deployed = {};
+  const addressFile = resolve(__dirname, 'deployed-addresses.json');
+  const network = RPC.includes('102.209') ? 'testnet' : 'local';
+  const existing = existsSync(addressFile) ? JSON.parse(readFileSync(addressFile, 'utf-8')) : {};
+  const deployed = { ...(existing[network] || {}) };
+  delete deployed.deployedAt;
+  delete deployed.deployer;
 
   for (const step of plan.steps) {
     let code = loadBytecode(step.name, step.buildDir);
@@ -475,17 +491,14 @@ async function main() {
     console.log(`  ${name.padEnd(20)} ${addr}`);
   }
 
-  // Save addresses to file
-  const addressFile = resolve(__dirname, 'deployed-addresses.json');
-  const existing = existsSync(addressFile) ? JSON.parse(readFileSync(addressFile, 'utf-8')) : {};
-  const network = RPC.includes('102.209') ? 'testnet' : 'local';
-  existing[network] = {
-    ...existing[network],
+  const saved = existsSync(addressFile) ? JSON.parse(readFileSync(addressFile, 'utf-8')) : {};
+  saved[network] = {
+    ...saved[network],
     ...deployed,
     deployedAt: new Date().toISOString(),
     deployer: deployerAddr,
   };
-  writeFileSync(addressFile, JSON.stringify(existing, null, 2) + '\n');
+  writeFileSync(addressFile, JSON.stringify(saved, null, 2) + '\n');
   console.log(`\n  Addresses saved to ${addressFile}`);
 }
 

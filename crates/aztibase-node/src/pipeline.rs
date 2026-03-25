@@ -1205,6 +1205,7 @@ impl ExecutionPipeline {
             buf.extend_from_slice(deployer);
             buf.extend_from_slice(code);
             buf.extend_from_slice(&nonce.to_le_bytes());
+            buf.extend_from_slice(&gas_limit.to_le_bytes());
             let tx_hash = hash(&buf);
             let cr = evm::evm_deploy(&mut state, tx_hash, deployer, code, *nonce, *gas_limit);
             exec_receipts.push(ExecutionReceipt {
@@ -1223,6 +1224,7 @@ impl ExecutionPipeline {
             buf.extend_from_slice(caller);
             buf.extend_from_slice(calldata);
             buf.extend_from_slice(&nonce.to_le_bytes());
+            buf.extend_from_slice(&gas_limit.to_le_bytes());
             let tx_hash = hash(&buf);
             let cr = evm::evm_call(
                 &mut state, tx_hash, caller, contract, calldata, *nonce, *gas_limit, *value,

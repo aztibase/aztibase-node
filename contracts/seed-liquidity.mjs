@@ -21,12 +21,11 @@ const addresses = JSON.parse(readFileSync(resolve(__dirname, 'deployed-addresses
 const testnet = addresses.testnet;
 
 const RPC = process.env.AZTB_RPC || 'http://102.209.21.247:9944';
-const SECRET = process.env.AZTB_DEPLOYER_KEY || 'dbe91028bf5a3f64c5b095bda345ee6402d0ca8654161228859d616cbcd995c3';
+const SECRET = process.env.AZTB_DEPLOYER_KEY || 'dbe91028c057a1e74438dc47d42e8e4d5e2eae3f55c4be0bbabb9c6f1d0c1d41';
 const GAS_PRICE = 1;
 
-// Liquidity amounts
-const WASZTB_AMOUNT = 100_000n;   // 100K WASZTB (wrap this much native AZTB)
-const TUSDC_AMOUNT = 100_000n * 1_000_000n;  // 100K tUSDC (6 decimals = 100_000_000_000)
+const WASZTB_AMOUNT = 1_000n;
+const TUSDC_AMOUNT = 1_000_000n * 1_000_000n;
 
 const PREFIX_EVM_CALL = 0x05;
 const EVM_CALL_VARIANT = 4;

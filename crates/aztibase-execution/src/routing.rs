@@ -699,24 +699,28 @@ pub fn compute_tx_hash(tx: &TxKind) -> [u8; 32] {
             deployer,
             code,
             nonce,
+            gas_limit,
             ..
         } => {
             let mut buf = Vec::new();
             buf.extend_from_slice(deployer);
             buf.extend_from_slice(code);
             buf.extend_from_slice(&nonce.to_le_bytes());
+            buf.extend_from_slice(&gas_limit.to_le_bytes());
             hash(&buf)
         }
         TxKind::EvmCall {
             caller,
             calldata,
             nonce,
+            gas_limit,
             ..
         } => {
             let mut buf = Vec::new();
             buf.extend_from_slice(caller);
             buf.extend_from_slice(calldata);
             buf.extend_from_slice(&nonce.to_le_bytes());
+            buf.extend_from_slice(&gas_limit.to_le_bytes());
             hash(&buf)
         }
         TxKind::AiInfer {

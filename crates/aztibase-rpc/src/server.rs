@@ -694,6 +694,7 @@ async fn dispatch(state: &RpcState, req: &JsonRpcRequest) -> JsonRpcResponse {
         "aztb_getEpochSummaries" => handle_get_epoch_summaries(state, req).await,
         "aztb_call" => handle_static_call(state, req).await,
         "eth_call" => handle_static_call(state, req).await,
+        "aztb_getStorageAt" => handle_get_storage_at(state, req).await,
         _ => JsonRpcResponse::error(
             req.id.clone(),
             METHOD_NOT_FOUND,
@@ -985,6 +986,66 @@ async fn handle_get_nonce(state: &RpcState, req: &JsonRpcRequest) -> JsonRpcResp
     let accounts = state.accounts.read().await;
     let nonce = accounts.nonce(&address);
     JsonRpcResponse::success(req.id.clone(), serde_json::json!(nonce))
+}
+
+async fn handle_get_storage_at(state: &RpcState, req: &JsonRpcRequest) -> JsonRpcResponse {
+    let address = match parse_address(&req.params) {
+        Ok(a) => a,
+        Err(e) => return JsonRpcResponse::error(req.id.clone(), INVALID_PARAMS, e),
+    };
+    let slot_hex = match req.params.get(1).and_then(|v| v.as_str()) {
+        Some(s) => s.strip_prefix("0x").unwrap_or(s),
+        None => {
+            return JsonRpcResponse::error(
+                req.id.clone(),
+                INVALID_PARAMS,
+                "missing slot parameter".into(),
+            );
+        }
+    };
+    let slot_bytes = match hex::decode(slot_hex.to_string().as_str()) {
+        Ok(b) => b,
+        Err(_) => {
+            return JsonRpcResponse::error(
+                req.id.clone(),
+                INVALID_PARAMS,
+                "invalid slot hex".into(),
+            );
+        }
+    };
+    let accounts = state.accounts.read().await;
+    let acct = accounts.get(&address);
+    let storage_count = acct.map(|a| a.storage.len()).unwrap_or(0);
+    let keys_sample: Vec<String> = acct
+        .map(|a| {
+            a.storage
+                .keys()
+                .take(5)
+                .map(|k| format!("0x{}({}B)", hex::encode(k), k.len()))
+                .collect()
+        })
+        .unwrap_or_default();
+    let qk = format!("0x{}({}B)", hex::encode(&slot_bytes), slot_bytes.len());
+    match accounts.get_storage(&address, &slot_bytes) {
+        Some(v) => JsonRpcResponse::success(
+            req.id.clone(),
+            serde_json::json!({
+                "value": format!("0x{}", hex::encode(v)),
+                "storageSlots": storage_count,
+                "queryKey": qk,
+                "sampleKeys": keys_sample,
+            }),
+        ),
+        None => JsonRpcResponse::success(
+            req.id.clone(),
+            serde_json::json!({
+                "value": null,
+                "storageSlots": storage_count,
+                "queryKey": qk,
+                "sampleKeys": keys_sample,
+            }),
+        ),
+    }
 }
 
 async fn handle_get_code(state: &RpcState, req: &JsonRpcRequest) -> JsonRpcResponse {
