@@ -72,6 +72,11 @@ description: Swap tokens on the Aztibase DEX
       </div>
     </div>
 
+    <div class="swap-wallet-section" id="swap-wallet">
+      <input type="password" id="swap-key" class="swap-key-input" placeholder="Paste secret key to enable swaps..." spellcheck="false" autocomplete="off" />
+      <div id="swap-wallet-info" class="swap-wallet-info" style="display:none;"></div>
+    </div>
+
     <button type="button" id="swap-btn" class="swap-submit" disabled>
       Enter an amount
     </button>
@@ -275,6 +280,14 @@ The Aztibase DEX uses an **x*y=k** constant-product AMM (Uniswap V2 pattern). Li
   cursor: pointer;
   transition: opacity 0.15s, transform 0.1s;
 }
+.swap-wallet-section { margin-top: 0.75rem; }
+.swap-key-input {
+  width: 100%; padding: 0.6rem 0.75rem; border: 1px solid rgba(136,120,166,0.15);
+  border-radius: 8px; background: #12121a; color: #e0dce8; font-size: 0.75rem;
+  font-family: 'Consolas','Fira Code',monospace; outline: none; box-sizing: border-box;
+}
+.swap-key-input:focus { border-color: #8878a6; }
+.swap-wallet-info { font-size: 0.72rem; color: #8878a6; margin-top: 0.3rem; }
 .swap-submit:hover:not(:disabled) {
   opacity: 0.9;
   transform: translateY(-1px);
@@ -435,7 +448,7 @@ The Aztibase DEX uses an **x*y=k** constant-product AMM (Uniswap V2 pattern). Li
           document.getElementById('swap-min-out').textContent =
             (outFloat * (1 - SLIPPAGE)).toFixed(6) + ' ' + tokenTo.value;
           details.style.display = 'block';
-          swapBtn.textContent = 'Swap (connect wallet)';
+          swapBtn.textContent = walletKey ? 'Swap' : 'Swap (paste key above)';
           swapBtn.disabled = false;
         }).catch(function(err) {
           var simulated = val * 0.997;
@@ -445,19 +458,184 @@ The Aztibase DEX uses an **x*y=k** constant-product AMM (Uniswap V2 pattern). Li
           document.getElementById('swap-impact').textContent = '--';
           document.getElementById('swap-min-out').textContent = '--';
           details.style.display = 'block';
-          swapBtn.textContent = 'Swap (connect wallet)';
+          swapBtn.textContent = walletKey ? 'Swap' : 'Swap (paste key above)';
           swapBtn.disabled = false;
         });
     }, 500);
   });
 
-  swapBtn.addEventListener('click', function() {
-    showResult('Connect a wallet to swap. Browser wallet extension or aztb_sendTransaction RPC required.', false);
+  var walletKey = null;
+  var walletAddr = null;
+  var keyInput = document.getElementById('swap-key');
+  var walletInfo = document.getElementById('swap-wallet-info');
+
+  keyInput.addEventListener('change', async function() {
+    var hex = keyInput.value.trim().replace('0x','');
+    if (hex.length !== 64) { walletKey = null; walletAddr = null; walletInfo.style.display='none'; return; }
+    try {
+      var keyBytes = hexToBytes(hex);
+      var ed = await loadEd25519();
+      var pub = await ed.getPublicKeyAsync(keyBytes);
+      var addr = await blake3(pub);
+      walletKey = hex;
+      walletAddr = '0x' + bytesToHex(addr);
+      walletInfo.textContent = 'Wallet: ' + walletAddr.slice(0,12) + '...' + walletAddr.slice(-8);
+      walletInfo.style.display = 'block';
+      if (amountIn.value && parseFloat(amountIn.value) > 0) {
+        swapBtn.textContent = 'Swap';
+      }
+    } catch(e) { walletKey = null; walletAddr = null; walletInfo.style.display='none'; }
   });
 
+  swapBtn.addEventListener('click', async function() {
+    if (!walletKey) {
+      showResult('Paste your secret key above to enable swaps.', false);
+      return;
+    }
+    var val = parseFloat(amountIn.value);
+    if (!val || val <= 0) return;
+
+    swapBtn.textContent = 'Swapping...';
+    swapBtn.disabled = true;
+    result.style.display = 'none';
+
+    try {
+      var ed = await loadEd25519();
+      var keyBytes = hexToBytes(walletKey);
+      var pub = await ed.getPublicKeyAsync(keyBytes);
+      var callerAddr = await blake3(pub);
+      var callerHex = '0x' + bytesToHex(callerAddr);
+
+      var nonceRes = await rpcCall('aztb_getNonce', [callerHex]);
+      var nonce = typeof nonceRes === 'string' ? parseInt(nonceRes, 16) : Number(nonceRes);
+
+      var amountWei = BigInt(Math.floor(val));
+      var minOut = 0n;
+      var deadline = BigInt(Math.floor(Date.now()/1000) + 600);
+      var path = [tokenAddr(tokenFrom.value), tokenAddr(tokenTo.value)];
+      var toAddr = callerAddr;
+
+      showResult('Approving Router to spend ' + tokenFrom.value + '...', true);
+      var approveSel = keccakSel('approve(address,uint256)');
+      var approveData = hexToBytes(
+        approveSel
+        + pad32(CONTRACTS.Router.replace('0x','').replace(/0+$/,''))
+        + toHex256(amountWei * 10n)
+      );
+      var tokenContract = hexToBytes(tokenAddr(tokenFrom.value).replace('0x',''));
+      var approvePostcard = encodeEvmCall(callerAddr, tokenContract, approveData, nonce, 100000, 0);
+      var approvePayload = new Uint8Array(1 + approvePostcard.length);
+      approvePayload[0] = 0x05;
+      approvePayload.set(approvePostcard, 1);
+      var approveMsg = concatBytes(domain, approvePayload);
+      var approveSig = await ed.signAsync(approveMsg, keyBytes);
+      var approvePayloadLen = new Uint8Array(4);
+      new DataView(approvePayloadLen.buffer).setUint32(0, approvePayload.length, true);
+      var approveEnv = concatBytes(new Uint8Array([0xAA]), approvePayloadLen, approvePayload, pub, approveSig);
+      await rpcCall('aztb_sendTransaction', ['0x' + bytesToHex(approveEnv)]);
+      nonce++;
+      await new Promise(function(r){setTimeout(r,2000)});
+
+      showResult('Sending swap...', true);
+      var sel = keccakSel('swapExactTokensForTokens(uint256,uint256,address[],address,uint256)');
+      var calldata = hexToBytes(
+        sel
+        + toHex256(amountWei)
+        + toHex256(minOut)
+        + toHex256(160n)
+        + pad32(bytesToHex(toAddr))
+        + toHex256(deadline)
+        + toHex256(BigInt(path.length))
+        + path.map(function(a){ return pad32(a); }).join('')
+      );
+
+      var contract = hexToBytes(CONTRACTS.Router.replace('0x',''));
+      var postcard = encodeEvmCall(callerAddr, contract, calldata, nonce, 500000, 0);
+      var payload = new Uint8Array(1 + postcard.length);
+      payload[0] = 0x05;
+      payload.set(postcard, 1);
+
+      var domain = new TextEncoder().encode('AZTB_TX_V1');
+      var msg = concatBytes(domain, payload);
+      var sig = await ed.signAsync(msg, keyBytes);
+
+      var payloadLen = new Uint8Array(4);
+      new DataView(payloadLen.buffer).setUint32(0, payload.length, true);
+      var envelope = concatBytes(new Uint8Array([0xAA]), payloadLen, payload, pub, sig);
+      var envelopeHex = '0x' + bytesToHex(envelope);
+
+      var txHash = await rpcCall('aztb_sendTransaction', [envelopeHex]);
+      showResult('Tx submitted: ' + txHash, true);
+
+      for (var i = 0; i < 15; i++) {
+        await new Promise(function(r){setTimeout(r, 2000)});
+        try {
+          var receipt = await rpcCall('aztb_getTransactionReceipt', [txHash]);
+          if (receipt) {
+            if (receipt.success) {
+              showResult('Swap confirmed! Gas: ' + parseInt(receipt.gasUsed,16), true);
+            } else {
+              showResult('Swap failed: ' + (receipt.error || 'reverted'), false);
+            }
+            break;
+          }
+        } catch(e) {}
+      }
+    } catch(e) {
+      showResult('Swap error: ' + e.message, false);
+    }
+    swapBtn.textContent = 'Swap';
+    swapBtn.disabled = false;
+  });
+
+  function hexToBytes(hex) {
+    hex = hex.replace(/^0x/,'');
+    var b = new Uint8Array(hex.length/2);
+    for (var i=0;i<b.length;i++) b[i]=parseInt(hex.slice(i*2,i*2+2),16);
+    return b;
+  }
+  function bytesToHex(b) {
+    return Array.from(b).map(function(x){return x.toString(16).padStart(2,'0')}).join('');
+  }
+  function concatBytes() {
+    var total=0; for(var i=0;i<arguments.length;i++) total+=arguments[i].length;
+    var out=new Uint8Array(total); var off=0;
+    for(var i=0;i<arguments.length;i++){out.set(arguments[i],off);off+=arguments[i].length;}
+    return out;
+  }
+  function encodeVarint(n) {
+    if(typeof n==='bigint'){var bytes=[];while(n>0x7Fn){bytes.push(Number(n&0x7Fn)|0x80);n>>=7n;}bytes.push(Number(n));return new Uint8Array(bytes);}
+    var bytes=[];var v=n>>>0;while(v>0x7F){bytes.push((v&0x7F)|0x80);v>>>=7;}bytes.push(v);return new Uint8Array(bytes);
+  }
+  function encodeVarint64(n){return encodeVarint(BigInt(n));}
+  function encodeBytes(d){var l=encodeVarint(d.length);var o=new Uint8Array(l.length+d.length);o.set(l);o.set(d,l.length);return o;}
+  function encodeEvmCall(caller,contract,calldata,nonce,gasLimit,value) {
+    return concatBytes(encodeVarint(4),caller,contract,encodeBytes(calldata),encodeVarint64(nonce),encodeVarint64(gasLimit),encodeVarint64(value||0),encodeVarint64(1));
+  }
+  var _ed25519 = null;
+  async function loadEd25519() {
+    if(_ed25519) return _ed25519;
+    _ed25519 = await import('https://esm.run/@noble/ed25519');
+    return _ed25519;
+  }
+  var _blake3 = null;
+  async function blake3(data) {
+    if(!_blake3){var m=await import('https://esm.run/@noble/hashes/blake3');_blake3=m.blake3;}
+    return _blake3(data);
+  }
+  var _keccak = null;
+  async function loadKeccak() {
+    if(!_keccak){var m=await import('https://esm.run/@noble/hashes/sha3');_keccak=m.keccak_256;}
+    return _keccak;
+  }
+  function keccakSel(sig) {
+    if(!_keccak) return '00000000';
+    return bytesToHex(_keccak(new TextEncoder().encode(sig)).slice(0,4));
+  }
+  (async function(){await loadKeccak();})();
+
   function encodeGetAmountsOut(amountWei, path) {
-    // getAmountsOut(uint256,address[]) selector: 0xd06ca61f
-    var sel = 'd06ca61f';
+    var sel = keccakSel('getAmountsOut(uint256,address[])');
     var amount = toHex256(amountWei);
     var offset = toHex256(64n); // offset to array
     var arrLen = toHex256(BigInt(path.length));
