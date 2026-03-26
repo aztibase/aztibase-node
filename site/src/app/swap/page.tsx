@@ -154,23 +154,30 @@ export default function SwapPage() {
     return CONTRACTS[sym as keyof typeof CONTRACTS] || CONTRACTS.WASZTB;
   }
 
+  function tokenDecimals(sym: string): number {
+    const t = TOKENS.find((tk) => tk.symbol === sym);
+    return t ? t.decimals : 18;
+  }
+
   const fetchQuote = useCallback(async (val: number) => {
     if (!val || val <= 0) { setAmountOut(""); setRate(""); return; }
     setLoading(true);
     try {
-      const amountWei = BigInt(Math.floor(val)) * 10n ** 18n;
+      const fromDec = tokenDecimals(tokenFrom);
+      const toDec = tokenDecimals(tokenTo);
+      const amountWei = BigInt(Math.floor(val * 10 ** Math.min(fromDec, 8))) * 10n ** BigInt(Math.max(0, fromDec - 8));
       const path = [tokenAddr(tokenFrom), tokenAddr(tokenTo)];
       const data = "0x" + KECCAK_GET_AMOUNTS_OUT + toHex256(amountWei) + toHex256(64n) + toHex256(BigInt(path.length)) +
         path.map((a) => toEvmAddress(a)).join("");
       const res = await evmCall(CONTRACTS.Router, data);
       const outHex = res.replace("0x", "").slice(192, 256);
       const outWei = hexToBigInt(outHex);
-      const outFloat = Number(outWei) / 1e18;
-      setAmountOut(outFloat.toFixed(6));
-      setRate(`1 ${tokenFrom} = ${(outFloat / val).toFixed(6)} ${tokenTo}`);
+      const outFloat = Number(outWei) / (10 ** toDec);
+      setAmountOut(outFloat.toFixed(Math.min(toDec, 6)));
+      setRate(`1 ${tokenFrom} = ${(outFloat / val).toFixed(Math.min(toDec, 6))} ${tokenTo}`);
     } catch {
-      setAmountOut((val * 0.997).toFixed(6));
-      setRate(`~0.997 (est.)`);
+      setAmountOut("--");
+      setRate("Quote unavailable");
     }
     setLoading(false);
   }, [tokenFrom, tokenTo]);

@@ -24,8 +24,8 @@ const RPC = process.env.AZTB_RPC || 'http://102.209.21.247:9944';
 const SECRET = process.env.AZTB_DEPLOYER_KEY || 'dbe91028c057a1e74438dc47d42e8e4d5e2eae3f55c4be0bbabb9c6f1d0c1d41';
 const GAS_PRICE = 1;
 
-const WASZTB_AMOUNT = 1_000n;
-const TUSDC_AMOUNT = 1_000_000n * 1_000_000n;
+const WASZTB_AMOUNT = 1_000n * (10n ** 18n);      // 1,000 WASZTB (18 decimals)
+const TUSDC_AMOUNT = 10_000_000n * (10n ** 6n);   // 10M tUSDC (6 decimals) — price ~$0.0001/AZTB
 
 const PREFIX_EVM_CALL = 0x05;
 const EVM_CALL_VARIANT = 4;

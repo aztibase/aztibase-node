@@ -20,7 +20,7 @@ export const CONTRACTS = {
 export const TOKENS = [
   { symbol: "AZTB", name: "Aztibase", decimals: 18, native: true, address: null },
   { symbol: "WASZTB", name: "Wrapped AZTB", decimals: 18, native: false, address: CONTRACTS.WASZTB },
-  { symbol: "tUSDC", name: "Test USDC", decimals: 18, native: false, address: CONTRACTS.tUSDC },
+  { symbol: "tUSDC", name: "Test USDC", decimals: 6, native: false, address: CONTRACTS.tUSDC },
 ] as const;
 
 export type Token = (typeof TOKENS)[number];
