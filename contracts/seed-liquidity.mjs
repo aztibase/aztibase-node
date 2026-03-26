@@ -24,8 +24,8 @@ const RPC = process.env.AZTB_RPC || 'http://102.209.21.247:9944';
 const SECRET = process.env.AZTB_DEPLOYER_KEY || 'dbe91028c057a1e74438dc47d42e8e4d5e2eae3f55c4be0bbabb9c6f1d0c1d41';
 const GAS_PRICE = 1;
 
-const WASZTB_AMOUNT = 1_000n * (10n ** 18n);      // 1,000 WASZTB (18 decimals)
-const TUSDC_AMOUNT = 10_000_000n * (10n ** 6n);   // 10M tUSDC (6 decimals) — price ~$0.0001/AZTB
+const WASZTB_AMOUNT = 100_000n;                   // 100,000 native AZTB → WASZTB (no decimal scaling — native has no decimals)
+const TUSDC_AMOUNT = 10_000n * (10n ** 6n);       // 10,000 tUSDC (6 decimals) — sets price at $0.10/AZTB
 
 const PREFIX_EVM_CALL = 0x05;
 const EVM_CALL_VARIANT = 4;
@@ -239,7 +239,7 @@ async function main() {
     abiAddress(callerHex + '000000000000000000000000'),  // to (deployer, padded to 32 bytes)
     abiUint256(deadline),             // deadline
   );
-  const payload4 = await buildEvmCall(callerAddr, router32, addLiq, nonce, 3000000, 0n);
+  const payload4 = await buildEvmCall(callerAddr, router32, addLiq, nonce, 2000000, 0n);
   const tx4 = await signAndSend(payload4, keyBytes);
   console.log(`    Tx: ${tx4}`);
   const r4 = await waitReceipt(tx4, 'addLiquidity');
