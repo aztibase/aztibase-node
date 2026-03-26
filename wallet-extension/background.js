@@ -1,7 +1,7 @@
 // Aztibase Wallet — background service worker (vault + signer)
 
 let vault = { secret: null, address: null, privKey: null, publicKey: null };
-let rpcUrl = "https://rpc.aztibase.com";
+let rpcUrl = "http://102.209.21.247:9944";
 
 const GOOGLE_CLIENT_ID = "REPLACE_WITH_YOUR_GOOGLE_CLIENT_ID.apps.googleusercontent.com";
 const GITHUB_CLIENT_ID = "REPLACE_WITH_YOUR_GITHUB_CLIENT_ID";
@@ -23,7 +23,7 @@ chrome.runtime.onInstalled.addListener(() => {
   chrome.storage.local.get("network", (result) => {
     if (!result.network) {
       chrome.storage.local.set({
-        network: { name: "Testnet", rpc: "https://rpc.aztibase.com", chainId: "0xA27B" },
+        network: { name: "Testnet", rpc: "http://102.209.21.247:9944", chainId: "0xA27B" },
       });
     }
   });
@@ -459,7 +459,7 @@ async function handleProviderRequest(method, params) {
   }
 
   // Reload network config
-  if (!rpcUrl || rpcUrl === "https://rpc.aztibase.com") {
+  if (!rpcUrl) {
     const net = await new Promise((r) =>
       chrome.storage.local.get(["network"], r)
     );
