@@ -4,7 +4,7 @@ import { useWalletStore } from "@/stores/wallet";
 import { useSwapBalance } from "@/hooks/useBalance";
 import { evmCall, rpc, getTransactionReceipt } from "@/lib/rpc";
 import { CONTRACTS, TOKENS } from "@/config/chain";
-import { formatBalance, hexToBigInt, pad32, toHex256 } from "@/lib/utils";
+import { formatBalance, hexToBigInt, toHex256, toEvmAddress } from "@/lib/utils";
 import WalletConnect from "@/components/WalletConnect";
 
 const KECCAK_GET_AMOUNTS_OUT = "d06ca61f";
@@ -74,21 +74,21 @@ function buildSwapCalldata(fromName: string, toName: string, amountWei: bigint, 
 
   if (payingNative) {
     const sel = keccakSel("swapExactETHForTokens(uint256,address[],address,uint256)");
-    data = sel + toHex256(minOut) + toHex256(128n) + pad32(toAddrHex.replace("0x", ""))
+    data = sel + toHex256(minOut) + toHex256(128n) + toEvmAddress(toAddrHex)
       + toHex256(deadline) + toHex256(BigInt(path.length))
-      + path.map((a) => pad32(a)).join("");
+      + path.map((a) => toEvmAddress(a)).join("");
   } else if (receivingNative) {
     const sel = keccakSel("swapExactTokensForETH(uint256,uint256,address[],address,uint256)");
     data = sel + toHex256(amountWei) + toHex256(minOut) + toHex256(160n)
-      + pad32(toAddrHex.replace("0x", "")) + toHex256(deadline)
+      + toEvmAddress(toAddrHex) + toHex256(deadline)
       + toHex256(BigInt(path.length))
-      + path.map((a) => pad32(a)).join("");
+      + path.map((a) => toEvmAddress(a)).join("");
   } else {
     const sel = keccakSel("swapExactTokensForTokens(uint256,uint256,address[],address,uint256)");
     data = sel + toHex256(amountWei) + toHex256(minOut) + toHex256(160n)
-      + pad32(toAddrHex.replace("0x", "")) + toHex256(deadline)
+      + toEvmAddress(toAddrHex) + toHex256(deadline)
       + toHex256(BigInt(path.length))
-      + path.map((a) => pad32(a)).join("");
+      + path.map((a) => toEvmAddress(a)).join("");
   }
   return "0x" + data;
 }
@@ -161,7 +161,7 @@ export default function SwapPage() {
       const amountWei = BigInt(Math.floor(val)) * 10n ** 18n;
       const path = [tokenAddr(tokenFrom), tokenAddr(tokenTo)];
       const data = "0x" + KECCAK_GET_AMOUNTS_OUT + toHex256(amountWei) + toHex256(64n) + toHex256(BigInt(path.length)) +
-        path.map((a) => pad32(a)).join("");
+        path.map((a) => toEvmAddress(a)).join("");
       const res = await evmCall(CONTRACTS.Router, data);
       const outHex = res.replace("0x", "").slice(192, 256);
       const outWei = hexToBigInt(outHex);
@@ -239,7 +239,7 @@ export default function SwapPage() {
           setSwapStatus({ msg: `Approving Router to spend ${fromName}...`, ok: true });
           const approveSel = keccakSel("approve(address,uint256)");
           const approveCalldata = "0x" + approveSel
-            + pad32(CONTRACTS.Router.replace("0x", "").replace(/0+$/, ""))
+            + toEvmAddress(CONTRACTS.Router)
             + toHex256(amountWei * 10n);
           await ext.signAndSendEvmCall(tokenAddr(fromName), approveCalldata, 100000, 0);
           await new Promise((r) => setTimeout(r, 2000));
@@ -272,7 +272,7 @@ export default function SwapPage() {
           setSwapStatus({ msg: `Approving Router to spend ${fromName}...`, ok: true });
           const approveSel = keccakSel("approve(address,uint256)");
           const approveData = hexToBytes(
-            approveSel + pad32(CONTRACTS.Router.replace("0x", "").replace(/0+$/, ""))
+            approveSel + toEvmAddress(CONTRACTS.Router)
             + toHex256(amountWei * 10n)
           );
           const tokenContract = hexToBytes(tokenAddr(fromName).replace("0x", ""));

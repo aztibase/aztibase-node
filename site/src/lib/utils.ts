@@ -29,3 +29,9 @@ export function toHex256(n: bigint): string {
 export function cn(...classes: (string | false | null | undefined)[]): string {
   return classes.filter(Boolean).join(" ");
 }
+
+export function toEvmAddress(addr: string): string {
+  const clean = addr.replace(/^0x/, "").replace(/0+$/, "");
+  const evm20 = clean.slice(0, 40);
+  return evm20.padStart(64, "0");
+}

@@ -1,7 +1,7 @@
 "use client";
 import { useCallback, useEffect, useState } from "react";
 import { getBalance, evmCall } from "@/lib/rpc";
-import { hexToBigInt, pad32 } from "@/lib/utils";
+import { hexToBigInt, toEvmAddress } from "@/lib/utils";
 import { useWalletStore } from "@/stores/wallet";
 import { CONTRACTS } from "@/config/chain";
 
@@ -46,7 +46,7 @@ export function useTokenBalance(contractAddress: string | null): BalanceResult {
     if (!address || !contractAddress) { setBalance(0n); return; }
     setLoading(true);
     try {
-      const data = "0x" + BALANCE_OF_SEL + pad32(address.replace("0x", ""));
+      const data = "0x" + BALANCE_OF_SEL + toEvmAddress(address);
       const res = await evmCall(contractAddress, data);
       if (!res || res === "0x") { setBalance(0n); }
       else { setBalance(hexToBigInt(res.replace("0x", "").slice(0, 64))); }
