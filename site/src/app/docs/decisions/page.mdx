@@ -1,0 +1,49 @@
+export const metadata = { title: "Architecture Decisions" };
+
+
+Aztibase documents all significant technical decisions as Architecture Decision Records (ADRs). This provides transparency into why the system is designed the way it is.
+
+## ADR Index
+
+| ADR | Decision | Status |
+|-----|----------|--------|
+| ADR-001 | Pure Rust dependencies only (no C/C++ build deps) | Accepted |
+| ADR-002 | redb as sole storage engine for all node types | Accepted |
+| ADR-003 | Dual MIT / Apache-2.0 licensing | Accepted |
+| ADR-004 | Workspace structure with 9 crates | Accepted |
+| ADR-005 | DAG-based consensus over linear chain | Accepted |
+| ADR-006 | BLAKE3 for all hashing (not SHA-256/Keccak) | Accepted |
+| ADR-007 | Ed25519 for transactions, BLS12-381 for finality | Accepted |
+| ADR-008 | Verkle trees for state (not Merkle Patricia Tries) | Accepted |
+| ADR-009 | EIP-1559 style fee model | Accepted |
+| ADR-010 | postcard for internal serialization | Accepted |
+| ADR-011 | Off-chain AI inference with on-chain verification | Accepted |
+| ADR-012 | Hybrid account + object model | Accepted |
+| ADR-013 | Dual VM (WASM + EVM) | Accepted |
+| ADR-014 | gossipsub for block/tx propagation | Accepted |
+| ADR-015 | QUIC + WebRTC transport | Accepted |
+| ADR-016 | 400ms round duration | Accepted |
+| ADR-017 | 4-round wave commit rule | Accepted |
+| ADR-018 | Threshold clock (message-driven, not timer) | Accepted |
+| ADR-019 | 1B fixed supply with halving emission | Accepted |
+| ADR-020 | 70/15/10/5 emission split | Accepted |
+| ADR-021 | Proof of Useful Work for AI compute | Accepted |
+| ADR-022 | tract + candle for AI runtime | Accepted |
+| ADR-023 | Browser wallet via WASM target | Accepted |
+| ADR-024 | postcard for WASM bridge serialization | Accepted |
+| ADR-025 | Consensus-based faucet (TxKind::FaucetDrip) | Accepted |
+| ADR-026 | Genesis ceremony CLI (multi-party setup) | Accepted |
+| ADR-027 | 0.0.0.0 bind for P2P (LAN discovery) | Accepted |
+| ADR-028 | nChain FTO risk assessment (LOW-MEDIUM) | Accepted |
+| ADR-029 | Checkpoint-based state snapshots | Accepted |
+
+## Decision Process
+
+All non-obvious technical choices go through this process:
+1. Identify the decision needed
+2. Research alternatives
+3. Document trade-offs
+4. Record the decision with rationale
+5. Review during security audit
+
+Full ADR details are available in the [source repository](https://github.com/aztibase/aztibase-node).

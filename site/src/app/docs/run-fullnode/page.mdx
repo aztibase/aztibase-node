@@ -1,0 +1,124 @@
+export const metadata = { title: "Run a Full Node" };
+
+
+Full nodes follow the chain without participating in consensus. They sync historical batches via the block sync protocol and follow new batches in real time via gossipsub.
+
+## Pre-built Binary (Fastest)
+
+Download the latest release from [GitHub Releases](https://github.com/aztibase/aztibase-node/releases).
+
+```bash
+# Extract the full node package
+tar -xzf aztibase-validator-linux-v0.1.11.tar.gz
+
+# Start the node
+bash start.sh
+```
+
+The node connects to public testnet boot nodes and begins catching up automatically.
+
+## Build from Source
+
+```bash
+git clone https://github.com/aztibase/aztibase.git
+cd aztibase
+cargo build --release
+```
+
+Create a config file `fullnode.toml`:
+
+```toml
+data_dir = "./data"
+genesis_path = "./genesis.toml"
+
+[network]
+listen_addresses = [
+    "/ip4/0.0.0.0/tcp/30336",
+    "/ip4/0.0.0.0/udp/30336/quic-v1",
+]
+boot_nodes = [
+    "/dns4/rpc.aztibase.com/tcp/30333",
+    "/dns4/rpc2.aztibase.com/tcp/30333",
+    "/dns4/rpc3.aztibase.com/tcp/30333",
+]
+idle_timeout_secs = 60
+stun_servers = [
+    "stun:stun.l.google.com:19302",
+    "stun:stun1.l.google.com:19302",
+]
+
+[rpc]
+listen_addr = "0.0.0.0:9947"
+enabled = true
+
+[log]
+level = "info"
+
+[ai]
+enabled = false
+models = []
+
+[metrics]
+enabled = true
+```
+
+Start the node:
+
+```bash
+./target/release/aztibase --config fullnode.toml
+```
+
+## How Sync Works
+
+Full nodes use a two-phase sync strategy:
+
+### Phase 1: Historical Catch-Up
+
+When a full node starts behind the network tip, it sends `RequestBatches` messages to validator peers:
+
+1. Node discovers its `batch_index` is behind the network `tip_index`
+2. Every 5 seconds, it requests up to 50 batches from a random connected peer
+3. Peers serve batches from their in-memory buffer or persistent archive
+4. Node applies batches sequentially, advancing `batch_index` one at a time
+5. Repeats until `batch_index == tip_index`
+
+A typical catch-up from genesis to 500 batches takes under 60 seconds.
+
+### Phase 2: Live Following
+
+Once caught up, the node subscribes to the `/aztibase/committed-batches/1.0.0` gossipsub topic:
+
+1. Validators broadcast a `CommittedBatchAnnounce` after each consensus commit
+2. Full nodes receive the announce, extract the batch data, and apply it
+3. `batch_index` advances in real time, tracking the network tip
+
+If the node falls behind (e.g., temporary disconnect), the catch-up ticker detects the gap and resumes Phase 1 automatically.
+
+## Verify Sync Status
+
+```bash
+# Check node health
+curl -s http://localhost:9947/health | jq .
+
+# Get current block height
+curl -s -X POST http://localhost:9947 \
+  -H "Content-Type: application/json" \
+  -d '{"jsonrpc":"2.0","method":"aztb_blockHeight","params":[],"id":1}' | jq .
+
+# Check node type (should show "full")
+curl -s -X POST http://localhost:9947 \
+  -H "Content-Type: application/json" \
+  -d '{"jsonrpc":"2.0","method":"aztb_nodeInfo","params":[],"id":1}' | jq .
+```
+
+## Upgrading to Validator
+
+A full node can become a validator by staking:
+
+1. Ensure the node is fully synced
+2. Generate a validator key: `./aztibase wallet generate --validator --output keys/validator.json`
+3. Get testnet tokens from the faucet
+4. Stake the minimum amount (50M AZTB)
+5. At the next epoch boundary, the node joins the active validator set
+
+See [Run a Validator](/docs/run-validator) for detailed instructions.

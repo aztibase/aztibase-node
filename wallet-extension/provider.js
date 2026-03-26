@@ -43,6 +43,8 @@
       request("signAndSendStake", { amount, gasPrice }),
     signAndSendUnstake: (amount, gasPrice) =>
       request("signAndSendUnstake", { amount, gasPrice }),
+    signAndSendEvmCall: (to, data, gasLimit, value) =>
+      request("signAndSendEvmCall", { to, data, gasLimit, value }),
     faucetDrip: () => request("faucetDrip"),
   };
 

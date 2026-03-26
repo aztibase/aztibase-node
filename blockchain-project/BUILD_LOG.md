@@ -21,6 +21,25 @@ Entries are prepended (newest first).
 
 ## Entries
 
+### Next.js Website Rebuild + Wallet Connect (2026-03-26)
+- **Date**: 2026-03-26
+- **Sprint**: M10 Phase 3 prep — Website rebuild
+- **Files Changed**:
+  - `site/` — NEW: Full Next.js 14 website replacing Starlight docs site
+  - `site/src/app/` — 24 pages: landing, swap, faucet, explorer, litepaper, 17 docs, docs hub
+  - `site/src/lib/rpc.ts` — RPC client for `aztb_*` methods via `https://rpc.aztibase.com`
+  - `site/src/stores/wallet.ts` — Zustand wallet store (extension + raw key modes)
+  - `site/src/hooks/useBalance.ts` — Native + ERC20 balance hooks
+  - `site/src/components/` — Header, Footer, WalletConnect dropdown
+  - `site/src/config/` — Chain config, contracts, tokens, docs sidebar nav
+  - `wallet-extension/background.js` — Added `signAndSendEvmCall` handler + EVM call payload encoding
+  - `wallet-extension/provider.js` — Added `signAndSendEvmCall` to `window.aztibase` API
+  - `website/src/components/Header.astro` — Wallet connect dropdown (old site, superseded)
+  - `website/src/content/docs/tools/swap.mdx` — AZTB native swap support, balance display (old site)
+  - VPS: nginx reverse proxy installed (port 80 → 9944), UFW port 80 opened
+- **Review Notes**: Full website rebuild from Starlight to Next.js. All 17 doc pages ported. Litepaper is now a styled React page (not raw markdown). Internal file paths and VPS IP removed from public docs. Wallet extension now supports EVM call signing. Cloudflare DNS for `rpc.aztibase.com` needs A record → 102.209.21.247 to complete RPC connectivity.
+- **Security Flags**: Removed `102.209.21.247` from SDK docs (replaced with `rpc.aztibase.com`). Removed internal file path reference from ADR page. All docs audited for sensitive content — clean.
+
 ### v0.1.11 Full Deployment + Swap Execution (2026-03-25)
 - **Date**: 2026-03-25
 - **Sprint**: Ecosystem Phase 2 close-out

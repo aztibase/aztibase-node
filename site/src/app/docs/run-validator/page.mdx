@@ -1,0 +1,150 @@
+export const metadata = { title: "Run a Validator" };
+
+
+This guide covers everything needed to run a production Aztibase validator — from choosing hardware to monitoring your node.
+
+## Hardware Requirements
+
+| Component | Minimum (Testnet) | Recommended (Mainnet) |
+|-----------|-------------------|----------------------|
+| CPU | 2 vCPU | 4+ vCPU (dedicated preferred) |
+| RAM | 4 GB | 8-16 GB |
+| Disk | 50 GB SSD | 200 GB NVMe |
+| Network | 100 Mbps | 1 Gbps unmetered |
+| OS | Ubuntu 22.04 / Debian 12 | Ubuntu 24.04 LTS |
+
+Storage grows ~1 GB/month on testnet. For archive nodes, plan for 500 GB+.
+
+## Recommended VPS Providers
+
+### Budget Tier (Testnet / Early Mainnet)
+
+| Provider | Plan | CPU | RAM | Disk | Price/mo |
+|----------|------|-----|-----|------|----------|
+| **Hetzner** | CX22 | 2 vCPU | 4 GB | 40 GB | €3.99 |
+| **Contabo** | VPS S | 4 vCPU | 8 GB | 50 GB | €6.99 |
+| **Vultr** | Cloud Compute | 2 vCPU | 4 GB | 80 GB | $12 |
+
+### Production Tier
+
+| Provider | Plan | CPU | RAM | Disk | Price/mo |
+|----------|------|-----|-----|------|----------|
+| **Hetzner** | CX32 | 4 vCPU | 8 GB | 80 GB | €7.59 |
+| **Contabo** | VPS M | 6 vCPU | 16 GB | 100 GB | €10.49 |
+| **Hetzner** | CCX23 (ARM) | 4 vCPU | 8 GB | 80 GB | €7.19 |
+
+**Our recommendation:** Start with Hetzner CX22 at €3.99/month. Upgrade to CX32 when mainnet traffic increases.
+
+## Quick Setup
+
+### 1. Provision a VPS
+
+Create an Ubuntu 24.04 server with your chosen provider. SSH in:
+
+```bash
+ssh root@YOUR_SERVER_IP
+```
+
+### 2. Run the Setup Script
+
+```bash
+curl -sSf https://raw.githubusercontent.com/aztibase/aztibase/dev/deploy/setup-validator.sh -o setup.sh
+sudo bash setup.sh
+```
+
+The script handles:
+- Installing Rust and build tools
+- Compiling the Aztibase binary
+- Generating validator keypair (Ed25519 + BLS12-381)
+- Configuring systemd auto-restart
+- Opening firewall ports (30333 TCP/UDP, 9944 TCP)
+- Optional Grafana Cloud monitoring setup
+
+### 3. Verify Your Node
+
+```bash
+# Check service status
+sudo systemctl status aztibase-validator
+
+# Watch logs
+sudo journalctl -u aztibase-validator -f
+
+# Health check
+curl -s http://localhost:9944/health | jq .
+
+# Block height
+curl -s -X POST http://localhost:9944 \
+  -H "Content-Type: application/json" \
+  -d '{"jsonrpc":"2.0","method":"aztb_blockNumber","params":[],"id":1}' | jq .
+```
+
+### 4. Fund and Stake
+
+1. Get your validator address from the setup output
+2. **Testnet:** Request tokens from the [faucet](https://faucet.aztibase.com)
+3. **Mainnet:** Send AZTB to your validator address
+4. Submit a Stake transaction for at least 10,000 AZTB
+
+## Staking Parameters
+
+| Parameter | Value |
+|-----------|-------|
+| Minimum stake | 50,000 AZTB (governance range: 10k-500k) |
+| Maximum stake | 50,000,000 AZTB (5% of supply) |
+| Unbonding period | ~21 days (4,536,000 rounds) |
+| Equivocation slash | 10% |
+| Downtime slash | 0.5% |
+| Downtime threshold | 1,000 rounds |
+| Default commission | 10% |
+| APY range | 3-12% |
+
+## Monitoring
+
+Set up free monitoring with Grafana Cloud:
+
+```bash
+sudo bash setup-validator.sh --grafana
+```
+
+This configures:
+- Node metrics export (block height, peer count, consensus rounds)
+- Grafana Cloud ingestion (10,000 metric series free tier)
+- Pre-built dashboard for Aztibase validators
+
+## Geographic Distribution
+
+For network health, choose a location that adds diversity:
+
+| Region | Recommended Providers |
+|--------|----------------------|
+| Europe | Hetzner, OVH, Contabo |
+| North America | Hetzner US, Vultr, DigitalOcean |
+| Asia | Vultr (Tokyo, Singapore) |
+| South America | Vultr (São Paulo) |
+| Oceania | Vultr (Sydney), Linode |
+
+## FAQ
+
+**Can I run multiple validators on one VPS?**
+Not recommended. If the VPS goes down, all validators get slashed.
+
+**Do I need a static IP?**
+No. Aztibase uses libp2p peer discovery. Your node will be found automatically.
+
+**Can I use AWS/GCP/Azure?**
+Yes, but they cost 3-5x more for equivalent specs.
+
+**Does Aztibase support ARM?**
+Yes. The binary compiles and runs on ARM64. Hetzner's Ampere ARM servers offer excellent performance per euro.
+
+**How much bandwidth does a validator use?**
+~5-20 GB/day depending on network activity. The 20 TB/month included with most VPS plans is sufficient.
+
+## Monthly Costs
+
+| Item | Cost |
+|------|------|
+| VPS (Hetzner CX22) | €3.99/mo |
+| Grafana Cloud | Free |
+| Domain (optional) | €10/year |
+| **Total minimum** | **~€4/month** |

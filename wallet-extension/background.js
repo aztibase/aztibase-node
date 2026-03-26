@@ -160,6 +160,7 @@ function encodeVarint(value) {
 const TX_DOMAIN = new TextEncoder().encode("AZTB_TX_V1");
 const ENVELOPE_MAGIC = 0xaa;
 const PREFIX_TRANSFER = 0x01;
+const PREFIX_EVM_CALL = 0x05;
 const PREFIX_STAKE = 0x10;
 const PREFIX_UNSTAKE = 0x11;
 
@@ -215,6 +216,35 @@ function encodeUnstakePayload(from32, value, nonce, gasPrice) {
 
   const payload = new Uint8Array(1 + inner.length);
   payload[0] = PREFIX_UNSTAKE;
+  payload.set(inner, 1);
+  return payload;
+}
+
+function encodeEvmCallPayload(caller32, contract32, calldata, nonce, gasLimit, value) {
+  const variantIdx = encodeVarint(4);
+  const calldataEnc = encodeVarint(calldata.length);
+  const nonceEnc = encodeVarint(nonce);
+  const gasEnc = encodeVarint(gasLimit);
+  const valEnc = encodeVarint(value);
+  const gasPriceEnc = encodeVarint(1);
+
+  const inner = new Uint8Array(
+    variantIdx.length + 32 + 32 + calldataEnc.length + calldata.length +
+    nonceEnc.length + gasEnc.length + valEnc.length + gasPriceEnc.length
+  );
+  let off = 0;
+  inner.set(variantIdx, off); off += variantIdx.length;
+  inner.set(caller32, off); off += 32;
+  inner.set(contract32, off); off += 32;
+  inner.set(calldataEnc, off); off += calldataEnc.length;
+  inner.set(calldata, off); off += calldata.length;
+  inner.set(nonceEnc, off); off += nonceEnc.length;
+  inner.set(gasEnc, off); off += gasEnc.length;
+  inner.set(valEnc, off); off += valEnc.length;
+  inner.set(gasPriceEnc, off);
+
+  const payload = new Uint8Array(1 + inner.length);
+  payload[0] = PREFIX_EVM_CALL;
   payload.set(inner, 1);
   return payload;
 }
@@ -523,6 +553,26 @@ async function handleProviderRequest(method, params) {
       const txHex = bytesToHex(envelope);
 
       const result = await rpc("aztb_sendRawTransaction", [txHex]);
+      return { txHash: result?.tx_hash || result || "submitted" };
+    }
+
+    case "signAndSendEvmCall": {
+      if (!vault.secret) throw new Error("Wallet locked. Open extension and unlock first.");
+      const { to, data, gasLimit, value } = params;
+      await ensureKeyPair();
+
+      const nonce = await rpc("aztb_getNonce", [vault.address]);
+      const caller32 = BLAKE3.hash(vault.publicKey);
+      const contract32 = hexToBytes(to.replace(/^0x/, "").padEnd(64, "0"));
+      const calldata = hexToBytes(data.replace(/^0x/, ""));
+      const gas = parseInt(gasLimit) || 500000;
+      const val = parseInt(value) || 0;
+
+      const payload = encodeEvmCallPayload(caller32, contract32, calldata, parseInt(nonce), gas, val);
+      const envelope = await signPayload(payload);
+      const txHex = "0x" + bytesToHex(envelope);
+
+      const result = await rpc("aztb_sendTransaction", [txHex]);
       return { txHash: result?.tx_hash || result || "submitted" };
     }
 

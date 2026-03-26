@@ -1,0 +1,226 @@
+export const metadata = { title: "TypeScript SDK" };
+
+
+The `@aztibase/sdk` package provides a typed client for the Aztibase JSON-RPC API and WebSocket subscriptions.
+
+## Install
+
+```bash
+npm install @aztibase/sdk
+```
+
+## Connect
+
+```typescript
+import { AztibaseClient } from '@aztibase/sdk';
+
+// Testnet
+const client = new AztibaseClient('https://rpc.aztibase.com');
+
+// Local node
+const local = new AztibaseClient('http://localhost:9944');
+
+// With custom timeout
+const custom = new AztibaseClient({ url: 'http://localhost:9944', timeout: 5000 });
+```
+
+## Read Chain State
+
+### Blocks
+
+```typescript
+const height = await client.getBlockNumber();
+
+const block = await client.getBlockByNumber(height);
+console.log(block.hash, block.txCount, block.timestamp);
+
+const blocks = await client.getBlockRange(height - 10, height);
+
+const byHash = await client.getBlockByHash('0x...');
+```
+
+### Accounts
+
+```typescript
+const balance = await client.getBalance('0x...');    // returns bigint
+const nonce = await client.getNonce('0x...');         // returns number
+const type = await client.getAccountType('0x...');    // "EOA" | "Contract" | "Agent"
+const code = await client.getCode('0x...');           // hex bytecode or null
+```
+
+### Network
+
+```typescript
+const info = await client.getNodeInfo();
+// { version: "0.1.10", nodeType: "validator", chainId: "0xa27b", peerCount: 2 }
+
+const peers = await client.getPeerCount();
+const gas = await client.getGasPrice();
+const chainId = await client.getChainId();
+```
+
+### Validators
+
+```typescript
+const validators = await client.getActiveValidators();
+for (const v of validators) {
+  console.log(v.validatorId, v.effectiveStake, v.isActive);
+}
+
+const consensus = await client.getConsensusState();
+// { round: 42, wave: 10, validators: 3, committedBatches: 500 }
+```
+
+### AI Sentinel
+
+```typescript
+const health = await client.getChainHealth();
+// { score: 95, level: "normal", batchHeight: 1000 }
+
+const actions = await client.getSentinelActions(5);
+const epochs = await client.getEpochSummaries(10);
+```
+
+## Submit Transactions
+
+```typescript
+// Send a pre-signed transaction
+const txHash = await client.sendTransaction('0x<signed-tx-hex>');
+
+// Wait for confirmation
+const receipt = await client.waitForTransaction(txHash);
+console.log(receipt.success, receipt.gasUsed);
+
+// With custom timeout
+const receipt2 = await client.waitForTransaction(txHash, {
+  timeout: 60_000,  // 60 seconds
+  interval: 500,    // poll every 500ms
+});
+```
+
+### Estimate Gas
+
+```typescript
+const gas = await client.estimateGas({
+  from: '0x...',
+  data: '0x608060...', // contract bytecode
+  gas: 1_000_000,
+});
+```
+
+## Faucet (Testnet)
+
+```typescript
+const txHash = await client.faucetDrip('0x...');
+// Sends 1,000,000 AZTB. 60-second cooldown per address.
+```
+
+## WebSocket Subscriptions
+
+```typescript
+import { AztibaseWs } from '@aztibase/sdk';
+
+const ws = new AztibaseWs('wss://rpc.aztibase.com/ws');
+await ws.connect();
+
+// Subscribe to new blocks
+const unsub = await ws.subscribe('newBlocks', (block) => {
+  console.log('Block:', block);
+});
+
+// Subscribe to transactions
+const unsubTx = await ws.subscribe('newTransactions', (tx) => {
+  console.log('Tx:', tx);
+});
+
+// Subscribe to chain health updates
+const unsubHealth = await ws.subscribe('chainHealth', (health) => {
+  console.log('Health:', health);
+});
+
+// Unsubscribe
+await unsub();
+await unsubTx();
+
+// Close connection
+ws.close();
+```
+
+### Available Topics
+
+| Topic | Data |
+|-------|------|
+| `newBlocks` | New committed blocks |
+| `newTransactions` | Transactions entering mempool |
+| `consensusUpdates` | Consensus state changes |
+| `chainHealth` | AI Sentinel health updates |
+
+### Auto-Reconnect
+
+The WebSocket client automatically reconnects on disconnect (up to 5 attempts with backoff):
+
+```typescript
+const ws = new AztibaseWs('ws://localhost:9944/ws', {
+  maxReconnectAttempts: 10,
+  reconnectDelay: 2000,  // ms between attempts
+});
+```
+
+## Transaction Types
+
+The SDK exports all 27 transaction type constants:
+
+```typescript
+import { TxKind } from '@aztibase/sdk';
+
+TxKind.Transfer        // 0x01
+TxKind.EvmDeploy       // 0x04
+TxKind.EvmCall         // 0x05
+TxKind.Stake           // 0x10
+TxKind.BridgeDeposit   // 0x17
+TxKind.FaucetDrip      // 0x1b
+```
+
+See [Transaction Types](/docs/transactions) for the full list.
+
+## TypeScript Types
+
+All response types are fully typed:
+
+```typescript
+import type {
+  Block,
+  Transaction,
+  TransactionReceipt,
+  Validator,
+  ConsensusState,
+  NodeInfo,
+  ChainHealth,
+  Address,
+  Hash,
+  Hex,
+} from '@aztibase/sdk';
+```
+
+## Error Handling
+
+```typescript
+import { AztibaseRpcError } from '@aztibase/sdk';
+
+try {
+  await client.getBlockByNumber(999_999_999);
+} catch (e) {
+  if (e instanceof AztibaseRpcError) {
+    console.log(e.code, e.message); // -32602, "Block not found"
+  }
+}
+```
+
+## Metrics
+
+Access raw Prometheus metrics as JSON:
+
+```typescript
+const metrics = await client.getMetrics();
+// { consensus: { ... }, execution: { ... }, network: { ... } }
+```

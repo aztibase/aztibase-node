@@ -1,0 +1,113 @@
+export const metadata = { title: "Deploy Contracts" };
+
+Aztibase supports two virtual machines — deploy in **Solidity** (EVM) or **Rust/AssemblyScript** (WASM).
+
+## EVM Contracts (Solidity)
+
+### Using the CLI
+
+```bash
+# Compile your contract
+solc --bin --abi MyContract.sol -o build/
+
+# Deploy via RPC
+curl -X POST https://rpc.aztibase.com \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "jsonrpc": "2.0",
+    "method": "aztb_sendTransaction",
+    "params": ["0x<signed-deploy-tx-hex>"],
+    "id": 1
+  }'
+```
+
+### Using the TypeScript SDK
+
+```typescript
+import { AztibaseClient } from '@aztibase/sdk';
+
+const client = new AztibaseClient('https://rpc.aztibase.com');
+const txHash = await client.sendTransaction('0x<signed-deploy-tx-hex>');
+const receipt = await client.waitForTransaction(txHash);
+console.log('Contract:', receipt.contractAddress);
+```
+
+See the [TypeScript SDK docs](/docs/sdk) for details on constructing and signing transactions.
+
+## WASM Contracts (Rust)
+
+### Write your contract
+
+```rust
+#[no_mangle]
+pub extern "C" fn call() {
+    // Read input
+    let input = aztb::input();
+    // Process
+    let result = process(input);
+    // Return output
+    aztb::ret(&result);
+}
+```
+
+### Compile to WASM
+
+```bash
+cargo build --target wasm32-unknown-unknown --release
+wasm-opt -Oz target/wasm32-unknown-unknown/release/my_contract.wasm -o optimized.wasm
+```
+
+### Deploy
+
+```bash
+# The WASM bytecode is deployed using TxKind::DeployWasm (0x0B)
+# Use the wallet extension or construct the transaction manually
+```
+
+## Transaction Types
+
+| TxKind | Hex | Purpose |
+|--------|-----|---------|
+| `ContractDeploy` | `0x02` | Deploy a WASM contract |
+| `ContractCall` | `0x03` | Call a WASM contract |
+| `EvmDeploy` | `0x04` | Deploy an EVM contract |
+| `EvmCall` | `0x05` | Call an EVM contract |
+
+See [Transaction Types](/docs/transactions) for the full list.
+
+## Gas Costs
+
+| Operation | Gas |
+|-----------|-----|
+| Transfer | 21,000 |
+| EVM deploy | ~200,000 - 2,000,000 |
+| WASM deploy | ~100,000 - 1,000,000 |
+| EVM call | ~30,000 - 500,000 |
+| WASM call | ~20,000 - 300,000 |
+| Cross-VM call | +50,000 overhead |
+
+## Verification
+
+After deployment, verify your contract is live:
+
+```bash
+# Check contract code exists
+curl -X POST https://rpc.aztibase.com \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "jsonrpc": "2.0",
+    "method": "aztb_getCode",
+    "params": ["0x<contract-address>"],
+    "id": 1
+  }'
+
+# Check account type is "Contract"
+curl -X POST https://rpc.aztibase.com \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "jsonrpc": "2.0",
+    "method": "aztb_getAccountType",
+    "params": ["0x<contract-address>"],
+    "id": 1
+  }'
+```

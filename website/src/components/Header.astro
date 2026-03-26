@@ -12,14 +12,343 @@ import Default from '@astrojs/starlight/components/Header.astro';
 	<a href="/api/rpc/">API</a>
 	<a href="/tools/faucet/">Faucet</a>
 	<a href="/tools/swap/">Swap</a>
-	<a href="/guides/run-validator/" class="nav-cta">Launch Node</a>
+	<div class="wallet-wrapper" id="wallet-wrapper">
+		<button type="button" id="wallet-btn" class="wallet-connect-btn">Connect Wallet</button>
+		<div class="wallet-dropdown" id="wallet-dropdown">
+			<div class="wallet-dropdown-header">Connect a wallet</div>
+			<button type="button" class="wallet-option" id="opt-extension">
+				<span class="wallet-option-icon">⬡</span>
+				<span class="wallet-option-info">
+					<span class="wallet-option-name">Aztibase Wallet</span>
+					<span class="wallet-option-desc" id="opt-extension-desc">Browser Extension</span>
+				</span>
+				<span class="wallet-option-arrow">›</span>
+			</button>
+			<div class="wallet-dropdown-divider"></div>
+			<button type="button" class="wallet-option" id="opt-key">
+				<span class="wallet-option-icon">🔑</span>
+				<span class="wallet-option-info">
+					<span class="wallet-option-name">Import Key</span>
+					<span class="wallet-option-desc">Paste a private key</span>
+				</span>
+				<span class="wallet-option-arrow">›</span>
+			</button>
+			<div class="wallet-key-section" id="wallet-key-section" style="display:none;">
+				<input type="password" id="wallet-key-input" class="wallet-key-input" placeholder="64-char hex secret key" spellcheck="false" autocomplete="off" />
+				<button type="button" id="wallet-key-go" class="wallet-key-go">Connect</button>
+			</div>
+			<div class="wallet-dropdown-msg" id="wallet-msg" style="display:none;"></div>
+		</div>
+	</div>
 </nav>
 
 <script>
-	// Move nav links into the header's right group
 	const nav = document.getElementById('top-nav');
 	const rightGroup = document.querySelector('.header .right-group');
 	if (nav && rightGroup) {
 		rightGroup.insertBefore(nav, rightGroup.firstChild);
 	}
+
+	const walletBtn = document.getElementById('wallet-btn');
+	const dropdown = document.getElementById('wallet-dropdown');
+	const wrapper = document.getElementById('wallet-wrapper');
+	const optExt = document.getElementById('opt-extension');
+	const optExtDesc = document.getElementById('opt-extension-desc');
+	const optKey = document.getElementById('opt-key');
+	const keySection = document.getElementById('wallet-key-section');
+	const keyInput = document.getElementById('wallet-key-input');
+	const keyGo = document.getElementById('wallet-key-go');
+	const msgEl = document.getElementById('wallet-msg');
+
+	let walletConnected = false;
+	let walletAddress = '';
+	let dropdownOpen = false;
+
+	function shortAddr(addr) {
+		if (!addr || addr.length < 16) return addr || '';
+		return addr.slice(0, 8) + '...' + addr.slice(-6);
+	}
+
+	function showMsg(text, isError) {
+		msgEl.textContent = text;
+		msgEl.className = 'wallet-dropdown-msg' + (isError ? ' error' : '');
+		msgEl.style.display = 'block';
+	}
+
+	function hideMsg() { msgEl.style.display = 'none'; }
+
+	function setConnected(addr) {
+		walletConnected = true;
+		walletAddress = addr;
+		walletBtn.textContent = shortAddr(addr);
+		walletBtn.classList.add('connected');
+		closeDropdown();
+	}
+
+	function setDisconnected() {
+		walletConnected = false;
+		walletAddress = '';
+		walletBtn.textContent = 'Connect Wallet';
+		walletBtn.classList.remove('connected');
+	}
+
+	function openDropdown() {
+		if (walletConnected) return;
+		dropdown.classList.add('open');
+		dropdownOpen = true;
+		keySection.style.display = 'none';
+		hideMsg();
+		optExtDesc.textContent = window.aztibase ? 'Browser Extension' : 'Not detected — install extension';
+	}
+
+	function closeDropdown() {
+		dropdown.classList.remove('open');
+		dropdownOpen = false;
+		keySection.style.display = 'none';
+		hideMsg();
+	}
+
+	walletBtn.addEventListener('click', () => {
+		if (walletConnected) {
+			if (window.aztibase) window.aztibase.disconnect();
+			setDisconnected();
+			window.dispatchEvent(new Event('aztibase:disconnected'));
+		} else if (dropdownOpen) {
+			closeDropdown();
+		} else {
+			openDropdown();
+		}
+	});
+
+	document.addEventListener('click', (e) => {
+		if (dropdownOpen && !wrapper.contains(e.target)) closeDropdown();
+	});
+
+	optExt.addEventListener('click', async () => {
+		hideMsg();
+		if (!window.aztibase) {
+			showMsg('Extension not detected. Install Aztibase Wallet and reload.', true);
+			return;
+		}
+		try {
+			optExtDesc.textContent = 'Connecting...';
+			const res = await window.aztibase.connect();
+			if (res?.address && !res.locked) {
+				setConnected(res.address);
+				window.dispatchEvent(new CustomEvent('aztibase:connected', { detail: res }));
+			} else if (res?.locked) {
+				optExtDesc.textContent = 'Browser Extension';
+				showMsg('Wallet is locked. Click the extension icon to unlock.', true);
+			}
+		} catch (e) {
+			optExtDesc.textContent = 'Browser Extension';
+			showMsg(e.message, true);
+		}
+	});
+
+	optKey.addEventListener('click', () => {
+		hideMsg();
+		keySection.style.display = keySection.style.display === 'none' ? 'flex' : 'none';
+		if (keySection.style.display === 'flex') keyInput.focus();
+	});
+
+	keyGo.addEventListener('click', async () => {
+		const hex = keyInput.value.trim().replace(/^0x/, '');
+		if (hex.length !== 64) { showMsg('Key must be 64 hex characters.', true); return; }
+		try {
+			const ed = await import('https://esm.run/@noble/ed25519');
+			const { blake3 } = await import('https://esm.run/@noble/hashes/blake3');
+			const keyBytes = new Uint8Array(hex.match(/.{2}/g).map(b => parseInt(b, 16)));
+			const pub = await ed.getPublicKeyAsync(keyBytes);
+			const addr = blake3(pub);
+			const addrHex = '0x' + Array.from(addr).map(b => b.toString(16).padStart(2,'0')).join('');
+			window.__aztibaseManualKey = hex;
+			setConnected(addrHex);
+			window.dispatchEvent(new CustomEvent('aztibase:connected', {
+				detail: { address: addrHex, manual: true }
+			}));
+		} catch (e) {
+			showMsg('Invalid key: ' + e.message, true);
+		}
+	});
+
+	keyInput.addEventListener('keydown', (e) => {
+		if (e.key === 'Enter') keyGo.click();
+	});
+
+	function initWallet() {
+		if (window.aztibase) {
+			window.aztibase.isConnected().then(s => {
+				if (s?.connected && s?.address) {
+					setConnected(s.address);
+					window.dispatchEvent(new CustomEvent('aztibase:connected', { detail: s }));
+				}
+			}).catch(() => {});
+			return;
+		}
+		window.addEventListener('aztibase#initialized', () => {
+			window.aztibase.isConnected().then(s => {
+				if (s?.connected && s?.address) {
+					setConnected(s.address);
+					window.dispatchEvent(new CustomEvent('aztibase:connected', { detail: s }));
+				}
+			}).catch(() => {});
+		}, { once: true });
+	}
+	initWallet();
 </script>
+
+<style>
+	.wallet-wrapper {
+		position: relative;
+	}
+	.wallet-connect-btn {
+		background: var(--sl-color-accent);
+		color: #fff;
+		border: none;
+		border-radius: 8px;
+		padding: 0.4rem 0.85rem;
+		font-family: 'Fira Code', monospace;
+		font-size: 0.72rem;
+		font-weight: 600;
+		cursor: pointer;
+		transition: opacity 0.15s, background 0.15s;
+		white-space: nowrap;
+	}
+	.wallet-connect-btn:hover {
+		opacity: 0.85;
+	}
+	.wallet-connect-btn.connected {
+		background: rgba(136, 120, 166, 0.12);
+		color: var(--sl-color-gray-2);
+		border: 1px solid rgba(136, 120, 166, 0.25);
+	}
+	.wallet-dropdown {
+		display: none;
+		position: absolute;
+		top: calc(100% + 8px);
+		right: 0;
+		width: 280px;
+		background: var(--sl-color-bg-nav, #1a1a2e);
+		border: 1.5px solid rgba(136, 120, 166, 0.2);
+		border-radius: 12px;
+		padding: 0.75rem;
+		z-index: 1000;
+		box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+	}
+	.wallet-dropdown.open {
+		display: block;
+	}
+	.wallet-dropdown-header {
+		font-family: 'Instrument Sans', sans-serif;
+		font-size: 0.8rem;
+		font-weight: 600;
+		color: var(--sl-color-gray-2, #ccc);
+		margin-bottom: 0.6rem;
+		padding: 0 0.25rem;
+	}
+	.wallet-option {
+		display: flex;
+		align-items: center;
+		gap: 0.6rem;
+		width: 100%;
+		padding: 0.6rem;
+		border: 1px solid rgba(136, 120, 166, 0.1);
+		border-radius: 10px;
+		background: rgba(136, 120, 166, 0.04);
+		cursor: pointer;
+		transition: background 0.15s, border-color 0.15s;
+		text-align: left;
+		color: inherit;
+	}
+	.wallet-option:hover {
+		background: rgba(136, 120, 166, 0.1);
+		border-color: rgba(136, 120, 166, 0.25);
+	}
+	.wallet-option-icon {
+		font-size: 1.4rem;
+		width: 32px;
+		height: 32px;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		background: rgba(136, 120, 166, 0.08);
+		border-radius: 8px;
+		flex-shrink: 0;
+	}
+	.wallet-option-info {
+		flex: 1;
+		display: flex;
+		flex-direction: column;
+		gap: 0.1rem;
+		min-width: 0;
+	}
+	.wallet-option-name {
+		font-family: 'Instrument Sans', sans-serif;
+		font-size: 0.82rem;
+		font-weight: 600;
+		color: var(--sl-color-white, #eee);
+	}
+	.wallet-option-desc {
+		font-family: 'Fira Code', monospace;
+		font-size: 0.65rem;
+		color: var(--sl-color-gray-3, #888);
+	}
+	.wallet-option-arrow {
+		font-size: 1.1rem;
+		color: var(--sl-color-gray-4, #666);
+		flex-shrink: 0;
+	}
+	.wallet-dropdown-divider {
+		height: 1px;
+		background: rgba(136, 120, 166, 0.1);
+		margin: 0.4rem 0;
+	}
+	.wallet-key-section {
+		display: flex;
+		gap: 0.4rem;
+		margin-top: 0.4rem;
+	}
+	.wallet-key-input {
+		flex: 1;
+		padding: 0.45rem 0.6rem;
+		border: 1px solid rgba(136, 120, 166, 0.15);
+		border-radius: 8px;
+		background: rgba(0, 0, 0, 0.3);
+		color: var(--sl-color-white, #eee);
+		font-family: 'Fira Code', monospace;
+		font-size: 0.7rem;
+		outline: none;
+		min-width: 0;
+	}
+	.wallet-key-input:focus {
+		border-color: rgba(136, 120, 166, 0.4);
+	}
+	.wallet-key-go {
+		padding: 0.45rem 0.7rem;
+		border: none;
+		border-radius: 8px;
+		background: var(--sl-color-accent);
+		color: #fff;
+		font-family: 'Fira Code', monospace;
+		font-size: 0.7rem;
+		font-weight: 600;
+		cursor: pointer;
+		white-space: nowrap;
+	}
+	.wallet-key-go:hover {
+		opacity: 0.85;
+	}
+	.wallet-dropdown-msg {
+		font-size: 0.7rem;
+		padding: 0.4rem 0.5rem;
+		border-radius: 6px;
+		margin-top: 0.4rem;
+		color: var(--sl-color-gray-3, #888);
+		background: rgba(136, 120, 166, 0.06);
+	}
+	.wallet-dropdown-msg.error {
+		color: #c9927e;
+		background: rgba(201, 146, 126, 0.08);
+	}
+</style>

@@ -1,0 +1,285 @@
+export const metadata = { title: "JSON-RPC API" };
+
+
+Aztibase nodes expose a JSON-RPC 2.0 API over HTTP and WebSocket. 57 methods available.
+
+## Connection
+
+| Transport | URL |
+|-----------|-----|
+| HTTP | `http://<node>:9944/` |
+| WebSocket | `ws://<node>:9944/ws` |
+| Health Check | `http://<node>:9944/health` |
+
+**Testnet RPC:** `https://rpc.aztibase.com`
+
+**Rate limit:** 100 requests/second per IP
+
+## Request Format
+
+```json
+{
+  "jsonrpc": "2.0",
+  "method": "aztb_<methodName>",
+  "params": [...],
+  "id": 1
+}
+```
+
+All addresses and hashes are 32-byte hex strings prefixed with `0x`.
+
+## Chain Methods
+
+### aztb_blockNumber
+
+Returns the current block height.
+
+**Parameters:** none
+**Returns:** `number`
+
+### aztb_getBlockByNumber
+
+Get a block by its number.
+
+**Parameters:** `[block_number]`
+**Returns:** Block object with `hash`, `number`, `transactions`, `timestamp`, `gasUsed`
+
+### aztb_getBlockByHash
+
+Get a block by its hash.
+
+**Parameters:** `[block_hash]`
+**Returns:** Block object or `null`
+
+### aztb_getBlockRange
+
+Get a range of blocks.
+
+**Parameters:** `[from_number, count]`
+**Returns:** Array of block objects
+
+### aztb_getBalance
+
+Get native AZTB balance for an address.
+
+**Parameters:** `[address]`
+**Returns:** `"0x..."` — hex-encoded balance in wei
+
+### aztb_getNonce
+
+Get the current nonce for an address.
+
+**Parameters:** `[address]`
+**Returns:** `number`
+
+### aztb_getAccountType
+
+Get the account type.
+
+**Parameters:** `[address]`
+**Returns:** `"EOA"` | `"Contract"` | `"Agent"` | `null`
+
+### aztb_getCode
+
+Get contract bytecode at an address.
+
+**Parameters:** `[address]`
+**Returns:** `"0x..."` hex bytecode or `null`
+
+### aztb_chainId
+
+Returns the chain ID.
+
+**Returns:** `"0xA27B"`
+
+### aztb_gasPrice
+
+Returns the current gas price.
+
+**Returns:** `"0x..."` — hex-encoded gas price
+
+## Transaction Methods
+
+### aztb_sendTransaction
+
+Submit a signed transaction to the mempool.
+
+**Parameters:** `[tx_hex]` — `0x` + hex-encoded signed transaction bytes
+**Returns:** `"0x{tx_hash}"` — 32-byte transaction hash
+
+### aztb_getTransactionReceipt
+
+Get the execution receipt for a transaction.
+
+**Parameters:** `[tx_hash]`
+**Returns:** Receipt object or `null`
+
+```json
+{
+  "txHash": "0x...",
+  "success": true,
+  "gasUsed": "0x5208",
+  "contractAddress": "0x...",
+  "error": null
+}
+```
+
+### aztb_getTransactionByHash
+
+Retrieve a stored transaction by hash.
+
+**Parameters:** `[tx_hash]`
+**Returns:** Transaction object or `null`
+
+### aztb_estimateGas
+
+Estimate gas for a transaction.
+
+**Parameters:** `[{ from, to, data, value, gas }]`
+**Returns:** `"0x..."` — estimated gas units
+
+## EVM Methods
+
+### aztb_call / eth_call
+
+Execute a read-only EVM call (no state changes).
+
+**Parameters:** `[{ to, data, from?, gas? }]`
+**Returns:** `"0x..."` — hex-encoded return data
+
+Supports both 20-byte and 32-byte addresses.
+
+### aztb_getStorageAt
+
+Read contract storage at a specific slot.
+
+**Parameters:** `[address, slot]`
+**Returns:** `"0x..."` — 32-byte storage value
+
+## Consensus Methods
+
+### aztb_consensusState
+
+Returns current consensus status.
+
+**Returns:**
+```json
+{
+  "round": 42,
+  "wave": 10,
+  "validators": 3,
+  "committed_batches": 500
+}
+```
+
+### aztb_getValidators
+
+Returns the current validator set.
+
+**Returns:** Array of validator objects with `validatorId`, `stake`, `isActive`
+
+### aztb_getValidatorStake
+
+Returns stake information for a specific validator.
+
+**Parameters:** `[validator_address]`
+
+## Network Methods
+
+### aztb_nodeInfo
+
+Returns node information.
+
+**Returns:**
+```json
+{
+  "version": "0.1.11",
+  "nodeType": "validator",
+  "chainId": "0xa27b",
+  "peerCount": 2
+}
+```
+
+### aztb_peerCount
+
+Returns the number of connected peers.
+
+**Returns:** `number`
+
+### aztb_getMetrics
+
+Returns Prometheus metrics as JSON.
+
+**Returns:** Object with `consensus`, `execution`, `network` sections
+
+## AI Methods
+
+### aztb_chainHealth
+
+Returns the AI Sentinel health score.
+
+**Returns:**
+```json
+{
+  "score": 95,
+  "level": "normal",
+  "batchHeight": 1000
+}
+```
+
+### aztb_getSentinelActions
+
+Returns recent sentinel actions.
+
+**Parameters:** `[count]`
+**Returns:** Array of action records
+
+### aztb_getEpochSummaries
+
+Returns epoch summary data.
+
+**Parameters:** `[count]`
+**Returns:** Array of epoch summaries
+
+## Faucet Methods (Testnet Only)
+
+### aztb_faucetDrip
+
+Request testnet tokens.
+
+**Parameters:** `[address]`
+**Returns:** Transaction hash
+
+**Drip amount:** 1,000,000 AZTB
+**Cooldown:** 60 seconds per address
+
+## WebSocket Subscriptions
+
+Connect via `ws://<node>:9944/ws` and subscribe to real-time events.
+
+### Available Topics
+
+| Topic | Data |
+|-------|------|
+| `newBlocks` | New committed blocks |
+| `newTransactions` | Transactions entering mempool |
+| `consensusUpdates` | Consensus state changes |
+| `chainHealth` | AI Sentinel health updates |
+
+### WebSocket Limits
+
+| Parameter | Value |
+|-----------|-------|
+| Max connections | 256 |
+| Max per IP | 8 |
+| Max subscriptions per client | 16 |
+
+## Error Codes
+
+| Code | Meaning |
+|------|---------|
+| -32700 | Parse error |
+| -32600 | Invalid request |
+| -32601 | Method not found |
+| -32602 | Invalid params |
+| -32603 | Internal error |

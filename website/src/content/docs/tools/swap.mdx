@@ -26,6 +26,7 @@ description: Swap tokens on the Aztibase DEX
           autocomplete="off"
         />
         <select id="swap-token-from" class="swap-token-select">
+          <option value="AZTB">AZTB</option>
           <option value="WASZTB">WASZTB</option>
           <option value="tUSDC">tUSDC</option>
         </select>
@@ -52,6 +53,7 @@ description: Swap tokens on the Aztibase DEX
         />
         <select id="swap-token-to" class="swap-token-select">
           <option value="tUSDC">tUSDC</option>
+          <option value="AZTB">AZTB</option>
           <option value="WASZTB">WASZTB</option>
         </select>
       </div>
@@ -73,7 +75,16 @@ description: Swap tokens on the Aztibase DEX
     </div>
 
     <div class="swap-wallet-section" id="swap-wallet">
-      <input type="password" id="swap-key" class="swap-key-input" placeholder="Paste secret key to enable swaps..." spellcheck="false" autocomplete="off" />
+      <div id="swap-wallet-connected" class="swap-wallet-connected" style="display:none;">
+        <span class="swap-wallet-dot"></span>
+        <span id="swap-wallet-addr" class="swap-wallet-addr"></span>
+        <button type="button" id="swap-wallet-disconnect" class="swap-wallet-disconnect">Disconnect</button>
+      </div>
+      <div id="swap-wallet-options" class="swap-wallet-options">
+        <button type="button" id="swap-connect-ext" class="swap-connect-btn">Connect Wallet</button>
+        <div class="swap-divider"><span>or</span></div>
+        <input type="password" id="swap-key" class="swap-key-input" placeholder="Paste secret key..." spellcheck="false" autocomplete="off" />
+      </div>
       <div id="swap-wallet-info" class="swap-wallet-info" style="display:none;"></div>
     </div>
 
@@ -281,6 +292,35 @@ The Aztibase DEX uses an **x*y=k** constant-product AMM (Uniswap V2 pattern). Li
   transition: opacity 0.15s, transform 0.1s;
 }
 .swap-wallet-section { margin-top: 0.75rem; }
+.swap-wallet-connected {
+  display: flex; align-items: center; gap: 0.5rem;
+  padding: 0.55rem 0.75rem; border-radius: 8px;
+  background: rgba(93,184,138,0.08); border: 1px solid rgba(93,184,138,0.2);
+}
+.swap-wallet-dot { width: 7px; height: 7px; border-radius: 50%; background: #5db88a; flex-shrink: 0; }
+.swap-wallet-addr {
+  flex: 1; font-family: 'Fira Code',monospace; font-size: 0.75rem; color: #5db88a;
+}
+.swap-wallet-disconnect {
+  background: none; border: 1px solid rgba(201,146,126,0.3); border-radius: 6px;
+  color: #c9927e; font-size: 0.65rem; padding: 0.2rem 0.5rem; cursor: pointer;
+  font-family: 'Fira Code',monospace;
+}
+.swap-wallet-disconnect:hover { background: rgba(201,146,126,0.1); }
+.swap-connect-btn {
+  width: 100%; padding: 0.6rem; border: 1.5px solid var(--sl-color-accent);
+  border-radius: 8px; background: rgba(136,120,166,0.06); color: var(--sl-color-accent);
+  font-family: 'Instrument Sans',sans-serif; font-size: 0.85rem; font-weight: 600;
+  cursor: pointer; transition: background 0.15s;
+}
+.swap-connect-btn:hover { background: rgba(136,120,166,0.12); }
+.swap-divider {
+  display: flex; align-items: center; gap: 0.5rem; margin: 0.5rem 0;
+  font-size: 0.7rem; color: var(--sl-color-gray-4);
+}
+.swap-divider::before, .swap-divider::after {
+  content: ''; flex: 1; height: 1px; background: rgba(136,120,166,0.12);
+}
 .swap-key-input {
   width: 100%; padding: 0.6rem 0.75rem; border: 1px solid rgba(136,120,166,0.15);
   border-radius: 8px; background: #12121a; color: #e0dce8; font-size: 0.75rem;
@@ -349,7 +389,7 @@ The Aztibase DEX uses an **x*y=k** constant-product AMM (Uniswap V2 pattern). Li
 
 <script>{`
 (function() {
-  var RPC = 'http://102.209.21.247:9944';
+  var RPC = 'https://rpc.aztibase.com';
   var SLIPPAGE = 0.005;
   var DECIMALS = 18;
 
@@ -362,8 +402,11 @@ The Aztibase DEX uses an **x*y=k** constant-product AMM (Uniswap V2 pattern). Li
   };
 
   function tokenAddr(name) {
+    if (name === 'AZTB') return CONTRACTS.WASZTB;
     return CONTRACTS[name] || CONTRACTS.WASZTB;
   }
+
+  function isNative(name) { return name === 'AZTB'; }
 
   function pad32(hex) { return hex.replace('0x','').padStart(64,'0'); }
   function toHex256(n) {
@@ -398,12 +441,65 @@ The Aztibase DEX uses an **x*y=k** constant-product AMM (Uniswap V2 pattern). Li
   var swapBtn = document.getElementById('swap-btn');
   var result = document.getElementById('swap-result');
   var details = document.getElementById('swap-details');
+  var balFrom = document.getElementById('swap-balance-from');
+  var balTo = document.getElementById('swap-balance-to');
+
+  var BALANCE_OF_SEL = '70a08231';
+
+  function formatBalance(wei) {
+    if (wei === 0n) return '0';
+    var whole = wei / BigInt(10**DECIMALS);
+    var frac = wei % BigInt(10**DECIMALS);
+    var fracStr = frac.toString().padStart(DECIMALS, '0').slice(0, 4).replace(/0+$/, '');
+    if (!fracStr) return whole.toString();
+    return whole.toString() + '.' + fracStr;
+  }
+
+  function fetchTokenBalance(tokenContract, ownerAddr) {
+    if (!BALANCE_OF_SEL || !ownerAddr) return Promise.resolve(null);
+    var data = '0x' + BALANCE_OF_SEL + pad32(ownerAddr.replace('0x',''));
+    return rpcCall('aztb_call', [{ to: tokenContract, data: data }])
+      .then(function(res) {
+        if (!res || res === '0x') return 0n;
+        return hexToBigInt(res.replace('0x','').slice(0, 64));
+      }).catch(function() { return null; });
+  }
+
+  function fetchNativeBalance(addr) {
+    return rpcCall('aztb_getBalance', [addr]).then(function(res) {
+      if (!res) return 0n;
+      if (typeof res === 'string') return hexToBigInt(res);
+      return BigInt(res);
+    }).catch(function() { return 0n; });
+  }
+
+  function getBalance(tokenName, addr) {
+    if (isNative(tokenName)) return fetchNativeBalance(addr);
+    return fetchTokenBalance(tokenAddr(tokenName), addr);
+  }
+
+  function fetchBalances() {
+    if (!walletAddr) {
+      balFrom.textContent = 'Balance: --';
+      balTo.textContent = 'Balance: --';
+      return;
+    }
+    getBalance(tokenFrom.value, walletAddr).then(function(b) {
+      balFrom.textContent = 'Balance: ' + (b !== null ? formatBalance(b) : '--');
+    });
+    getBalance(tokenTo.value, walletAddr).then(function(b) {
+      balTo.textContent = 'Balance: ' + (b !== null ? formatBalance(b) : '--');
+    });
+  }
 
   function showResult(msg, ok) {
     result.textContent = msg;
     result.className = 'swap-result ' + (ok ? 'success' : 'error');
     result.style.display = 'block';
   }
+
+  tokenFrom.addEventListener('change', function() { fetchBalances(); });
+  tokenTo.addEventListener('change', function() { fetchBalances(); });
 
   flipBtn.addEventListener('click', function() {
     var fromVal = tokenFrom.value;
@@ -415,6 +511,7 @@ The Aztibase DEX uses an **x*y=k** constant-product AMM (Uniswap V2 pattern). Li
     details.style.display = 'none';
     swapBtn.textContent = 'Enter an amount';
     swapBtn.disabled = true;
+    fetchBalances();
   });
 
   var quoteTimeout;
@@ -448,7 +545,7 @@ The Aztibase DEX uses an **x*y=k** constant-product AMM (Uniswap V2 pattern). Li
           document.getElementById('swap-min-out').textContent =
             (outFloat * (1 - SLIPPAGE)).toFixed(6) + ' ' + tokenTo.value;
           details.style.display = 'block';
-          swapBtn.textContent = walletKey ? 'Swap' : 'Swap (paste key above)';
+          swapBtn.textContent = (walletKey || useExtension) ? 'Swap' : 'Swap (connect wallet)';
           swapBtn.disabled = false;
         }).catch(function(err) {
           var simulated = val * 0.997;
@@ -458,7 +555,7 @@ The Aztibase DEX uses an **x*y=k** constant-product AMM (Uniswap V2 pattern). Li
           document.getElementById('swap-impact').textContent = '--';
           document.getElementById('swap-min-out').textContent = '--';
           details.style.display = 'block';
-          swapBtn.textContent = walletKey ? 'Swap' : 'Swap (paste key above)';
+          swapBtn.textContent = (walletKey || useExtension) ? 'Swap' : 'Swap (connect wallet)';
           swapBtn.disabled = false;
         });
     }, 500);
@@ -466,8 +563,71 @@ The Aztibase DEX uses an **x*y=k** constant-product AMM (Uniswap V2 pattern). Li
 
   var walletKey = null;
   var walletAddr = null;
+  var useExtension = false;
   var keyInput = document.getElementById('swap-key');
   var walletInfo = document.getElementById('swap-wallet-info');
+  var walletConnectedEl = document.getElementById('swap-wallet-connected');
+  var walletOptionsEl = document.getElementById('swap-wallet-options');
+  var walletAddrEl = document.getElementById('swap-wallet-addr');
+  var connectExtBtn = document.getElementById('swap-connect-ext');
+  var disconnectBtn = document.getElementById('swap-wallet-disconnect');
+
+  function showConnected(addr) {
+    walletAddr = addr;
+    walletAddrEl.textContent = addr.slice(0,10) + '...' + addr.slice(-8);
+    walletConnectedEl.style.display = 'flex';
+    walletOptionsEl.style.display = 'none';
+    walletInfo.style.display = 'none';
+    if (amountIn.value && parseFloat(amountIn.value) > 0) swapBtn.textContent = 'Swap';
+    fetchBalances();
+  }
+
+  function showDisconnected() {
+    walletAddr = null; walletKey = null; useExtension = false;
+    walletConnectedEl.style.display = 'none';
+    walletOptionsEl.style.display = 'block';
+    keyInput.value = '';
+    walletInfo.style.display = 'none';
+    balFrom.textContent = 'Balance: --';
+    balTo.textContent = 'Balance: --';
+  }
+
+  connectExtBtn.addEventListener('click', async function() {
+    if (!window.aztibase) {
+      walletInfo.textContent = 'Click the Aztibase Wallet icon in your browser toolbar to open it, then try again.';
+      walletInfo.style.display = 'block';
+      return;
+    }
+    try {
+      var res = await window.aztibase.connect();
+      if (res && res.address && !res.locked) {
+        useExtension = true;
+        showConnected(res.address);
+      } else if (res && res.locked) {
+        walletInfo.textContent = 'Wallet is locked. Open the extension and unlock it.';
+        walletInfo.style.display = 'block';
+      }
+    } catch(e) {
+      walletInfo.textContent = 'Connection failed: ' + e.message;
+      walletInfo.style.display = 'block';
+    }
+  });
+
+  disconnectBtn.addEventListener('click', function() {
+    if (useExtension && window.aztibase) window.aztibase.disconnect();
+    showDisconnected();
+  });
+
+  window.addEventListener('aztibase:connected', function(e) {
+    if (e.detail && e.detail.address && !e.detail.locked) {
+      useExtension = true;
+      showConnected(e.detail.address);
+    }
+  });
+
+  window.addEventListener('aztibase:disconnected', function() {
+    if (useExtension) showDisconnected();
+  });
 
   keyInput.addEventListener('change', async function() {
     var hex = keyInput.value.trim().replace('0x','');
@@ -478,18 +638,63 @@ The Aztibase DEX uses an **x*y=k** constant-product AMM (Uniswap V2 pattern). Li
       var pub = await ed.getPublicKeyAsync(keyBytes);
       var addr = await blake3(pub);
       walletKey = hex;
-      walletAddr = '0x' + bytesToHex(addr);
-      walletInfo.textContent = 'Wallet: ' + walletAddr.slice(0,12) + '...' + walletAddr.slice(-8);
-      walletInfo.style.display = 'block';
-      if (amountIn.value && parseFloat(amountIn.value) > 0) {
-        swapBtn.textContent = 'Swap';
-      }
+      useExtension = false;
+      showConnected('0x' + bytesToHex(addr));
     } catch(e) { walletKey = null; walletAddr = null; walletInfo.style.display='none'; }
   });
 
+  // Auto-connect if extension already connected (e.g. from header button)
+  (async function() {
+    if (!window.aztibase) return;
+    try {
+      var s = await window.aztibase.isConnected();
+      if (s && s.connected && s.address) { useExtension = true; showConnected(s.address); }
+    } catch(e) {}
+  })();
+
+  function buildSwapCalldata(fromName, toName, amountWei, minOut, toAddrHex, deadline, path) {
+    var payingNative = isNative(fromName);
+    var receivingNative = isNative(toName);
+    var sel, data;
+
+    if (payingNative) {
+      sel = keccakSel('swapExactETHForTokens(uint256,address[],address,uint256)');
+      data = sel + toHex256(minOut) + toHex256(128n) + pad32(toAddrHex.replace('0x',''))
+        + toHex256(deadline) + toHex256(BigInt(path.length))
+        + path.map(function(a){ return pad32(a); }).join('');
+    } else if (receivingNative) {
+      sel = keccakSel('swapExactTokensForETH(uint256,uint256,address[],address,uint256)');
+      data = sel + toHex256(amountWei) + toHex256(minOut) + toHex256(160n)
+        + pad32(toAddrHex.replace('0x','')) + toHex256(deadline)
+        + toHex256(BigInt(path.length))
+        + path.map(function(a){ return pad32(a); }).join('');
+    } else {
+      sel = keccakSel('swapExactTokensForTokens(uint256,uint256,address[],address,uint256)');
+      data = sel + toHex256(amountWei) + toHex256(minOut) + toHex256(160n)
+        + pad32(toAddrHex.replace('0x','')) + toHex256(deadline)
+        + toHex256(BigInt(path.length))
+        + path.map(function(a){ return pad32(a); }).join('');
+    }
+    return '0x' + data;
+  }
+
+  async function waitForReceipt(txHash) {
+    for (var i = 0; i < 15; i++) {
+      await new Promise(function(r){setTimeout(r, 2000)});
+      try {
+        var receipt = await rpcCall('aztb_getTransactionReceipt', [txHash]);
+        if (receipt) {
+          if (receipt.success) showResult('Swap confirmed! Gas: ' + parseInt(receipt.gasUsed,16), true);
+          else showResult('Swap failed: ' + (receipt.error || 'reverted'), false);
+          return;
+        }
+      } catch(e) {}
+    }
+  }
+
   swapBtn.addEventListener('click', async function() {
-    if (!walletKey) {
-      showResult('Paste your secret key above to enable swaps.', false);
+    if (!useExtension && !walletKey) {
+      showResult('Connect your wallet or paste a secret key above.', false);
       return;
     }
     var val = parseFloat(amountIn.value);
@@ -499,93 +704,91 @@ The Aztibase DEX uses an **x*y=k** constant-product AMM (Uniswap V2 pattern). Li
     swapBtn.disabled = true;
     result.style.display = 'none';
 
+    var fromName = tokenFrom.value;
+    var toName = tokenTo.value;
+    var payingNative = isNative(fromName);
+
     try {
-      var ed = await loadEd25519();
-      var keyBytes = hexToBytes(walletKey);
-      var pub = await ed.getPublicKeyAsync(keyBytes);
-      var callerAddr = await blake3(pub);
-      var callerHex = '0x' + bytesToHex(callerAddr);
-
-      var nonceRes = await rpcCall('aztb_getNonce', [callerHex]);
-      var nonce = typeof nonceRes === 'string' ? parseInt(nonceRes, 16) : Number(nonceRes);
-
       var amountWei = BigInt(Math.floor(val));
       var minOut = 0n;
       var deadline = BigInt(Math.floor(Date.now()/1000) + 600);
-      var path = [tokenAddr(tokenFrom.value), tokenAddr(tokenTo.value)];
-      var toAddr = callerAddr;
+      var path = [tokenAddr(fromName), tokenAddr(toName)];
 
-      showResult('Approving Router to spend ' + tokenFrom.value + '...', true);
-      var approveSel = keccakSel('approve(address,uint256)');
-      var approveData = hexToBytes(
-        approveSel
-        + pad32(CONTRACTS.Router.replace('0x','').replace(/0+$/,''))
-        + toHex256(amountWei * 10n)
-      );
-      var tokenContract = hexToBytes(tokenAddr(tokenFrom.value).replace('0x',''));
-      var approvePostcard = encodeEvmCall(callerAddr, tokenContract, approveData, nonce, 100000, 0);
-      var approvePayload = new Uint8Array(1 + approvePostcard.length);
-      approvePayload[0] = 0x05;
-      approvePayload.set(approvePostcard, 1);
-      var approveMsg = concatBytes(domain, approvePayload);
-      var approveSig = await ed.signAsync(approveMsg, keyBytes);
-      var approvePayloadLen = new Uint8Array(4);
-      new DataView(approvePayloadLen.buffer).setUint32(0, approvePayload.length, true);
-      var approveEnv = concatBytes(new Uint8Array([0xAA]), approvePayloadLen, approvePayload, pub, approveSig);
-      await rpcCall('aztb_sendTransaction', ['0x' + bytesToHex(approveEnv)]);
-      nonce++;
-      await new Promise(function(r){setTimeout(r,2000)});
+      if (useExtension) {
+        if (!payingNative) {
+          showResult('Approving Router to spend ' + fromName + '...', true);
+          var approveSel = keccakSel('approve(address,uint256)');
+          var approveCalldata = '0x' + approveSel
+            + pad32(CONTRACTS.Router.replace('0x','').replace(/0+$/,''))
+            + toHex256(amountWei * 10n);
+          await window.aztibase.signAndSendEvmCall(tokenAddr(fromName), approveCalldata, 100000, 0);
+          await new Promise(function(r){setTimeout(r,2000)});
+        }
 
-      showResult('Sending swap...', true);
-      var sel = keccakSel('swapExactTokensForTokens(uint256,uint256,address[],address,uint256)');
-      var calldata = hexToBytes(
-        sel
-        + toHex256(amountWei)
-        + toHex256(minOut)
-        + toHex256(160n)
-        + pad32(bytesToHex(toAddr))
-        + toHex256(deadline)
-        + toHex256(BigInt(path.length))
-        + path.map(function(a){ return pad32(a); }).join('')
-      );
+        showResult('Sending swap...', true);
+        var swapCalldata = buildSwapCalldata(fromName, toName, amountWei, minOut, walletAddr, deadline, path);
+        var nativeValue = payingNative ? Number(amountWei) : 0;
+        var swapRes = await window.aztibase.signAndSendEvmCall(CONTRACTS.Router, swapCalldata, 500000, nativeValue);
+        var txHash = swapRes.txHash || swapRes;
+        showResult('Tx submitted: ' + txHash, true);
+        await waitForReceipt(txHash);
+      } else {
+        var ed = await loadEd25519();
+        var keyBytes = hexToBytes(walletKey);
+        var pub = await ed.getPublicKeyAsync(keyBytes);
+        var callerAddr = await blake3(pub);
+        var callerHex = '0x' + bytesToHex(callerAddr);
+        var domain = new TextEncoder().encode('AZTB_TX_V1');
 
-      var contract = hexToBytes(CONTRACTS.Router.replace('0x',''));
-      var postcard = encodeEvmCall(callerAddr, contract, calldata, nonce, 500000, 0);
-      var payload = new Uint8Array(1 + postcard.length);
-      payload[0] = 0x05;
-      payload.set(postcard, 1);
+        var nonceRes = await rpcCall('aztb_getNonce', [callerHex]);
+        var nonce = typeof nonceRes === 'string' ? parseInt(nonceRes, 16) : Number(nonceRes);
 
-      var domain = new TextEncoder().encode('AZTB_TX_V1');
-      var msg = concatBytes(domain, payload);
-      var sig = await ed.signAsync(msg, keyBytes);
+        if (!payingNative) {
+          showResult('Approving Router to spend ' + fromName + '...', true);
+          var approveSel = keccakSel('approve(address,uint256)');
+          var approveData = hexToBytes(
+            approveSel + pad32(CONTRACTS.Router.replace('0x','').replace(/0+$/,''))
+            + toHex256(amountWei * 10n)
+          );
+          var tokenContract = hexToBytes(tokenAddr(fromName).replace('0x',''));
+          var approvePostcard = encodeEvmCall(callerAddr, tokenContract, approveData, nonce, 100000, 0);
+          var approvePayload = new Uint8Array(1 + approvePostcard.length);
+          approvePayload[0] = 0x05;
+          approvePayload.set(approvePostcard, 1);
+          var approveMsg = concatBytes(domain, approvePayload);
+          var approveSig = await ed.signAsync(approveMsg, keyBytes);
+          var approvePayloadLen = new Uint8Array(4);
+          new DataView(approvePayloadLen.buffer).setUint32(0, approvePayload.length, true);
+          var approveEnv = concatBytes(new Uint8Array([0xAA]), approvePayloadLen, approvePayload, pub, approveSig);
+          await rpcCall('aztb_sendTransaction', ['0x' + bytesToHex(approveEnv)]);
+          nonce++;
+          await new Promise(function(r){setTimeout(r,2000)});
+        }
 
-      var payloadLen = new Uint8Array(4);
-      new DataView(payloadLen.buffer).setUint32(0, payload.length, true);
-      var envelope = concatBytes(new Uint8Array([0xAA]), payloadLen, payload, pub, sig);
-      var envelopeHex = '0x' + bytesToHex(envelope);
-
-      var txHash = await rpcCall('aztb_sendTransaction', [envelopeHex]);
-      showResult('Tx submitted: ' + txHash, true);
-
-      for (var i = 0; i < 15; i++) {
-        await new Promise(function(r){setTimeout(r, 2000)});
-        try {
-          var receipt = await rpcCall('aztb_getTransactionReceipt', [txHash]);
-          if (receipt) {
-            if (receipt.success) {
-              showResult('Swap confirmed! Gas: ' + parseInt(receipt.gasUsed,16), true);
-            } else {
-              showResult('Swap failed: ' + (receipt.error || 'reverted'), false);
-            }
-            break;
-          }
-        } catch(e) {}
+        showResult('Sending swap...', true);
+        var swapCalldata = buildSwapCalldata(fromName, toName, amountWei, minOut, callerHex, deadline, path);
+        var swapData = hexToBytes(swapCalldata.replace('0x',''));
+        var routerBytes = hexToBytes(CONTRACTS.Router.replace('0x',''));
+        var nativeValue = payingNative ? Number(amountWei) : 0;
+        var postcard = encodeEvmCall(callerAddr, routerBytes, swapData, nonce, 500000, nativeValue);
+        var payload = new Uint8Array(1 + postcard.length);
+        payload[0] = 0x05;
+        payload.set(postcard, 1);
+        var msg = concatBytes(domain, payload);
+        var sig = await ed.signAsync(msg, keyBytes);
+        var payloadLen = new Uint8Array(4);
+        new DataView(payloadLen.buffer).setUint32(0, payload.length, true);
+        var envelope = concatBytes(new Uint8Array([0xAA]), payloadLen, payload, pub, sig);
+        var txHash = await rpcCall('aztb_sendTransaction', ['0x' + bytesToHex(envelope)]);
+        showResult('Tx submitted: ' + txHash, true);
+        await waitForReceipt(txHash);
       }
     } catch(e) {
       showResult('Swap error: ' + e.message, false);
     }
     swapBtn.textContent = 'Swap';
     swapBtn.disabled = false;
+    fetchBalances();
   });
 
   function hexToBytes(hex) {

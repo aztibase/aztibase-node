@@ -14,7 +14,7 @@ Aztibase supports two virtual machines — deploy in **Solidity** (EVM) or **Rus
 solc --bin --abi MyContract.sol -o build/
 
 # Deploy via RPC
-curl -X POST http://102.209.21.247:9944 \
+curl -X POST https://rpc.aztibase.com \
   -H 'Content-Type: application/json' \
   -d '{
     "jsonrpc": "2.0",
@@ -140,7 +140,7 @@ After deployment, verify your contract is live:
 
 ```bash
 # Check contract code exists
-curl -X POST http://102.209.21.247:9944 \
+curl -X POST https://rpc.aztibase.com \
   -H 'Content-Type: application/json' \
   -d '{
     "jsonrpc": "2.0",
@@ -150,7 +150,7 @@ curl -X POST http://102.209.21.247:9944 \
   }'
 
 # Check account type is "Contract"
-curl -X POST http://102.209.21.247:9944 \
+curl -X POST https://rpc.aztibase.com \
   -H 'Content-Type: application/json' \
   -d '{
     "jsonrpc": "2.0",
@@ -292,7 +292,7 @@ curl -X POST http://102.209.21.247:9944 \
 
 <script>{`
 (function() {
-  const RPC = 'http://102.209.21.247:9944';
+  const RPC = 'https://rpc.aztibase.com';
   const btn = document.getElementById('deploy-estimate');
   const result = document.getElementById('deploy-result');
 
