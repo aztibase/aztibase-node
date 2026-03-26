@@ -20,12 +20,8 @@ chrome.storage.local.get(["network"], (result) => {
 });
 
 chrome.runtime.onInstalled.addListener(() => {
-  chrome.storage.local.get("network", (result) => {
-    if (!result.network) {
-      chrome.storage.local.set({
-        network: { name: "Testnet", rpc: "http://102.209.21.247:9944", chainId: "0xA27B" },
-      });
-    }
+  chrome.storage.local.set({
+    network: { name: "Testnet", rpc: "http://102.209.21.247:9944", chainId: "0xA27B" },
   });
 });
 
