@@ -3,7 +3,7 @@ import { useCallback, useEffect, useState } from "react";
 import { getBalance, evmCall } from "@/lib/rpc";
 import { hexToBigInt, toEvmAddress } from "@/lib/utils";
 import { useWalletStore } from "@/stores/wallet";
-import { CONTRACTS } from "@/config/chain";
+import { CONTRACTS, TOKENS } from "@/config/chain";
 
 const BALANCE_OF_SEL = "70a08231";
 
@@ -37,7 +37,8 @@ export function useNativeBalance(): BalanceResult {
   return { balance, loading, refresh, decimals: 0 };
 }
 
-export function useTokenBalance(contractAddress: string | null): BalanceResult {
+export function useTokenBalance(contractAddress: string | null, decimals?: number): BalanceResult {
+  const tokenDec = decimals ?? TOKENS.find((t) => t.address === contractAddress)?.decimals ?? 0;
   const { address, connected } = useWalletStore();
   const [balance, setBalance] = useState<bigint>(0n);
   const [loading, setLoading] = useState(false);
@@ -60,7 +61,7 @@ export function useTokenBalance(contractAddress: string | null): BalanceResult {
     if (connected && address) refresh();
   }, [connected, address, refresh]);
 
-  return { balance, loading, refresh, decimals: 18 };
+  return { balance, loading, refresh, decimals: tokenDec };
 }
 
 export function useSwapBalance(tokenSymbol: string): BalanceResult {

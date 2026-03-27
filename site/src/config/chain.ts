@@ -5,7 +5,7 @@ export const CHAIN = {
   rpcFallback: "https://rpc.aztibase.com",
   explorer: "https://aztibase.com/explorer",
   symbol: "AZTB",
-  decimals: 18,
+  decimals: 0,
   blockTime: 400,
 };
 
@@ -18,8 +18,8 @@ export const CONTRACTS = {
 };
 
 export const TOKENS = [
-  { symbol: "AZTB", name: "Aztibase", decimals: 18, native: true, address: null },
-  { symbol: "WASZTB", name: "Wrapped AZTB", decimals: 18, native: false, address: CONTRACTS.WASZTB },
+  { symbol: "AZTB", name: "Aztibase", decimals: 0, native: true, address: null },
+  { symbol: "WASZTB", name: "Wrapped AZTB", decimals: 0, native: false, address: CONTRACTS.WASZTB },
   { symbol: "tUSDC", name: "Test USDC", decimals: 6, native: false, address: CONTRACTS.tUSDC },
 ] as const;
 

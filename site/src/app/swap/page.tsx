@@ -165,7 +165,9 @@ export default function SwapPage() {
     try {
       const fromDec = tokenDecimals(tokenFrom);
       const toDec = tokenDecimals(tokenTo);
-      const amountWei = BigInt(Math.floor(val * 10 ** Math.min(fromDec, 8))) * 10n ** BigInt(Math.max(0, fromDec - 8));
+      const amountWei = fromDec === 0
+        ? BigInt(Math.floor(val))
+        : BigInt(Math.floor(val * 10 ** Math.min(fromDec, 8))) * 10n ** BigInt(Math.max(0, fromDec - 8));
       const path = [tokenAddr(tokenFrom), tokenAddr(tokenTo)];
       const data = "0x" + KECCAK_GET_AMOUNTS_OUT + toHex256(amountWei) + toHex256(64n) + toHex256(BigInt(path.length)) +
         path.map((a) => toEvmAddress(a)).join("");
@@ -232,7 +234,10 @@ export default function SwapPage() {
     const fromName = tokenFrom;
     const toName = tokenTo;
     const payingNative = isNative(fromName);
-    const amountWei = BigInt(Math.floor(val));
+    const fromDec = tokenDecimals(fromName);
+    const amountWei = fromDec === 0
+      ? BigInt(Math.floor(val))
+      : BigInt(Math.floor(val * 10 ** Math.min(fromDec, 8))) * 10n ** BigInt(Math.max(0, fromDec - 8));
     const minOut = 0n;
     const deadline = BigInt(Math.floor(Date.now() / 1000) + 600);
     const path = [tokenAddr(fromName), tokenAddr(toName)];
@@ -247,7 +252,7 @@ export default function SwapPage() {
           const approveSel = keccakSel("approve(address,uint256)");
           const approveCalldata = "0x" + approveSel
             + toEvmAddress(CONTRACTS.Router)
-            + toHex256(amountWei * 10n);
+            + toHex256(amountWei);
           await ext.signAndSendEvmCall(tokenAddr(fromName), approveCalldata, 100000, 0);
           await new Promise((r) => setTimeout(r, 2000));
         }
