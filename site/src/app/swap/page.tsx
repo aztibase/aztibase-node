@@ -67,29 +67,12 @@ function encodeEvmCall(caller: Uint8Array, contract: Uint8Array, calldata: Uint8
 
 function isNative(sym: string) { return sym === "AZTB"; }
 
-function buildSwapCalldata(fromName: string, toName: string, amountWei: bigint, minOut: bigint, toAddrHex: string, deadline: bigint, path: string[]): string {
-  const payingNative = isNative(fromName);
-  const receivingNative = isNative(toName);
-  let data: string;
-
-  if (payingNative) {
-    const sel = keccakSel("swapExactETHForTokens(uint256,address[],address,uint256)");
-    data = sel + toHex256(minOut) + toHex256(128n) + toEvmAddress(toAddrHex)
-      + toHex256(deadline) + toHex256(BigInt(path.length))
-      + path.map((a) => toEvmAddress(a)).join("");
-  } else if (receivingNative) {
-    const sel = keccakSel("swapExactTokensForETH(uint256,uint256,address[],address,uint256)");
-    data = sel + toHex256(amountWei) + toHex256(minOut) + toHex256(160n)
-      + toEvmAddress(toAddrHex) + toHex256(deadline)
-      + toHex256(BigInt(path.length))
-      + path.map((a) => toEvmAddress(a)).join("");
-  } else {
-    const sel = keccakSel("swapExactTokensForTokens(uint256,uint256,address[],address,uint256)");
-    data = sel + toHex256(amountWei) + toHex256(minOut) + toHex256(160n)
-      + toEvmAddress(toAddrHex) + toHex256(deadline)
-      + toHex256(BigInt(path.length))
-      + path.map((a) => toEvmAddress(a)).join("");
-  }
+function buildSwapCalldata(amountWei: bigint, minOut: bigint, toAddrHex: string, deadline: bigint, path: string[]): string {
+  const sel = keccakSel("swapExactTokensForTokens(uint256,uint256,address[],address,uint256)");
+  const data = sel + toHex256(amountWei) + toHex256(minOut) + toHex256(160n)
+    + toEvmAddress(toAddrHex) + toHex256(deadline)
+    + toHex256(BigInt(path.length))
+    + path.map((a) => toEvmAddress(a)).join("");
   return "0x" + data;
 }
 
@@ -223,6 +206,31 @@ export default function SwapPage() {
     setSwapStatus({ msg: "Tx submitted but receipt not found yet. Check explorer.", ok: true });
   }
 
+  async function sendEvmCall(
+    contract: string, calldata: string, gasLimit: number, value: number,
+    signingCtx?: { ed: typeof import("@noble/ed25519"); keyBytes: Uint8Array; callerAddr: Uint8Array; pub: Uint8Array; domain: Uint8Array; nonce: number }
+  ): Promise<string> {
+    if (signingCtx) {
+      const { ed, keyBytes, callerAddr, pub, domain } = signingCtx;
+      const cd = hexToBytes(calldata.replace("0x", ""));
+      const contractBytes = hexToBytes(contract.replace("0x", ""));
+      const pc = encodeEvmCall(callerAddr, contractBytes, cd, signingCtx.nonce, gasLimit, value);
+      const payload = new Uint8Array(1 + pc.length);
+      payload[0] = 0x05;
+      payload.set(pc, 1);
+      const msg = concatBytes(domain, payload);
+      const sig = await ed.signAsync(msg, keyBytes);
+      const pLen = new Uint8Array(4);
+      new DataView(pLen.buffer).setUint32(0, payload.length, true);
+      const envelope = concatBytes(new Uint8Array([0xAA]), pLen, payload, pub, sig);
+      signingCtx.nonce++;
+      return await rpc<string>("aztb_sendTransaction", ["0x" + bytesToHex(envelope)]);
+    }
+    const ext = window.aztibase!;
+    const res = await ext.signAndSendEvmCall(contract, calldata, gasLimit, value);
+    return res.txHash || String(res);
+  }
+
   async function handleSwap() {
     if (!address) return;
     const val = parseFloat(amountIn);
@@ -245,81 +253,46 @@ export default function SwapPage() {
     try {
       const canUseExtension = mode === "extension" && window.aztibase && typeof window.aztibase.signAndSendEvmCall === "function";
 
-      if (canUseExtension) {
-        const ext = window.aztibase!;
-        if (!payingNative) {
-          setSwapStatus({ msg: `Approving Router to spend ${fromName}...`, ok: true });
-          const approveSel = keccakSel("approve(address,uint256)");
-          const approveCalldata = "0x" + approveSel
-            + toEvmAddress(CONTRACTS.Router)
-            + toHex256(amountWei);
-          await ext.signAndSendEvmCall(tokenAddr(fromName), approveCalldata, 100000, 0);
-          await new Promise((r) => setTimeout(r, 2000));
-        }
-
-        setSwapStatus({ msg: "Sending swap...", ok: true });
-        const swapCalldata = buildSwapCalldata(fromName, toName, amountWei, minOut, address, deadline, path);
-        const nativeValue = payingNative ? Number(amountWei) : 0;
-        const swapRes = await ext.signAndSendEvmCall(CONTRACTS.Router, swapCalldata, 500000, nativeValue);
-        const txHash = swapRes.txHash || String(swapRes);
-        setSwapStatus({ msg: `Tx submitted: ${txHash.slice(0, 16)}...`, ok: true });
-        await waitForReceipt(txHash);
-      } else if (mode === "extension" && !canUseExtension) {
+      if (mode === "extension" && !canUseExtension) {
         setSwapStatus({ msg: "Extension outdated — please update your wallet extension to enable swap.", ok: false });
         setSwapping(false);
         return;
-      } else if (mode === "key" && secretKey) {
+      }
+
+      let sigCtx: Parameters<typeof sendEvmCall>[4] | undefined;
+      let callerHex = address;
+
+      if (mode === "key" && secretKey) {
         const ed = await import("@noble/ed25519");
         const hashes = await import("@noble/hashes/blake3.js");
         const keyBytes = hexToBytes(secretKey!);
         const pub = await ed.getPublicKeyAsync(keyBytes);
         const callerAddr = hashes.blake3(pub);
-        const callerHex = "0x" + bytesToHex(callerAddr as Uint8Array);
+        callerHex = "0x" + bytesToHex(callerAddr as Uint8Array);
         const domain = new TextEncoder().encode("AZTB_TX_V1");
-
         const nonceRes = await rpc<string | number>("aztb_getNonce", [callerHex]);
-        let nonce = typeof nonceRes === "string" ? parseInt(nonceRes, 16) : Number(nonceRes);
-
-        if (!payingNative) {
-          setSwapStatus({ msg: `Approving Router to spend ${fromName}...`, ok: true });
-          const approveSel = keccakSel("approve(address,uint256)");
-          const approveData = hexToBytes(
-            approveSel + toEvmAddress(CONTRACTS.Router)
-            + toHex256(amountWei * 10n)
-          );
-          const tokenContract = hexToBytes(tokenAddr(fromName).replace("0x", ""));
-          const approvePostcard = encodeEvmCall(callerAddr as Uint8Array, tokenContract, approveData, nonce, 100000, 0);
-          const approvePayload = new Uint8Array(1 + approvePostcard.length);
-          approvePayload[0] = 0x05;
-          approvePayload.set(approvePostcard, 1);
-          const approveMsg = concatBytes(domain, approvePayload);
-          const approveSig = await ed.signAsync(approveMsg, keyBytes);
-          const approvePayloadLen = new Uint8Array(4);
-          new DataView(approvePayloadLen.buffer).setUint32(0, approvePayload.length, true);
-          const approveEnv = concatBytes(new Uint8Array([0xAA]), approvePayloadLen, approvePayload, pub, approveSig);
-          await rpc("aztb_sendTransaction", ["0x" + bytesToHex(approveEnv)]);
-          nonce++;
-          await new Promise((r) => setTimeout(r, 2000));
-        }
-
-        setSwapStatus({ msg: "Sending swap...", ok: true });
-        const swapCalldata = buildSwapCalldata(fromName, toName, amountWei, minOut, callerHex, deadline, path);
-        const swapData = hexToBytes(swapCalldata.replace("0x", ""));
-        const routerBytes = hexToBytes(CONTRACTS.Router.replace("0x", ""));
-        const nativeValue = payingNative ? Number(amountWei) : 0;
-        const postcard = encodeEvmCall(callerAddr as Uint8Array, routerBytes, swapData, nonce, 500000, nativeValue);
-        const payload = new Uint8Array(1 + postcard.length);
-        payload[0] = 0x05;
-        payload.set(postcard, 1);
-        const msg = concatBytes(domain, payload);
-        const sig = await ed.signAsync(msg, keyBytes);
-        const payloadLen = new Uint8Array(4);
-        new DataView(payloadLen.buffer).setUint32(0, payload.length, true);
-        const envelope = concatBytes(new Uint8Array([0xAA]), payloadLen, payload, pub, sig);
-        const txHash = await rpc<string>("aztb_sendTransaction", ["0x" + bytesToHex(envelope)]);
-        setSwapStatus({ msg: `Tx submitted: ${String(txHash).slice(0, 16)}...`, ok: true });
-        await waitForReceipt(String(txHash));
+        const nonce = typeof nonceRes === "string" ? parseInt(nonceRes, 16) : Number(nonceRes);
+        sigCtx = { ed, keyBytes, callerAddr: callerAddr as Uint8Array, pub, domain, nonce };
       }
+
+      if (payingNative) {
+        setSwapStatus({ msg: "Wrapping AZTB → WASZTB...", ok: true });
+        const depositSel = keccakSel("deposit()");
+        await sendEvmCall(CONTRACTS.WASZTB, "0x" + depositSel, 100000, Number(amountWei), sigCtx);
+        await new Promise((r) => setTimeout(r, 2000));
+      }
+
+      setSwapStatus({ msg: `Approving Router to spend WASZTB...`, ok: true });
+      const approveSel = keccakSel("approve(address,uint256)");
+      const approveCalldata = "0x" + approveSel + toEvmAddress(CONTRACTS.Router) + toHex256(amountWei);
+      await sendEvmCall(tokenAddr(fromName), approveCalldata, 100000, 0, sigCtx);
+      await new Promise((r) => setTimeout(r, 2000));
+
+      setSwapStatus({ msg: "Sending swap...", ok: true });
+      const swapCalldata = buildSwapCalldata(amountWei, minOut, callerHex, deadline, path);
+      const txHash = await sendEvmCall(CONTRACTS.Router, swapCalldata, 300000, 0, sigCtx);
+      setSwapStatus({ msg: `Tx submitted: ${String(txHash).slice(0, 16)}...`, ok: true });
+      await waitForReceipt(String(txHash));
     } catch (e: unknown) {
       setSwapStatus({ msg: `Swap error: ${e instanceof Error ? e.message : String(e)}`, ok: false });
     }
